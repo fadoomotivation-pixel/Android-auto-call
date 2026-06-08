@@ -13,29 +13,34 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setBusy(true);
     // Create the browser client here (on click), not during render, so the page
     // can be statically prerendered at build time without Supabase env vars.
     const supabase = createClient();
     try {
       if (mode === "signup") {
-        const { error: signErr } = await supabase.auth.signUp({
+        // The company is created server-side by the new-user trigger from this
+        // metadata (full_name + role + company_name) — no extra RPC needed.
+        const { data, error: signErr } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName, role: "admin" } },
+          options: { data: { full_name: fullName, role: "admin", company_name: companyName } },
         });
         if (signErr) throw signErr;
 
-        // New admin: create their company and attach themselves.
-        const { error: rpcErr } = await supabase.rpc("create_company_and_join", {
-          company_name: companyName,
-        });
-        if (rpcErr) throw rpcErr;
+        // If email confirmation is enabled, signUp returns no session yet.
+        if (!data.session) {
+          setNotice("Account created. Please confirm your email, then sign in.");
+          setMode("signin");
+          return;
+        }
       } else {
         const { error: signErr } = await supabase.auth.signInWithPassword({
           email,
@@ -85,6 +90,7 @@ export default function LoginPage() {
         </button>
 
         {error && <div className="error">{error}</div>}
+        {notice && <div style={{ color: "var(--good)", fontSize: 13, marginTop: 12 }}>{notice}</div>}
 
         <div style={{ marginTop: 16, textAlign: "center" }}>
           {mode === "signin" ? (
