@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [companyName, setCompanyName] = useState("");
@@ -20,6 +19,9 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setBusy(true);
+    // Create the browser client here (on click), not during render, so the page
+    // can be statically prerendered at build time without Supabase env vars.
+    const supabase = createClient();
     try {
       if (mode === "signup") {
         const { error: signErr } = await supabase.auth.signUp({
