@@ -50,61 +50,7 @@ object Repository {
 
     // ---------- imports ----------
 
-    /**
-     * Persists a parsed CSV/TSV file: creates an import batch then bulk-inserts
-     * the contacts assigned to the current salesperson.
-     * Returns the number of contacts stored.
-     */
-    suspend fun importContacts(parsed: ParseResult, fileName: String, format: String): Int {
-        val profile = myProfile() ?: error("No profile / company. Ask your admin to add you to a company.")
-        val companyId = profile.companyId ?: error("You are not linked to a company yet.")
-        val uid = profile.id
-
-        val batch = client.from("import_batches").insert(
-            ImportBatch(
-                companyId = companyId,
-                salespersonId = uid,
-                filename = fileName,
-                format = format,
-                totalRows = parsed.totalRows,
-                importedRows = parsed.contacts.size,
-                failedRows = parsed.skippedRows,
-            ),
-        ) { select() }.decodeSingle<ImportBatch>()
-
-        val contacts = parsed.contacts.map {
-            Contact(
-                companyId = companyId,
-                salespersonId = uid,
-                importBatchId = batch.id,
-                name = it.name,
-                phone = it.phone,
-                email = it.email,
-                companyName = it.companyName,
-                notes = it.notes,
-                status = "new",
-            )
-        }
-        if (contacts.isNotEmpty()) {
-            client.from("contacts").insert(contacts)
-        }
-        return contacts.size
-    }
-
-    // ---------- contacts / queue ----------
-
-    /** Contacts still worth calling, oldest first. Excludes DNC and finished states. */
-    suspend fun fetchCallQueue(limit: Int = 500): List<Contact> {
-        val uid = currentUserId() ?: return emptyList()
-        return client.from("contacts").select {
-            filter {
-                eq("salesperson_id", uid)
-                isIn("status", listOf("new", "queued", "callback", "no_answer", "busy"))
-            }
-            order("created_at", Order.ASCENDING)
-            limit(limit.toLong())
-        }.decodeList<Contact>()
-    }
+    // ---------- contacts ----------
 
     suspend fun updateContactStatus(contactId: String, status: String) {
         client.from("contacts").update(mapOf("status" to status)) {
