@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -11,6 +13,15 @@ val supabaseUrl: String =
     (project.findProperty("SUPABASE_URL") as String?) ?: "https://rqgkzamuohdvttnkluzn.supabase.co"
 val supabaseAnonKey: String =
     (project.findProperty("SUPABASE_ANON_KEY") as String?) ?: "sb_publishable_jbinu2H4JrpqAUp_3Prdpw_8pZzE58N"
+
+// Release signing. Reads from keystore.properties (never committed). If the file
+// is absent (e.g. CI without secrets), the release build falls back to unsigned
+// and you sign later. See android/keystore.properties.example.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) load(keystorePropsFile.inputStream())
+}
+val hasReleaseSigning = keystorePropsFile.exists()
 
 android {
     namespace = "com.salesautocall.app"
@@ -27,10 +38,24 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

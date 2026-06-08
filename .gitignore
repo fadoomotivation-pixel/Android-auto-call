@@ -24,6 +24,8 @@ android/.idea/
 *.apk
 *.aab
 *.keystore
+*.jks
+android/keystore.properties
 !debug.keystore
 
 # ---- Misc ----
