@@ -31,3 +31,6 @@ android/keystore.properties
 # ---- Misc ----
 .idea/
 .vscode/
+
+# Next.js build info
+*.tsbuildinfo
