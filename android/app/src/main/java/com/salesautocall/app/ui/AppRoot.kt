@@ -10,26 +10,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -41,11 +42,7 @@ import androidx.navigation.compose.rememberNavController
 @Composable
 fun AppRoot(vm: MainViewModel) {
     val state by vm.state.collectAsState()
-    if (state.signedIn) {
-        MainScaffold(vm)
-    } else {
-        LoginScreen(vm)
-    }
+    if (state.signedIn) MainShell(vm) else LoginScreen(vm)
 }
 
 @Composable
@@ -61,7 +58,7 @@ private fun LoginScreen(vm: MainViewModel) {
         Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("SalesAutoCall", style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+        Text("Bulk Caller", style = MaterialTheme.typography.headlineMedium)
         Text(if (signUp) "Create your salesperson account" else "Sign in")
         Spacer(Modifier.height(16.dp))
 
@@ -81,8 +78,7 @@ private fun LoginScreen(vm: MainViewModel) {
 
         Button(
             onClick = {
-                if (signUp) vm.signUp(email, password, fullName, phone)
-                else vm.signIn(email, password)
+                if (signUp) vm.signUp(email, password, fullName, phone) else vm.signIn(email, password)
             },
             enabled = !state.loading,
             modifier = Modifier.fillMaxWidth(),
@@ -91,30 +87,32 @@ private fun LoginScreen(vm: MainViewModel) {
         TextButton(onClick = { signUp = !signUp }, modifier = Modifier.fillMaxWidth()) {
             Text(if (signUp) "Already have an account? Sign in" else "New here? Create an account")
         }
-
-        state.error?.let { Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error) }
-
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "After signing up, ask your admin to add you to a company so you can import contacts.",
-            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-        )
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }
 
 private sealed class Tab(val route: String, val label: String) {
-    data object Home : Tab("home", "Home")
-    data object Import : Tab("import", "Import")
-    data object Dialer : Tab("dialer", "Dialer")
-    data object Logs : Tab("logs", "Logs")
+    data object Campaign : Tab("campaign", "Campaign")
+    data object Analytics : Tab("analytics", "Analytics")
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainScaffold(vm: MainViewModel) {
+private fun MainShell(vm: MainViewModel) {
     val nav = rememberNavController()
-    val tabs = listOf(Tab.Home, Tab.Import, Tab.Dialer, Tab.Logs)
+    val tabs = listOf(Tab.Campaign, Tab.Analytics)
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Bulk Caller") },
+                actions = {
+                    IconButton(onClick = { nav.navigate("settings") }) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                },
+            )
+        },
         bottomBar = {
             NavigationBar {
                 val current by nav.currentBackStackEntryAsState()
@@ -125,12 +123,7 @@ private fun MainScaffold(vm: MainViewModel) {
                         onClick = { nav.navigate(tab.route) { launchSingleTop = true } },
                         icon = {
                             Icon(
-                                when (tab) {
-                                    Tab.Home -> Icons.Default.Home
-                                    Tab.Import -> Icons.Default.Upload
-                                    Tab.Dialer -> Icons.Default.Call
-                                    Tab.Logs -> Icons.Default.List
-                                },
+                                if (tab is Tab.Campaign) Icons.Default.Campaign else Icons.Default.QueryStats,
                                 contentDescription = tab.label,
                             )
                         },
@@ -141,28 +134,11 @@ private fun MainScaffold(vm: MainViewModel) {
         },
     ) { padding ->
         Column(Modifier.padding(padding)) {
-            NavHost(nav, startDestination = Tab.Home.route) {
-                composable(Tab.Home.route) { HomeScreen(vm) }
-                composable(Tab.Import.route) { ImportScreen(vm) }
-                composable(Tab.Dialer.route) { DialerScreen(vm) }
-                composable(Tab.Logs.route) { LogsScreen(vm) }
+            NavHost(nav, startDestination = Tab.Campaign.route) {
+                composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                composable(Tab.Analytics.route) { AnalyticsScreen(vm) }
+                composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
             }
         }
-    }
-}
-
-@Composable
-private fun HomeScreen(vm: MainViewModel) {
-    val state by vm.state.collectAsState()
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Text("Welcome", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall)
-        state.profile?.let {
-            Text(it.fullName ?: "—")
-            Text(if (it.companyId != null) "Company linked ✓" else "Not linked to a company yet — ask your admin.")
-        }
-        Spacer(Modifier.height(16.dp))
-        Text("Queue: ${state.queue.size} contacts ready to call")
-        Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = { vm.signOut() }) { Text("Sign out") }
     }
 }

@@ -1,15 +1,18 @@
 package com.salesautocall.app.ui
 
-import android.content.ContentResolver
+import android.app.Application
 import android.net.Uri
-import android.provider.OpenableColumns
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.salesautocall.app.data.CallLog
-import com.salesautocall.app.data.Contact
-import com.salesautocall.app.data.CsvTsvParser
+import com.salesautocall.app.data.AppPrefs
+import com.salesautocall.app.data.CampaignStat
+import com.salesautocall.app.data.ContactImport
+import com.salesautocall.app.data.ParseResult
 import com.salesautocall.app.data.Profile
 import com.salesautocall.app.data.Repository
+import com.salesautocall.app.dialer.AutoDialerService
+import com.salesautocall.app.dialer.DialerConfig
+import com.salesautocall.app.dialer.DialerController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,15 +24,18 @@ data class AppState(
     val loading: Boolean = false,
     val signedIn: Boolean = false,
     val profile: Profile? = null,
-    val queue: List<Contact> = emptyList(),
-    val logs: List<CallLog> = emptyList(),
+    val campaigns: List<CampaignStat> = emptyList(),
+    val campaignName: String = "",
+    val breakSeconds: Int = 5,
+    val pendingParse: ParseResult? = null,
+    val pendingFileName: String? = null,
     val message: String? = null,
     val error: String? = null,
 )
 
-class MainViewModel : ViewModel() {
+class MainViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val _state = MutableStateFlow(AppState())
+    private val _state = MutableStateFlow(AppState(breakSeconds = AppPrefs.getBreakSeconds(app)))
     val state: StateFlow<AppState> = _state.asStateFlow()
 
     init {
@@ -39,6 +45,8 @@ class MainViewModel : ViewModel() {
     private fun set(transform: (AppState) -> AppState) {
         _state.value = transform(_state.value)
     }
+
+    // ---------- auth ----------
 
     fun refreshSession() {
         viewModelScope.launch {
@@ -53,13 +61,10 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    fun signIn(email: String, password: String) = auth {
-        Repository.signIn(email, password)
-    }
+    fun signIn(email: String, password: String) = auth { Repository.signIn(email, password) }
 
-    fun signUp(email: String, password: String, fullName: String, phone: String) = auth {
-        Repository.signUp(email, password, fullName, phone)
-    }
+    fun signUp(email: String, password: String, fullName: String, phone: String) =
+        auth { Repository.signUp(email, password, fullName, phone) }
 
     private fun auth(block: suspend () -> Unit) {
         viewModelScope.launch {
@@ -76,61 +81,101 @@ class MainViewModel : ViewModel() {
     fun signOut() {
         viewModelScope.launch {
             runCatching { Repository.signOut() }
-            set { AppState(signedIn = false) }
+            set { AppState(breakSeconds = it.breakSeconds) }
         }
     }
 
-    fun importFile(resolver: ContentResolver, uri: Uri) {
+    // ---------- settings ----------
+
+    fun setCampaignName(name: String) = set { it.copy(campaignName = name) }
+
+    fun setBreakSeconds(value: Int) {
+        AppPrefs.setBreakSeconds(getApplication(), value)
+        set { it.copy(breakSeconds = value.coerceIn(1, 59)) }
+    }
+
+    // ---------- file pick ----------
+
+    fun pickFile(uri: Uri) {
         viewModelScope.launch {
             set { it.copy(loading = true, error = null, message = null) }
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val name = displayName(resolver, uri)
-                    val format = if (name.lowercase().endsWith(".tsv")) "tsv" else "csv"
-                    val parsed = resolver.openInputStream(uri)!!.bufferedReader().use {
-                        CsvTsvParser.parse(it, name)
-                    }
-                    val stored = Repository.importContacts(parsed, name, format)
-                    Triple(stored, parsed.totalRows, parsed.skippedRows)
+                    val name = displayName(uri)
+                    val bytes = getApplication<Application>().contentResolver
+                        .openInputStream(uri)!!.use { it.readBytes() }
+                    name to ContactImport.parse(bytes, name)
                 }
-            }.onSuccess { (stored, total, skipped) ->
+            }.onSuccess { (name, parsed) ->
                 set {
                     it.copy(
                         loading = false,
-                        message = "Imported $stored contacts from $total rows ($skipped skipped).",
+                        pendingParse = parsed,
+                        pendingFileName = name,
+                        message = "${parsed.contacts.size} contacts ready (${parsed.skippedRows} skipped).",
                     )
                 }
-                loadQueue()
-            }.onFailure { e ->
-                set { it.copy(loading = false, error = e.message) }
-            }
+            }.onFailure { e -> set { it.copy(loading = false, error = e.message) } }
         }
     }
 
-    fun loadQueue() {
+    fun clearPending() = set { it.copy(pendingParse = null, pendingFileName = null, message = null) }
+
+    // ---------- campaign start ----------
+
+    fun startCampaign() {
+        val s = _state.value
+        val parsed = s.pendingParse
+        if (parsed == null || parsed.contacts.isEmpty()) {
+            set { it.copy(error = "Choose a file with at least one valid phone number first.") }
+            return
+        }
         viewModelScope.launch {
-            runCatching { Repository.fetchCallQueue() }
-                .onSuccess { q -> set { it.copy(queue = q) } }
+            set { it.copy(loading = true, error = null) }
+            runCatching {
+                Repository.createCampaignWithContacts(
+                    name = s.campaignName.ifBlank { "Campaign ${s.campaigns.size + 1}" },
+                    gapSeconds = s.breakSeconds,
+                    parsed = parsed,
+                )
+            }.onSuccess { contacts ->
+                DialerController.prepare(
+                    contacts,
+                    DialerConfig(gapSeconds = s.breakSeconds),
+                    s.campaignName.ifBlank { "Campaign" },
+                )
+                AutoDialerService.start(getApplication())
+                set { it.copy(loading = false, pendingParse = null, pendingFileName = null, campaignName = "", message = null) }
+                loadCampaigns()
+            }.onFailure { e -> set { it.copy(loading = false, error = e.message) } }
+        }
+    }
+
+    // ---------- analytics ----------
+
+    fun loadCampaigns() {
+        viewModelScope.launch {
+            runCatching { Repository.fetchCampaignStats() }
+                .onSuccess { c -> set { it.copy(campaigns = c) } }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
     }
 
-    fun loadLogs() {
+    fun deleteCampaign(id: String) {
         viewModelScope.launch {
-            runCatching { Repository.recentCalls() }
-                .onSuccess { l -> set { it.copy(logs = l) } }
+            runCatching { Repository.deleteCampaign(id) }
+                .onSuccess { loadCampaigns() }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
     }
 
-    fun clearMessages() = set { it.copy(message = null, error = null) }
-
-    private fun displayName(resolver: ContentResolver, uri: Uri): String {
+    private fun displayName(uri: Uri): String {
         var name = "import.csv"
-        resolver.query(uri, null, null, null, null)?.use { c ->
-            val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (idx >= 0 && c.moveToFirst()) name = c.getString(idx)
-        }
+        getApplication<Application>().contentResolver
+            .query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && c.moveToFirst()) name = c.getString(idx)
+            }
         return name
     }
 }

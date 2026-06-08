@@ -83,7 +83,9 @@ class AutoDialerService : Service() {
     }
 
     private suspend fun runQueue() {
-        DialerController.update { it.copy(isRunning = true, finished = false) }
+        DialerController.update {
+            it.copy(isRunning = true, finished = false, sessionStartMillis = System.currentTimeMillis())
+        }
         val queue = DialerController.queue
         val cfg = DialerController.config
 
@@ -122,14 +124,29 @@ class AutoDialerService : Service() {
 
             persistResult(contact.id, contact, startedAt, endedAt, durationSec, outcome, cfg.simSlot)
 
+            val wasDialed = placed
+            val talked = durationSec
             DialerController.update {
-                it.copy(completed = i + 1, lastOutcome = outcome)
+                it.copy(
+                    completed = i + 1,
+                    lastOutcome = outcome,
+                    dialedCount = it.dialedCount + if (wasDialed) 1 else 0,
+                    talkSeconds = it.talkSeconds + talked,
+                )
             }
 
             if (i < queue.lastIndex) delay(cfg.gapSeconds * 1000L)
         }
 
-        DialerController.update { it.copy(isRunning = false, finished = true, currentName = null, currentPhone = null) }
+        DialerController.update {
+            it.copy(
+                isRunning = false,
+                finished = true,
+                currentName = null,
+                currentPhone = null,
+                sessionEndMillis = System.currentTimeMillis(),
+            )
+        }
         updateNotification("Auto-dial finished — ${queue.size} calls")
         stopForeground(STOP_FOREGROUND_DETACH)
     }
@@ -149,6 +166,7 @@ class AutoDialerService : Service() {
                     CallLog(
                         companyId = contact.companyId,
                         salespersonId = contact.salespersonId ?: (Repository.currentUserId() ?: return@runCatching),
+                        campaignId = contact.campaignId,
                         contactId = contactId,
                         phone = contact.phone,
                         outcome = outcome,

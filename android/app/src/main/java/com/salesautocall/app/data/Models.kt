@@ -13,15 +13,24 @@ data class Profile(
 )
 
 @Serializable
-data class ImportBatch(
+data class Campaign(
     val id: String? = null,
     @SerialName("company_id") val companyId: String,
     @SerialName("salesperson_id") val salespersonId: String,
-    val filename: String? = null,
-    val format: String? = null,
-    @SerialName("total_rows") val totalRows: Int = 0,
-    @SerialName("imported_rows") val importedRows: Int = 0,
-    @SerialName("failed_rows") val failedRows: Int = 0,
+    val name: String,
+    @SerialName("gap_seconds") val gapSeconds: Int = 5,
+    val status: String = "active",
+)
+
+/** Backed by the v_campaign_stats view — drives the Analytics screen. */
+@Serializable
+data class CampaignStat(
+    @SerialName("campaign_id") val campaignId: String,
+    val name: String,
+    @SerialName("gap_seconds") val gapSeconds: Int = 5,
+    @SerialName("created_at") val createdAt: String? = null,
+    val total: Int = 0,
+    val completed: Int = 0,
 )
 
 @Serializable
@@ -29,7 +38,7 @@ data class Contact(
     val id: String? = null,
     @SerialName("company_id") val companyId: String,
     @SerialName("salesperson_id") val salespersonId: String? = null,
-    @SerialName("import_batch_id") val importBatchId: String? = null,
+    @SerialName("campaign_id") val campaignId: String? = null,
     val name: String? = null,
     val phone: String,
     val email: String? = null,
@@ -43,6 +52,7 @@ data class CallLog(
     val id: String? = null,
     @SerialName("company_id") val companyId: String,
     @SerialName("salesperson_id") val salespersonId: String,
+    @SerialName("campaign_id") val campaignId: String? = null,
     @SerialName("contact_id") val contactId: String? = null,
     val phone: String,
     val direction: String = "outgoing",
