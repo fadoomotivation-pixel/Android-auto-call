@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">SalesAutoCall</string>
+    <string name="app_name">Bulk Caller</string>
     <string name="dialer_channel_name">Auto Dialer</string>
     <string name="dialer_channel_desc">Shows progress while auto-dialing your contact queue.</string>
 </resources>

@@ -5,6 +5,8 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.serializer.KotlinXSerializer
+import kotlinx.serialization.json.Json
 
 /**
  * Single shared Supabase client for the whole app.
@@ -16,6 +18,11 @@ object Supabase {
             supabaseUrl = BuildConfig.SUPABASE_URL,
             supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
         ) {
+            // Tolerate extra columns returned by the DB that our models don't map.
+            defaultSerializer = KotlinXSerializer(Json {
+                ignoreUnknownKeys = true
+                coerceInputValues = true
+            })
             install(Auth)
             install(Postgrest)
         }
