@@ -20,6 +20,13 @@ export default async function DashboardLayout({
     .eq("id", user.id)
     .single<Profile>();
 
+  const { data: pa } = await supabase
+    .from("platform_admins")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const isSuper = !!pa;
+
   let company: Company | null = null;
   if (profile?.company_id) {
     const { data } = await supabase
@@ -38,6 +45,15 @@ export default async function DashboardLayout({
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
         <NavLink href="/dashboard/contacts" label="Contacts" />
         <NavLink href="/dashboard/calls" label="Call logs" />
+        {isSuper && (
+          <>
+            <div style={{ margin: "14px 6px 4px", fontSize: 11, letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" }}>
+              Super admin
+            </div>
+            <NavLink href="/dashboard/platform" label="🏢 Companies" />
+            <NavLink href="/dashboard/platform/telecallers" label="🎧 Telecallers" />
+          </>
+        )}
         <div className="spacer" />
         <div style={{ padding: "0 6px 10px", color: "var(--muted)", fontSize: 12 }}>
           <div style={{ color: "var(--text)", fontWeight: 600 }}>
