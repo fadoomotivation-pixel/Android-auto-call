@@ -245,6 +245,8 @@ private fun CallingPanel(dial: DialerUiState, vm: MainViewModel) {
 private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
     val context = LocalContext.current
     val name = dial.lastContactName ?: dial.lastContactPhone ?: "—"
+    var noteOpen by remember { mutableStateOf(false) }
+    var noteText by remember(dial.lastContactId) { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
         Text("Paused", style = MaterialTheme.typography.headlineSmall)
@@ -274,12 +276,15 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = { dial.lastContactPhone?.let { openWhatsApp(context, it) } },
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = androidx.compose.ui.graphics.Color(0xFF25D366),
-                    ),
-                ) { Text("Chat on WhatsApp") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { dial.lastContactPhone?.let { openWhatsApp(context, it) } },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = androidx.compose.ui.graphics.Color(0xFF25D366),
+                        ),
+                    ) { Text("WhatsApp") }
+                    OutlinedButton(onClick = { noteOpen = true }) { Text("Save details") }
+                }
             }
         }
 
@@ -288,6 +293,27 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
             Button(onClick = { vm.resumeCampaign() }) { Text("Next call ▶") }
             OutlinedButton(onClick = { AutoDialerService.stop(context) }) { Text("Stop") }
         }
+    }
+
+    if (noteOpen) {
+        AlertDialog(
+            onDismissRequest = { noteOpen = false },
+            title = { Text("Details for $name") },
+            text = {
+                OutlinedTextField(
+                    noteText, { noteText = it },
+                    label = { Text("e.g. budget, best time to call, requirement") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    dial.lastContactId?.let { vm.saveNote(it, noteText) }
+                    noteOpen = false
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { noteOpen = false }) { Text("Cancel") } },
+        )
     }
 }
 
@@ -490,7 +516,7 @@ private val DISPOSITIONS = listOf(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit) {
+fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () -> Unit) {
     val app by vm.state.collectAsState()
     val context = LocalContext.current
     var noteFor by remember { mutableStateOf<Contact?>(null) }
@@ -505,6 +531,19 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit) {
         Text("Tap an outcome for each contact. Updates sync to your dashboard.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
+
+        val callable = app.campaignContacts.count {
+            it.status in setOf("new", "queued", "callback", "no_answer", "busy")
+        }
+        Button(
+            onClick = {
+                vm.startExistingCampaign(app.selectedCampaignId ?: "", app.selectedCampaignName, app.campaignContacts)
+                onStarted()
+            },
+            enabled = callable > 0,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (callable > 0) "Start calling ($callable)" else "Nothing left to call") }
+        Spacer(Modifier.height(14.dp))
 
         if (app.campaignContacts.isEmpty()) {
             Text("No contacts in this campaign.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -552,7 +591,7 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit) {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    contact.id?.let { vm.setDisposition(it, contact.status, text) }
+                    contact.id?.let { vm.saveNote(it, text) }
                     noteFor = null
                 }) { Text("Save") }
             },

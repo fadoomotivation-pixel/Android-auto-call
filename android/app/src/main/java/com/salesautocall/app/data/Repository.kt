@@ -179,6 +179,11 @@ object Repository {
         client.from("contacts").update(patch) { filter { eq("id", contactId) } }
     }
 
+    /** Saves custom details / notes for a contact without changing its status. */
+    suspend fun setContactNote(contactId: String, note: String) {
+        client.from("contacts").update(mapOf("notes" to note)) { filter { eq("id", contactId) } }
+    }
+
     // ---------- team ----------
 
     suspend fun joinCompanyByCode(code: String) {

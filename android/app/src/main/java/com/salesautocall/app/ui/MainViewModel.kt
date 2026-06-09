@@ -187,6 +187,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun saveNote(contactId: String, note: String) {
+        viewModelScope.launch {
+            runCatching { Repository.setContactNote(contactId, note) }
+                .onSuccess {
+                    set { st ->
+                        st.copy(campaignContacts = st.campaignContacts.map { c ->
+                            if (c.id == contactId) c.copy(notes = note) else c
+                        })
+                    }
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
+    /** Starts auto-dialing an existing campaign (e.g. a follow-up) from its loaded contacts. */
+    fun startExistingCampaign(campaignId: String, campaignName: String, contacts: List<Contact>) {
+        val callable = contacts.filter {
+            it.status in setOf("new", "queued", "callback", "no_answer", "busy")
+        }
+        if (callable.isEmpty()) {
+            set { it.copy(error = "No contacts left to call in this campaign.") }
+            return
+        }
+        val s = _state.value
+        DialerController.prepare(
+            callable,
+            DialerConfig(gapSeconds = s.breakSeconds, reviewAfterEachCall = s.reviewAfterCall),
+            campaignName,
+            campaignId,
+        )
+        AutoDialerService.start(getApplication())
+    }
+
     /** Bundles the just-finished campaign's unanswered numbers into a follow-up campaign. */
     fun createFollowUp() {
         if (_state.value.followUpDone) return
