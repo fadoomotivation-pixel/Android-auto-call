@@ -79,6 +79,10 @@ private val QUICK_DISPOSITIONS = listOf(
     "dnc" to "DNC",
 )
 
+private fun statusLabel(status: String): String =
+    QUICK_DISPOSITIONS.firstOrNull { it.first == status }?.second
+        ?: status.replace('_', ' ').replaceFirstChar { it.uppercase() }
+
 /** Opens a WhatsApp chat with the given number (falls back to wa.me in a browser). */
 private fun openWhatsApp(context: android.content.Context, phone: String) {
     val digits = phone.filter { it.isDigit() }
@@ -298,6 +302,8 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
     val name = dial.lastContactName ?: dial.lastContactPhone ?: "—"
     var noteOpen by remember { mutableStateOf(false) }
     var noteText by remember(dial.lastContactId) { mutableStateOf("") }
+    var marked by remember(dial.lastContactId) { mutableStateOf<String?>(null) }
+    var savedNote by remember(dial.lastContactId) { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
         Text("Paused", style = MaterialTheme.typography.headlineSmall)
@@ -320,11 +326,26 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
                 Spacer(Modifier.height(6.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     QUICK_DISPOSITIONS.forEach { (status, label) ->
+                        val selected = marked == status
                         AssistChip(
-                            onClick = { dial.lastContactId?.let { vm.quickDisposition(it, status) } },
+                            onClick = {
+                                marked = status
+                                dial.lastContactId?.let { vm.quickDisposition(it, status) }
+                            },
                             label = { Text(label) },
+                            leadingIcon = if (selected) ({ Text("✓") }) else null,
                         )
                     }
+                }
+                // Confirmation of what was just recorded.
+                marked?.let { st ->
+                    val label = QUICK_DISPOSITIONS.firstOrNull { it.first == st }?.second ?: st
+                    Spacer(Modifier.height(8.dp))
+                    Text("✓ Marked as “$label” — saved.", color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium)
+                }
+                savedNote?.takeIf { it.isNotBlank() }?.let {
+                    Text("📝 $it", style = MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -360,6 +381,7 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
             confirmButton = {
                 TextButton(onClick = {
                     dial.lastContactId?.let { vm.saveNote(it, noteText) }
+                    savedNote = noteText
                     noteOpen = false
                 }) { Text("Save") }
             },
@@ -602,6 +624,21 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
         ) { Text(if (callable > 0) "Start calling ($callable)" else "Nothing left to call") }
         Spacer(Modifier.height(14.dp))
 
+        if (app.campaignContacts.isNotEmpty()) {
+            val interested = app.campaignContacts.count { it.status == "interested" }
+            val callbacks = app.campaignContacts.count { it.status == "callback" }
+            val notInterested = app.campaignContacts.count { it.status == "not_interested" }
+            Card(Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Stat("Interested", interested.toString())
+                    Stat("Callback", callbacks.toString())
+                    Stat("Not int.", notInterested.toString())
+                    Stat("Total", app.campaignContacts.size.toString())
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
         if (app.campaignContacts.isEmpty()) {
             Text("No contacts in this campaign.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -612,6 +649,13 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
                             Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium)
                             Text(c.phone, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val isLead = c.status == "interested"
+                            Text(
+                                "Status: ${statusLabel(c.status)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isLead) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                             c.notes?.takeIf { it.isNotBlank() }?.let {
                                 Spacer(Modifier.height(4.dp))
                                 Text("📝 $it", style = MaterialTheme.typography.bodySmall)
