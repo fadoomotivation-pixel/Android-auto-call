@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
+
 package com.salesautocall.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -8,11 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -31,13 +36,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.AutofillType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.salesautocall.app.data.AppPrefs
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -48,11 +59,13 @@ fun AppRoot(vm: MainViewModel) {
 @Composable
 private fun LoginScreen(vm: MainViewModel) {
     val state by vm.state.collectAsState()
+    val context = LocalContext.current
     var signUp by remember { mutableStateOf(false) }
     var fullName by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf(AppPrefs.getLastEmail(context)) }
     var password by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
@@ -63,22 +76,46 @@ private fun LoginScreen(vm: MainViewModel) {
         Spacer(Modifier.height(16.dp))
 
         if (signUp) {
-            OutlinedTextField(fullName, { fullName = it }, label = { Text("Full name") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                fullName, { fullName = it }, label = { Text("Full name") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.PersonFullName)) { fullName = it },
+            )
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(phone, { phone = it }, label = { Text("Phone") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                phone, { phone = it }, label = { Text("Phone") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.PhoneNumber)) { phone = it },
+            )
             Spacer(Modifier.height(8.dp))
         }
-        OutlinedTextField(email, { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth())
+
+        OutlinedTextField(
+            email, { email = it }, label = { Text("Email") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.EmailAddress, AutofillType.Username)) { email = it },
+        )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            password, { password = it }, label = { Text("Password") },
-            visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(),
+            password, { password = it }, label = { Text("Password") }, singleLine = true,
+            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = {
+                IconButton(onClick = { showPassword = !showPassword }) {
+                    Icon(
+                        if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = if (showPassword) "Hide password" else "Show password",
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.Password)) { password = it },
         )
         Spacer(Modifier.height(16.dp))
 
         Button(
             onClick = {
-                if (signUp) vm.signUp(email, password, fullName, phone) else vm.signIn(email, password)
+                AppPrefs.setLastEmail(context, email.trim())
+                if (signUp) vm.signUp(email.trim(), password, fullName, phone)
+                else vm.signIn(email.trim(), password)
             },
             enabled = !state.loading,
             modifier = Modifier.fillMaxWidth(),
