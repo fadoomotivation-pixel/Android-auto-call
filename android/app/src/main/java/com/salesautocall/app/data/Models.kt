@@ -4,6 +4,13 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class Company(
+    val id: String,
+    val name: String,
+    @SerialName("join_code") val joinCode: String? = null,
+)
+
+@Serializable
 data class Profile(
     val id: String,
     @SerialName("company_id") val companyId: String? = null,

@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.salesautocall.app.data.AppPrefs
 import com.salesautocall.app.data.CampaignStat
+import com.salesautocall.app.data.Company
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.ContactImport
 import com.salesautocall.app.data.ParseResult
@@ -25,6 +26,7 @@ data class AppState(
     val loading: Boolean = false,
     val signedIn: Boolean = false,
     val profile: Profile? = null,
+    val company: Company? = null,
     val campaigns: List<CampaignStat> = emptyList(),
     val campaignName: String = "",
     val breakSeconds: Int = 5,
@@ -70,6 +72,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { Repository.myProfile() }
                 .onSuccess { p -> set { it.copy(signedIn = true, profile = p) } }
                 .onFailure { set { it.copy(signedIn = true) } }
+            runCatching { Repository.myCompany() }
+                .onSuccess { c -> set { it.copy(company = c) } }
         }
     }
 
@@ -90,6 +94,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { block() }
                 .onSuccess {
                     set { it.copy(loading = false) }
+                    refreshSession()
+                }
+                .onFailure { e -> set { it.copy(loading = false, error = e.message) } }
+        }
+    }
+
+    /** A salesperson (already signed in) joins their company with the admin's code. */
+    fun joinCompany(code: String) {
+        if (code.isBlank()) return
+        viewModelScope.launch {
+            set { it.copy(loading = true, error = null) }
+            runCatching { Repository.joinCompanyByCode(code.trim()) }
+                .onSuccess {
+                    set { it.copy(loading = false, message = "Joined company.") }
                     refreshSession()
                 }
                 .onFailure { e -> set { it.copy(loading = false, error = e.message) } }

@@ -158,9 +158,20 @@ object Repository {
     }
 
     suspend fun deleteCampaign(campaignId: String) {
-        // Remove the campaign's contacts first, then the campaign itself.
-        client.from("contacts").delete { filter { eq("campaign_id", campaignId) } }
-        client.from("campaigns").delete { filter { eq("id", campaignId) } }
+        // Soft-delete: keep the campaign + its contacts (and notes) so admins /
+        // super admins can still review them. Just mark it deleted.
+        client.from("campaigns").update(mapOf("deleted_at" to java.time.Instant.now().toString())) {
+            filter { eq("id", campaignId) }
+        }
+    }
+
+    // ---------- company / team ----------
+
+    suspend fun myCompany(): Company? {
+        val cid = myProfile()?.companyId ?: return null
+        return client.from("companies").select {
+            filter { eq("id", cid) }
+        }.decodeSingleOrNull<Company>()
     }
 
     suspend fun fetchCampaignContacts(campaignId: String): List<Contact> {

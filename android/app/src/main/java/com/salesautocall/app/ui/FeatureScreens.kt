@@ -50,7 +50,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,6 +112,12 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
     }
 
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
+        // Not linked to a company yet → must join first.
+        if (app.profile != null && app.profile?.companyId == null) {
+            JoinCompanyCard(vm, app)
+            return@Column
+        }
+
         Text("Start New Campaign", style = MaterialTheme.typography.headlineSmall)
         Text("Create a campaign to organize and track your calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
@@ -167,6 +175,49 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun JoinCompanyCard(vm: MainViewModel, app: AppState) {
+    var code by remember { mutableStateOf("") }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Join your company", style = MaterialTheme.typography.titleMedium)
+            Text("Ask your admin for the company code, then enter it to start calling.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                code, { code = it.uppercase() }, label = { Text("Company code") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = { vm.joinCompany(code) }, enabled = !app.loading && code.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()) {
+                Text(if (app.loading) "Joining…" else "Join company")
+            }
+            app.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+            app.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+    }
+}
+
+@Composable
+private fun InviteCodeCard(app: AppState) {
+    val code = app.company?.joinCode ?: return
+    val clipboard = LocalClipboardManager.current
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Invite your team", style = MaterialTheme.typography.titleMedium)
+            Text("Share this code. Salespeople enter it when they sign up (or under Join company) to join ${app.company?.name ?: "your company"}.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(code, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(16.dp))
+                OutlinedButton(onClick = { clipboard.setText(AnnotatedString(code)) }) { Text("Copy") }
+            }
+        }
     }
 }
 
@@ -444,6 +495,12 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
         Text("Settings", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(20.dp))
+
+        // Admins: invite code to onboard salespeople from the app.
+        if (app.profile?.role == "admin") {
+            InviteCodeCard(app)
+            Spacer(Modifier.height(16.dp))
+        }
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {

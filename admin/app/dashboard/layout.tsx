@@ -52,6 +52,7 @@ export default async function DashboardLayout({
             </div>
             <NavLink href="/dashboard/platform" label="🏢 Companies" />
             <NavLink href="/dashboard/platform/telecallers" label="🎧 Telecallers" />
+            <NavLink href="/dashboard/platform/contacts" label="📇 Contacts" />
           </>
         )}
         <div className="spacer" />
