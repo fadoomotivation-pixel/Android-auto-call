@@ -2,21 +2,30 @@ package com.salesautocall.app.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,18 +37,26 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.salesautocall.app.data.Contact
 import com.salesautocall.app.dialer.AutoDialerService
 import com.salesautocall.app.dialer.DialerController
+import kotlinx.coroutines.delay
 
 private fun fmt(seconds: Int): String {
     val m = seconds / 60
@@ -150,21 +167,45 @@ private fun StepCard(number: String, title: String, content: @Composable () -> U
 private fun RunningView(onStop: (android.content.Context) -> Unit) {
     val dial by DialerController.state.collectAsState()
     val context = LocalContext.current
+
+    // Live per-call timer: resets whenever the current contact changes.
+    var elapsed by remember { mutableIntStateOf(0) }
+    LaunchedEffect(dial.currentPhone) {
+        elapsed = 0
+        while (true) {
+            delay(1000)
+            elapsed++
+        }
+    }
+
+    val name = dial.currentName ?: dial.currentPhone ?: "—"
+    val initials = name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
+
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Calling…", style = MaterialTheme.typography.headlineSmall)
+        Box(
+            Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(initials.ifBlank { "?" }, style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        dial.currentPhone?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.height(8.dp))
-        Text(dial.currentName ?: dial.currentPhone ?: "—", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(24.dp))
+        Text(fmt(elapsed), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+
+        Spacer(Modifier.height(28.dp))
         val progress = if (dial.total > 0) dial.completed.toFloat() / dial.total else 0f
         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         Text("${dial.completed} / ${dial.total}  ·  last: ${dial.lastOutcome ?: "—"}")
         Spacer(Modifier.height(32.dp))
-        OutlinedButton(onClick = { onStop(context) }) { Text("Stop") }
+        OutlinedButton(onClick = { onStop(context) }) { Text("Stop campaign") }
     }
 }
 
@@ -213,7 +254,7 @@ private fun StatRow(label: String, value: String) {
 // Analytics tab — campaign list with progress
 // ============================================================
 @Composable
-fun AnalyticsScreen(vm: MainViewModel) {
+fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
     val app by vm.state.collectAsState()
     LaunchedEffect(Unit) { vm.loadCampaigns() }
 
@@ -226,7 +267,9 @@ fun AnalyticsScreen(vm: MainViewModel) {
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(app.campaigns, key = { it.campaignId }) { c ->
-                    Card(Modifier.fillMaxWidth()) {
+                    Card(
+                        Modifier.fillMaxWidth().clickable { onOpen(c.campaignId, c.name) },
+                    ) {
                         Column(Modifier.padding(16.dp)) {
                             Row(
                                 Modifier.fillMaxWidth(),
@@ -323,5 +366,87 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             Text("Signed in as ${it.fullName ?: "—"}", style = MaterialTheme.typography.bodySmall)
         }
         OutlinedButton(onClick = { vm.signOut() }) { Text("Sign out") }
+    }
+}
+
+// ============================================================
+// Campaign detail — per-contact call dispositions + notes
+// ============================================================
+private val DISPOSITIONS = listOf(
+    "interested" to "Interested",
+    "callback" to "Callback",
+    "not_interested" to "Not interested",
+    "called" to "Done",
+    "dnc" to "DNC",
+)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit) {
+    val app by vm.state.collectAsState()
+    var noteFor by remember { mutableStateOf<Contact?>(null) }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = onBack) { Text("Back") }
+            Spacer(Modifier.width(12.dp))
+            Text(app.selectedCampaignName, style = MaterialTheme.typography.titleLarge)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("Tap an outcome for each contact. Updates sync to your dashboard.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(12.dp))
+
+        if (app.campaignContacts.isEmpty()) {
+            Text("No contacts in this campaign.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(app.campaignContacts, key = { it.id ?: it.phone }) { c ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium)
+                            Text(c.phone, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            c.notes?.takeIf { it.isNotBlank() }?.let {
+                                Spacer(Modifier.height(4.dp))
+                                Text("📝 $it", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                DISPOSITIONS.forEach { (status, label) ->
+                                    val selected = c.status == status
+                                    AssistChip(
+                                        onClick = { c.id?.let { vm.setDisposition(it, status, c.notes) } },
+                                        label = { Text(label) },
+                                        leadingIcon = if (selected) {
+                                            { Text("✓") }
+                                        } else null,
+                                    )
+                                }
+                                AssistChip(onClick = { noteFor = c }, label = { Text("Note") })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    noteFor?.let { contact ->
+        var text by remember(contact.id) { mutableStateOf(contact.notes ?: "") }
+        AlertDialog(
+            onDismissRequest = { noteFor = null },
+            title = { Text("Note for ${contact.name ?: contact.phone}") },
+            text = {
+                OutlinedTextField(text, { text = it }, label = { Text("Note") }, modifier = Modifier.fillMaxWidth())
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    contact.id?.let { vm.setDisposition(it, contact.status, text) }
+                    noteFor = null
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { noteFor = null }) { Text("Cancel") } },
+        )
     }
 }

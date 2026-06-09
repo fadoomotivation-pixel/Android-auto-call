@@ -3,9 +3,11 @@ package com.salesautocall.app.data
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Thin data-access layer over Supabase. All reads/writes are constrained by
@@ -120,6 +122,31 @@ object Repository {
         // Remove the campaign's contacts first, then the campaign itself.
         client.from("contacts").delete { filter { eq("campaign_id", campaignId) } }
         client.from("campaigns").delete { filter { eq("id", campaignId) } }
+    }
+
+    suspend fun fetchCampaignContacts(campaignId: String): List<Contact> {
+        return client.from("contacts").select {
+            filter { eq("campaign_id", campaignId) }
+            order("created_at", Order.ASCENDING)
+        }.decodeList<Contact>()
+    }
+
+    /** Records a salesperson's call outcome (disposition) + optional note. */
+    suspend fun setDisposition(contactId: String, status: String, note: String?) {
+        val patch = buildMap {
+            put("status", status)
+            if (note != null) put("notes", note)
+        }
+        client.from("contacts").update(patch) { filter { eq("id", contactId) } }
+    }
+
+    // ---------- team ----------
+
+    suspend fun joinCompanyByCode(code: String) {
+        client.postgrest.rpc(
+            "join_company_by_code",
+            buildJsonObject { put("p_code", code) },
+        )
     }
 }
 
