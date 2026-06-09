@@ -4,12 +4,29 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import com.salesautocall.app.data.AppPrefs
+import java.io.PrintWriter
+import java.io.StringWriter
 
 class SalesAutoCallApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        installCrashHandler()
         createDialerChannel()
+    }
+
+    /** Saves the stack trace of any uncaught crash so it can be shown on next launch. */
+    private fun installCrashHandler() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                val sw = StringWriter()
+                throwable.printStackTrace(PrintWriter(sw))
+                AppPrefs.setLastCrash(this, sw.toString().take(4000))
+            }
+            previous?.uncaughtException(thread, throwable)
+        }
     }
 
     private fun createDialerChannel() {

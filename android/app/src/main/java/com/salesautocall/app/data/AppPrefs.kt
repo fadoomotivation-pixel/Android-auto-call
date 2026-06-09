@@ -7,6 +7,7 @@ object AppPrefs {
     private const val FILE = "salesautocall_prefs"
     private const val KEY_BREAK = "break_seconds"
     private const val KEY_EMAIL = "last_email"
+    private const val KEY_CRASH = "last_crash"
 
     fun getBreakSeconds(context: Context): Int =
         prefs(context).getInt(KEY_BREAK, 5)
@@ -19,6 +20,15 @@ object AppPrefs {
 
     fun setLastEmail(context: Context, email: String) =
         prefs(context).edit().putString(KEY_EMAIL, email).apply()
+
+    fun getLastCrash(context: Context): String? =
+        prefs(context).getString(KEY_CRASH, null)
+
+    fun setLastCrash(context: Context, text: String) =
+        prefs(context).edit().putString(KEY_CRASH, text).apply()
+
+    fun clearLastCrash(context: Context) =
+        prefs(context).edit().remove(KEY_CRASH).apply()
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
