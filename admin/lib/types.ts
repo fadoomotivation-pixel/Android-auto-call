@@ -81,6 +81,24 @@ export interface TelecallerOverview {
   latest_campaign: string | null;
 }
 
+export interface ContactDetail {
+  id: string;
+  company_id: string;
+  company_name: string | null;
+  campaign_id: string | null;
+  campaign_name: string | null;
+  campaign_deleted: boolean;
+  salesperson_id: string | null;
+  salesperson_name: string | null;
+  name: string | null;
+  phone: string;
+  email: string | null;
+  contact_company: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface SalespersonStats {
   salesperson_id: string;
   full_name: string | null;
