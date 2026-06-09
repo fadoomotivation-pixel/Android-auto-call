@@ -57,6 +57,30 @@ export interface CallLog {
   created_at: string;
 }
 
+export interface CompanyOverview {
+  company_id: string;
+  name: string;
+  created_at: string;
+  salespeople: number;
+  campaigns: number;
+  contacts: number;
+  calls: number;
+  last_call_at: string | null;
+}
+
+export interface TelecallerOverview {
+  salesperson_id: string;
+  full_name: string | null;
+  is_active: boolean;
+  company_id: string | null;
+  company_name: string | null;
+  campaigns: number;
+  calls: number;
+  connected: number;
+  last_call_at: string | null;
+  latest_campaign: string | null;
+}
+
 export interface SalespersonStats {
   salesperson_id: string;
   full_name: string | null;
