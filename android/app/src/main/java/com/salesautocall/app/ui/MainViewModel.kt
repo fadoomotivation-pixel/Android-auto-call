@@ -31,6 +31,10 @@ data class AppState(
     val campaignName: String = "",
     val breakSeconds: Int = 5,
     val reviewAfterCall: Boolean = true,
+    val dailyGoal: Int = 50,
+    val todayCalls: Int = 0,
+    val todayConnected: Int = 0,
+    val todayTalk: Int = 0,
     val followUpInfo: String? = null,
     val followUpDone: Boolean = false,
     val pendingParse: ParseResult? = null,
@@ -48,6 +52,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         AppState(
             breakSeconds = AppPrefs.getBreakSeconds(app),
             reviewAfterCall = AppPrefs.getReviewAfterCall(app),
+            dailyGoal = AppPrefs.getDailyGoal(app),
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -133,6 +138,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setReviewAfterCall(value: Boolean) {
         AppPrefs.setReviewAfterCall(getApplication(), value)
         set { it.copy(reviewAfterCall = value) }
+    }
+
+    fun setDailyGoal(value: Int) {
+        AppPrefs.setDailyGoal(getApplication(), value)
+        set { it.copy(dailyGoal = value.coerceIn(10, 500)) }
+    }
+
+    fun loadToday() {
+        viewModelScope.launch {
+            runCatching { Repository.fetchTodayCalls() }
+                .onSuccess { list ->
+                    set {
+                        it.copy(
+                            todayCalls = list.size,
+                            todayConnected = list.count { c -> c.outcome == "connected" },
+                            todayTalk = list.sumOf { c -> c.durationSeconds },
+                        )
+                    }
+                }
+        }
     }
 
     // ---------- file pick ----------

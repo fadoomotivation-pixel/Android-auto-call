@@ -75,6 +75,20 @@ object Repository {
         }.decodeList<CallLog>()
     }
 
+    /** This salesperson's calls since local midnight (for the Today tracker). */
+    suspend fun fetchTodayCalls(): List<CallLog> {
+        val uid = currentUserId() ?: return emptyList()
+        val start = java.time.LocalDate.now()
+            .atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toString()
+        return client.from("call_logs").select {
+            filter {
+                eq("salesperson_id", uid)
+                gte("created_at", start)
+            }
+        }.decodeList<CallLog>()
+    }
+
     // ---------- campaigns ----------
 
     /**

@@ -122,6 +122,10 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
             return@Column
         }
 
+        LaunchedEffect(Unit) { vm.loadToday() }
+        TodayCard(app)
+        Spacer(Modifier.height(16.dp))
+
         Text("Start New Campaign", style = MaterialTheme.typography.headlineSmall)
         Text("Create a campaign to organize and track your calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
@@ -179,6 +183,30 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun TodayCard(app: AppState) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Today", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Stat("Calls", app.todayCalls.toString())
+                Stat("Connected", app.todayConnected.toString())
+                Stat("Talk", fmt(app.todayTalk))
+            }
+            Spacer(Modifier.height(14.dp))
+            val p = if (app.dailyGoal > 0) (app.todayCalls.toFloat() / app.dailyGoal).coerceIn(0f, 1f) else 0f
+            LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (app.todayCalls >= app.dailyGoal) "🎉 Daily goal reached — ${app.todayCalls}/${app.dailyGoal}"
+                else "${app.todayCalls} / ${app.dailyGoal} daily goal",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -561,6 +589,22 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
+                Text("Daily call goal", style = MaterialTheme.typography.titleMedium)
+                Text("Target calls per day, shown on your Today card.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { vm.setDailyGoal(app.dailyGoal - 10) }) { Text("−10") }
+                    Text("${app.dailyGoal}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    OutlinedButton(onClick = { vm.setDailyGoal(app.dailyGoal + 10) }) { Text("+10") }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
                 Text("How It Works", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -599,6 +643,7 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
     val app by vm.state.collectAsState()
     val context = LocalContext.current
     var noteFor by remember { mutableStateOf<Contact?>(null) }
+    var query by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -639,11 +684,24 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
             Spacer(Modifier.height(12.dp))
         }
 
-        if (app.campaignContacts.isEmpty()) {
-            Text("No contacts in this campaign.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(
+            query, { query = it }, label = { Text("Search name or phone") },
+            singleLine = true, modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+
+        val filtered = if (query.isBlank()) app.campaignContacts else app.campaignContacts.filter {
+            (it.name ?: "").contains(query, ignoreCase = true) || it.phone.contains(query)
+        }
+
+        if (filtered.isEmpty()) {
+            Text(
+                if (app.campaignContacts.isEmpty()) "No contacts in this campaign." else "No matches.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(app.campaignContacts, key = { it.id ?: it.phone }) { c ->
+                items(filtered, key = { it.id ?: it.phone }) { c ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp)) {
                             Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium)
