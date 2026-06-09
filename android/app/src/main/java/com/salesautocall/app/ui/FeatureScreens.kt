@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,12 +57,34 @@ import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.dialer.AutoDialerService
 import com.salesautocall.app.dialer.DialerController
+import com.salesautocall.app.dialer.DialerUiState
 import kotlinx.coroutines.delay
 
 private fun fmt(seconds: Int): String {
     val m = seconds / 60
     val s = seconds % 60
     return if (m > 0) "${m}m ${s}s" else "${s}s"
+}
+
+/** Disposition chips used in review + campaign detail. */
+private val QUICK_DISPOSITIONS = listOf(
+    "called" to "Answered",
+    "no_answer" to "No answer",
+    "busy" to "Switched off",
+    "callback" to "Callback",
+    "interested" to "Interested",
+    "not_interested" to "Not interested",
+    "dnc" to "DNC",
+)
+
+/** Opens a WhatsApp chat with the given number (falls back to wa.me in a browser). */
+private fun openWhatsApp(context: android.content.Context, phone: String) {
+    val digits = phone.filter { it.isDigit() }
+    val intent = android.content.Intent(
+        android.content.Intent.ACTION_VIEW,
+        android.net.Uri.parse("https://wa.me/$digits"),
+    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }
 
 // ============================================================
@@ -73,8 +96,8 @@ fun CampaignScreen(vm: MainViewModel) {
     val dial by DialerController.state.collectAsState()
 
     when {
-        dial.isRunning -> RunningView(onStop = AutoDialerService::stop)
-        dial.finished && dial.total > 0 -> SessionSummaryView(onNew = { DialerController.reset() })
+        dial.isRunning -> RunningView(vm)
+        dial.finished && dial.total > 0 -> SessionSummaryView(vm, onNew = { DialerController.reset() })
         else -> CreateCampaignView(vm, app)
     }
 }
@@ -164,35 +187,39 @@ private fun StepCard(number: String, title: String, content: @Composable () -> U
 }
 
 @Composable
-private fun RunningView(onStop: (android.content.Context) -> Unit) {
+private fun RunningView(vm: MainViewModel) {
     val dial by DialerController.state.collectAsState()
-    val context = LocalContext.current
+    if (dial.paused) ReviewPanel(vm, dial) else CallingPanel(dial, vm)
+}
 
-    // Live per-call timer: resets whenever the current contact changes.
+@Composable
+private fun Avatar(name: String) {
+    val initials = name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
+    Box(
+        Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(initials.ifBlank { "?" }, style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun CallingPanel(dial: DialerUiState, vm: MainViewModel) {
+    val context = LocalContext.current
     var elapsed by remember { mutableIntStateOf(0) }
     LaunchedEffect(dial.currentPhone) {
         elapsed = 0
-        while (true) {
-            delay(1000)
-            elapsed++
-        }
+        while (true) { delay(1000); elapsed++ }
     }
-
     val name = dial.currentName ?: dial.currentPhone ?: "—"
-    val initials = name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
 
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Box(
-            Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(initials.ifBlank { "?" }, style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
-        }
+        Avatar(name)
         Spacer(Modifier.height(16.dp))
         Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         dial.currentPhone?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -204,16 +231,75 @@ private fun RunningView(onStop: (android.content.Context) -> Unit) {
         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
         Text("${dial.completed} / ${dial.total}  ·  last: ${dial.lastOutcome ?: "—"}")
-        Spacer(Modifier.height(32.dp))
-        OutlinedButton(onClick = { onStop(context) }) { Text("Stop campaign") }
+
+        Spacer(Modifier.height(28.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = { vm.pauseCampaign() }) { Text("Pause") }
+            OutlinedButton(onClick = { AutoDialerService.stop(context) }) { Text("Stop") }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
+    val context = LocalContext.current
+    val name = dial.lastContactName ?: dial.lastContactPhone ?: "—"
+
+    Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
+        Text("Paused", style = MaterialTheme.typography.headlineSmall)
+        Text("${dial.completed} / ${dial.total} done", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(16.dp))
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(name)
+                    Spacer(Modifier.width(14.dp))
+                    Column {
+                        Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        dial.lastContactPhone?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Text("Outcome: ${dial.lastOutcome ?: "—"}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("Mark outcome", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(6.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    QUICK_DISPOSITIONS.forEach { (status, label) ->
+                        AssistChip(
+                            onClick = { dial.lastContactId?.let { vm.quickDisposition(it, status) } },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = { dial.lastContactPhone?.let { openWhatsApp(context, it) } },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = androidx.compose.ui.graphics.Color(0xFF25D366),
+                    ),
+                ) { Text("Chat on WhatsApp") }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = { vm.resumeCampaign() }) { Text("Next call ▶") }
+            OutlinedButton(onClick = { AutoDialerService.stop(context) }) { Text("Stop") }
+        }
     }
 }
 
 @Composable
-private fun SessionSummaryView(onNew: () -> Unit) {
+private fun SessionSummaryView(vm: MainViewModel, onNew: () -> Unit) {
+    val app by vm.state.collectAsState()
     val dial by DialerController.state.collectAsState()
     val sessionSec = ((dial.sessionEndMillis - dial.sessionStartMillis) / 1000).toInt().coerceAtLeast(0)
     val avg = if (dial.dialedCount > 0) dial.talkSeconds.toDouble() / dial.dialedCount else 0.0
+
+    // Auto-bundle unanswered numbers into a follow-up campaign for tomorrow.
+    LaunchedEffect(Unit) { vm.createFollowUp() }
 
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
         Text("Session Complete!", style = MaterialTheme.typography.headlineSmall)
@@ -237,6 +323,13 @@ private fun SessionSummaryView(onNew: () -> Unit) {
                 StatRow("Average Call Duration", String.format("%.1fs", avg))
             }
         }
+        app.followUpInfo?.let {
+            Spacer(Modifier.height(16.dp))
+            Card(Modifier.fillMaxWidth()) {
+                Text("📅 $it", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.primary)
+            }
+        }
+
         Spacer(Modifier.height(24.dp))
         Button(onClick = onNew, modifier = Modifier.fillMaxWidth()) { Text("Start New Campaign") }
     }
@@ -347,6 +440,21 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
         Spacer(Modifier.height(16.dp))
         Card(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Pause after each call", style = MaterialTheme.typography.titleMedium)
+                    Text("Review the call, set an outcome, or WhatsApp before the next number.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = app.reviewAfterCall, onCheckedChange = { vm.setReviewAfterCall(it) })
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("How It Works", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
@@ -384,6 +492,7 @@ private val DISPOSITIONS = listOf(
 @Composable
 fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit) {
     val app by vm.state.collectAsState()
+    val context = LocalContext.current
     var noteFor by remember { mutableStateOf<Contact?>(null) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -424,6 +533,7 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit) {
                                     )
                                 }
                                 AssistChip(onClick = { noteFor = c }, label = { Text("Note") })
+                                AssistChip(onClick = { openWhatsApp(context, c.phone) }, label = { Text("WhatsApp") })
                             }
                         }
                     }
