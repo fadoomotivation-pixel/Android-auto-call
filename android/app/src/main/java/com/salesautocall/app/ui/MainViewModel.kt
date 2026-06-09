@@ -112,10 +112,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             set { it.copy(loading = true, error = null) }
             runCatching { Repository.joinCompanyByCode(code.trim()) }
                 .onSuccess {
-                    set { it.copy(loading = false, message = "Joined company.") }
+                    set { it.copy(loading = false, message = "✓ Joined your company. You can start calling now.") }
                     refreshSession()
+                    loadCampaigns()
+                    loadToday()
                 }
-                .onFailure { e -> set { it.copy(loading = false, error = e.message) } }
+                .onFailure { e -> set { it.copy(loading = false, error = "Couldn't join: ${e.message}") } }
         }
     }
 
