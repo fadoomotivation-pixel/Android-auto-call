@@ -9,6 +9,13 @@ object AppPrefs {
     private const val KEY_EMAIL = "last_email"
     private const val KEY_CRASH = "last_crash"
     private const val KEY_REVIEW = "review_after_call"
+    private const val KEY_GOAL = "daily_goal"
+
+    fun getDailyGoal(context: Context): Int =
+        prefs(context).getInt(KEY_GOAL, 50)
+
+    fun setDailyGoal(context: Context, value: Int) =
+        prefs(context).edit().putInt(KEY_GOAL, value.coerceIn(10, 500)).apply()
 
     fun getBreakSeconds(context: Context): Int =
         prefs(context).getInt(KEY_BREAK, 5)

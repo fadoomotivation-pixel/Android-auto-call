@@ -83,6 +83,20 @@ private fun statusLabel(status: String): String =
     QUICK_DISPOSITIONS.firstOrNull { it.first == status }?.second
         ?: status.replace('_', ' ').replaceFirstChar { it.uppercase() }
 
+/** Opens the Android share sheet with the given text. */
+private fun shareText(context: android.content.Context, text: String) {
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+    }
+    runCatching {
+        context.startActivity(
+            android.content.Intent.createChooser(send, "Share invite")
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+}
+
 /** Opens a WhatsApp chat with the given number (falls back to wa.me in a browser). */
 private fun openWhatsApp(context: android.content.Context, phone: String) {
     val digits = phone.filter { it.isDigit() }
@@ -121,6 +135,10 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
             JoinCompanyCard(vm, app)
             return@Column
         }
+
+        LaunchedEffect(Unit) { vm.loadToday() }
+        TodayCard(app)
+        Spacer(Modifier.height(16.dp))
 
         Text("Start New Campaign", style = MaterialTheme.typography.headlineSmall)
         Text("Create a campaign to organize and track your calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -183,6 +201,30 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
 }
 
 @Composable
+private fun TodayCard(app: AppState) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Today", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Stat("Calls", app.todayCalls.toString())
+                Stat("Connected", app.todayConnected.toString())
+                Stat("Talk", fmt(app.todayTalk))
+            }
+            Spacer(Modifier.height(14.dp))
+            val p = if (app.dailyGoal > 0) (app.todayCalls.toFloat() / app.dailyGoal).coerceIn(0f, 1f) else 0f
+            LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (app.todayCalls >= app.dailyGoal) "🎉 Daily goal reached — ${app.todayCalls}/${app.dailyGoal}"
+                else "${app.todayCalls} / ${app.dailyGoal} daily goal",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun JoinCompanyCard(vm: MainViewModel, app: AppState) {
     var code by remember { mutableStateOf("") }
     Card(Modifier.fillMaxWidth()) {
@@ -207,19 +249,54 @@ private fun JoinCompanyCard(vm: MainViewModel, app: AppState) {
 }
 
 @Composable
-private fun InviteCodeCard(app: AppState) {
-    val code = app.company?.joinCode ?: return
+private fun CompanyCard(vm: MainViewModel, app: AppState) {
+    val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val company = app.company
+    val isAdmin = app.profile?.role == "admin"
+    var code by remember { mutableStateOf("") }
+
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Invite your team", style = MaterialTheme.typography.titleMedium)
-            Text("Share this code. Salespeople enter it when they sign up (or under Join company) to join ${app.company?.name ?: "your company"}.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(code, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(16.dp))
-                OutlinedButton(onClick = { clipboard.setText(AnnotatedString(code)) }) { Text("Copy") }
+            Text("Your company", style = MaterialTheme.typography.titleMedium)
+            if (company != null) {
+                Text("You're in: ${company.name}", style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold)
+            } else {
+                Text("You haven't joined a company yet — enter your admin's code below.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            if (isAdmin && company?.joinCode != null) {
+                // Admin: share the invite code.
+                Spacer(Modifier.height(14.dp))
+                Text("Invite code", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(4.dp))
+                Text(company.joinCode, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { clipboard.setText(AnnotatedString(company.joinCode)) }) { Text("Copy") }
+                    OutlinedButton(onClick = {
+                        shareText(context, "Join my Bulk Caller team. Open the app, tap Create an account (or Settings → Your company), and enter code: ${company.joinCode}")
+                    }) { Text("Share") }
+                }
+            } else {
+                // Anyone else: join (or switch) a company with a code.
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    code, { code = it.uppercase() },
+                    label = { Text("Enter company code") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { vm.joinCompany(code) },
+                    enabled = !app.loading && code.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (company == null) "Join company" else "Switch company") }
+                app.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                app.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
     }
@@ -518,11 +595,9 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         Text("Settings", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(20.dp))
 
-        // Admins: invite code to onboard salespeople from the app.
-        if (app.profile?.role == "admin") {
-            InviteCodeCard(app)
-            Spacer(Modifier.height(16.dp))
-        }
+        // Company: invite code (admin) or join/switch by code (everyone else).
+        CompanyCard(vm, app)
+        Spacer(Modifier.height(16.dp))
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
@@ -558,6 +633,22 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 Switch(checked = app.reviewAfterCall, onCheckedChange = { vm.setReviewAfterCall(it) })
             }
         }
+        Spacer(Modifier.height(16.dp))
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Daily call goal", style = MaterialTheme.typography.titleMedium)
+                Text("Target calls per day, shown on your Today card.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { vm.setDailyGoal(app.dailyGoal - 10) }) { Text("−10") }
+                    Text("${app.dailyGoal}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    OutlinedButton(onClick = { vm.setDailyGoal(app.dailyGoal + 10) }) { Text("+10") }
+                }
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
@@ -599,6 +690,7 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
     val app by vm.state.collectAsState()
     val context = LocalContext.current
     var noteFor by remember { mutableStateOf<Contact?>(null) }
+    var query by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -639,11 +731,24 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
             Spacer(Modifier.height(12.dp))
         }
 
-        if (app.campaignContacts.isEmpty()) {
-            Text("No contacts in this campaign.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(
+            query, { query = it }, label = { Text("Search name or phone") },
+            singleLine = true, modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+
+        val filtered = if (query.isBlank()) app.campaignContacts else app.campaignContacts.filter {
+            (it.name ?: "").contains(query, ignoreCase = true) || it.phone.contains(query)
+        }
+
+        if (filtered.isEmpty()) {
+            Text(
+                if (app.campaignContacts.isEmpty()) "No contacts in this campaign." else "No matches.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(app.campaignContacts, key = { it.id ?: it.phone }) { c ->
+                items(filtered, key = { it.id ?: it.phone }) { c ->
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp)) {
                             Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium)
