@@ -28,6 +28,9 @@ data class AppState(
     val campaigns: List<CampaignStat> = emptyList(),
     val campaignName: String = "",
     val breakSeconds: Int = 5,
+    val reviewAfterCall: Boolean = true,
+    val followUpInfo: String? = null,
+    val followUpDone: Boolean = false,
     val pendingParse: ParseResult? = null,
     val pendingFileName: String? = null,
     val selectedCampaignId: String? = null,
@@ -39,7 +42,12 @@ data class AppState(
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val _state = MutableStateFlow(AppState(breakSeconds = AppPrefs.getBreakSeconds(app)))
+    private val _state = MutableStateFlow(
+        AppState(
+            breakSeconds = AppPrefs.getBreakSeconds(app),
+            reviewAfterCall = AppPrefs.getReviewAfterCall(app),
+        ),
+    )
     val state: StateFlow<AppState> = _state.asStateFlow()
 
     init {
@@ -104,6 +112,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         set { it.copy(breakSeconds = value.coerceIn(1, 59)) }
     }
 
+    fun setReviewAfterCall(value: Boolean) {
+        AppPrefs.setReviewAfterCall(getApplication(), value)
+        set { it.copy(reviewAfterCall = value) }
+    }
+
     // ---------- file pick ----------
 
     fun pickFile(uri: Uri) {
@@ -151,13 +164,47 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }.onSuccess { contacts ->
                 DialerController.prepare(
                     contacts,
-                    DialerConfig(gapSeconds = s.breakSeconds),
+                    DialerConfig(gapSeconds = s.breakSeconds, reviewAfterEachCall = s.reviewAfterCall),
                     s.campaignName.ifBlank { "Campaign" },
+                    contacts.firstOrNull()?.campaignId ?: "",
                 )
                 AutoDialerService.start(getApplication())
-                set { it.copy(loading = false, pendingParse = null, pendingFileName = null, campaignName = "", message = null) }
+                set { it.copy(loading = false, pendingParse = null, pendingFileName = null, campaignName = "", message = null, followUpInfo = null, followUpDone = false) }
                 loadCampaigns()
             }.onFailure { e -> set { it.copy(loading = false, error = e.message) } }
+        }
+    }
+
+    // ---------- in-session controls ----------
+
+    fun pauseCampaign() = DialerController.pause()
+    fun resumeCampaign() = DialerController.resume()
+
+    fun quickDisposition(contactId: String, status: String) {
+        viewModelScope.launch {
+            runCatching { Repository.setDisposition(contactId, status, null) }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
+    /** Bundles the just-finished campaign's unanswered numbers into a follow-up campaign. */
+    fun createFollowUp() {
+        if (_state.value.followUpDone) return
+        val sourceId = DialerController.campaignId
+        if (sourceId.isBlank()) return
+        set { it.copy(followUpDone = true) }
+        viewModelScope.launch {
+            runCatching { Repository.createFollowUpCampaign(sourceId, _state.value.breakSeconds) }
+                .onSuccess { n ->
+                    set {
+                        it.copy(
+                            followUpInfo = if (n > 0) "Follow-up campaign created with $n unanswered numbers — call them tomorrow."
+                            else "No unanswered numbers to follow up.",
+                        )
+                    }
+                    loadCampaigns()
+                }
+                .onFailure { e -> set { it.copy(error = e.message, followUpDone = false) } }
         }
     }
 

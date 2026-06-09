@@ -93,6 +93,9 @@ class AutoDialerService : Service() {
         val cfg = DialerController.config
 
         for ((i, contact) in queue.withIndex()) {
+            // Wait here if the campaign is paused (manual pause or after-call review).
+            DialerController.awaitResume()
+
             DialerController.update {
                 it.copy(currentName = contact.name, currentPhone = contact.phone)
             }
@@ -135,10 +138,19 @@ class AutoDialerService : Service() {
                     lastOutcome = outcome,
                     dialedCount = it.dialedCount + if (wasDialed) 1 else 0,
                     talkSeconds = it.talkSeconds + talked,
+                    lastContactId = contact.id,
+                    lastContactName = contact.name,
+                    lastContactPhone = contact.phone,
                 )
             }
 
-            if (i < queue.lastIndex) delay(cfg.gapSeconds * 1000L)
+            // Pause for quick review (disposition / WhatsApp) after each call.
+            if (cfg.reviewAfterEachCall && i < queue.lastIndex) {
+                DialerController.pause()
+                updateNotification("Paused — review ${contact.name ?: contact.phone}")
+            } else if (i < queue.lastIndex) {
+                delay(cfg.gapSeconds * 1000L)
+            }
         }
 
         DialerController.update {

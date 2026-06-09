@@ -111,6 +111,45 @@ object Repository {
         return client.from("contacts").insert(contacts) { select() }.decodeList<Contact>()
     }
 
+    /**
+     * Clones the unanswered / call-back contacts of [sourceCampaignId] into a new
+     * "Follow-up" campaign to be called the next day. Returns how many were added.
+     */
+    suspend fun createFollowUpCampaign(sourceCampaignId: String, gapSeconds: Int): Int {
+        val profile = myProfile() ?: return 0
+        val companyId = profile.companyId ?: return 0
+        val uid = profile.id
+
+        val pending = client.from("contacts").select {
+            filter {
+                eq("campaign_id", sourceCampaignId)
+                isIn("status", listOf("no_answer", "busy", "callback"))
+            }
+        }.decodeList<Contact>()
+        if (pending.isEmpty()) return 0
+
+        val label = "Follow-up " + java.time.LocalDate.now().toString()
+        val campaign = client.from("campaigns").insert(
+            Campaign(companyId = companyId, salespersonId = uid, name = label, gapSeconds = gapSeconds),
+        ) { select() }.decodeSingle<Campaign>()
+
+        val clones = pending.map {
+            Contact(
+                companyId = companyId,
+                salespersonId = uid,
+                campaignId = campaign.id,
+                name = it.name,
+                phone = it.phone,
+                email = it.email,
+                companyName = it.companyName,
+                notes = it.notes,
+                status = "new",
+            )
+        }
+        client.from("contacts").insert(clones)
+        return clones.size
+    }
+
     suspend fun fetchCampaignStats(): List<CampaignStat> {
         if (currentUserId() == null) return emptyList()
         return client.from("v_campaign_stats").select {

@@ -8,12 +8,19 @@ object AppPrefs {
     private const val KEY_BREAK = "break_seconds"
     private const val KEY_EMAIL = "last_email"
     private const val KEY_CRASH = "last_crash"
+    private const val KEY_REVIEW = "review_after_call"
 
     fun getBreakSeconds(context: Context): Int =
         prefs(context).getInt(KEY_BREAK, 5)
 
     fun setBreakSeconds(context: Context, value: Int) =
         prefs(context).edit().putInt(KEY_BREAK, value.coerceIn(1, 59)).apply()
+
+    fun getReviewAfterCall(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_REVIEW, true)
+
+    fun setReviewAfterCall(context: Context, value: Boolean) =
+        prefs(context).edit().putBoolean(KEY_REVIEW, value).apply()
 
     fun getLastEmail(context: Context): String =
         prefs(context).getString(KEY_EMAIL, "") ?: ""
