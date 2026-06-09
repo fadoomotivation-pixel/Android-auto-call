@@ -77,7 +77,10 @@ class AutoDialerService : Service() {
     }
 
     private fun startRun() {
-        startForeground(NOTIF_ID, buildNotification("Starting auto-dial…"))
+        // Best-effort foreground promotion. On some OEMs / Android 14 the phoneCall
+        // FGS type can be restricted; never let that crash the app — the dial loop
+        // still runs while the app is in the foreground.
+        runCatching { startForeground(NOTIF_ID, buildNotification("Starting auto-dial…")) }
         if (loopJob?.isActive == true) return
         loopJob = scope.launch { runQueue() }
     }
@@ -309,12 +312,11 @@ class AutoDialerService : Service() {
         private const val OFFHOOK_TIMEOUT_MS = 30_000L
 
         fun start(context: Context) {
+            // Plain startService (the app is in the foreground when the user taps
+            // Start). The service promotes itself to foreground best-effort, so a
+            // restricted FGS type can't trigger the "did not start in time" crash.
             val intent = Intent(context, AutoDialerService::class.java).setAction(ACTION_START)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            context.startService(intent)
         }
 
         fun stop(context: Context) {

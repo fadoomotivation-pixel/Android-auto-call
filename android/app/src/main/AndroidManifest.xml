@@ -15,6 +15,8 @@
     <!-- Foreground service that runs the auto-dial queue -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <!-- Required so the phoneCall foreground-service type is allowed on Android 14+ -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
