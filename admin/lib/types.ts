@@ -12,6 +12,7 @@ export interface Company {
   id: string;
   name: string;
   owner_id: string | null;
+  join_code: string | null;
   created_at: string;
 }
 

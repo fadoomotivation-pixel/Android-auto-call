@@ -63,6 +63,7 @@ private fun LoginScreen(vm: MainViewModel) {
     var signUp by remember { mutableStateOf(false) }
     var fullName by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
+    var companyCode by remember { mutableStateOf("") }
     var email by remember { mutableStateOf(AppPrefs.getLastEmail(context)) }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -85,6 +86,11 @@ private fun LoginScreen(vm: MainViewModel) {
                 phone, { phone = it }, label = { Text("Phone") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.PhoneNumber)) { phone = it },
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                companyCode, { companyCode = it }, label = { Text("Company code (from your admin)") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
         }
@@ -114,7 +120,7 @@ private fun LoginScreen(vm: MainViewModel) {
         Button(
             onClick = {
                 AppPrefs.setLastEmail(context, email.trim())
-                if (signUp) vm.signUp(email.trim(), password, fullName, phone)
+                if (signUp) vm.signUp(email.trim(), password, fullName, phone, companyCode)
                 else vm.signIn(email.trim(), password)
             },
             enabled = !state.loading,
@@ -173,7 +179,15 @@ private fun MainShell(vm: MainViewModel) {
         Column(Modifier.padding(padding)) {
             NavHost(nav, startDestination = Tab.Campaign.route) {
                 composable(Tab.Campaign.route) { CampaignScreen(vm) }
-                composable(Tab.Analytics.route) { AnalyticsScreen(vm) }
+                composable(Tab.Analytics.route) {
+                    AnalyticsScreen(vm, onOpen = { id, name ->
+                        vm.openCampaign(id, name)
+                        nav.navigate("campaign_detail")
+                    })
+                }
+                composable("campaign_detail") {
+                    CampaignDetailScreen(vm, onBack = { nav.popBackStack() })
+                }
                 composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
             }
         }

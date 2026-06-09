@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.salesautocall.app.data.AppPrefs
 import com.salesautocall.app.data.CampaignStat
+import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.ContactImport
 import com.salesautocall.app.data.ParseResult
 import com.salesautocall.app.data.Profile
@@ -29,6 +30,9 @@ data class AppState(
     val breakSeconds: Int = 5,
     val pendingParse: ParseResult? = null,
     val pendingFileName: String? = null,
+    val selectedCampaignId: String? = null,
+    val selectedCampaignName: String = "",
+    val campaignContacts: List<Contact> = emptyList(),
     val message: String? = null,
     val error: String? = null,
 )
@@ -63,8 +67,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun signIn(email: String, password: String) = auth { Repository.signIn(email, password) }
 
-    fun signUp(email: String, password: String, fullName: String, phone: String) =
-        auth { Repository.signUp(email, password, fullName, phone) }
+    fun signUp(email: String, password: String, fullName: String, phone: String, companyCode: String) =
+        auth {
+            Repository.signUp(email, password, fullName, phone)
+            // If a session exists (email confirmation off) and a code was given, join now.
+            if (companyCode.isNotBlank() && Repository.currentUserId() != null) {
+                Repository.joinCompanyByCode(companyCode.trim())
+            }
+        }
 
     private fun auth(block: suspend () -> Unit) {
         viewModelScope.launch {
@@ -165,6 +175,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { Repository.deleteCampaign(id) }
                 .onSuccess { loadCampaigns() }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
+    fun openCampaign(id: String, name: String) {
+        set { it.copy(selectedCampaignId = id, selectedCampaignName = name, campaignContacts = emptyList()) }
+        viewModelScope.launch {
+            runCatching { Repository.fetchCampaignContacts(id) }
+                .onSuccess { c -> set { it.copy(campaignContacts = c) } }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
+    fun setDisposition(contactId: String, status: String, note: String?) {
+        viewModelScope.launch {
+            runCatching { Repository.setDisposition(contactId, status, note) }
+                .onSuccess {
+                    set { st ->
+                        st.copy(campaignContacts = st.campaignContacts.map { c ->
+                            if (c.id == contactId) c.copy(status = status, notes = note ?: c.notes) else c
+                        })
+                    }
+                }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
     }

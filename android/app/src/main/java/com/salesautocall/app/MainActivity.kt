@@ -6,10 +6,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.salesautocall.app.ui.AppRoot
+import com.salesautocall.app.ui.AppTheme
 import com.salesautocall.app.ui.MainViewModel
 
 class MainActivity : ComponentActivity() {
@@ -18,11 +19,12 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { /* no-op */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         requestRuntimePermissions()
 
         setContent {
-            MaterialTheme {
+            AppTheme {
                 Surface {
                     val vm: MainViewModel = viewModel()
                     AppRoot(vm)
