@@ -206,7 +206,16 @@ private fun MainShell(vm: MainViewModel) {
                     })
                 }
                 composable("campaign_detail") {
-                    CampaignDetailScreen(vm, onBack = { nav.popBackStack() })
+                    CampaignDetailScreen(
+                        vm,
+                        onBack = { nav.popBackStack() },
+                        onStarted = {
+                            nav.navigate(Tab.Campaign.route) {
+                                popUpTo(Tab.Campaign.route) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        },
+                    )
                 }
                 composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
             }
