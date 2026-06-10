@@ -314,6 +314,42 @@ private fun CompanyCard(vm: MainViewModel, app: AppState) {
 }
 
 @Composable
+private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Cloud calling (uroperator)", style = MaterialTheme.typography.titleMedium)
+                    Text("Optional. Rings your phone, then bridges the customer — no SIM auto-dial.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = app.cloudEnabled, onCheckedChange = { vm.setCloudEnabled(it) })
+            }
+            if (app.cloudEnabled) {
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    app.cloudAgentId, { vm.setCloudAgentId(it) },
+                    label = { Text("Agent ID / extension (from your admin)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    app.cloudCallerId, { vm.setCloudCallerId(it) },
+                    label = { Text("Caller ID / DID (optional)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Use the 📞 Cloud call button on a contact. Your admin sets up agent IDs/DIDs in uroperator.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
 private fun StepCard(number: String, title: String, content: @Composable () -> Unit) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors()) {
         Column(Modifier.padding(16.dp)) {
@@ -387,6 +423,7 @@ private fun CallingPanel(dial: DialerUiState, vm: MainViewModel) {
 @Composable
 private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
     val context = LocalContext.current
+    val app by vm.state.collectAsState()
     val name = dial.lastContactName ?: dial.lastContactPhone ?: "—"
     var noteOpen by remember { mutableStateOf(false) }
     var noteText by remember(dial.lastContactId) { mutableStateOf("") }
@@ -445,6 +482,14 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
                     ) { Text("WhatsApp") }
                     OutlinedButton(onClick = { noteOpen = true }) { Text("Save details") }
                 }
+                if (app.cloudEnabled) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = {
+                        dial.lastContactPhone?.let { vm.cloudCall(it, dial.lastContactId, DialerController.campaignId) }
+                    }) { Text("📞 Cloud call") }
+                }
+                app.message?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
+                app.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         }
 
@@ -661,6 +706,9 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
 
         Spacer(Modifier.height(16.dp))
+        CloudCallingCard(vm, app)
+
+        Spacer(Modifier.height(16.dp))
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("How It Works", style = MaterialTheme.typography.titleMedium)
@@ -790,6 +838,12 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
                                 }
                                 AssistChip(onClick = { noteFor = c }, label = { Text("Note") })
                                 AssistChip(onClick = { openWhatsApp(context, c.phone) }, label = { Text("WhatsApp") })
+                                if (app.cloudEnabled) {
+                                    AssistChip(
+                                        onClick = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
+                                        label = { Text("📞 Cloud call") },
+                                    )
+                                }
                             }
                         }
                     }

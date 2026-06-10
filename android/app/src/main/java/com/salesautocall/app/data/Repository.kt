@@ -2,9 +2,11 @@ package com.salesautocall.app.data
 
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -210,6 +212,19 @@ object Repository {
     }
 
     // ---------- team ----------
+
+    /** Triggers a cloud click-to-call via the Edge Function. Returns the raw JSON response. */
+    suspend fun cloudCall(customerPhone: String, agentId: String, callerId: String): String {
+        val resp = client.functions.invoke(
+            function = "click-to-call",
+            body = buildJsonObject {
+                put("customer_phone", customerPhone)
+                put("agent_id", agentId)
+                put("caller_id", callerId)
+            },
+        )
+        return resp.bodyAsText()
+    }
 
     suspend fun joinCompanyByCode(code: String) {
         client.postgrest.rpc(

@@ -4,6 +4,13 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class CloudCallRequest(
+    val customer_phone: String,
+    val agent_id: String,
+    val caller_id: String,
+)
+
+@Serializable
 data class Company(
     val id: String,
     val name: String,
