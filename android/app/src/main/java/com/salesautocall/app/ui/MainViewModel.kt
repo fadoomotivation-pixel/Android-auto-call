@@ -90,14 +90,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun signIn(email: String, password: String) = auth { Repository.signIn(email, password) }
 
-    fun signUp(email: String, password: String, fullName: String, phone: String, companyCode: String) =
-        auth {
-            Repository.signUp(email, password, fullName, phone)
-            // If a session exists (email confirmation off) and a code was given, join now.
-            if (companyCode.isNotBlank() && Repository.currentUserId() != null) {
-                Repository.joinCompanyByCode(companyCode.trim())
-            }
+    fun signUp(
+        email: String,
+        password: String,
+        fullName: String,
+        phone: String,
+        role: String,
+        companyName: String,
+        companyCode: String,
+    ) = auth {
+        Repository.signUp(email, password, fullName, phone, role, companyName)
+        // Employee with a code + an active session → join their company now.
+        // (Admins get their company created automatically by the signup trigger.)
+        if (role == "salesperson" && companyCode.isNotBlank() && Repository.currentUserId() != null) {
+            Repository.joinCompanyByCode(companyCode.trim())
         }
+    }
 
     private fun auth(block: suspend () -> Unit) {
         viewModelScope.launch {

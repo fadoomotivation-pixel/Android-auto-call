@@ -29,14 +29,22 @@ object Repository {
         }
     }
 
-    suspend fun signUp(email: String, password: String, fullName: String, phone: String) {
+    suspend fun signUp(
+        email: String,
+        password: String,
+        fullName: String,
+        phone: String,
+        role: String,
+        companyName: String,
+    ) {
         client.auth.signUpWith(Email) {
             this.email = email
             this.password = password
             data = buildJsonObject {
                 put("full_name", JsonPrimitive(fullName))
                 put("phone", JsonPrimitive(phone))
-                put("role", JsonPrimitive("salesperson"))
+                put("role", JsonPrimitive(role))
+                if (companyName.isNotBlank()) put("company_name", JsonPrimitive(companyName))
             }
         }
     }

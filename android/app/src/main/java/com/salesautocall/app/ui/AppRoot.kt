@@ -4,6 +4,7 @@ package com.salesautocall.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -82,52 +84,83 @@ private fun LoginScreen(vm: MainViewModel) {
     val state by vm.state.collectAsState()
     val context = LocalContext.current
     var signUp by remember { mutableStateOf(false) }
+    var role by remember { mutableStateOf("salesperson") } // "admin" | "salesperson"
     var fullName by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
+    var companyName by remember { mutableStateOf("") }
     var companyCode by remember { mutableStateOf("") }
     var email by remember { mutableStateOf(AppPrefs.getLastEmail(context)) }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    val isAdmin = role == "admin"
 
     Column(
         Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Center,
     ) {
         Text("Bulk Caller", style = MaterialTheme.typography.headlineMedium)
-        Text(if (signUp) "Create your salesperson account" else "Sign in")
+        Text(if (signUp) "Create your account" else "Sign in")
         Spacer(Modifier.height(16.dp))
 
         if (signUp) {
-            // Explain the company code up front — the #1 first-time confusion.
+            // Choose your role — admin creates a company, employee joins one.
+            Text("I want to…", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = isAdmin,
+                    onClick = { role = "admin"; formError = null },
+                    label = { Text("Create company") },
+                )
+                FilterChip(
+                    selected = !isAdmin,
+                    onClick = { role = "salesperson"; formError = null },
+                    label = { Text("Join company") },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
             Card(Modifier.fillMaxWidth()) {
                 Text(
-                    "Joining your team? Enter the Company code your admin shares with you.\n" +
-                        "Setting up a brand-new company instead? Create it on the web dashboard first, then share its code with your team.",
+                    if (isAdmin)
+                        "You'll create a new company and become its admin. After signing up you'll get an invite code to share with your team."
+                    else
+                        "Enter the Company code your admin shared with you to join their team. Don't have one? Ask your admin, or switch to “Create a company”.",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.height(12.dp))
+
             OutlinedTextField(
                 fullName, { fullName = it }, label = { Text("Full name *") }, singleLine = true,
                 isError = formError != null && fullName.isBlank(),
                 modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.PersonFullName)) { fullName = it },
             )
             Spacer(Modifier.height(8.dp))
+            if (isAdmin) {
+                OutlinedTextField(
+                    companyName, { companyName = it }, label = { Text("Company name *") }, singleLine = true,
+                    isError = formError != null && companyName.isBlank(),
+                    supportingText = { Text("Your business / team name.") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+            } else {
+                OutlinedTextField(
+                    companyCode, { companyCode = it.uppercase() }, label = { Text("Company code *") },
+                    singleLine = true,
+                    isError = formError != null && companyCode.isBlank(),
+                    supportingText = { Text("The 6-character code from your team admin, e.g. EB5FC8.") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             OutlinedTextField(
                 phone, { phone = it }, label = { Text("Phone (optional)") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.PhoneNumber)) { phone = it },
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                companyCode, { companyCode = it.uppercase() }, label = { Text("Company code *") },
-                singleLine = true,
-                isError = formError != null && companyCode.isBlank(),
-                supportingText = { Text("The 6-character code from your team admin, e.g. EB5FC8.") },
-                modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
         }
@@ -162,9 +195,10 @@ private fun LoginScreen(vm: MainViewModel) {
                 val err = if (signUp) {
                     when {
                         fullName.isBlank() -> "Please enter your full name."
+                        isAdmin && companyName.isBlank() -> "Enter a name for your company."
+                        !isAdmin && companyCode.isBlank() -> "Enter the Company code from your admin (shown above)."
                         !email.trim().contains("@") -> "Please enter a valid email address."
                         password.length < 6 -> "Password must be at least 6 characters."
-                        companyCode.isBlank() -> "Enter the Company code from your admin (shown above)."
                         else -> null
                     }
                 } else {
@@ -177,13 +211,22 @@ private fun LoginScreen(vm: MainViewModel) {
                 formError = err
                 if (err == null) {
                     AppPrefs.setLastEmail(context, email.trim())
-                    if (signUp) vm.signUp(email.trim(), password, fullName, phone, companyCode)
+                    if (signUp) vm.signUp(email.trim(), password, fullName, phone, role, companyName, companyCode)
                     else vm.signIn(email.trim(), password)
                 }
             },
             enabled = !state.loading,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (state.loading) "Please wait…" else if (signUp) "Create account" else "Sign in") }
+        ) {
+            Text(
+                when {
+                    state.loading -> "Please wait…"
+                    signUp && isAdmin -> "Create company"
+                    signUp -> "Create account"
+                    else -> "Sign in"
+                },
+            )
+        }
 
         TextButton(
             onClick = { signUp = !signUp; formError = null },
