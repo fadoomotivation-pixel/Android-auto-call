@@ -34,6 +34,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 supabase-bom = { group = "io.github.jan-tennert.supabase", name = "bom", version.ref = "supabase" }
 supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt" }
 supabase-auth = { group = "io.github.jan-tennert.supabase", name = "auth-kt" }
+supabase-functions = { group = "io.github.jan-tennert.supabase", name = "functions-kt" }
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
 
 [plugins]

@@ -32,6 +32,9 @@ data class AppState(
     val breakSeconds: Int = 5,
     val reviewAfterCall: Boolean = true,
     val dailyGoal: Int = 50,
+    val cloudEnabled: Boolean = false,
+    val cloudAgentId: String = "",
+    val cloudCallerId: String = "",
     val todayCalls: Int = 0,
     val todayConnected: Int = 0,
     val todayTalk: Int = 0,
@@ -53,6 +56,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             breakSeconds = AppPrefs.getBreakSeconds(app),
             reviewAfterCall = AppPrefs.getReviewAfterCall(app),
             dailyGoal = AppPrefs.getDailyGoal(app),
+            cloudEnabled = AppPrefs.getCloudEnabled(app),
+            cloudAgentId = AppPrefs.getAgentId(app),
+            cloudCallerId = AppPrefs.getCallerId(app),
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -145,6 +151,58 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setDailyGoal(value: Int) {
         AppPrefs.setDailyGoal(getApplication(), value)
         set { it.copy(dailyGoal = value.coerceIn(10, 500)) }
+    }
+
+    fun setCloudEnabled(v: Boolean) {
+        AppPrefs.setCloudEnabled(getApplication(), v)
+        set { it.copy(cloudEnabled = v) }
+    }
+
+    fun setCloudAgentId(v: String) {
+        AppPrefs.setAgentId(getApplication(), v)
+        set { it.copy(cloudAgentId = v.trim()) }
+    }
+
+    fun setCloudCallerId(v: String) {
+        AppPrefs.setCallerId(getApplication(), v)
+        set { it.copy(cloudCallerId = v.trim()) }
+    }
+
+    /** Cloud click-to-call: rings the agent's extension, then bridges to the customer. */
+    fun cloudCall(phone: String, contactId: String?, campaignId: String?) {
+        val s = _state.value
+        if (!s.cloudEnabled || s.cloudAgentId.isBlank()) {
+            set { it.copy(error = "Set up cloud calling in Settings (agent ID) first.") }
+            return
+        }
+        viewModelScope.launch {
+            set { it.copy(error = null, message = null) }
+            runCatching { Repository.cloudCall(phone, s.cloudAgentId, s.cloudCallerId) }
+                .onSuccess { body ->
+                    if (body.contains("\"ok\":true")) {
+                        set { it.copy(message = "📞 Cloud call started — your phone (ext ${s.cloudAgentId}) will ring, then the customer.") }
+                        val p = s.profile
+                        if (p?.companyId != null) {
+                            runCatching {
+                                Repository.logCall(
+                                    com.salesautocall.app.data.CallLog(
+                                        companyId = p.companyId,
+                                        salespersonId = p.id,
+                                        contactId = contactId,
+                                        campaignId = campaignId,
+                                        phone = phone,
+                                        direction = "outgoing",
+                                        notes = "cloud",
+                                    ),
+                                )
+                            }
+                        }
+                    } else {
+                        set { it.copy(error = "Cloud call failed: ${body.take(200)}") }
+                    }
+                }
+                .onFailure { e -> set { it.copy(error = "Cloud call error: ${e.message}") } }
+        }
     }
 
     fun loadToday() {
