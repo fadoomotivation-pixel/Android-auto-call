@@ -171,16 +171,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Cloud click-to-call: rings the agent's extension, then bridges to the customer. */
     fun cloudCall(phone: String, contactId: String?, campaignId: String?) {
         val s = _state.value
-        if (!s.cloudEnabled || s.cloudAgentId.isBlank()) {
-            set { it.copy(error = "Set up cloud calling in Settings (agent ID) first.") }
+        // Admin-assigned values (from profile) take priority over local entries.
+        val agentId = s.profile?.sipAgentId?.ifBlank { null } ?: s.cloudAgentId
+        val callerId = s.profile?.callerId?.ifBlank { null } ?: s.cloudCallerId
+        if (agentId.isBlank()) {
+            set { it.copy(error = "No agent extension set. Ask your admin to assign one, or add it in Settings.") }
             return
         }
         viewModelScope.launch {
             set { it.copy(error = null, message = null) }
-            runCatching { Repository.cloudCall(phone, s.cloudAgentId, s.cloudCallerId) }
+            runCatching { Repository.cloudCall(phone, agentId, callerId) }
                 .onSuccess { body ->
                     if (body.contains("\"ok\":true")) {
-                        set { it.copy(message = "📞 Cloud call started — your phone (ext ${s.cloudAgentId}) will ring, then the customer.") }
+                        set { it.copy(message = "📞 Cloud call started — your phone (ext $agentId) will ring, then the customer.") }
                         val p = s.profile
                         if (p?.companyId != null) {
                             runCatching {

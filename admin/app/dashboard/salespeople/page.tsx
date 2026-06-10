@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import type { Company, Profile, SalespersonStats } from "@/lib/types";
 import { InviteCard } from "./InviteCard";
 import { MemberToggle } from "./MemberToggle";
+import { AgentAssign } from "./AgentAssign";
+
+type Member = Pick<Profile, "id" | "full_name" | "is_active" | "sip_agent_id" | "caller_id">;
 
 function fmtDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -21,13 +24,14 @@ export default async function SalespeoplePage() {
     supabase.from("companies").select("*").limit(1).maybeSingle<Company>(),
     supabase
       .from("profiles")
-      .select("id, full_name, is_active")
+      .select("id, full_name, is_active, sip_agent_id, caller_id")
       .eq("role", "salesperson")
-      .returns<Pick<Profile, "id" | "full_name" | "is_active">[]>(),
+      .returns<Member[]>(),
   ]);
 
   const rows = stats ?? [];
-  const activeById = new Map((members ?? []).map((m) => [m.id, m.is_active]));
+  const memberList = members ?? [];
+  const activeById = new Map(memberList.map((m) => [m.id, m.is_active]));
 
   return (
     <>
@@ -77,6 +81,34 @@ export default async function SalespeoplePage() {
             })}
           </tbody>
         </table>
+      )}
+
+      {memberList.length > 0 && (
+        <>
+          <h3 style={{ margin: "28px 0 4px" }}>Cloud calling — agent assignment</h3>
+          <p className="subtitle">
+            Set each rep&apos;s uroperator <strong>agent extension</strong> + <strong>caller ID (DID)</strong>. The app uses these
+            automatically for the 📞 Cloud call button.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Telecaller</th>
+                <th>Agent ext · Caller ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {memberList.map((m) => (
+                <tr key={m.id}>
+                  <td>{m.full_name || "—"}</td>
+                  <td>
+                    <AgentAssign userId={m.id} agentId={m.sip_agent_id} callerId={m.caller_id} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </>
   );

@@ -24,6 +24,8 @@ data class Profile(
     @SerialName("full_name") val fullName: String? = null,
     val phone: String? = null,
     val role: String = "salesperson",
+    @SerialName("sip_agent_id") val sipAgentId: String? = null,
+    @SerialName("caller_id") val callerId: String? = null,
 )
 
 @Serializable

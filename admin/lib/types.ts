@@ -23,6 +23,8 @@ export interface Profile {
   phone: string | null;
   role: UserRole;
   is_active: boolean;
+  sip_agent_id: string | null;
+  caller_id: string | null;
   created_at: string;
 }
 
