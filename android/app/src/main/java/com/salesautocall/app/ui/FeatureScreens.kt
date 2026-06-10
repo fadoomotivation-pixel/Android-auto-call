@@ -3,6 +3,7 @@ package com.salesautocall.app.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +55,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
@@ -140,6 +142,11 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
         TodayCard(app)
         Spacer(Modifier.height(16.dp))
 
+        if (app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank()) {
+            CloudDialCard(vm, app)
+            Spacer(Modifier.height(16.dp))
+        }
+
         Text("Start New Campaign", style = MaterialTheme.typography.headlineSmall)
         Text("Create a campaign to organize and track your calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
@@ -197,6 +204,33 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun CloudDialCard(vm: MainViewModel, app: AppState) {
+    var number by remember { mutableStateOf("") }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("📞 Cloud dial", style = MaterialTheme.typography.titleMedium)
+            Text("Call any number through uroperator — your phone rings first, then the customer connects.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                number, { number = it }, label = { Text("Phone number") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { if (number.isNotBlank()) vm.cloudCall(number.trim(), null, null) },
+                enabled = number.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Cloud call") }
+            app.message?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
+            app.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        }
     }
 }
 
