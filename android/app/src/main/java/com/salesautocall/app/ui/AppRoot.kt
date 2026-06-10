@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -87,6 +88,7 @@ private fun LoginScreen(vm: MainViewModel) {
     var email by remember { mutableStateOf(AppPrefs.getLastEmail(context)) }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    var formError by remember { mutableStateOf<String?>(null) }
 
     Column(
         Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
@@ -97,34 +99,52 @@ private fun LoginScreen(vm: MainViewModel) {
         Spacer(Modifier.height(16.dp))
 
         if (signUp) {
+            // Explain the company code up front — the #1 first-time confusion.
+            Card(Modifier.fillMaxWidth()) {
+                Text(
+                    "Joining your team? Enter the Company code your admin shares with you.\n" +
+                        "Setting up a brand-new company instead? Create it on the web dashboard first, then share its code with your team.",
+                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
             OutlinedTextField(
-                fullName, { fullName = it }, label = { Text("Full name") }, singleLine = true,
+                fullName, { fullName = it }, label = { Text("Full name *") }, singleLine = true,
+                isError = formError != null && fullName.isBlank(),
                 modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.PersonFullName)) { fullName = it },
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
-                phone, { phone = it }, label = { Text("Phone") }, singleLine = true,
+                phone, { phone = it }, label = { Text("Phone (optional)") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.PhoneNumber)) { phone = it },
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
-                companyCode, { companyCode = it }, label = { Text("Company code (from your admin)") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
+                companyCode, { companyCode = it.uppercase() }, label = { Text("Company code *") },
+                singleLine = true,
+                isError = formError != null && companyCode.isBlank(),
+                supportingText = { Text("The 6-character code from your team admin, e.g. EB5FC8.") },
+                modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
         }
 
         OutlinedTextField(
-            email, { email = it }, label = { Text("Email") }, singleLine = true,
+            email, { email = it }, label = { Text("Email *") }, singleLine = true,
+            isError = formError != null && !email.trim().contains("@"),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
             modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.EmailAddress, AutofillType.Username)) { email = it },
         )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            password, { password = it }, label = { Text("Password") }, singleLine = true,
+            password, { password = it }, label = { Text("Password *") }, singleLine = true,
+            isError = formError != null && password.length < 6,
             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            supportingText = if (signUp) ({ Text("At least 6 characters.") }) else null,
             trailingIcon = {
                 IconButton(onClick = { showPassword = !showPassword }) {
                     Icon(
@@ -139,17 +159,39 @@ private fun LoginScreen(vm: MainViewModel) {
 
         Button(
             onClick = {
-                AppPrefs.setLastEmail(context, email.trim())
-                if (signUp) vm.signUp(email.trim(), password, fullName, phone, companyCode)
-                else vm.signIn(email.trim(), password)
+                val err = if (signUp) {
+                    when {
+                        fullName.isBlank() -> "Please enter your full name."
+                        !email.trim().contains("@") -> "Please enter a valid email address."
+                        password.length < 6 -> "Password must be at least 6 characters."
+                        companyCode.isBlank() -> "Enter the Company code from your admin (shown above)."
+                        else -> null
+                    }
+                } else {
+                    when {
+                        !email.trim().contains("@") -> "Please enter a valid email address."
+                        password.isBlank() -> "Please enter your password."
+                        else -> null
+                    }
+                }
+                formError = err
+                if (err == null) {
+                    AppPrefs.setLastEmail(context, email.trim())
+                    if (signUp) vm.signUp(email.trim(), password, fullName, phone, companyCode)
+                    else vm.signIn(email.trim(), password)
+                }
             },
             enabled = !state.loading,
             modifier = Modifier.fillMaxWidth(),
         ) { Text(if (state.loading) "Please wait…" else if (signUp) "Create account" else "Sign in") }
 
-        TextButton(onClick = { signUp = !signUp }, modifier = Modifier.fillMaxWidth()) {
+        TextButton(
+            onClick = { signUp = !signUp; formError = null },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text(if (signUp) "Already have an account? Sign in" else "New here? Create an account")
         }
+        formError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }
