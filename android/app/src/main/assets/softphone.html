@@ -8,11 +8,14 @@
   <audio id="remoteAudio" autoplay></audio>
   <script src="https://cdn.jsdelivr.net/npm/sip.js@0.21.2/dist/sip.min.js"></script>
   <script>
-    var ua, registerer, currentSession;
+    var ua, registerer, currentSession, registerTimer;
 
     function status(s) {
       try { if (window.Android && Android.onStatus) Android.onStatus(s); } catch (e) {}
     }
+
+    // Tell Android the page itself has loaded and SIP.js is ready.
+    status(window.SIP ? "loaded" : "nolib");
 
     function attachAudio(session) {
       try {
@@ -31,9 +34,10 @@
       });
     }
 
-    // Called from Android once mic permission is granted.
+    // Called from Android once mic permission is granted and creds are fetched.
     function appRegister(ext, pass, wss, domain) {
       try {
+        status("connecting");
         ua = new SIP.UserAgent({
           uri: SIP.UserAgent.makeURI("sip:" + ext + "@" + domain),
           transportOptions: { server: wss },
@@ -50,18 +54,44 @@
             },
           },
         });
+
+        // Surface transport connect / disconnect so a bad wss URL doesn't hang silently.
+        ua.transport.stateChange.addListener(function (s) {
+          if (s === SIP.TransportState.Connected) status("transport-up");
+          if (s === SIP.TransportState.Disconnected) status("transport-down");
+        });
+
+        // Fail loudly if registration never completes (firewall / wrong creds / VPN off).
+        registerTimer = setTimeout(function () { status("timeout:no-register"); }, 15000);
+
         ua.start().then(function () {
           registerer = new SIP.Registerer(ua);
           registerer.stateChange.addListener(function (s) {
-            if (s === SIP.RegistererState.Registered) status("registered");
+            if (s === SIP.RegistererState.Registered) {
+              if (registerTimer) { clearTimeout(registerTimer); registerTimer = null; }
+              status("registered");
+            }
+            if (s === SIP.RegistererState.Unregistered) status("unregistered");
           });
-          return registerer.register();
-        }).catch(function (e) { status("regerr"); });
-      } catch (e) { status("err"); }
+          return registerer.register({
+            requestDelegate: {
+              onReject: function (response) {
+                if (registerTimer) { clearTimeout(registerTimer); registerTimer = null; }
+                var code = (response && response.message && response.message.statusCode) || "?";
+                status("regreject:" + code);
+              },
+            },
+          });
+        }).catch(function (e) {
+          if (registerTimer) { clearTimeout(registerTimer); registerTimer = null; }
+          status("regerr:" + (e && e.message ? e.message : "start"));
+        });
+      } catch (e) { status("err:" + (e && e.message ? e.message : "init")); }
     }
 
     function appHangup() {
       try {
+        if (registerTimer) { clearTimeout(registerTimer); registerTimer = null; }
         if (currentSession) {
           if (currentSession.state === SIP.SessionState.Established || currentSession.state === SIP.SessionState.Establishing) {
             if (currentSession.bye) currentSession.bye();

@@ -222,6 +222,12 @@ object Repository {
     // ---------- team ----------
 
     /** Triggers a cloud click-to-call via the Edge Function. Returns the raw JSON response. */
+    /** Fetches the tenant's WebRTC softphone config (ext, password, wss, domain) from uroperator. */
+    suspend fun getWebrtcConfig(): String {
+        val resp = client.functions.invoke("uro-webrtc", buildJsonObject { })
+        return resp.bodyAsText()
+    }
+
     suspend fun cloudCall(customerPhone: String, agentId: String, callerId: String): String {
         val resp = client.functions.invoke(
             function = "click-to-call",
