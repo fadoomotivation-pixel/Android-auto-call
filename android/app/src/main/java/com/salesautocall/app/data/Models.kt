@@ -4,6 +4,16 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class WebrtcConfig(
+    val ok: Boolean = false,
+    val ext: String = "",
+    val password: String = "",
+    val wss: String = "",
+    val domain: String = "",
+    val error: String? = null,
+)
+
+@Serializable
 data class CloudCallRequest(
     val customer_phone: String,
     val agent_id: String,

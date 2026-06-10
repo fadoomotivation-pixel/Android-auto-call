@@ -42,6 +42,10 @@ data class AppState(
     val cloudCallCampaignId: String? = null,
     val cloudCallStatus: String = "",
     val cloudBridged: Boolean = false,
+    val cloudCallExt: String = "",
+    val cloudCallPass: String = "",
+    val cloudCallWss: String = "",
+    val cloudCallDomain: String = "",
     val todayCalls: Int = 0,
     val todayConnected: Int = 0,
     val todayTalk: Int = 0,
@@ -74,6 +78,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     init {
         refreshSession()
     }
+
+    private val lenientJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
     private fun set(transform: (AppState) -> AppState) {
         _state.value = transform(_state.value)
@@ -193,26 +199,44 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun agentId(): String = _state.value.profile?.sipAgentId?.ifBlank { null } ?: _state.value.cloudAgentId
     private fun callerId(): String = _state.value.profile?.callerId?.ifBlank { null } ?: _state.value.cloudCallerId
 
-    /** Opens the in-app softphone for a cloud call (it registers, then we bridge). */
+    /** Opens the in-app softphone for a cloud call. Auto-fetches SIP config from
+     *  uroperator; falls back to the manual Settings values if that fails. */
     fun cloudCall(phone: String, contactId: String?, campaignId: String?) {
-        val ext = agentId()
-        if (ext.isBlank()) {
-            set { it.copy(error = "No agent extension set. Add it (and your SIP password) in Settings.") }
-            return
-        }
-        if (_state.value.cloudSipPassword.isBlank()) {
-            set { it.copy(error = "Enter your SIP password in Settings → Cloud calling to make in-app calls.") }
-            return
-        }
         set {
             it.copy(
                 error = null, message = null,
                 cloudCallNumber = phone.trim(),
                 cloudCallContactId = contactId,
                 cloudCallCampaignId = campaignId,
-                cloudCallStatus = "Starting softphone…",
+                cloudCallStatus = "Fetching SIP config…",
                 cloudBridged = false,
+                cloudCallExt = "", cloudCallPass = "", cloudCallWss = "", cloudCallDomain = "",
             )
+        }
+        viewModelScope.launch {
+            val cfg = runCatching {
+                val body = Repository.getWebrtcConfig()
+                lenientJson.decodeFromString(com.salesautocall.app.data.WebrtcConfig.serializer(), body)
+            }.getOrNull()
+
+            val manualExt = agentId()
+            val manualPass = _state.value.cloudSipPassword
+
+            val ext = cfg?.ext?.ifBlank { null } ?: manualExt
+            val pass = cfg?.password?.ifBlank { null } ?: manualPass
+            val wss = cfg?.wss?.ifBlank { null } ?: "wss://sip.uroperator.com:8843"
+            val domain = cfg?.domain?.ifBlank { null } ?: "sip.uroperator.com"
+
+            if (ext.isBlank() || pass.isBlank()) {
+                set { it.copy(cloudCallStatus = "Couldn't get SIP login from uroperator. Set your agent ID + SIP password in Settings, or ask your admin.") }
+                return@launch
+            }
+            set {
+                it.copy(
+                    cloudCallExt = ext, cloudCallPass = pass, cloudCallWss = wss, cloudCallDomain = domain,
+                    cloudCallStatus = "Starting softphone…",
+                )
+            }
         }
     }
 
@@ -221,10 +245,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val s = _state.value
         val number = s.cloudCallNumber ?: return
         val pretty = when {
+            raw == "loaded" -> "Loading softphone…"
+            raw == "nolib" -> "Softphone failed to load — check your internet."
+            raw == "connecting" -> "Logging in to uroperator…"
+            raw == "transport-up" -> "Connected to server — registering…"
+            raw == "transport-down" -> "Lost connection to server — check internet / VPN."
             raw == "registered" -> "Connecting your call…"
+            raw == "unregistered" -> "Signed out of softphone."
             raw == "ringing" -> "Connecting…"
             raw == "connected" -> "🔊 Connected — you're live"
             raw == "ended" -> "Call ended"
+            raw.startsWith("timeout") -> "Couldn't reach uroperator (no registration). Turn OFF your VPN and try again."
+            raw.startsWith("regreject") -> "Login rejected (${raw.substringAfter(':', "?")}) — check your SIP extension / password."
             raw.startsWith("regerr") -> "Could not register — check your SIP password / extension."
             raw.startsWith("audioerr") -> "Audio error — check mic permission."
             raw.startsWith("err") -> "Softphone error."
@@ -235,8 +267,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Once registered, trigger uroperator to ring this app, then log the call.
         if (raw == "registered" && !s.cloudBridged) {
             set { it.copy(cloudBridged = true) }
+            val bridgeExt = _state.value.cloudCallExt.ifBlank { agentId() }
             viewModelScope.launch {
-                runCatching { Repository.cloudCall(number, agentId(), callerId()) }
+                runCatching { Repository.cloudCall(number, bridgeExt, callerId()) }
                     .onSuccess { body ->
                         if (!body.contains("\"ok\":true")) {
                             set { it.copy(cloudCallStatus = "uroperator rejected the call: ${body.take(160)}") }

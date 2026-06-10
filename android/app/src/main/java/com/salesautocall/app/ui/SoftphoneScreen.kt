@@ -20,9 +20,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,8 +42,8 @@ fun SoftphoneScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
     val number = app.cloudCallNumber ?: return
     val context = LocalContext.current
-    val ext = app.profile?.sipAgentId?.ifBlank { null } ?: app.cloudAgentId
-    val pass = app.cloudSipPassword
+    var pageLoaded by remember { mutableStateOf(false) }
+    var registered by remember { mutableStateOf(false) }
 
     val webView = remember {
         WebView(context).apply {
@@ -63,12 +66,24 @@ fun SoftphoneScreen(vm: MainViewModel) {
             )
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
-                    val js = "appRegister('$ext','$pass','wss://sip.uroperator.com:8843','sip.uroperator.com')"
-                    evaluateJavascript(js, null)
+                    pageLoaded = true
                 }
             }
             // Served over https so WebRTC getUserMedia has a secure context.
             loadUrl("https://android-auto-call.vercel.app/softphone.html")
+        }
+    }
+
+    // Register once the page is loaded AND credentials are fetched from uroperator.
+    LaunchedEffect(pageLoaded, app.cloudCallExt, app.cloudCallPass) {
+        if (pageLoaded && !registered && app.cloudCallExt.isNotBlank() && app.cloudCallPass.isNotBlank()) {
+            registered = true
+            val js = "appRegister(" +
+                "'${app.cloudCallExt}'," +
+                "'${app.cloudCallPass}'," +
+                "'${app.cloudCallWss.ifBlank { "wss://sip.uroperator.com:8843" }}'," +
+                "'${app.cloudCallDomain.ifBlank { "sip.uroperator.com" }}')"
+            webView.evaluateJavascript(js, null)
         }
     }
 
