@@ -63,6 +63,11 @@ fun AppRoot(vm: MainViewModel) {
 
     if (state.signedIn) MainShell(vm) else LoginScreen(vm)
 
+    // In-app softphone call overlay.
+    if (state.signedIn && state.cloudCallNumber != null) {
+        SoftphoneScreen(vm)
+    }
+
     crash?.let { text ->
         AlertDialog(
             onDismissRequest = { AppPrefs.clearLastCrash(context); crash = null },

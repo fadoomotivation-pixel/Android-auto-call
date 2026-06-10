@@ -20,6 +20,8 @@ object AppPrefs {
     fun setAgentId(context: Context, v: String) = prefs(context).edit().putString(KEY_AGENT, v.trim()).apply()
     fun getCallerId(context: Context): String = prefs(context).getString(KEY_CALLERID, "") ?: ""
     fun setCallerId(context: Context, v: String) = prefs(context).edit().putString(KEY_CALLERID, v.trim()).apply()
+    fun getSipPassword(context: Context): String = prefs(context).getString("cloud_sip_password", "") ?: ""
+    fun setSipPassword(context: Context, v: String) = prefs(context).edit().putString("cloud_sip_password", v.trim()).apply()
 
     fun getDailyGoal(context: Context): Int =
         prefs(context).getInt(KEY_GOAL, 50)

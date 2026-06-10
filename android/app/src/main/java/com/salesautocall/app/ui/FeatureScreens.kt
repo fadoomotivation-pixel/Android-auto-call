@@ -384,7 +384,13 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                     label = { Text("Caller ID / DID (optional)") },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
                 )
-                Text("Use the 📞 Cloud call button on a contact. Your admin sets up agent IDs/DIDs in uroperator.",
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    app.cloudSipPassword, { vm.setCloudSipPassword(it) },
+                    label = { Text("SIP password (for in-app calling)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Calls open an in-app phone: your extension registers, then connects you to the customer. Get the SIP password from your admin/uroperator.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

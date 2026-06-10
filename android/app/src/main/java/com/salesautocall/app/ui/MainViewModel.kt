@@ -35,6 +35,13 @@ data class AppState(
     val cloudEnabled: Boolean = false,
     val cloudAgentId: String = "",
     val cloudCallerId: String = "",
+    val cloudSipPassword: String = "",
+    // active in-app softphone call
+    val cloudCallNumber: String? = null,
+    val cloudCallContactId: String? = null,
+    val cloudCallCampaignId: String? = null,
+    val cloudCallStatus: String = "",
+    val cloudBridged: Boolean = false,
     val todayCalls: Int = 0,
     val todayConnected: Int = 0,
     val todayTalk: Int = 0,
@@ -59,6 +66,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             cloudEnabled = AppPrefs.getCloudEnabled(app),
             cloudAgentId = AppPrefs.getAgentId(app),
             cloudCallerId = AppPrefs.getCallerId(app),
+            cloudSipPassword = AppPrefs.getSipPassword(app),
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -177,43 +185,82 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Cloud click-to-call: rings the agent's extension, then bridges to the customer. */
+    fun setCloudSipPassword(v: String) {
+        AppPrefs.setSipPassword(getApplication(), v)
+        set { it.copy(cloudSipPassword = v.trim()) }
+    }
+
+    private fun agentId(): String = _state.value.profile?.sipAgentId?.ifBlank { null } ?: _state.value.cloudAgentId
+    private fun callerId(): String = _state.value.profile?.callerId?.ifBlank { null } ?: _state.value.cloudCallerId
+
+    /** Opens the in-app softphone for a cloud call (it registers, then we bridge). */
     fun cloudCall(phone: String, contactId: String?, campaignId: String?) {
-        val s = _state.value
-        // Admin-assigned values (from profile) take priority over local entries.
-        val agentId = s.profile?.sipAgentId?.ifBlank { null } ?: s.cloudAgentId
-        val callerId = s.profile?.callerId?.ifBlank { null } ?: s.cloudCallerId
-        if (agentId.isBlank()) {
-            set { it.copy(error = "No agent extension set. Ask your admin to assign one, or add it in Settings.") }
+        val ext = agentId()
+        if (ext.isBlank()) {
+            set { it.copy(error = "No agent extension set. Add it (and your SIP password) in Settings.") }
             return
         }
-        viewModelScope.launch {
-            set { it.copy(error = null, message = null) }
-            runCatching { Repository.cloudCall(phone, agentId, callerId) }
-                .onSuccess { body ->
-                    if (body.contains("\"ok\":true")) {
-                        set { it.copy(message = "📞 Cloud call started — your phone (ext $agentId) will ring, then the customer.") }
-                        val p = s.profile
+        if (_state.value.cloudSipPassword.isBlank()) {
+            set { it.copy(error = "Enter your SIP password in Settings → Cloud calling to make in-app calls.") }
+            return
+        }
+        set {
+            it.copy(
+                error = null, message = null,
+                cloudCallNumber = phone.trim(),
+                cloudCallContactId = contactId,
+                cloudCallCampaignId = campaignId,
+                cloudCallStatus = "Starting softphone…",
+                cloudBridged = false,
+            )
+        }
+    }
+
+    /** Called by the softphone WebView as its state changes. */
+    fun onSoftphoneStatus(raw: String) {
+        val s = _state.value
+        val number = s.cloudCallNumber ?: return
+        val pretty = when {
+            raw == "registered" -> "Connecting your call…"
+            raw == "ringing" -> "Connecting…"
+            raw == "connected" -> "🔊 Connected — you're live"
+            raw == "ended" -> "Call ended"
+            raw.startsWith("regerr") -> "Could not register — check your SIP password / extension."
+            raw.startsWith("audioerr") -> "Audio error — check mic permission."
+            raw.startsWith("err") -> "Softphone error."
+            else -> raw
+        }
+        set { it.copy(cloudCallStatus = pretty) }
+
+        // Once registered, trigger uroperator to ring this app, then log the call.
+        if (raw == "registered" && !s.cloudBridged) {
+            set { it.copy(cloudBridged = true) }
+            viewModelScope.launch {
+                runCatching { Repository.cloudCall(number, agentId(), callerId()) }
+                    .onSuccess { body ->
+                        if (!body.contains("\"ok\":true")) {
+                            set { it.copy(cloudCallStatus = "uroperator rejected the call: ${body.take(160)}") }
+                        }
+                        val p = _state.value.profile
                         if (p?.companyId != null) {
                             runCatching {
                                 Repository.logCall(
                                     com.salesautocall.app.data.CallLog(
-                                        companyId = p.companyId,
-                                        salespersonId = p.id,
-                                        contactId = contactId,
-                                        campaignId = campaignId,
-                                        phone = phone,
-                                        direction = "outgoing",
-                                        notes = "cloud",
+                                        companyId = p.companyId, salespersonId = p.id,
+                                        contactId = s.cloudCallContactId, campaignId = s.cloudCallCampaignId,
+                                        phone = number, direction = "outgoing", notes = "cloud",
                                     ),
                                 )
                             }
                         }
-                    } else {
-                        set { it.copy(error = "Cloud call failed: ${body.take(200)}") }
                     }
-                }
-                .onFailure { e -> set { it.copy(error = "Cloud call error: ${e.message}") } }
+                    .onFailure { e -> set { it.copy(cloudCallStatus = "Bridge error: ${e.message}") } }
+            }
         }
+    }
+
+    fun endCloudCall() {
+        set { it.copy(cloudCallNumber = null, cloudCallStatus = "", cloudBridged = false) }
     }
 
     fun loadToday() {
