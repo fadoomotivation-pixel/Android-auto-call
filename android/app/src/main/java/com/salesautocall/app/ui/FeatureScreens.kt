@@ -390,7 +390,21 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                     label = { Text("SIP password (for in-app calling)") },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
                 )
-                Text("Calls open an in-app phone: your extension registers, then connects you to the customer. Get the SIP password from your admin/uroperator.",
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        app.cloudSipServer, { vm.setCloudSipServer(it) },
+                        label = { Text("SIP server (advanced, optional)") },
+                        singleLine = true, modifier = Modifier.weight(2f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedTextField(
+                        app.cloudSipPort, { vm.setCloudSipPort(it) },
+                        label = { Text("Port") },
+                        singleLine = true, modifier = Modifier.weight(1f),
+                    )
+                }
+                Text("Calls open an in-app phone: your extension registers over SIP, then connects you to the customer — real two-way audio, like Zoiper. Leave SIP server blank to use uroperator's default (sip.uroperator.com:6060). Only fill it if your PBX uses a private address (then keep the VPN on).",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

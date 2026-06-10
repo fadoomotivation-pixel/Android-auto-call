@@ -10,6 +10,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Linphone SDK (native SIP/VoIP engine) is published here, not on Maven Central.
+        maven { url = uri("https://download.linphone.org/maven_repository") }
     }
 }
 
