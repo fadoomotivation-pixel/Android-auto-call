@@ -12,10 +12,11 @@ import org.linphone.core.TransportType
 
 /**
  * Thin wrapper around the Linphone SDK that turns the app into a real SIP
- * endpoint — it registers over SIP-UDP (exactly like Zoiper does), auto-answers
- * the leg that uroperator's click-to-call rings, and carries two-way audio
- * natively. This replaces the WebRTC/WebView softphone, which couldn't work
- * because the tenant's PBX only exposes SIP-UDP on a private address.
+ * endpoint — it registers over SIP-UDP (exactly like Zoiper does), dials the
+ * customer directly, and carries two-way audio natively (with STUN/ICE for NAT
+ * and earpiece/speaker routing). It also auto-answers an inbound leg, in case
+ * the PBX is driven via click-to-call. This replaces the WebRTC/WebView
+ * softphone, which couldn't register because the PBX only exposes SIP-UDP.
  *
  * All state changes are surfaced through [onState] as short status strings the
  * ViewModel maps to user-facing text:
@@ -26,6 +27,7 @@ object SipManager {
     private var core: Core? = null
     private var account: Account? = null
     private var domain: String = "sip.uroperator.com"
+    private var speakerOn: Boolean = false
 
     /** Called on every meaningful state change. Set by the ViewModel. */
     var onState: ((String) -> Unit)? = null
@@ -62,7 +64,7 @@ object SipManager {
                 Call.State.OutgoingRinging -> onState?.invoke("ringing")
                 Call.State.Connected,
                 Call.State.StreamsRunning -> {
-                    enableSpeaker(core)
+                    applyAudioRoute(core)
                     onState?.invoke("connected")
                 }
                 Call.State.End,
@@ -81,6 +83,15 @@ object SipManager {
         // Audio only — never offer video.
         c.isVideoCaptureEnabled = false
         c.isVideoDisplayEnabled = false
+        c.isMicEnabled = true
+        // NAT traversal so media (RTP) flows on the public path (mobile/carrier NAT).
+        runCatching {
+            val nat = c.createNatPolicy()
+            nat.isStunEnabled = true
+            nat.stunServer = "stun.l.google.com:19302"
+            nat.isIceEnabled = true
+            c.natPolicy = nat
+        }
         c.start()
         core = c
         return c
@@ -140,6 +151,12 @@ object SipManager {
         core?.isMicEnabled = !muted
     }
 
+    /** Toggles loudspeaker vs earpiece for the active call. */
+    fun setSpeaker(on: Boolean) {
+        speakerOn = on
+        core?.let { applyAudioRoute(it) }
+    }
+
     fun hangup() {
         val c = core ?: return
         c.currentCall?.terminate() ?: c.terminateAllCalls()
@@ -155,9 +172,14 @@ object SipManager {
         account = null
     }
 
-    private fun enableSpeaker(c: Core) {
-        // Route audio to the loudspeaker so it behaves like a phone call on speaker.
-        val speaker = c.audioDevices.firstOrNull { it.type == AudioDevice.Type.Speaker }
-        if (speaker != null) c.outputAudioDevice = speaker
+    private fun applyAudioRoute(c: Core) {
+        val wanted = if (speakerOn) AudioDevice.Type.Speaker else AudioDevice.Type.Earpiece
+        val dev = c.audioDevices.firstOrNull {
+            it.type == wanted && it.hasCapability(AudioDevice.Capabilities.CapabilityPlay)
+        } ?: c.audioDevices.firstOrNull { it.type == wanted }
+        if (dev != null) {
+            c.outputAudioDevice = dev
+            c.currentCall?.outputAudioDevice = dev
+        }
     }
 }

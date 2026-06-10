@@ -34,6 +34,7 @@ fun SoftphoneScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
     val number = app.cloudCallNumber ?: return
     var muted by remember { mutableStateOf(false) }
+    var speaker by remember { mutableStateOf(false) }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -61,13 +62,20 @@ fun SoftphoneScreen(vm: MainViewModel) {
                     vm.setMuted(muted)
                 }) { Text(if (muted) "Unmute" else "Mute") }
 
-                Spacer(Modifier.width(16.dp))
+                Spacer(Modifier.width(12.dp))
 
-                Button(
-                    onClick = { vm.endCloudCall() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD7263D)),
-                ) { Text("Hang up") }
+                OutlinedButton(onClick = {
+                    speaker = !speaker
+                    vm.setSpeaker(speaker)
+                }) { Text(if (speaker) "Speaker ✓" else "Speaker") }
             }
+
+            Spacer(Modifier.height(20.dp))
+
+            Button(
+                onClick = { vm.endCloudCall() },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD7263D)),
+            ) { Text("Hang up") }
         }
     }
 }

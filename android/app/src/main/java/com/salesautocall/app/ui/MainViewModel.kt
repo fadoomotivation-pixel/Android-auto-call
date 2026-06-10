@@ -276,30 +276,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         set { it.copy(cloudCallStatus = pretty) }
 
-        // Once registered, trigger uroperator to ring this app, then log the call.
+        // Once registered, dial the customer directly over SIP (exactly like Zoiper),
+        // then log the call. This is the proven path on this PBX's dialplan.
         if (raw == "registered" && !s.cloudBridged) {
-            set { it.copy(cloudBridged = true) }
-            val bridgeExt = _state.value.cloudCallExt.ifBlank { agentId() }
-            viewModelScope.launch {
-                runCatching { Repository.cloudCall(number, bridgeExt, callerId()) }
-                    .onSuccess { body ->
-                        if (!body.contains("\"ok\":true")) {
-                            set { it.copy(cloudCallStatus = "uroperator rejected the call: ${body.take(160)}") }
-                        }
-                        val p = _state.value.profile
-                        if (p?.companyId != null) {
-                            runCatching {
-                                Repository.logCall(
-                                    com.salesautocall.app.data.CallLog(
-                                        companyId = p.companyId, salespersonId = p.id,
-                                        contactId = s.cloudCallContactId, campaignId = s.cloudCallCampaignId,
-                                        phone = number, direction = "outgoing", notes = "cloud",
-                                    ),
-                                )
-                            }
-                        }
+            set { it.copy(cloudBridged = true, cloudCallStatus = "Calling ${'$'}number…") }
+            runCatching { com.salesautocall.app.sip.SipManager.call(number) }
+                .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't place call: ${e.message}") } }
+
+            val p = _state.value.profile
+            if (p?.companyId != null) {
+                viewModelScope.launch {
+                    runCatching {
+                        Repository.logCall(
+                            com.salesautocall.app.data.CallLog(
+                                companyId = p.companyId, salespersonId = p.id,
+                                contactId = s.cloudCallContactId, campaignId = s.cloudCallCampaignId,
+                                phone = number, direction = "outgoing", notes = "cloud",
+                            ),
+                        )
                     }
-                    .onFailure { e -> set { it.copy(cloudCallStatus = "Bridge error: ${e.message}") } }
+                }
             }
         }
     }
@@ -311,6 +307,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setMuted(muted: Boolean) = com.salesautocall.app.sip.SipManager.setMuted(muted)
+
+    fun setSpeaker(on: Boolean) = com.salesautocall.app.sip.SipManager.setSpeaker(on)
 
     fun loadToday() {
         viewModelScope.launch {
