@@ -329,6 +329,14 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                 }
                 Switch(checked = app.cloudEnabled, onCheckedChange = { vm.setCloudEnabled(it) })
             }
+            if (!app.profile?.sipAgentId.isNullOrBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "✓ Assigned by your admin — extension ${app.profile?.sipAgentId}" +
+                        (app.profile?.callerId?.takeIf { it.isNotBlank() }?.let { " · caller ID $it" } ?: ""),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary,
+                )
+            }
             if (app.cloudEnabled) {
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
@@ -482,7 +490,7 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
                     ) { Text("WhatsApp") }
                     OutlinedButton(onClick = { noteOpen = true }) { Text("Save details") }
                 }
-                if (app.cloudEnabled) {
+                if (app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank()) {
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = {
                         dial.lastContactPhone?.let { vm.cloudCall(it, dial.lastContactId, DialerController.campaignId) }
@@ -838,7 +846,7 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
                                 }
                                 AssistChip(onClick = { noteFor = c }, label = { Text("Note") })
                                 AssistChip(onClick = { openWhatsApp(context, c.phone) }, label = { Text("WhatsApp") })
-                                if (app.cloudEnabled) {
+                                if (app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank()) {
                                     AssistChip(
                                         onClick = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
                                         label = { Text("📞 Cloud call") },
