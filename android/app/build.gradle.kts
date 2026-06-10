@@ -97,4 +97,7 @@ dependencies {
     implementation(libs.supabase.auth)
     implementation(libs.supabase.functions)
     implementation(libs.ktor.client.android)
+
+    // Native SIP/VoIP engine (registers over SIP-UDP like Zoiper, handles audio).
+    implementation("org.linphone:linphone-sdk-android:5.3.+")
 }

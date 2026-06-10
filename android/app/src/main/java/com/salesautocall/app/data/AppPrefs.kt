@@ -23,6 +23,13 @@ object AppPrefs {
     fun getSipPassword(context: Context): String = prefs(context).getString("cloud_sip_password", "") ?: ""
     fun setSipPassword(context: Context, v: String) = prefs(context).edit().putString("cloud_sip_password", v.trim()).apply()
 
+    // Optional manual SIP server override (e.g. a private IP reached over VPN, like
+    // the 10.10.10.3:5060 that Zoiper uses). Blank => use the value uroperator returns.
+    fun getSipServer(context: Context): String = prefs(context).getString("cloud_sip_server", "") ?: ""
+    fun setSipServer(context: Context, v: String) = prefs(context).edit().putString("cloud_sip_server", v.trim()).apply()
+    fun getSipPort(context: Context): String = prefs(context).getString("cloud_sip_port", "") ?: ""
+    fun setSipPort(context: Context, v: String) = prefs(context).edit().putString("cloud_sip_port", v.trim()).apply()
+
     fun getDailyGoal(context: Context): Int =
         prefs(context).getInt(KEY_GOAL, 50)
 

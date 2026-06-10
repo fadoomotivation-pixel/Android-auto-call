@@ -10,6 +10,10 @@ data class WebrtcConfig(
     val password: String = "",
     val wss: String = "",
     val domain: String = "",
+    // SIP-UDP registration details (for the native softphone).
+    @SerialName("sip_server") val sipServer: String = "",
+    @SerialName("sip_port") val sipPort: Int = 0,
+    val transport: String = "",
     val error: String? = null,
 )
 
