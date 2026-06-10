@@ -59,6 +59,13 @@ export interface CallLog {
   created_at: string;
 }
 
+export interface CompanyIntegration {
+  company_id: string;
+  uro_token: string | null;
+  uro_tenant_id: string | null;
+  default_caller_id: string | null;
+}
+
 export interface CompanyOverview {
   company_id: string;
   name: string;
