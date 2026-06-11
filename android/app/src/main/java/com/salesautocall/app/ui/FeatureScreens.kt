@@ -312,14 +312,14 @@ private fun CompanyCard(vm: MainViewModel, app: AppState) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { clipboard.setText(AnnotatedString(company.joinCode)) }) { Text("Copy") }
                     OutlinedButton(onClick = {
-                        shareText(context, "Join my Bulk Caller team. Open the app, tap Create an account (or Settings → Your company), and enter code: ${company.joinCode}")
+                        shareText(context, "Join my Call Pro AI team. Open the app, tap Create an account (or Settings → Your company), and enter code: ${company.joinCode}")
                     }) { Text("Share") }
                 }
                 Spacer(Modifier.height(14.dp))
                 Text("How your team joins", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "1. They install Bulk Caller.\n" +
+                    "1. They install Call Pro AI.\n" +
                         "2. Tap “Create an account” and enter this code in the Company field.\n" +
                         "   (Already signed in? Settings → Your company → type the code → Join.)\n" +
                         "3. Done — they're on your team and can start calling. Their calls show in your dashboard.",

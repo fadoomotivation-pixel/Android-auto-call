@@ -21,6 +21,8 @@
     <!-- Required so the phoneCall foreground-service type is allowed on Android 14+ -->
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Exact reminders for scheduled follow-up callbacks (degrades to inexact if denied) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:name=".SalesAutoCallApp"
@@ -52,6 +54,11 @@
             android:name=".dialer.ManualCallService"
             android:exported="false"
             android:foregroundServiceType="phoneCall" />
+
+        <!-- Fires local notifications when a scheduled follow-up callback is due -->
+        <receiver
+            android:name=".notify.FollowUpAlarmReceiver"
+            android:exported="false" />
 
     </application>
 </manifest>

@@ -2,6 +2,9 @@
 
 package com.salesautocall.app.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,11 +19,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -30,7 +34,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +41,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
@@ -45,6 +49,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -118,7 +123,7 @@ private fun LoginScreen(vm: MainViewModel) {
         Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Bulk Caller", style = MaterialTheme.typography.headlineMedium)
+        Text("Call Pro AI", style = MaterialTheme.typography.headlineMedium)
         Text(if (signUp) "Create your account" else "Sign in")
         Spacer(Modifier.height(16.dp))
 
@@ -259,10 +264,11 @@ private fun LoginScreen(vm: MainViewModel) {
 }
 
 private sealed class Tab(val route: String, val label: String) {
-    data object Campaign : Tab("campaign", "Campaign")
+    data object Home : Tab("home", "Home")
+    data object Leads : Tab("leads", "Leads")
     data object Dialer : Tab("dialer", "Dialer")
-    data object Calls : Tab("calls", "Calls")
-    data object Analytics : Tab("analytics", "Analytics")
+    data object Campaign : Tab("campaign", "Campaign")
+    data object Team : Tab("team", "Team")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -270,7 +276,7 @@ private sealed class Tab(val route: String, val label: String) {
 private fun MainShell(vm: MainViewModel) {
     val state by vm.state.collectAsState()
     val nav = rememberNavController()
-    val tabs = listOf(Tab.Campaign, Tab.Dialer, Tab.Calls, Tab.Analytics)
+    val tabs = listOf(Tab.Home, Tab.Leads, Tab.Dialer, Tab.Campaign, Tab.Team)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -295,7 +301,7 @@ private fun MainShell(vm: MainViewModel) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Bulk Caller") },
+                    title = { Text("Call Pro AI") },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
@@ -306,6 +312,13 @@ private fun MainShell(vm: MainViewModel) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
                     },
+                    // Navy bar with a gold-tinted menu icon — the brand signature.
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        navigationIconContentColor = MaterialTheme.colorScheme.secondary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
                 )
             },
             bottomBar = {
@@ -327,26 +340,62 @@ private fun MainShell(vm: MainViewModel) {
                             icon = {
                                 Icon(
                                     when (tab) {
-                                        is Tab.Campaign -> Icons.Default.Campaign
+                                        is Tab.Home -> Icons.Default.Home
+                                        is Tab.Leads -> Icons.Default.People
                                         is Tab.Dialer -> Icons.Default.Dialpad
-                                        is Tab.Calls -> Icons.Default.Call
-                                        else -> Icons.Default.QueryStats
+                                        is Tab.Campaign -> Icons.Default.Campaign
+                                        else -> Icons.Default.Leaderboard
                                     },
                                     contentDescription = tab.label,
                                 )
                             },
                             label = { Text(tab.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primary,
+                            ),
                         )
                     }
                 }
             },
         ) { padding ->
             Column(Modifier.padding(padding)) {
-                NavHost(nav, startDestination = Tab.Campaign.route) {
-                    composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                NavHost(
+                    nav,
+                    startDestination = Tab.Home.route,
+                    // Instant tab switches — the default ~700ms crossfade reads as lag.
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
+                ) {
+                    composable(Tab.Home.route) {
+                        HomeScreen(
+                            vm,
+                            onOpenFollowUps = { nav.navigate("followups") },
+                            onOpenLeads = {
+                                nav.navigate(Tab.Leads.route) {
+                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                        )
+                    }
+                    composable(Tab.Leads.route) { LeadsScreen(vm) }
                     composable(Tab.Dialer.route) { DialerScreen(vm) }
-                    composable(Tab.Calls.route) { CallsScreen(vm) }
-                    composable(Tab.Analytics.route) {
+                    composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                    composable(Tab.Team.route) {
+                        TeamScreen(
+                            vm,
+                            onCampaigns = { nav.navigate("analytics") },
+                            onCallHistory = { nav.navigate("calls") },
+                        )
+                    }
+                    composable("followups") { FollowUpsScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("calls") { CallsScreen(vm) }
+                    composable("analytics") {
                         AnalyticsScreen(vm, onOpen = { id, name ->
                             vm.openCampaign(id, name)
                             nav.navigate("campaign_detail")
@@ -380,22 +429,34 @@ private fun AppDrawer(
     onSignOut: () -> Unit,
 ) {
     ModalDrawerSheet {
-        Spacer(Modifier.height(16.dp))
-        Column(Modifier.padding(horizontal = 28.dp, vertical = 12.dp)) {
-            Text("Bulk Caller", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            Text(userName, style = MaterialTheme.typography.bodyLarge)
+        // Navy brand band at the top of the drawer.
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.primary)
+                .padding(horizontal = 24.dp, vertical = 24.dp),
+        ) {
+            Text(
+                "Call Pro AI",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                userName,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
             Text(
                 buildString {
                     append(if (role == "admin") "Admin" else "Salesperson")
                     companyName?.let { append(" · "); append(it) }
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
             )
         }
-        HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
 
         NavigationDrawerItem(
             icon = { Icon(Icons.Default.Settings, contentDescription = null) },

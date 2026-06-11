@@ -14,6 +14,7 @@ class SalesAutoCallApp : Application() {
         super.onCreate()
         installCrashHandler()
         createDialerChannel()
+        createFollowUpChannel()
     }
 
     /** Saves the stack trace of any uncaught crash so it can be shown on next launch. */
@@ -37,6 +38,20 @@ class SalesAutoCallApp : Application() {
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = getString(R.string.dialer_channel_desc)
+            }
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+    }
+
+    /** Heads-up channel for "your follow-up callback is due now" reminders. */
+    private fun createFollowUpChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                com.salesautocall.app.notify.FollowUpReminder.CHANNEL_ID,
+                getString(R.string.followup_channel_name),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = getString(R.string.followup_channel_desc)
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }

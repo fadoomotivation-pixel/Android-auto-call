@@ -43,6 +43,7 @@ export default async function DashboardLayout({
         <h1>📞 SalesAutoCall</h1>
         <NavLink href="/dashboard" label="Overview" />
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
+        {profile?.role === "admin" && <NavLink href="/dashboard/cloud-calling" label="☁️ Cloud calling" />}
         <NavLink href="/dashboard/contacts" label="Contacts" />
         <NavLink href="/dashboard/calls" label="Call logs" />
         <NavLink href="/dashboard/recordings" label="Recordings" />
