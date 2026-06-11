@@ -71,9 +71,11 @@ Deno.serve(async (req) => {
     if (bytes.length === 0) return json({ ok: false, error: "empty body" }, 400);
 
     const token = await driveAccessToken(integ.refresh_token);
+    const ext = source === "sim" ? "m4a" : "wav";
+    const mime = source === "sim" ? "audio/mp4" : "audio/wav";
     const metadata = {
-      name: `${callId}.mka`,
-      mimeType: "audio/x-matroska",
+      name: `${callId}.${ext}`,
+      mimeType: mime,
       parents: integ.folder_id ? [integ.folder_id] : undefined,
     };
 
@@ -83,7 +85,7 @@ Deno.serve(async (req) => {
     const pre = enc.encode(
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
         JSON.stringify(metadata) +
-        `\r\n--${boundary}\r\nContent-Type: audio/x-matroska\r\n\r\n`,
+        `\r\n--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`,
     );
     const post = enc.encode(`\r\n--${boundary}--`);
     const body = new Uint8Array(pre.length + bytes.length + post.length);

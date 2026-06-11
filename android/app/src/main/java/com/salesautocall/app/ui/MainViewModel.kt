@@ -327,7 +327,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 set { it.copy(cloudCallLogId = logId) }
                 // Arm recording (captures both legs once the call is answered).
                 if (logId != null && recordingEnabled()) {
-                    val f = java.io.File(getApplication<Application>().cacheDir, "rec_$logId.mka")
+                    val f = java.io.File(getApplication<Application>().cacheDir, "rec_$logId.wav")
                     com.salesautocall.app.sip.SipManager.setRecordFile(f.absolutePath)
                 } else {
                     com.salesautocall.app.sip.SipManager.setRecordFile(null)

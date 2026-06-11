@@ -86,7 +86,7 @@ object Repository {
             header("x-call-id", callLogId)
             header("x-source", source)
             header("x-duration", durationSeconds.toString())
-            header("Content-Type", "audio/x-matroska")
+            header("Content-Type", "application/octet-stream")
             setBody(bytes)
         }
         return resp.bodyAsText()

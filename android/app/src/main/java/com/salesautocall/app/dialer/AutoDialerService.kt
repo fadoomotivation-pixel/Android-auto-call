@@ -28,6 +28,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 import java.time.Instant
 
 /**
@@ -108,6 +109,7 @@ class AutoDialerService : Service() {
             val placed = placeCall(contact.phone, cfg.simSlot)
             var outcome: String
             var durationSec = 0
+            var recordingPath: String? = null
 
             if (!placed) {
                 outcome = "failed"
@@ -120,15 +122,18 @@ class AutoDialerService : Service() {
                 if (!wentOffhook) {
                     outcome = "no_answer"
                 } else {
+                    // Best-effort recording while the call is connected (device-dependent).
+                    if (cfg.recordingEnabled) runCatching { SimRecorder.start(this) }
                     // Now wait for it to return to idle = call ended.
                     awaitState(TelephonyManager.CALL_STATE_IDLE)
+                    recordingPath = runCatching { SimRecorder.stop() }.getOrNull()
                     durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()
                     outcome = if (durationSec >= cfg.connectedThresholdSeconds) "connected" else "no_answer"
                 }
             }
             val endedAt = Instant.now()
 
-            persistResult(contact.id, contact, startedAt, endedAt, durationSec, outcome, cfg.simSlot)
+            persistResult(contact.id, contact, startedAt, endedAt, durationSec, outcome, cfg.simSlot, recordingPath)
 
             val wasDialed = placed
             val talked = durationSec
@@ -174,10 +179,11 @@ class AutoDialerService : Service() {
         durationSec: Int,
         outcome: String,
         simSlot: Int?,
+        recordingPath: String?,
     ) {
         scope.launch(Dispatchers.IO) {
             runCatching {
-                Repository.logCall(
+                val logId = Repository.logCall(
                     CallLog(
                         companyId = contact.companyId,
                         salespersonId = contact.salespersonId ?: (Repository.currentUserId() ?: return@runCatching),
@@ -189,11 +195,21 @@ class AutoDialerService : Service() {
                         endedAt = endedAt.toString(),
                         durationSeconds = durationSec,
                         simSlot = simSlot,
+                        recordingStatus = if (recordingPath != null) "uploading" else "none",
+                        recordingSource = if (recordingPath != null) "sim" else null,
                     ),
                 )
                 contactId?.let {
                     val newStatus = if (outcome == "connected") "called" else "no_answer"
                     Repository.updateContactStatus(it, newStatus)
+                }
+                // Ship the recording (if any) to Drive via the edge function.
+                if (logId != null && recordingPath != null) {
+                    val f = File(recordingPath)
+                    if (f.exists() && f.length() > 0) {
+                        runCatching { Repository.uploadRecording(logId, "sim", durationSec, f.readBytes()) }
+                        runCatching { f.delete() }
+                    }
                 }
             }
         }

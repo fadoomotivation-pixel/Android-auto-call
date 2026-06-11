@@ -52,10 +52,11 @@ Deno.serve(async (req) => {
 
   // RLS decides whether this user may see this row.
   const { data: row } = await u
-    .from("call_logs").select("company_id, recording_path, recording_status").eq("id", call_log_id).maybeSingle();
+    .from("call_logs").select("company_id, recording_path, recording_status, recording_source").eq("id", call_log_id).maybeSingle();
   if (!row || row.recording_status !== "ready" || !row.recording_path) {
     return err({ ok: false, error: "not available" }, 404);
   }
+  const contentType = row.recording_source === "sim" ? "audio/mp4" : "audio/wav";
 
   const admin = createClient(SUPABASE_URL, SERVICE);
   const { data: integ } = await admin
@@ -71,7 +72,7 @@ Deno.serve(async (req) => {
     if (!media.ok) return err({ ok: false, error: "drive fetch failed" }, 502);
     return new Response(media.body, {
       status: 200,
-      headers: { ...cors, "Content-Type": "audio/x-matroska", "Cache-Control": "private, max-age=300" },
+      headers: { ...cors, "Content-Type": contentType, "Cache-Control": "private, max-age=300" },
     });
   } catch (e) {
     return err({ ok: false, error: String(e) }, 500);
