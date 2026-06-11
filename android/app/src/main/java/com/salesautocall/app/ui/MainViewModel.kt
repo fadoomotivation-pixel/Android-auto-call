@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.salesautocall.app.data.AppPrefs
+import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.CampaignStat
 import com.salesautocall.app.data.Company
 import com.salesautocall.app.data.Contact
