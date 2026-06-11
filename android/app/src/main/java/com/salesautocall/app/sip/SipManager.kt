@@ -42,6 +42,20 @@ object SipManager {
     /** Path of the recording captured for the last call, or null. */
     fun takeRecording(): String? = recordFile
 
+    fun isRecording(): Boolean = recordingActive
+
+    /** Manually pause/resume recording for the active call. Returns the new state. */
+    fun toggleRecording(): Boolean {
+        val c = core?.currentCall ?: return recordingActive
+        if (recordingActive) {
+            runCatching { c.stopRecording() }
+            recordingActive = false
+        } else if (recordFile != null) {
+            runCatching { c.startRecording() }.onSuccess { recordingActive = true }
+        }
+        return recordingActive
+    }
+
     private val listener = object : CoreListenerStub() {
         override fun onAccountRegistrationStateChanged(
             core: Core,

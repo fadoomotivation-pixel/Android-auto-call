@@ -57,8 +57,26 @@ data class AppState(
     val selectedCampaignId: String? = null,
     val selectedCampaignName: String = "",
     val campaignContacts: List<Contact> = emptyList(),
+    // telecaller "Calls" tab: history, follow-ups and the summary card
+    val callFilter: CallFilter = CallFilter.TODAY,
+    val callList: List<CallLog> = emptyList(),
+    val callsLoading: Boolean = false,
+    val callSummary: CallSummary = CallSummary(),
+    // notes typed during an active cloud call
+    val inCallNote: String = "",
     val message: String? = null,
     val error: String? = null,
+)
+
+enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
+
+/** Roll-up shown in the Calls-tab summary card. */
+data class CallSummary(
+    val total: Int = 0,
+    val connected: Int = 0,
+    val noAnswer: Int = 0,
+    val failed: Int = 0,
+    val talkSeconds: Int = 0,
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -365,16 +383,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun recordingEnabled(): Boolean = _state.value.company?.recordingEnabled ?: true
 
     fun endCloudCall() {
+        if (_state.value.inCallNote.isNotBlank()) saveInCallNote()
         uploadCloudRecording()
         runCatching { com.salesautocall.app.sip.SipManager.stop() }
         com.salesautocall.app.sip.SipManager.onState = null
         cloudConnectedAt = 0L
-        set { it.copy(cloudCallNumber = null, cloudCallStatus = "", cloudBridged = false, cloudCallLogId = null) }
+        set {
+            it.copy(
+                cloudCallNumber = null, cloudCallStatus = "", cloudBridged = false,
+                cloudCallLogId = null, inCallNote = "",
+            )
+        }
     }
 
     fun setMuted(muted: Boolean) = com.salesautocall.app.sip.SipManager.setMuted(muted)
 
     fun setSpeaker(on: Boolean) = com.salesautocall.app.sip.SipManager.setSpeaker(on)
+
+    fun isRecording(): Boolean = com.salesautocall.app.sip.SipManager.isRecording()
+
+    /** Manually pause/resume recording of the active cloud call. Returns the new state. */
+    fun toggleRecording(): Boolean = com.salesautocall.app.sip.SipManager.toggleRecording()
+
+    fun recordingAllowed(): Boolean = recordingEnabled()
 
     fun loadToday() {
         viewModelScope.launch {
@@ -388,6 +419,57 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     }
                 }
+        }
+    }
+
+    // ---------- Calls tab (history / follow-up / summary) ----------
+
+    fun setCallFilter(f: CallFilter) {
+        if (f == _state.value.callFilter) return
+        set { it.copy(callFilter = f) }
+        loadCalls()
+    }
+
+    fun loadCalls() {
+        val filter = _state.value.callFilter
+        val since: String? = when (filter) {
+            CallFilter.TODAY -> java.time.LocalDate.now()
+                .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toString()
+            CallFilter.WEEK -> java.time.LocalDate.now().minusDays(6)
+                .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toString()
+            CallFilter.ALL -> null
+        }
+        viewModelScope.launch {
+            set { it.copy(callsLoading = true) }
+            runCatching { Repository.fetchCalls(since) }
+                .onSuccess { list ->
+                    val summary = CallSummary(
+                        total = list.size,
+                        connected = list.count { c -> c.outcome == "connected" },
+                        noAnswer = list.count { c -> c.outcome == "no_answer" },
+                        failed = list.count { c -> c.outcome == "failed" },
+                        talkSeconds = list.sumOf { c -> c.durationSeconds },
+                    )
+                    set { it.copy(callList = list, callSummary = summary, callsLoading = false) }
+                }
+                .onFailure { e -> set { it.copy(callsLoading = false, error = e.message ?: "Couldn't load calls") } }
+        }
+    }
+
+    /** Contacts worth chasing: not-connected calls, most-recent attempt per number. */
+    fun followUps(): List<CallLog> =
+        _state.value.callList
+            .filter { it.outcome == "no_answer" || it.outcome == "failed" }
+            .distinctBy { it.phone }
+
+    fun setInCallNote(v: String) = set { it.copy(inCallNote = v) }
+
+    /** Persists the in-call note onto the active cloud call's log row. */
+    fun saveInCallNote() {
+        val id = _state.value.cloudCallLogId ?: return
+        val note = _state.value.inCallNote
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { Repository.setCallNote(id, note) }
         }
     }
 

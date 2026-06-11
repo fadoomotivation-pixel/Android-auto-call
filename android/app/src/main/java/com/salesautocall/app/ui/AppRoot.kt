@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
@@ -246,6 +247,7 @@ private fun LoginScreen(vm: MainViewModel) {
 
 private sealed class Tab(val route: String, val label: String) {
     data object Campaign : Tab("campaign", "Campaign")
+    data object Calls : Tab("calls", "Calls")
     data object Analytics : Tab("analytics", "Analytics")
 }
 
@@ -253,7 +255,7 @@ private sealed class Tab(val route: String, val label: String) {
 @Composable
 private fun MainShell(vm: MainViewModel) {
     val nav = rememberNavController()
-    val tabs = listOf(Tab.Campaign, Tab.Analytics)
+    val tabs = listOf(Tab.Campaign, Tab.Calls, Tab.Analytics)
 
     Scaffold(
         topBar = {
@@ -276,7 +278,11 @@ private fun MainShell(vm: MainViewModel) {
                         onClick = { nav.navigate(tab.route) { launchSingleTop = true } },
                         icon = {
                             Icon(
-                                if (tab is Tab.Campaign) Icons.Default.Campaign else Icons.Default.QueryStats,
+                                when (tab) {
+                                    is Tab.Campaign -> Icons.Default.Campaign
+                                    is Tab.Calls -> Icons.Default.Call
+                                    else -> Icons.Default.QueryStats
+                                },
                                 contentDescription = tab.label,
                             )
                         },
@@ -289,6 +295,7 @@ private fun MainShell(vm: MainViewModel) {
         Column(Modifier.padding(padding)) {
             NavHost(nav, startDestination = Tab.Campaign.route) {
                 composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                composable(Tab.Calls.route) { CallsScreen(vm) }
                 composable(Tab.Analytics.route) {
                     AnalyticsScreen(vm, onOpen = { id, name ->
                         vm.openCampaign(id, name)

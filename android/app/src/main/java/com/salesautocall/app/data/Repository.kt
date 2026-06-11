@@ -115,6 +115,24 @@ object Repository {
         }.decodeList<CallLog>()
     }
 
+    /** This salesperson's calls since [sinceIso] (null = no lower bound). Newest first. */
+    suspend fun fetchCalls(sinceIso: String?, limit: Int = 300): List<CallLog> {
+        val uid = currentUserId() ?: return emptyList()
+        return client.from("call_logs").select {
+            filter {
+                eq("salesperson_id", uid)
+                if (sinceIso != null) gte("created_at", sinceIso)
+            }
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<CallLog>()
+    }
+
+    /** Saves a free-text note onto a call log (used by the in-call Notes field). */
+    suspend fun setCallNote(callLogId: String, note: String) {
+        client.from("call_logs").update(mapOf("notes" to note)) { filter { eq("id", callLogId) } }
+    }
+
     // ---------- campaigns ----------
 
     /**
