@@ -343,8 +343,11 @@ private fun MainShell(vm: MainViewModel) {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
+                        IconButton(onClick = { /* notifications placeholder */ }) {
                             Icon(Icons.Default.Notifications, contentDescription = "Notifications")
+                        }
+                        IconButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
                     },
                     // Clean white app bar with a blue menu icon — modern CRM signature.
@@ -419,7 +422,15 @@ private fun MainShell(vm: MainViewModel) {
                             onNavigate = { route -> nav.navigate(route) { launchSingleTop = true } },
                         )
                     }
-                    composable(Tab.Leads.route) { LeadsScreen(vm) }
+                    composable(Tab.Leads.route) {
+                        LeadsScreen(vm, onStartCampaign = {
+                            nav.navigate(Tab.Campaign.route) {
+                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        })
+                    }
                     composable(Tab.Dialer.route) { DialerScreen(vm) }
                     composable(Tab.Campaign.route) { CampaignScreen(vm) }
                     composable(Tab.Team.route) {

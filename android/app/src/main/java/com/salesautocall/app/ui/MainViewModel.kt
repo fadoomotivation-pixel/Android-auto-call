@@ -705,6 +705,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * One-tap campaign for telecallers: auto-dial a hand-picked set of leads with
+     * no file upload or campaign setup. The admin uploads the leads; the rep just
+     * selects (all or by choice) and starts.
+     */
+    fun startSelectedLeads(contacts: List<Contact>) {
+        val callable = contacts.filter { it.id != null && it.status != "dnc" }
+        if (callable.isEmpty()) {
+            set { it.copy(error = "Select at least one callable lead (DNC are skipped).") }
+            return
+        }
+        val s = _state.value
+        DialerController.prepare(
+            callable,
+            DialerConfig(gapSeconds = s.breakSeconds, reviewAfterEachCall = s.reviewAfterCall),
+            "Selected leads (${callable.size})",
+            callable.firstOrNull()?.campaignId ?: "",
+        )
+        AutoDialerService.start(getApplication())
+        set { it.copy(message = "▶ Calling ${callable.size} selected leads…") }
+    }
+
     /** Optimistically updates the in-memory lead so the chip reflects instantly. */
     fun setLeadDisposition(contactId: String, status: String) {
         viewModelScope.launch {
