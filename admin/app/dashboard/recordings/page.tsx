@@ -1,0 +1,82 @@
+import { createClient } from "@/lib/supabase/server";
+import type { CallLog, Profile } from "@/lib/types";
+import { RecordingPlayer } from "./RecordingPlayer";
+
+function fmt(seconds: number | null) {
+  if (!seconds) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s.toString().padStart(2, "0")}s`;
+}
+
+export default async function RecordingsPage() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const [{ data: me }, { data: pa }] = await Promise.all([
+    supabase.from("profiles").select("role").eq("id", user!.id).maybeSingle<{ role: string }>(),
+    supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
+  ]);
+  const canDelete = me?.role === "admin" || !!pa;
+
+  // RLS scopes this automatically: telecaller = own, admin = company, super = all.
+  const [{ data: calls, error }, { data: people }] = await Promise.all([
+    supabase
+      .from("call_logs")
+      .select("*")
+      .eq("recording_status", "ready")
+      .order("created_at", { ascending: false })
+      .limit(500)
+      .returns<CallLog[]>(),
+    supabase.from("profiles").select("id, full_name").returns<Profile[]>(),
+  ]);
+
+  const nameById = new Map((people ?? []).map((p) => [p.id, p.full_name]));
+  const rows = calls ?? [];
+
+  return (
+    <>
+      <h2>Call recordings</h2>
+      <p className="subtitle">
+        Recorded cloud calls (latest 500). Telecallers see their own; admins see the whole company.
+        Recordings auto-delete after 30 days.
+      </p>
+
+      {error && <div className="error">{error.message}</div>}
+
+      {rows.length === 0 ? (
+        <div className="empty">No recordings yet.</div>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Salesperson</th>
+              <th>Phone</th>
+              <th>Length</th>
+              <th>Source</th>
+              <th>Recording</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => (
+              <tr key={c.id}>
+                <td>{new Date(c.started_at ?? c.created_at).toLocaleString()}</td>
+                <td>{nameById.get(c.salesperson_id) || "—"}</td>
+                <td>{c.phone}</td>
+                <td>{fmt(c.recording_seconds)}</td>
+                <td>{c.recording_source === "sim" ? "SIM" : "Cloud"}</td>
+                <td>
+                  <RecordingPlayer callId={c.id} canDelete={canDelete} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+}

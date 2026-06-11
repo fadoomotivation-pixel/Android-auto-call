@@ -57,6 +57,9 @@ export interface CallLog {
   sim_slot: number | null;
   notes: string | null;
   created_at: string;
+  recording_status: string;
+  recording_seconds: number | null;
+  recording_source: string | null;
 }
 
 export interface CompanyIntegration {
