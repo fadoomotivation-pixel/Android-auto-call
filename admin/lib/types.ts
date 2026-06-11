@@ -25,6 +25,8 @@ export interface Profile {
   is_active: boolean;
   sip_agent_id: string | null;
   caller_id: string | null;
+  sip_server: string | null;
+  sip_port: number | null;
   created_at: string;
 }
 
@@ -67,6 +69,25 @@ export interface CompanyIntegration {
   uro_token: string | null;
   uro_tenant_id: string | null;
   default_caller_id: string | null;
+  sip_server: string;
+  sip_port: number;
+  transport: string;
+  wss_url: string | null;
+  outbound_proxy: string | null;
+  api_base_url: string;
+}
+
+/** An agent extension returned by UrOperator's registration-info endpoint. */
+export interface UroAgent {
+  username: string;
+  name: string | null;
+}
+
+/** A DID / caller-ID returned by UrOperator. */
+export interface UroCallerId {
+  did: string;
+  name?: string | null;
+  status?: string | null;
 }
 
 export interface CompanyOverview {
