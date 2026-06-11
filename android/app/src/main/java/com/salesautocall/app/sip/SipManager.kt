@@ -89,12 +89,14 @@ object SipManager {
         c.isVideoCaptureEnabled = false
         c.isVideoDisplayEnabled = false
         c.isMicEnabled = true
-        // NAT traversal so media (RTP) flows on the public path (mobile/carrier NAT).
+        // Direct media, no ICE/STUN — matches Zoiper's behaviour on the private
+        // VPN path. (ICE candidates pointing at an unreachable STUN server inside
+        // the VPN can make the PBX drop the call instantly.)
         runCatching {
             val nat = c.createNatPolicy()
-            nat.isStunEnabled = true
-            nat.stunServer = "stun.l.google.com:19302"
-            nat.isIceEnabled = true
+            nat.isStunEnabled = false
+            nat.isIceEnabled = false
+            nat.isTurnEnabled = false
             c.natPolicy = nat
         }
         c.start()
