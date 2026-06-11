@@ -12,10 +12,11 @@ import org.linphone.core.TransportType
 
 /**
  * Thin wrapper around the Linphone SDK that turns the app into a real SIP
- * endpoint — it registers over SIP-UDP (exactly like Zoiper does), auto-answers
- * the leg that uroperator's click-to-call rings, and carries two-way audio
- * natively. This replaces the WebRTC/WebView softphone, which couldn't work
- * because the tenant's PBX only exposes SIP-UDP on a private address.
+ * endpoint — it registers over SIP-UDP (exactly like Zoiper does), dials the
+ * customer directly, and carries two-way audio natively (with STUN/ICE for NAT
+ * and earpiece/speaker routing). It also auto-answers an inbound leg, in case
+ * the PBX is driven via click-to-call. This replaces the WebRTC/WebView
+ * softphone, which couldn't register because the PBX only exposes SIP-UDP.
  *
  * All state changes are surfaced through [onState] as short status strings the
  * ViewModel maps to user-facing text:
@@ -26,9 +27,34 @@ object SipManager {
     private var core: Core? = null
     private var account: Account? = null
     private var domain: String = "sip.uroperator.com"
+    private var speakerOn: Boolean = false
+    private var recordFile: String? = null
+    private var recordingActive: Boolean = false
 
     /** Called on every meaningful state change. Set by the ViewModel. */
     var onState: ((String) -> Unit)? = null
+
+    /** Set the path the next call should record to (null = no recording). */
+    fun setRecordFile(path: String?) {
+        recordFile = path
+    }
+
+    /** Path of the recording captured for the last call, or null. */
+    fun takeRecording(): String? = recordFile
+
+    fun isRecording(): Boolean = recordingActive
+
+    /** Manually pause/resume recording for the active call. Returns the new state. */
+    fun toggleRecording(): Boolean {
+        val c = core?.currentCall ?: return recordingActive
+        if (recordingActive) {
+            runCatching { c.stopRecording() }
+            recordingActive = false
+        } else if (recordFile != null) {
+            runCatching { c.startRecording() }.onSuccess { recordingActive = true }
+        }
+        return recordingActive
+    }
 
     private val listener = object : CoreListenerStub() {
         override fun onAccountRegistrationStateChanged(
@@ -54,20 +80,35 @@ object SipManager {
         ) {
             when (state) {
                 Call.State.IncomingReceived -> {
-                    // uroperator is ringing our extension — answer immediately.
+                    // uroperator is ringing our extension — answer immediately, with the
+                    // record file set on the call params so both sides get captured.
                     onState?.invoke("ringing")
-                    runCatching { call.accept() }
+                    val p = runCatching { core.createCallParams(call) }.getOrNull()
+                    if (p != null && recordFile != null) runCatching { p.recordFile = recordFile }
+                    runCatching { if (p != null) call.acceptWithParams(p) else call.accept() }
                 }
                 Call.State.OutgoingProgress,
                 Call.State.OutgoingRinging -> onState?.invoke("ringing")
                 Call.State.Connected,
                 Call.State.StreamsRunning -> {
-                    enableSpeaker(core)
+                    applyAudioRoute(core)
+                    if (recordFile != null && !recordingActive) {
+                        runCatching { call.startRecording() }.onSuccess { recordingActive = true }
+                    }
                     onState?.invoke("connected")
                 }
                 Call.State.End,
-                Call.State.Released -> onState?.invoke("ended")
-                Call.State.Error -> onState?.invoke("callerror:$message")
+                Call.State.Released,
+                Call.State.Error -> {
+                    if (recordingActive) {
+                        runCatching { call.stopRecording() }
+                        recordingActive = false
+                    }
+                    // Surface the SIP failure code (403/404/488/603…) so the cause is visible.
+                    val code = runCatching { call.errorInfo?.protocolCode ?: 0 }.getOrDefault(0)
+                    val phrase = runCatching { call.errorInfo?.phrase ?: "" }.getOrDefault("")
+                    if (code >= 300) onState?.invoke("callfailed:$code $phrase") else onState?.invoke("ended")
+                }
                 else -> { /* nothing */ }
             }
         }
@@ -81,6 +122,17 @@ object SipManager {
         // Audio only — never offer video.
         c.isVideoCaptureEnabled = false
         c.isVideoDisplayEnabled = false
+        c.isMicEnabled = true
+        // Direct media, no ICE/STUN — matches Zoiper's behaviour on the private
+        // VPN path. (ICE candidates pointing at an unreachable STUN server inside
+        // the VPN can make the PBX drop the call instantly.)
+        runCatching {
+            val nat = c.createNatPolicy()
+            nat.isStunEnabled = false
+            nat.isIceEnabled = false
+            nat.isTurnEnabled = false
+            c.natPolicy = nat
+        }
         c.start()
         core = c
         return c
@@ -123,6 +175,8 @@ object SipManager {
         }
         params.serverAddress = proxy
         params.isRegisterEnabled = true
+        // Send REGISTER and all in-dialog requests straight to this server.
+        runCatching { params.isOutboundProxyEnabled = true }
 
         val acc = c.createAccount(params)
         c.addAccount(acc)
@@ -133,11 +187,20 @@ object SipManager {
     /** Places a direct outbound call to [number] on the registered domain. */
     fun call(number: String) {
         val c = core ?: return
-        c.invite("sip:$number@$domain")
+        val remote = Factory.instance().createAddress("sip:$number@$domain")
+        val p = c.createCallParams(null)
+        if (p != null && recordFile != null) runCatching { p.recordFile = recordFile }
+        if (remote != null && p != null) c.inviteAddressWithParams(remote, p) else c.invite("sip:$number@$domain")
     }
 
     fun setMuted(muted: Boolean) {
         core?.isMicEnabled = !muted
+    }
+
+    /** Toggles loudspeaker vs earpiece for the active call. */
+    fun setSpeaker(on: Boolean) {
+        speakerOn = on
+        core?.let { applyAudioRoute(it) }
     }
 
     fun hangup() {
@@ -148,6 +211,10 @@ object SipManager {
     /** Ends the call (if any) and tears down registration (removing the account
      *  sends an un-REGISTER to the PBX). */
     fun stop() {
+        if (recordingActive) {
+            runCatching { core?.currentCall?.stopRecording() }
+            recordingActive = false
+        }
         runCatching { hangup() }
         val c = core ?: return
         runCatching { c.clearAccounts() }
@@ -155,9 +222,14 @@ object SipManager {
         account = null
     }
 
-    private fun enableSpeaker(c: Core) {
-        // Route audio to the loudspeaker so it behaves like a phone call on speaker.
-        val speaker = c.audioDevices.firstOrNull { it.type == AudioDevice.Type.Speaker }
-        if (speaker != null) c.outputAudioDevice = speaker
+    private fun applyAudioRoute(c: Core) {
+        val wanted = if (speakerOn) AudioDevice.Type.Speaker else AudioDevice.Type.Earpiece
+        val dev = c.audioDevices.firstOrNull {
+            it.type == wanted && it.hasCapability(AudioDevice.Capabilities.CapabilityPlay)
+        } ?: c.audioDevices.firstOrNull { it.type == wanted }
+        if (dev != null) {
+            c.outputAudioDevice = dev
+            c.currentCall?.outputAudioDevice = dev
+        }
     }
 }

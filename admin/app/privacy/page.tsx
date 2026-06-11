@@ -27,10 +27,15 @@ export default function PrivacyPage() {
         <li>Salesperson account: name, phone, email — for authentication and attributing activity.</li>
         <li>Imported contacts: name, phone, email, company, notes — the list the agent calls.</li>
         <li>Call logs: phone dialed, timestamps, duration, outcome, SIM slot — for productivity reporting.</li>
+        <li>Call recordings (when enabled by your company): the audio of calls made through the app,
+          stored on your company&apos;s own Google Drive and auto-deleted after 30 days. A telecaller can
+          hear their own recordings; company admins can hear and delete the company&apos;s recordings.</li>
       </ul>
       <p>
-        The app does <strong>not</strong> record or upload call audio, does not read your
-        device&apos;s existing contacts or call history, and does not use the data for advertising.
+        Call recording is controlled by your company&apos;s admin and may be on by default. Telecallers
+        are shown a notice when recording is active. The app does not read your device&apos;s existing
+        contacts or call history, and does not use the data for advertising. Recording laws vary by
+        region — your company is responsible for any consent required where it operates.
       </p>
 
       <h2>Permissions</h2>

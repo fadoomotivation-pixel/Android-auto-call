@@ -48,5 +48,10 @@
             android:exported="false"
             android:foregroundServiceType="phoneCall" />
 
+        <service
+            android:name=".dialer.ManualCallService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall" />
+
     </application>
 </manifest>

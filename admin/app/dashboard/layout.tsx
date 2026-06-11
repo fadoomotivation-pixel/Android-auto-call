@@ -45,6 +45,7 @@ export default async function DashboardLayout({
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
         <NavLink href="/dashboard/contacts" label="Contacts" />
         <NavLink href="/dashboard/calls" label="Call logs" />
+        <NavLink href="/dashboard/recordings" label="Recordings" />
         {isSuper && (
           <>
             <div style={{ margin: "14px 6px 4px", fontSize: 11, letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" }}>
@@ -54,6 +55,7 @@ export default async function DashboardLayout({
             <NavLink href="/dashboard/platform/telecallers" label="🎧 Telecallers" />
             <NavLink href="/dashboard/platform/contacts" label="📇 Contacts" />
             <NavLink href="/dashboard/platform/integrations" label="☎️ Integrations" />
+            <NavLink href="/dashboard/platform/storage" label="💾 Recording storage" />
           </>
         )}
         <div className="spacer" />

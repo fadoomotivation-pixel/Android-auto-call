@@ -6,6 +6,8 @@ import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import io.ktor.client.request.header
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -72,8 +74,22 @@ object Repository {
 
     // ---------- call logs ----------
 
-    suspend fun logCall(log: CallLog) {
-        client.from("call_logs").insert(log)
+    /** Inserts a call log and returns its new id (so a recording can be attached). */
+    suspend fun logCall(log: CallLog): String? {
+        return client.from("call_logs").insert(log) { select() }.decodeSingleOrNull<CallLog>()?.id
+    }
+
+    /** Uploads a recording file to the recording-upload edge function, which streams
+     *  it to the company's Google Drive and marks the call log ready. */
+    suspend fun uploadRecording(callLogId: String, source: String, durationSeconds: Int, bytes: ByteArray): String {
+        val resp = client.functions.invoke("recording-upload") {
+            header("x-call-id", callLogId)
+            header("x-source", source)
+            header("x-duration", durationSeconds.toString())
+            header("Content-Type", "application/octet-stream")
+            setBody(bytes)
+        }
+        return resp.bodyAsText()
     }
 
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {
@@ -97,6 +113,24 @@ object Repository {
                 gte("created_at", start)
             }
         }.decodeList<CallLog>()
+    }
+
+    /** This salesperson's calls since [sinceIso] (null = no lower bound). Newest first. */
+    suspend fun fetchCalls(sinceIso: String?, limit: Int = 300): List<CallLog> {
+        val uid = currentUserId() ?: return emptyList()
+        return client.from("call_logs").select {
+            filter {
+                eq("salesperson_id", uid)
+                if (sinceIso != null) gte("created_at", sinceIso)
+            }
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<CallLog>()
+    }
+
+    /** Saves a free-text note onto a call log (used by the in-call Notes field). */
+    suspend fun setCallNote(callLogId: String, note: String) {
+        client.from("call_logs").update(mapOf("notes" to note)) { filter { eq("id", callLogId) } }
     }
 
     // ---------- campaigns ----------

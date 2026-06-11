@@ -34,6 +34,8 @@ data class DialerConfig(
     val simSlot: Int? = null,
     /** When true, the dialer pauses after every call for quick review. */
     val reviewAfterEachCall: Boolean = true,
+    /** Best-effort SIM call recording (device-dependent). */
+    val recordingEnabled: Boolean = true,
 )
 
 /**

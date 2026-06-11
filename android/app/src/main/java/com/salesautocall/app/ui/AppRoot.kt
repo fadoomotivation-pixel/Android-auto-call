@@ -15,7 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
@@ -23,23 +27,31 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -49,11 +61,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.salesautocall.app.data.AppPrefs
+import kotlinx.coroutines.launch
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -246,69 +260,156 @@ private fun LoginScreen(vm: MainViewModel) {
 
 private sealed class Tab(val route: String, val label: String) {
     data object Campaign : Tab("campaign", "Campaign")
+    data object Dialer : Tab("dialer", "Dialer")
+    data object Calls : Tab("calls", "Calls")
     data object Analytics : Tab("analytics", "Analytics")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainShell(vm: MainViewModel) {
+    val state by vm.state.collectAsState()
     val nav = rememberNavController()
-    val tabs = listOf(Tab.Campaign, Tab.Analytics)
+    val tabs = listOf(Tab.Campaign, Tab.Dialer, Tab.Calls, Tab.Analytics)
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Bulk Caller") },
-                actions = {
-                    IconButton(onClick = { nav.navigate("settings") }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            AppDrawer(
+                userName = state.profile?.fullName ?: "Your account",
+                role = state.profile?.role ?: "salesperson",
+                companyName = state.company?.name,
+                onSettings = {
+                    scope.launch { drawerState.close() }
+                    nav.navigate("settings") { launchSingleTop = true }
+                },
+                onSignOut = {
+                    scope.launch { drawerState.close() }
+                    vm.signOut()
                 },
             )
         },
-        bottomBar = {
-            NavigationBar {
-                val current by nav.currentBackStackEntryAsState()
-                val route = current?.destination?.route
-                tabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = route == tab.route,
-                        onClick = { nav.navigate(tab.route) { launchSingleTop = true } },
-                        icon = {
-                            Icon(
-                                if (tab is Tab.Campaign) Icons.Default.Campaign else Icons.Default.QueryStats,
-                                contentDescription = tab.label,
-                            )
-                        },
-                        label = { Text(tab.label) },
-                    )
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Bulk Caller") },
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    },
+                )
+            },
+            bottomBar = {
+                NavigationBar {
+                    val current by nav.currentBackStackEntryAsState()
+                    val route = current?.destination?.route
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = route == tab.route,
+                            onClick = {
+                                // Standard bottom-nav behaviour: don't stack tabs and keep
+                                // each tab's state so switching back doesn't reload everything.
+                                nav.navigate(tab.route) {
+                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    when (tab) {
+                                        is Tab.Campaign -> Icons.Default.Campaign
+                                        is Tab.Dialer -> Icons.Default.Dialpad
+                                        is Tab.Calls -> Icons.Default.Call
+                                        else -> Icons.Default.QueryStats
+                                    },
+                                    contentDescription = tab.label,
+                                )
+                            },
+                            label = { Text(tab.label) },
+                        )
+                    }
                 }
-            }
-        },
-    ) { padding ->
-        Column(Modifier.padding(padding)) {
-            NavHost(nav, startDestination = Tab.Campaign.route) {
-                composable(Tab.Campaign.route) { CampaignScreen(vm) }
-                composable(Tab.Analytics.route) {
-                    AnalyticsScreen(vm, onOpen = { id, name ->
-                        vm.openCampaign(id, name)
-                        nav.navigate("campaign_detail")
-                    })
+            },
+        ) { padding ->
+            Column(Modifier.padding(padding)) {
+                NavHost(nav, startDestination = Tab.Campaign.route) {
+                    composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                    composable(Tab.Dialer.route) { DialerScreen(vm) }
+                    composable(Tab.Calls.route) { CallsScreen(vm) }
+                    composable(Tab.Analytics.route) {
+                        AnalyticsScreen(vm, onOpen = { id, name ->
+                            vm.openCampaign(id, name)
+                            nav.navigate("campaign_detail")
+                        })
+                    }
+                    composable("campaign_detail") {
+                        CampaignDetailScreen(
+                            vm,
+                            onBack = { nav.popBackStack() },
+                            onStarted = {
+                                nav.navigate(Tab.Campaign.route) {
+                                    popUpTo(Tab.Campaign.route) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                            },
+                        )
+                    }
+                    composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
                 }
-                composable("campaign_detail") {
-                    CampaignDetailScreen(
-                        vm,
-                        onBack = { nav.popBackStack() },
-                        onStarted = {
-                            nav.navigate(Tab.Campaign.route) {
-                                popUpTo(Tab.Campaign.route) { inclusive = false }
-                                launchSingleTop = true
-                            }
-                        },
-                    )
-                }
-                composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
             }
         }
+    }
+}
+
+@Composable
+private fun AppDrawer(
+    userName: String,
+    role: String,
+    companyName: String?,
+    onSettings: () -> Unit,
+    onSignOut: () -> Unit,
+) {
+    ModalDrawerSheet {
+        Spacer(Modifier.height(16.dp))
+        Column(Modifier.padding(horizontal = 28.dp, vertical = 12.dp)) {
+            Text("Bulk Caller", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(8.dp))
+            Text(userName, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                buildString {
+                    append(if (role == "admin") "Admin" else "Salesperson")
+                    companyName?.let { append(" · "); append(it) }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+        Spacer(Modifier.height(8.dp))
+
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+            label = { Text("Settings") },
+            selected = false,
+            onClick = onSettings,
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+        )
+        NavigationDrawerItem(
+            icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+            label = { Text("Sign out") },
+            selected = false,
+            onClick = onSignOut,
+            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+        )
     }
 }
