@@ -234,8 +234,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 lenientJson.decodeFromString(com.salesautocall.app.data.WebrtcConfig.serializer(), body)
             }.getOrNull()
 
-            val ext = cfg?.ext?.ifBlank { null } ?: agentId()
-            val pass = cfg?.password?.ifBlank { null } ?: _state.value.cloudSipPassword
+            // Manually-entered credentials WIN over the auto-fetched ones: a private
+            // PBX (e.g. 10.10.10.3) can have a different password for the same
+            // extension than uroperator's public API returns. Auto-fetch is only a
+            // fallback for when the user hasn't filled Settings.
+            val ext = _state.value.cloudAgentId.ifBlank { null }
+                ?: _state.value.profile?.sipAgentId?.ifBlank { null }
+                ?: cfg?.ext?.ifBlank { null } ?: ""
+            val pass = _state.value.cloudSipPassword.ifBlank { null }
+                ?: cfg?.password?.ifBlank { null } ?: ""
             // Server/port: manual override (e.g. private IP) > uroperator-provided > public default.
             val server = _state.value.cloudSipServer.ifBlank { null }
                 ?: cfg?.sipServer?.ifBlank { null } ?: "sip.uroperator.com"

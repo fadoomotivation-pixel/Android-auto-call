@@ -134,6 +134,8 @@ object SipManager {
         }
         params.serverAddress = proxy
         params.isRegisterEnabled = true
+        // Send REGISTER and all in-dialog requests straight to this server.
+        runCatching { params.isOutboundProxyEnabled = true }
 
         val acc = c.createAccount(params)
         c.addAccount(acc)
