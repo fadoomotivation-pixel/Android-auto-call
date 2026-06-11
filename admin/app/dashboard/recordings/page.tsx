@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { CallLog, Profile } from "@/lib/types";
 import { RecordingPlayer } from "./RecordingPlayer";
+import { RecordingToggle } from "./RecordingToggle";
 
 function fmt(seconds: number | null) {
   if (!seconds) return "—";
@@ -17,10 +18,19 @@ export default async function RecordingsPage() {
   } = await supabase.auth.getUser();
 
   const [{ data: me }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", user!.id).maybeSingle<{ role: string }>(),
+    supabase.from("profiles").select("role, company_id").eq("id", user!.id).maybeSingle<{ role: string; company_id: string | null }>(),
     supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
   ]);
   const canDelete = me?.role === "admin" || !!pa;
+
+  // Company admins get a recording on/off switch for their company.
+  let company: { id: string; recording_enabled: boolean } | null = null;
+  if (me?.role === "admin" && me.company_id) {
+    const { data } = await supabase
+      .from("companies").select("id, recording_enabled").eq("id", me.company_id)
+      .maybeSingle<{ id: string; recording_enabled: boolean }>();
+    company = data;
+  }
 
   // RLS scopes this automatically: telecaller = own, admin = company, super = all.
   const [{ data: calls, error }, { data: people }] = await Promise.all([
@@ -44,6 +54,8 @@ export default async function RecordingsPage() {
         Recorded cloud calls (latest 500). Telecallers see their own; admins see the whole company.
         Recordings auto-delete after 30 days.
       </p>
+
+      {company && <RecordingToggle companyId={company.id} enabled={company.recording_enabled} />}
 
       {error && <div className="error">{error.message}</div>}
 

@@ -363,6 +363,14 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                 }
                 Switch(checked = app.cloudEnabled, onCheckedChange = { vm.setCloudEnabled(it) })
             }
+            if (app.company?.recordingEnabled == true) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "🎙️ Calls may be recorded by your company for quality and training. " +
+                        "Recordings are kept for 30 days.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (!app.profile?.sipAgentId.isNullOrBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
