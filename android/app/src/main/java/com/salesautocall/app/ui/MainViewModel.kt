@@ -214,10 +214,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Opens the in-app native softphone for a cloud call. Auto-fetches SIP config
      *  from uroperator; falls back to the manual Settings values if that fails. */
     fun cloudCall(phone: String, contactId: String?, campaignId: String?) {
+        // Strip spaces/dashes so the SIP/URI and the API get clean digits.
+        val clean = phone.filter { it.isDigit() || it == '+' }
         set {
             it.copy(
                 error = null, message = null,
-                cloudCallNumber = phone.trim(),
+                cloudCallNumber = clean,
                 cloudCallContactId = contactId,
                 cloudCallCampaignId = campaignId,
                 cloudCallStatus = "Fetching SIP config…",
@@ -295,16 +297,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         set { it.copy(cloudCallStatus = pretty) }
 
-        // Once registered, dial the customer directly over SIP (exactly like Zoiper),
-        // then log the call. This is the proven path on this PBX's dialplan.
+        // Once registered, ask uroperator to place the call (click-to-call): their
+        // server rings our extension (the app auto-answers) and bridges the customer
+        // through the proper trunk. This is uroperator's supported path and avoids
+        // the app having to know the PBX dialplan for direct dialing.
         if (raw == "registered" && !s.cloudBridged) {
-            set { it.copy(cloudBridged = true, cloudCallStatus = "Calling ${'$'}number…") }
-            runCatching { com.salesautocall.app.sip.SipManager.call(number) }
-                .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't place call: ${e.message}") } }
+            set { it.copy(cloudBridged = true, cloudCallStatus = "Ringing you, then the customer…") }
+            val ext = _state.value.cloudCallExt.ifBlank { agentId() }
+            viewModelScope.launch {
+                runCatching { Repository.cloudCall(number, ext, callerId()) }
+                    .onSuccess { body ->
+                        if (!body.contains("\"ok\":true")) {
+                            set { it.copy(cloudCallStatus = "uroperator: ${body.take(160)}") }
+                        }
+                    }
+                    .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't start call: ${e.message}") } }
 
-            val p = _state.value.profile
-            if (p?.companyId != null) {
-                viewModelScope.launch {
+                val p = _state.value.profile
+                if (p?.companyId != null) {
                     runCatching {
                         Repository.logCall(
                             com.salesautocall.app.data.CallLog(
