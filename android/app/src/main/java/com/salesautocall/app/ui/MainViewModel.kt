@@ -463,6 +463,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .filter { it.outcome == "no_answer" || it.outcome == "failed" }
             .distinctBy { it.phone }
 
+    /** Places a manually-keyed SIM call (recorded + logged) via the in-app keypad. */
+    fun dialManual(phone: String) {
+        val clean = phone.trim()
+        if (clean.isEmpty()) return
+        com.salesautocall.app.dialer.ManualCallService.dial(
+            getApplication(), clean, _state.value.company?.id, null, recordingEnabled(),
+        )
+    }
+
     fun setInCallNote(v: String) = set { it.copy(inCallNote = v) }
 
     /** Persists the in-call note onto the active cloud call's log row. */

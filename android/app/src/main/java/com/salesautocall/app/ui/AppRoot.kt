@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
@@ -247,6 +248,7 @@ private fun LoginScreen(vm: MainViewModel) {
 
 private sealed class Tab(val route: String, val label: String) {
     data object Campaign : Tab("campaign", "Campaign")
+    data object Dialer : Tab("dialer", "Dialer")
     data object Calls : Tab("calls", "Calls")
     data object Analytics : Tab("analytics", "Analytics")
 }
@@ -255,7 +257,7 @@ private sealed class Tab(val route: String, val label: String) {
 @Composable
 private fun MainShell(vm: MainViewModel) {
     val nav = rememberNavController()
-    val tabs = listOf(Tab.Campaign, Tab.Calls, Tab.Analytics)
+    val tabs = listOf(Tab.Campaign, Tab.Dialer, Tab.Calls, Tab.Analytics)
 
     Scaffold(
         topBar = {
@@ -280,6 +282,7 @@ private fun MainShell(vm: MainViewModel) {
                             Icon(
                                 when (tab) {
                                     is Tab.Campaign -> Icons.Default.Campaign
+                                    is Tab.Dialer -> Icons.Default.Dialpad
                                     is Tab.Calls -> Icons.Default.Call
                                     else -> Icons.Default.QueryStats
                                 },
@@ -295,6 +298,7 @@ private fun MainShell(vm: MainViewModel) {
         Column(Modifier.padding(padding)) {
             NavHost(nav, startDestination = Tab.Campaign.route) {
                 composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                composable(Tab.Dialer.route) { DialerScreen(vm) }
                 composable(Tab.Calls.route) { CallsScreen(vm) }
                 composable(Tab.Analytics.route) {
                     AnalyticsScreen(vm, onOpen = { id, name ->
