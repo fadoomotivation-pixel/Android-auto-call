@@ -363,8 +363,14 @@ object Repository {
         }.decodeSingleOrNull<Attendance>()
     }
 
-    /** Punches in for today (idempotent — returns the existing row if already in). */
-    suspend fun punchIn(): Attendance? {
+    /** Punches in for today with an optional selfie + GPS proof
+     *  (idempotent — returns the existing row if already punched in). */
+    suspend fun punchIn(
+        selfie: String? = null,
+        lat: Double? = null,
+        lng: Double? = null,
+        locationLabel: String? = null,
+    ): Attendance? {
         val existing = todayAttendance()
         if (existing != null) return existing
         val profile = myProfile() ?: error("No profile.")
@@ -373,8 +379,22 @@ object Repository {
             companyId = companyId,
             salespersonId = profile.id,
             punchInAt = java.time.Instant.now().toString(),
+            punchInLat = lat,
+            punchInLng = lng,
+            selfie = selfie,
+            locationLabel = locationLabel,
         )
         return client.from("attendance").insert(row) { select() }.decodeSingleOrNull<Attendance>()
+    }
+
+    /** Recent attendance rows for this salesperson (for the history list). */
+    suspend fun recentAttendance(limit: Int = 14): List<Attendance> {
+        val uid = currentUserId() ?: return emptyList()
+        return client.from("attendance").select {
+            filter { eq("salesperson_id", uid) }
+            order("work_date", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<Attendance>()
     }
 
     /** Punches out of today's shift. Returns the updated row. */
