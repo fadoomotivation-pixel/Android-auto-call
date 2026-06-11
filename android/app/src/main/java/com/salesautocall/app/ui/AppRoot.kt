@@ -2,6 +2,8 @@
 
 package com.salesautocall.app.ui
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -342,7 +344,15 @@ private fun MainShell(vm: MainViewModel) {
             },
         ) { padding ->
             Column(Modifier.padding(padding)) {
-                NavHost(nav, startDestination = Tab.Campaign.route) {
+                NavHost(
+                    nav,
+                    startDestination = Tab.Campaign.route,
+                    // Instant tab switches — the default ~700ms crossfade reads as lag.
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
+                ) {
                     composable(Tab.Campaign.route) { CampaignScreen(vm) }
                     composable(Tab.Dialer.route) { DialerScreen(vm) }
                     composable(Tab.Calls.route) { CallsScreen(vm) }
