@@ -19,11 +19,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -263,10 +264,11 @@ private fun LoginScreen(vm: MainViewModel) {
 }
 
 private sealed class Tab(val route: String, val label: String) {
-    data object Campaign : Tab("campaign", "Campaign")
+    data object Home : Tab("home", "Home")
+    data object Leads : Tab("leads", "Leads")
     data object Dialer : Tab("dialer", "Dialer")
-    data object Calls : Tab("calls", "Calls")
-    data object Analytics : Tab("analytics", "Analytics")
+    data object Campaign : Tab("campaign", "Campaign")
+    data object Team : Tab("team", "Team")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -274,7 +276,7 @@ private sealed class Tab(val route: String, val label: String) {
 private fun MainShell(vm: MainViewModel) {
     val state by vm.state.collectAsState()
     val nav = rememberNavController()
-    val tabs = listOf(Tab.Campaign, Tab.Dialer, Tab.Calls, Tab.Analytics)
+    val tabs = listOf(Tab.Home, Tab.Leads, Tab.Dialer, Tab.Campaign, Tab.Team)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -338,10 +340,11 @@ private fun MainShell(vm: MainViewModel) {
                             icon = {
                                 Icon(
                                     when (tab) {
-                                        is Tab.Campaign -> Icons.Default.Campaign
+                                        is Tab.Home -> Icons.Default.Home
+                                        is Tab.Leads -> Icons.Default.People
                                         is Tab.Dialer -> Icons.Default.Dialpad
-                                        is Tab.Calls -> Icons.Default.Call
-                                        else -> Icons.Default.QueryStats
+                                        is Tab.Campaign -> Icons.Default.Campaign
+                                        else -> Icons.Default.Leaderboard
                                     },
                                     contentDescription = tab.label,
                                 )
@@ -360,17 +363,39 @@ private fun MainShell(vm: MainViewModel) {
             Column(Modifier.padding(padding)) {
                 NavHost(
                     nav,
-                    startDestination = Tab.Campaign.route,
+                    startDestination = Tab.Home.route,
                     // Instant tab switches — the default ~700ms crossfade reads as lag.
                     enterTransition = { EnterTransition.None },
                     exitTransition = { ExitTransition.None },
                     popEnterTransition = { EnterTransition.None },
                     popExitTransition = { ExitTransition.None },
                 ) {
-                    composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                    composable(Tab.Home.route) {
+                        HomeScreen(
+                            vm,
+                            onOpenFollowUps = { nav.navigate("followups") },
+                            onOpenLeads = {
+                                nav.navigate(Tab.Leads.route) {
+                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                        )
+                    }
+                    composable(Tab.Leads.route) { LeadsScreen(vm) }
                     composable(Tab.Dialer.route) { DialerScreen(vm) }
-                    composable(Tab.Calls.route) { CallsScreen(vm) }
-                    composable(Tab.Analytics.route) {
+                    composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                    composable(Tab.Team.route) {
+                        TeamScreen(
+                            vm,
+                            onCampaigns = { nav.navigate("analytics") },
+                            onCallHistory = { nav.navigate("calls") },
+                        )
+                    }
+                    composable("followups") { FollowUpsScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("calls") { CallsScreen(vm) }
+                    composable("analytics") {
                         AnalyticsScreen(vm, onOpen = { id, name ->
                             vm.openCampaign(id, name)
                             nav.navigate("campaign_detail")

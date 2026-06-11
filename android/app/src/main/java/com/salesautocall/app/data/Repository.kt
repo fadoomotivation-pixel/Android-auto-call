@@ -280,5 +280,115 @@ object Repository {
             buildJsonObject { put("p_code", code) },
         )
     }
+
+    // ---------- lead pipeline ----------
+
+    /** Every contact this salesperson owns, newest activity first — the pipeline. */
+    suspend fun fetchLeads(limit: Int = 500): List<Contact> {
+        val uid = currentUserId() ?: return emptyList()
+        return client.from("contacts").select {
+            filter { eq("salesperson_id", uid) }
+            order("updated_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<Contact>()
+    }
+
+    /** Sets the Hot/Warm/Cold triage flag on a lead. */
+    suspend fun setTemperature(contactId: String, temperature: String) {
+        client.from("contacts").update(mapOf("temperature" to temperature)) {
+            filter { eq("id", contactId) }
+        }
+    }
+
+    // ---------- follow-ups ----------
+
+    /** Schedules a callback for a lead at [dueAtIso]. Returns the stored row (with id). */
+    suspend fun scheduleFollowUp(
+        contactId: String?,
+        phone: String,
+        name: String?,
+        dueAtIso: String,
+        note: String?,
+    ): FollowUp? {
+        val profile = myProfile() ?: error("No profile. Ask your admin to add you to a company.")
+        val companyId = profile.companyId ?: error("You are not linked to a company yet.")
+        val fu = FollowUp(
+            companyId = companyId,
+            salespersonId = profile.id,
+            contactId = contactId,
+            phone = phone,
+            name = name,
+            dueAt = dueAtIso,
+            note = note,
+        )
+        // Mirror the lead's stage so the pipeline shows it as a scheduled follow-up.
+        if (contactId != null) runCatching { setDisposition(contactId, "follow_up", null) }
+        return client.from("follow_ups").insert(fu) { select() }.decodeSingleOrNull<FollowUp>()
+    }
+
+    /** This salesperson's follow-ups, soonest-due first. [includeDone] keeps history. */
+    suspend fun fetchFollowUps(includeDone: Boolean = false): List<FollowUp> {
+        val uid = currentUserId() ?: return emptyList()
+        return client.from("follow_ups").select {
+            filter {
+                eq("salesperson_id", uid)
+                if (!includeDone) eq("status", "pending")
+            }
+            order("due_at", Order.ASCENDING)
+            limit(300L)
+        }.decodeList<FollowUp>()
+    }
+
+    /** Marks a follow-up done (after the callback has been made). */
+    suspend fun completeFollowUp(id: String) {
+        client.from("follow_ups").update(
+            mapOf("status" to "done", "completed_at" to java.time.Instant.now().toString()),
+        ) { filter { eq("id", id) } }
+    }
+
+    // ---------- attendance ----------
+
+    /** Today's attendance row for this salesperson, or null if not punched in yet. */
+    suspend fun todayAttendance(): Attendance? {
+        val uid = currentUserId() ?: return null
+        val today = java.time.LocalDate.now().toString()
+        return client.from("attendance").select {
+            filter { eq("salesperson_id", uid); eq("work_date", today) }
+        }.decodeSingleOrNull<Attendance>()
+    }
+
+    /** Punches in for today (idempotent — returns the existing row if already in). */
+    suspend fun punchIn(): Attendance? {
+        val existing = todayAttendance()
+        if (existing != null) return existing
+        val profile = myProfile() ?: error("No profile.")
+        val companyId = profile.companyId ?: error("You are not linked to a company yet.")
+        val row = Attendance(
+            companyId = companyId,
+            salespersonId = profile.id,
+            punchInAt = java.time.Instant.now().toString(),
+        )
+        return client.from("attendance").insert(row) { select() }.decodeSingleOrNull<Attendance>()
+    }
+
+    /** Punches out of today's shift. Returns the updated row. */
+    suspend fun punchOut(): Attendance? {
+        val existing = todayAttendance() ?: return null
+        val id = existing.id ?: return existing
+        return client.from("attendance").update(
+            mapOf("punch_out_at" to java.time.Instant.now().toString()),
+        ) { filter { eq("id", id) }; select() }.decodeSingleOrNull<Attendance>()
+    }
+
+    // ---------- leaderboard ----------
+
+    /** Company rankings for [period] = "today" | "week" (via SECURITY DEFINER RPC). */
+    suspend fun fetchLeaderboard(period: String): List<LeaderboardRow> {
+        if (currentUserId() == null) return emptyList()
+        return client.postgrest.rpc(
+            "get_team_leaderboard",
+            buildJsonObject { put("p_period", JsonPrimitive(period)) },
+        ).decodeList<LeaderboardRow>()
+    }
 }
 

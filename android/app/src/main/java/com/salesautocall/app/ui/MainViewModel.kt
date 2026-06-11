@@ -5,14 +5,18 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.salesautocall.app.data.AppPrefs
+import com.salesautocall.app.data.Attendance
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.CampaignStat
 import com.salesautocall.app.data.Company
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.ContactImport
+import com.salesautocall.app.data.FollowUp
+import com.salesautocall.app.data.LeaderboardRow
 import com.salesautocall.app.data.ParseResult
 import com.salesautocall.app.data.Profile
 import com.salesautocall.app.data.Repository
+import com.salesautocall.app.notify.FollowUpReminder
 import com.salesautocall.app.dialer.AutoDialerService
 import com.salesautocall.app.dialer.DialerConfig
 import com.salesautocall.app.dialer.DialerController
@@ -65,11 +69,34 @@ data class AppState(
     val callSummary: CallSummary = CallSummary(),
     // notes typed during an active cloud call
     val inCallNote: String = "",
+    // lead pipeline (all my contacts across campaigns)
+    val leads: List<Contact> = emptyList(),
+    val leadsLoading: Boolean = false,
+    val leadFilter: String = "open",
+    // follow-up / callback scheduler
+    val followUpList: List<FollowUp> = emptyList(),
+    val followUpsLoading: Boolean = false,
+    // attendance (today's shift)
+    val attendance: Attendance? = null,
+    val attendanceBusy: Boolean = false,
+    // team leaderboard
+    val leaderboard: List<LeaderboardRow> = emptyList(),
+    val leaderboardPeriod: String = "today",
+    val leaderboardLoading: Boolean = false,
     val message: String? = null,
     val error: String? = null,
 )
 
 enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
+
+/** Lead-pipeline filters shown on the Leads tab. */
+enum class LeadFilter(val key: String, val label: String, val statuses: Set<String>) {
+    OPEN("open", "Open", setOf("new", "queued", "callback", "follow_up", "no_answer", "busy")),
+    HOT("hot", "Hot", emptySet()),           // filtered by temperature, not status
+    INTERESTED("interested", "Interested", setOf("interested")),
+    BOOKED("booked", "Booked", setOf("booked")),
+    ALL("all", "All", emptySet()),
+}
 
 /** Roll-up shown in the Calls-tab summary card. */
 data class CallSummary(
@@ -647,6 +674,175 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
     }
+
+    // ---------- Home dashboard ----------
+
+    /** Loads everything the Home tab needs in one go. */
+    fun loadHome() {
+        loadToday()
+        loadAttendance()
+        loadFollowUps()
+        loadLeaderboard(_state.value.leaderboardPeriod)
+    }
+
+    // ---------- lead pipeline ----------
+
+    fun setLeadFilter(f: LeadFilter) {
+        if (f.key == _state.value.leadFilter) return
+        set { it.copy(leadFilter = f.key) }
+    }
+
+    fun loadLeads() {
+        viewModelScope.launch {
+            set { it.copy(leadsLoading = true) }
+            runCatching { Repository.fetchLeads() }
+                .onSuccess { list -> set { it.copy(leads = list, leadsLoading = false) } }
+                .onFailure { e -> set { it.copy(leadsLoading = false, error = e.message) } }
+        }
+    }
+
+    /** Optimistically updates the in-memory lead so the chip reflects instantly. */
+    fun setLeadDisposition(contactId: String, status: String) {
+        viewModelScope.launch {
+            runCatching { Repository.setDisposition(contactId, status, null) }
+                .onSuccess {
+                    set { st ->
+                        st.copy(leads = st.leads.map { c ->
+                            if (c.id == contactId) c.copy(status = status) else c
+                        })
+                    }
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
+    fun setLeadTemperature(contactId: String, temperature: String) {
+        viewModelScope.launch {
+            runCatching { Repository.setTemperature(contactId, temperature) }
+                .onSuccess {
+                    set { st ->
+                        st.copy(leads = st.leads.map { c ->
+                            if (c.id == contactId) c.copy(temperature = temperature) else c
+                        })
+                    }
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
+    // ---------- follow-up scheduler ----------
+
+    fun loadFollowUps() {
+        viewModelScope.launch {
+            set { it.copy(followUpsLoading = true) }
+            runCatching { Repository.fetchFollowUps() }
+                .onSuccess { list -> set { it.copy(followUpList = list, followUpsLoading = false) } }
+                .onFailure { e -> set { it.copy(followUpsLoading = false, error = e.message) } }
+        }
+    }
+
+    /** Schedules a callback [dueAtMillis] from now and arms an on-device reminder. */
+    fun scheduleFollowUp(contactId: String?, phone: String, name: String?, dueAtMillis: Long, note: String?) {
+        viewModelScope.launch {
+            val iso = java.time.Instant.ofEpochMilli(dueAtMillis).toString()
+            runCatching { Repository.scheduleFollowUp(contactId, phone, name, iso, note) }
+                .onSuccess { saved ->
+                    FollowUpReminder.schedule(
+                        getApplication(),
+                        id = saved?.id ?: phone,
+                        name = name,
+                        phone = phone,
+                        note = note,
+                        dueAtMillis = dueAtMillis,
+                    )
+                    set { it.copy(message = "⏰ Follow-up set for ${shortWhen(dueAtMillis)}") }
+                    loadFollowUps()
+                    if (contactId != null) {
+                        set { st ->
+                            st.copy(leads = st.leads.map { c ->
+                                if (c.id == contactId) c.copy(status = "follow_up") else c
+                            })
+                        }
+                    }
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
+    fun completeFollowUp(id: String) {
+        viewModelScope.launch {
+            runCatching { Repository.completeFollowUp(id) }
+                .onSuccess {
+                    set { st -> st.copy(followUpList = st.followUpList.filterNot { it.id == id }) }
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
+    /** Count of follow-ups due now or overdue — the red badge on Home. */
+    fun dueNowCount(): Int {
+        val now = System.currentTimeMillis()
+        return _state.value.followUpList.count { parseInstant(it.dueAt) <= now }
+    }
+
+    // ---------- attendance ----------
+
+    fun loadAttendance() {
+        viewModelScope.launch {
+            runCatching { Repository.todayAttendance() }
+                .onSuccess { a -> set { it.copy(attendance = a) } }
+        }
+    }
+
+    fun punchIn() {
+        viewModelScope.launch {
+            set { it.copy(attendanceBusy = true) }
+            runCatching { Repository.punchIn() }
+                .onSuccess { a -> set { it.copy(attendance = a, attendanceBusy = false, message = "✓ Punched in. Have a great shift!") } }
+                .onFailure { e -> set { it.copy(attendanceBusy = false, error = e.message) } }
+        }
+    }
+
+    fun punchOut() {
+        viewModelScope.launch {
+            set { it.copy(attendanceBusy = true) }
+            runCatching { Repository.punchOut() }
+                .onSuccess { a -> set { it.copy(attendance = a, attendanceBusy = false, message = "✓ Punched out. See you tomorrow!") } }
+                .onFailure { e -> set { it.copy(attendanceBusy = false, error = e.message) } }
+        }
+    }
+
+    // ---------- leaderboard ----------
+
+    fun setLeaderboardPeriod(period: String) {
+        if (period == _state.value.leaderboardPeriod) return
+        set { it.copy(leaderboardPeriod = period) }
+        loadLeaderboard(period)
+    }
+
+    fun loadLeaderboard(period: String) {
+        viewModelScope.launch {
+            set { it.copy(leaderboardLoading = true) }
+            runCatching { Repository.fetchLeaderboard(period) }
+                .onSuccess { rows ->
+                    // Rank by a simple sales score: leads weigh most, then connects, then calls.
+                    val sorted = rows.sortedWith(
+                        compareByDescending<LeaderboardRow> { it.leads * 100 + it.connected * 5 + it.calls },
+                    )
+                    set { it.copy(leaderboard = sorted, leaderboardLoading = false) }
+                }
+                .onFailure { e -> set { it.copy(leaderboardLoading = false, error = e.message) } }
+        }
+    }
+
+    fun clearMessage() = set { it.copy(message = null, error = null) }
+
+    private fun parseInstant(iso: String): Long =
+        runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
+
+    private fun shortWhen(millis: Long): String =
+        java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(millis), java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, h:mm a"))
 
     private fun displayName(uri: Uri): String {
         var name = "import.csv"
