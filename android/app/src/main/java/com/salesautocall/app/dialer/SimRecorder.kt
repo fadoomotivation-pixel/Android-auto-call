@@ -38,7 +38,7 @@ object SimRecorder {
         // Try the richer call-oriented source first, then fall back to the plain mic.
         for (source in intArrayOf(MediaRecorder.AudioSource.VOICE_COMMUNICATION, MediaRecorder.AudioSource.MIC)) {
             val ok = runCatching {
-                val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else @Suppress("DEPRECATION") MediaRecorder()
+                val r = newRecorder(context)
                 r.setAudioSource(source)
                 r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
@@ -59,6 +59,10 @@ object SimRecorder {
         runCatching { am.isSpeakerphoneOn = prevSpeaker }
         return false
     }
+
+    @Suppress("DEPRECATION")
+    private fun newRecorder(context: Context): MediaRecorder =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context) else MediaRecorder()
 
     /** Stops recording and returns the file path (or null if nothing was captured). */
     fun stop(): String? {
