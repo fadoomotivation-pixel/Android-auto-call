@@ -30,7 +30,9 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +48,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -483,7 +487,7 @@ private fun UpcomingRow(f: FollowUp, onCall: () -> Unit) {
 //  LEADS
 // ════════════════════════════════════════════════════════════
 @Composable
-fun LeadsScreen(vm: MainViewModel) {
+fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val app by vm.state.collectAsState()
     val context = LocalContext.current
     LaunchedEffect(Unit) { vm.loadLeads() }
@@ -492,6 +496,8 @@ fun LeadsScreen(vm: MainViewModel) {
     var selected by remember { mutableStateOf("all") }
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
+    var selectMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
 
     val base = when (selected) {
         "all" -> app.leads
@@ -500,54 +506,117 @@ fun LeadsScreen(vm: MainViewModel) {
     val filtered = if (query.isBlank()) base else base.filter {
         (it.name ?: "").contains(query, ignoreCase = true) || it.phone.contains(query)
     }
+    val filteredIds = filtered.mapNotNull { it.id }.toSet()
+    val allSelected = filteredIds.isNotEmpty() && selectedIds.containsAll(filteredIds)
 
-    LazyColumn(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            Column {
-                Text("Leads", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Manage and follow up with your leads",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        // stat filter tabs
-        item {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterTab("All", app.leads.size, selected == "all", MaterialTheme.colorScheme.primary) { selected = "all" }
-                STAGES.forEach { st ->
-                    val n = app.leads.count { it.status in st.statuses }
-                    FilterTab(st.label, n, selected == st.key, st.color) { selected = st.key }
+    fun exitSelect() { selectMode = false; selectedIds = emptySet() }
+
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        LazyColumn(
+            Modifier.weight(1f),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Leads", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(if (selectMode) "Tap leads to add them to a campaign" else "Manage and follow up with your leads",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (!selectMode) {
+                        Box(
+                            Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
+                                .clickable { selectMode = true }.padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Checklist, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Select", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    } else {
+                        Text("Cancel", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.clickable { exitSelect() }.padding(8.dp))
+                    }
                 }
             }
-        }
-        item {
-            OutlinedTextField(
-                query, { query = it }, placeholder = { Text("Search by name or phone…") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-            )
-        }
-
-        when {
-            app.leadsLoading && app.leads.isEmpty() ->
-                item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
-            filtered.isEmpty() ->
+            // stat filter tabs
+            item {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterTab("All", app.leads.size, selected == "all", MaterialTheme.colorScheme.primary) { selected = "all" }
+                    STAGES.forEach { st ->
+                        val n = app.leads.count { it.status in st.statuses }
+                        FilterTab(st.label, n, selected == st.key, st.color) { selected = st.key }
+                    }
+                }
+            }
+            if (selectMode) {
                 item {
-                    Text(if (app.leads.isEmpty()) "No leads yet. Start a campaign to import contacts." else "No leads in this stage.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("${selectedIds.size} selected", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            TextButton(onClick = {
+                                selectedIds = if (allSelected) selectedIds - filteredIds else selectedIds + filteredIds
+                            }) { Text(if (allSelected) "Clear all" else "Select all (${filteredIds.size})") }
+                        }
+                    }
                 }
-            else -> items(filtered, key = { it.id ?: it.phone }) { c ->
-                LeadCard(
-                    c = c,
-                    cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
-                    onCall = { vm.dialManual(c.phone) },
-                    onCloudCall = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
-                    onWhatsApp = { openWhatsApp(context, c.phone) },
-                    onSchedule = { scheduleFor = c },
-                    onMore = { actionFor = c },
+            }
+            item {
+                OutlinedTextField(
+                    query, { query = it }, placeholder = { Text("Search by name or phone…") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                 )
+            }
+
+            when {
+                app.leadsLoading && app.leads.isEmpty() ->
+                    item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+                filtered.isEmpty() ->
+                    item {
+                        Text(if (app.leads.isEmpty()) "No leads yet. Ask your admin to upload leads, then select & start calling." else "No leads in this stage.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                else -> items(filtered, key = { it.id ?: it.phone }) { c ->
+                    LeadCard(
+                        c = c,
+                        cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
+                        selectMode = selectMode,
+                        isSelected = c.id != null && c.id in selectedIds,
+                        onToggleSelect = { c.id?.let { id -> selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id } },
+                        onCall = { vm.dialManual(c.phone) },
+                        onCloudCall = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
+                        onWhatsApp = { openWhatsApp(context, c.phone) },
+                        onSchedule = { scheduleFor = c },
+                        onMore = { actionFor = c },
+                    )
+                }
+            }
+        }
+
+        // Start-campaign action bar (bulk select → one-tap auto-dial)
+        if (selectMode) {
+            Surface(shadowElevation = 12.dp, color = MaterialTheme.colorScheme.surface) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${selectedIds.size} lead(s) selected", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Auto-dials them one after another", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Button(
+                        onClick = {
+                            val chosen = app.leads.filter { it.id != null && it.id in selectedIds }
+                            vm.startSelectedLeads(chosen)
+                            exitSelect()
+                            onStartCampaign()
+                        },
+                        enabled = selectedIds.isNotEmpty(),
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Start Campaign")
+                    }
+                }
             }
         }
     }
@@ -578,13 +647,19 @@ fun LeadsScreen(vm: MainViewModel) {
 private fun LeadCard(
     c: Contact,
     cloudOn: Boolean,
+    selectMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: () -> Unit = {},
     onCall: () -> Unit,
     onCloudCall: () -> Unit,
     onWhatsApp: () -> Unit,
     onSchedule: () -> Unit,
     onMore: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth()) {
+    val cardMod = Modifier.fillMaxWidth()
+        .then(if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier)
+        .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier)
+    Card(cardMod) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(c.name ?: c.phone)
@@ -599,8 +674,20 @@ private fun LeadCard(
                     }
                     Text(c.phone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Icon(Icons.Default.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp).clip(CircleShape).clickable { onMore() })
+                if (selectMode) {
+                    val ring = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    Box(
+                        Modifier.size(26.dp).clip(CircleShape)
+                            .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .border(2.dp, ring, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isSelected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+                    }
+                } else {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp).clip(CircleShape).clickable { onMore() })
+                }
             }
 
             // Project + budget (no source / owner)
@@ -629,15 +716,17 @@ private fun LeadCard(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(Icons.Default.Call, "Call", Green, Modifier.weight(1f), onClick = onCall)
-                ActionButton(Icons.Default.Chat, "WhatsApp", Color(0xFF25D366), Modifier.weight(1f), onClick = onWhatsApp)
-                ActionButton(Icons.Default.CalendarMonth, "Schedule", MaterialTheme.colorScheme.primary, Modifier.weight(1f), onClick = onSchedule)
-            }
-            if (cloudOn) {
-                Spacer(Modifier.height(8.dp))
-                ActionButton(Icons.Default.Call, "☁ Cloud call", MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth(), onClick = onCloudCall)
+            if (!selectMode) {
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionButton(Icons.Default.Call, "Call", Green, Modifier.weight(1f), onClick = onCall)
+                    ActionButton(Icons.Default.Chat, "WhatsApp", Color(0xFF25D366), Modifier.weight(1f), onClick = onWhatsApp)
+                    ActionButton(Icons.Default.CalendarMonth, "Schedule", MaterialTheme.colorScheme.primary, Modifier.weight(1f), onClick = onSchedule)
+                }
+                if (cloudOn) {
+                    Spacer(Modifier.height(8.dp))
+                    ActionButton(Icons.Default.Call, "☁ Cloud call", MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth(), onClick = onCloudCall)
+                }
             }
         }
     }
