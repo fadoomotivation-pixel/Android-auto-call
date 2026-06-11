@@ -28,9 +28,19 @@ object SipManager {
     private var account: Account? = null
     private var domain: String = "sip.uroperator.com"
     private var speakerOn: Boolean = false
+    private var recordFile: String? = null
+    private var recordingActive: Boolean = false
 
     /** Called on every meaningful state change. Set by the ViewModel. */
     var onState: ((String) -> Unit)? = null
+
+    /** Set the path the next call should record to (null = no recording). */
+    fun setRecordFile(path: String?) {
+        recordFile = path
+    }
+
+    /** Path of the recording captured for the last call, or null. */
+    fun takeRecording(): String? = recordFile
 
     private val listener = object : CoreListenerStub() {
         override fun onAccountRegistrationStateChanged(
@@ -56,20 +66,30 @@ object SipManager {
         ) {
             when (state) {
                 Call.State.IncomingReceived -> {
-                    // uroperator is ringing our extension — answer immediately.
+                    // uroperator is ringing our extension — answer immediately, with the
+                    // record file set on the call params so both sides get captured.
                     onState?.invoke("ringing")
-                    runCatching { call.accept() }
+                    val p = runCatching { core.createCallParams(call) }.getOrNull()
+                    if (p != null && recordFile != null) runCatching { p.recordFile = recordFile }
+                    runCatching { if (p != null) call.acceptWithParams(p) else call.accept() }
                 }
                 Call.State.OutgoingProgress,
                 Call.State.OutgoingRinging -> onState?.invoke("ringing")
                 Call.State.Connected,
                 Call.State.StreamsRunning -> {
                     applyAudioRoute(core)
+                    if (recordFile != null && !recordingActive) {
+                        runCatching { call.startRecording() }.onSuccess { recordingActive = true }
+                    }
                     onState?.invoke("connected")
                 }
                 Call.State.End,
                 Call.State.Released,
                 Call.State.Error -> {
+                    if (recordingActive) {
+                        runCatching { call.stopRecording() }
+                        recordingActive = false
+                    }
                     // Surface the SIP failure code (403/404/488/603…) so the cause is visible.
                     val code = runCatching { call.errorInfo?.protocolCode ?: 0 }.getOrDefault(0)
                     val phrase = runCatching { call.errorInfo?.phrase ?: "" }.getOrDefault("")
@@ -153,7 +173,10 @@ object SipManager {
     /** Places a direct outbound call to [number] on the registered domain. */
     fun call(number: String) {
         val c = core ?: return
-        c.invite("sip:$number@$domain")
+        val remote = Factory.instance().createAddress("sip:$number@$domain")
+        val p = c.createCallParams(null)
+        if (p != null && recordFile != null) runCatching { p.recordFile = recordFile }
+        if (remote != null && p != null) c.inviteAddressWithParams(remote, p) else c.invite("sip:$number@$domain")
     }
 
     fun setMuted(muted: Boolean) {
@@ -174,6 +197,10 @@ object SipManager {
     /** Ends the call (if any) and tears down registration (removing the account
      *  sends an un-REGISTER to the PBX). */
     fun stop() {
+        if (recordingActive) {
+            runCatching { core?.currentCall?.stopRecording() }
+            recordingActive = false
+        }
         runCatching { hangup() }
         val c = core ?: return
         runCatching { c.clearAccounts() }

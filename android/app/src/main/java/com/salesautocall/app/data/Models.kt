@@ -29,6 +29,7 @@ data class Company(
     val id: String,
     val name: String,
     @SerialName("join_code") val joinCode: String? = null,
+    @SerialName("recording_enabled") val recordingEnabled: Boolean = true,
 )
 
 @Serializable
@@ -92,4 +93,7 @@ data class CallLog(
     @SerialName("duration_seconds") val durationSeconds: Int = 0,
     @SerialName("sim_slot") val simSlot: Int? = null,
     val notes: String? = null,
+    @SerialName("recording_status") val recordingStatus: String = "none",
+    @SerialName("recording_seconds") val recordingSeconds: Int? = null,
+    @SerialName("recording_source") val recordingSource: String? = null,
 )

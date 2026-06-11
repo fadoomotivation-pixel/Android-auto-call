@@ -46,6 +46,7 @@ data class AppState(
     val cloudBridged: Boolean = false,
     val cloudCallExt: String = "",
     val cloudCallPass: String = "",
+    val cloudCallLogId: String? = null,
     val todayCalls: Int = 0,
     val todayConnected: Int = 0,
     val todayTalk: Int = 0,
@@ -82,6 +83,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private val lenientJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    private var cloudConnectedAt: Long = 0L
 
     private fun set(transform: (AppState) -> AppState) {
         _state.value = transform(_state.value)
@@ -297,14 +299,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         set { it.copy(cloudCallStatus = pretty) }
 
-        // Once registered, ask uroperator to place the call (click-to-call): their
-        // server rings our extension (the app auto-answers) and bridges the customer
-        // through the proper trunk. This is uroperator's supported path and avoids
-        // the app having to know the PBX dialplan for direct dialing.
+        if (raw == "connected") cloudConnectedAt = System.currentTimeMillis()
+        if (raw == "ended" || raw.startsWith("callfailed")) uploadCloudRecording()
+
+        // Once registered: log the call (to get its id, and set the recording file
+        // before the leg is answered), then ask uroperator to place the call
+        // (click-to-call): their server rings our extension (the app auto-answers)
+        // and bridges the customer through the proper trunk.
         if (raw == "registered" && !s.cloudBridged) {
             set { it.copy(cloudBridged = true, cloudCallStatus = "Ringing you, then the customer…") }
             val ext = _state.value.cloudCallExt.ifBlank { agentId() }
             viewModelScope.launch {
+                val p = _state.value.profile
+                val logId = if (p?.companyId != null) {
+                    runCatching {
+                        Repository.logCall(
+                            com.salesautocall.app.data.CallLog(
+                                companyId = p.companyId, salespersonId = p.id,
+                                contactId = s.cloudCallContactId, campaignId = s.cloudCallCampaignId,
+                                phone = number, direction = "outgoing", notes = "cloud",
+                                recordingStatus = if (recordingEnabled()) "recording" else "none",
+                                recordingSource = "sip",
+                            ),
+                        )
+                    }.getOrNull()
+                } else null
+                set { it.copy(cloudCallLogId = logId) }
+                // Arm recording (captures both legs once the call is answered).
+                if (logId != null && recordingEnabled()) {
+                    val f = java.io.File(getApplication<Application>().cacheDir, "rec_$logId.mka")
+                    com.salesautocall.app.sip.SipManager.setRecordFile(f.absolutePath)
+                } else {
+                    com.salesautocall.app.sip.SipManager.setRecordFile(null)
+                }
+
                 runCatching { Repository.cloudCall(number, ext, callerId()) }
                     .onSuccess { body ->
                         if (!body.contains("\"ok\":true")) {
@@ -312,27 +340,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                     .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't start call: ${e.message}") } }
+            }
+        }
+    }
 
-                val p = _state.value.profile
-                if (p?.companyId != null) {
-                    runCatching {
-                        Repository.logCall(
-                            com.salesautocall.app.data.CallLog(
-                                companyId = p.companyId, salespersonId = p.id,
-                                contactId = s.cloudCallContactId, campaignId = s.cloudCallCampaignId,
-                                phone = number, direction = "outgoing", notes = "cloud",
-                            ),
-                        )
-                    }
+    /** Reads the just-finished recording and ships it to Drive via the edge function.
+     *  Idempotent: consumes the record path so it only uploads once. */
+    private fun uploadCloudRecording() {
+        val id = _state.value.cloudCallLogId ?: return
+        val path = com.salesautocall.app.sip.SipManager.takeRecording() ?: return
+        com.salesautocall.app.sip.SipManager.setRecordFile(null) // consume → guard against double upload
+        val dur = if (cloudConnectedAt > 0) ((System.currentTimeMillis() - cloudConnectedAt) / 1000).toInt() else 0
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val f = java.io.File(path)
+                if (f.exists() && f.length() > 0) {
+                    Repository.uploadRecording(id, "sip", dur, f.readBytes())
+                    f.delete()
                 }
             }
         }
     }
 
+    private fun recordingEnabled(): Boolean = _state.value.company?.recordingEnabled ?: true
+
     fun endCloudCall() {
+        uploadCloudRecording()
         runCatching { com.salesautocall.app.sip.SipManager.stop() }
         com.salesautocall.app.sip.SipManager.onState = null
-        set { it.copy(cloudCallNumber = null, cloudCallStatus = "", cloudBridged = false) }
+        cloudConnectedAt = 0L
+        set { it.copy(cloudCallNumber = null, cloudCallStatus = "", cloudBridged = false, cloudCallLogId = null) }
     }
 
     fun setMuted(muted: Boolean) = com.salesautocall.app.sip.SipManager.setMuted(muted)
