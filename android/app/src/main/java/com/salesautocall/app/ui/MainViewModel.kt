@@ -276,6 +276,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             raw == "ringing" -> "Ringing…"
             raw == "connected" -> "🔊 Connected — you're live"
             raw == "ended" -> "Call ended"
+            raw.startsWith("callfailed") -> {
+                val info = raw.substringAfter(':', "").trim()
+                val code = info.substringBefore(' ')
+                when (code) {
+                    "403" -> "Rejected by PBX (403) — this extension isn't allowed to dial out, or needs a caller ID/DID set."
+                    "404" -> "Number not routed (404) — the PBX didn't recognise $number. It likely needs a dialing prefix (e.g. 0 or 91)."
+                    "488", "606" -> "Media not accepted ($code) — codec mismatch."
+                    "486", "603" -> "Busy / declined ($code)."
+                    "407", "401" -> "Call auth required ($code) — SIP password issue on dialing."
+                    else -> "Call failed ($info)"
+                }
+            }
             raw.startsWith("regfailed") ->
                 "SIP login failed — check your extension/password. If your PBX is a private address, turn the VPN ON."
             raw.startsWith("callerror") -> "Call failed: ${raw.substringAfter(':', "")}"

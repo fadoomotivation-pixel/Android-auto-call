@@ -68,8 +68,13 @@ object SipManager {
                     onState?.invoke("connected")
                 }
                 Call.State.End,
-                Call.State.Released -> onState?.invoke("ended")
-                Call.State.Error -> onState?.invoke("callerror:$message")
+                Call.State.Released,
+                Call.State.Error -> {
+                    // Surface the SIP failure code (403/404/488/603…) so the cause is visible.
+                    val code = runCatching { call.errorInfo?.protocolCode ?: 0 }.getOrDefault(0)
+                    val phrase = runCatching { call.errorInfo?.phrase ?: "" }.getOrDefault("")
+                    if (code >= 300) onState?.invoke("callfailed:$code $phrase") else onState?.invoke("ended")
+                }
                 else -> { /* nothing */ }
             }
         }
