@@ -300,6 +300,12 @@ object Repository {
         }
     }
 
+    /** Patches any subset of a lead's editable fields (status/temperature/budget/notes). */
+    suspend fun updateContact(contactId: String, patch: Map<String, String>) {
+        if (patch.isEmpty()) return
+        client.from("contacts").update(patch) { filter { eq("id", contactId) } }
+    }
+
     // ---------- follow-ups ----------
 
     /** Schedules a callback for a lead at [dueAtIso]. Returns the stored row (with id). */
