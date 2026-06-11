@@ -14,50 +14,50 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 // ── Brand palette ─────────────────────────────────────────────
-// Navy = trust / establishment, Gold = premium / luxury. Tuned for
-// a real-estate audience that responds to high-end, dependable cues.
-private val Navy = Color(0xFF0B2545)
-private val NavyDeep = Color(0xFF081A33)
-private val Gold = Color(0xFFC9A24B)
-private val GoldSoft = Color(0xFFE7D29A)
+// Bright, trustworthy blue (action/primary) on a soft off-white canvas —
+// the modern fintech/CRM look. Status colours (hot/warm/cold, won/lost) live
+// in TelecallerScreens alongside the screens that use them.
+private val Blue = Color(0xFF2563EB)
+private val BlueDark = Color(0xFF1E3A8A)
+private val Sky = Color(0xFF3B82F6)
 
 private val LightColors = lightColorScheme(
-    primary = Navy,
+    primary = Blue,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFDCE5F4),
-    onPrimaryContainer = NavyDeep,
-    secondary = Gold,
-    onSecondary = Color(0xFF2A2000),
-    secondaryContainer = Color(0xFFF6E9C6),
-    onSecondaryContainer = Color(0xFF4A3A00),
-    tertiary = Color(0xFF3E5C82),
+    primaryContainer = Color(0xFFDBEAFE),
+    onPrimaryContainer = BlueDark,
+    secondary = Sky,
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE0ECFF),
+    onSecondaryContainer = Color(0xFF143A8C),
+    tertiary = Color(0xFF7C3AED),
     onTertiary = Color.White,
-    background = Color(0xFFF6F8FB),
-    onBackground = Color(0xFF101725),
+    background = Color(0xFFF3F5FA),
+    onBackground = Color(0xFF0F1729),
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF101725),
-    surfaceVariant = Color(0xFFE9EDF4),
-    onSurfaceVariant = Color(0xFF54607A),
-    outline = Color(0xFFC2CAD8),
-    outlineVariant = Color(0xFFDDE3EC),
-    error = Color(0xFFB3261E),
+    onSurface = Color(0xFF0F1729),
+    surfaceVariant = Color(0xFFEEF2F8),
+    onSurfaceVariant = Color(0xFF64748B),
+    outline = Color(0xFFCBD5E1),
+    outlineVariant = Color(0xFFE2E8F0),
+    error = Color(0xFFDC2626),
     onError = Color.White,
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFFAFC4E8),
-    onPrimary = NavyDeep,
-    primaryContainer = Color(0xFF21385C),
-    onPrimaryContainer = Color(0xFFDCE5F4),
-    secondary = GoldSoft,
-    onSecondary = Color(0xFF2A2000),
-    secondaryContainer = Color(0xFF564618),
-    onSecondaryContainer = Color(0xFFF6E9C6),
-    tertiary = Color(0xFF9FB6D6),
-    onTertiary = Color(0xFF0D1B30),
+    primary = Color(0xFF93B4FF),
+    onPrimary = Color(0xFF0A1A3A),
+    primaryContainer = Color(0xFF1E3A8A),
+    onPrimaryContainer = Color(0xFFDBEAFE),
+    secondary = Color(0xFF7DA8FF),
+    onSecondary = Color(0xFF0A1A3A),
+    secondaryContainer = Color(0xFF1B3470),
+    onSecondaryContainer = Color(0xFFDBEAFE),
+    tertiary = Color(0xFFC4B5FD),
+    onTertiary = Color(0xFF2A1065),
     background = Color(0xFF0A1322),
     onBackground = Color(0xFFE4EAF4),
-    surface = Color(0xFF101C30),
+    surface = Color(0xFF111C30),
     onSurface = Color(0xFFE4EAF4),
     surfaceVariant = Color(0xFF1B2840),
     onSurfaceVariant = Color(0xFF9DAAC4),

@@ -78,6 +78,9 @@ data class Contact(
     val status: String = "new",
     /** Lead triage: "hot" | "warm" | "cold" (null = not scored yet). */
     val temperature: String? = null,
+    /** Free-text budget the rep captured (e.g. "₹45L", "1.2 Cr"). */
+    val budget: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
 )
 
 /** A scheduled callback for a lead. Drives the Follow-ups worklist + reminders. */

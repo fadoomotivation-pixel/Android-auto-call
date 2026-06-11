@@ -716,6 +716,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Applies any subset of lead edits (stage/temperature/budget/note) at once. */
+    fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?) {
+        viewModelScope.launch {
+            val patch = buildMap<String, String> {
+                if (status != null) put("status", status)
+                if (temperature != null) put("temperature", temperature)
+                if (budget != null) put("budget", budget)
+                if (note != null) put("notes", note)
+            }
+            runCatching { Repository.updateContact(contactId, patch) }
+                .onSuccess {
+                    set { st ->
+                        st.copy(leads = st.leads.map { c ->
+                            if (c.id == contactId) c.copy(
+                                status = status ?: c.status,
+                                temperature = temperature ?: c.temperature,
+                                budget = budget ?: c.budget,
+                                notes = note ?: c.notes,
+                            ) else c
+                        })
+                    }
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
     fun setLeadTemperature(contactId: String, temperature: String) {
         viewModelScope.launch {
             runCatching { Repository.setTemperature(contactId, temperature) }

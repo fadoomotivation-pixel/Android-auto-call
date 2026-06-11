@@ -5,7 +5,9 @@ package com.salesautocall.app.ui
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,20 +16,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -264,11 +283,11 @@ private fun LoginScreen(vm: MainViewModel) {
 }
 
 private sealed class Tab(val route: String, val label: String) {
-    data object Home : Tab("home", "Home")
+    data object Home : Tab("home", "Dashboard")
     data object Leads : Tab("leads", "Leads")
     data object Dialer : Tab("dialer", "Dialer")
     data object Campaign : Tab("campaign", "Campaign")
-    data object Team : Tab("team", "Team")
+    data object Team : Tab("team", "Reports")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -287,6 +306,14 @@ private fun MainShell(vm: MainViewModel) {
                 userName = state.profile?.fullName ?: "Your account",
                 role = state.profile?.role ?: "salesperson",
                 companyName = state.company?.name,
+                onNavigate = { route ->
+                    scope.launch { drawerState.close() }
+                    nav.navigate(route) {
+                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
                 onSettings = {
                     scope.launch { drawerState.close() }
                     nav.navigate("settings") { launchSingleTop = true }
@@ -301,7 +328,13 @@ private fun MainShell(vm: MainViewModel) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Call Pro AI") },
+                    title = {
+                        Column {
+                            Text("Call Pro AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
@@ -309,15 +342,15 @@ private fun MainShell(vm: MainViewModel) {
                     },
                     actions = {
                         IconButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            Icon(Icons.Default.Notifications, contentDescription = "Notifications")
                         }
                     },
-                    // Navy bar with a gold-tinted menu icon — the brand signature.
+                    // Clean white app bar with a blue menu icon — modern CRM signature.
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                        navigationIconContentColor = MaterialTheme.colorScheme.secondary,
-                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.primary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 )
             },
@@ -420,57 +453,119 @@ private fun MainShell(vm: MainViewModel) {
     }
 }
 
+private data class MenuItem(
+    val label: String,
+    val desc: String,
+    val icon: ImageVector,
+    val route: String?,        // null = "coming soon"
+    val badge: String? = null,
+)
+
 @Composable
 private fun AppDrawer(
     userName: String,
     role: String,
     companyName: String?,
+    onNavigate: (String) -> Unit,
     onSettings: () -> Unit,
     onSignOut: () -> Unit,
 ) {
-    ModalDrawerSheet {
-        // Navy brand band at the top of the drawer.
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.primary)
-                .padding(horizontal = 24.dp, vertical = 24.dp),
-        ) {
-            Text(
-                "Call Pro AI",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                userName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onPrimary,
-            )
-            Text(
-                buildString {
-                    append(if (role == "admin") "Admin" else "Salesperson")
-                    companyName?.let { append(" · "); append(it) }
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
-            )
-        }
-        Spacer(Modifier.height(12.dp))
+    val context = LocalContext.current
+    val items = listOf(
+        MenuItem("Dashboard", "Calls, leads & team performance", Icons.Default.Dashboard, "home"),
+        MenuItem("Leads", "Manage and follow up your leads", Icons.Default.People, "leads"),
+        MenuItem("Calls", "Call history and recordings", Icons.Default.Call, "calls"),
+        MenuItem("Follow Ups", "Never miss a callback", Icons.Default.CalendarMonth, "followups"),
+        MenuItem("Campaigns", "Import lists & auto-dial", Icons.Default.Campaign, "campaign"),
+        MenuItem("Reports & Team", "Leaderboard, talk-time, conversions", Icons.Default.Leaderboard, "team"),
+        MenuItem("AI Assistant", "Smart call scripts & summaries", Icons.Default.AutoAwesome, null, "NEW"),
+        MenuItem("Investor Videos", "AI-generated property videos", Icons.Default.Videocam, null, "Soon"),
+        MenuItem("Brochures", "Share project brochures", Icons.Default.Description, null, "Soon"),
+        MenuItem("Training & Support", "Guides and best practices", Icons.Default.School, null, "Soon"),
+    )
 
-        NavigationDrawerItem(
-            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-            label = { Text("Settings") },
-            selected = false,
-            onClick = onSettings,
-            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-        )
-        NavigationDrawerItem(
-            icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
-            label = { Text("Sign out") },
-            selected = false,
-            onClick = onSignOut,
-            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-        )
+    ModalDrawerSheet(Modifier.fillMaxWidth(0.84f)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            // Brand header
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(20.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.onPrimary),
+                        contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                        Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("Everything you need. One app.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f))
+            }
+
+            Spacer(Modifier.height(8.dp))
+            items.forEach { item ->
+                DrawerRow(item) {
+                    if (item.route != null) onNavigate(item.route)
+                    else android.widget.Toast.makeText(context, "${item.label} — coming soon", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            DrawerRow(MenuItem("Settings", "Calling, goals & cloud setup", Icons.Default.Settings, null)) { onSettings() }
+            DrawerRow(MenuItem("Help & Support", "Get help using the app", Icons.AutoMirrored.Filled.HelpOutline, null)) {
+                android.widget.Toast.makeText(context, "Help & Support — coming soon", android.widget.Toast.LENGTH_SHORT).show()
+            }
+
+            Spacer(Modifier.height(8.dp))
+            // Profile footer
+            Row(
+                Modifier.fillMaxWidth().clickable { onSignOut() }.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+                    Text(userName.trim().take(1).uppercase().ifBlank { "?" }, color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(userName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        buildString {
+                            append(if (role == "admin") "Admin" else "Telecaller")
+                            companyName?.let { append(" · "); append(it) }
+                        },
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawerRow(item: MenuItem, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center) {
+            Icon(item.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(item.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(item.desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+        item.badge?.let {
+            Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondaryContainer).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
