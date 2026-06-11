@@ -25,19 +25,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -322,9 +321,8 @@ private fun PipelineBar(counts: List<Pair<Stage, Int>>) {
 //  DASHBOARD
 // ════════════════════════════════════════════════════════════
 @Composable
-fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -> Unit) {
+fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -> Unit, onNavigate: (String) -> Unit) {
     val app by vm.state.collectAsState()
-    val context = LocalContext.current
     LaunchedEffect(Unit) { vm.loadHome(); vm.loadLeads() }
 
     val firstName = app.profile?.fullName?.substringBefore(' ')?.takeIf { it.isNotBlank() } ?: "there"
@@ -338,7 +336,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Greeting hero
-        item { GreetingCard(vm, app, firstName) }
+        item { GreetingCard(app, firstName, onOpenAttendance = { onNavigate("attendance") }) }
 
         // Stat tiles 2×2
         item {
@@ -382,13 +380,9 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     QuickAction("Add Lead", Icons.Default.PersonAdd, MaterialTheme.colorScheme.primary, Modifier.weight(1f), onOpenLeads)
-                    QuickAction("Follow-ups", Icons.Default.CalendarMonth, Purple, Modifier.weight(1f), onOpenFollowUps)
-                    QuickAction("Brochure", Icons.Default.Description, Amber, Modifier.weight(1f)) {
-                        android.widget.Toast.makeText(context, "Brochures — coming soon", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                    QuickAction("AI Video", Icons.Default.Videocam, Cyan, Modifier.weight(1f)) {
-                        android.widget.Toast.makeText(context, "AI investor videos — coming soon", android.widget.Toast.LENGTH_SHORT).show()
-                    }
+                    QuickAction("Calendar", Icons.Default.CalendarMonth, Purple, Modifier.weight(1f)) { onNavigate("calendar") }
+                    QuickAction("AI Coach", Icons.Default.AutoAwesome, Cyan, Modifier.weight(1f)) { onNavigate("ai") }
+                    QuickAction("Attendance", Icons.Default.AccessTime, Amber, Modifier.weight(1f)) { onNavigate("attendance") }
                 }
             }
         }
@@ -421,7 +415,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
 }
 
 @Composable
-private fun GreetingCard(vm: MainViewModel, app: AppState, firstName: String) {
+private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () -> Unit) {
     val a = app.attendance
     val onShift = a?.punchInAt != null && a.punchOutAt == null
     val done = a?.punchOutAt != null
@@ -436,18 +430,14 @@ private fun GreetingCard(vm: MainViewModel, app: AppState, firstName: String) {
                 style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f))
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Attendance: punch in / out, right in the hero.
-                val label = when { done -> "Shift done ✓"; onShift -> "Punch out"; else -> "Punch in" }
+                // Attendance: opens the selfie + GPS check-in screen.
+                val label = when { done -> "Shift done ✓"; onShift -> "Punch out"; else -> "Check in" }
                 Box(
-                    Modifier.clip(RoundedCornerShape(50))
-                        .background(Color.White)
-                        .clickable(enabled = !app.attendanceBusy && !done) {
-                            if (onShift) vm.punchOut() else vm.punchIn()
-                        }
+                    Modifier.clip(RoundedCornerShape(50)).background(Color.White)
+                        .clickable { onOpenAttendance() }
                         .padding(horizontal = 16.dp, vertical = 9.dp),
                 ) {
-                    Text(if (app.attendanceBusy) "…" else label, color = Color(0xFF1D4ED8), fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelLarge)
+                    Text(label, color = Color(0xFF1D4ED8), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                 }
                 Spacer(Modifier.width(12.dp))
                 if (onShift) {

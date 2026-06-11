@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Videocam
@@ -414,6 +416,7 @@ private fun MainShell(vm: MainViewModel) {
                                     restoreState = true
                                 }
                             },
+                            onNavigate = { route -> nav.navigate(route) { launchSingleTop = true } },
                         )
                     }
                     composable(Tab.Leads.route) { LeadsScreen(vm) }
@@ -427,6 +430,9 @@ private fun MainShell(vm: MainViewModel) {
                         )
                     }
                     composable("followups") { FollowUpsScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("attendance") { AttendanceScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("calendar") { CalendarScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("ai") { AiAssistantScreen(vm, onBack = { nav.popBackStack() }) }
                     composable("calls") { CallsScreen(vm) }
                     composable("analytics") {
                         AnalyticsScreen(vm, onOpen = { id, name ->
@@ -474,11 +480,13 @@ private fun AppDrawer(
     val items = listOf(
         MenuItem("Dashboard", "Calls, leads & team performance", Icons.Default.Dashboard, "home"),
         MenuItem("Leads", "Manage and follow up your leads", Icons.Default.People, "leads"),
+        MenuItem("AI Assistant", "Insights & next-best actions", Icons.Default.AutoAwesome, "ai", "NEW"),
+        MenuItem("Follow-up Calendar", "Day & week callback planner", Icons.Default.CalendarMonth, "calendar"),
+        MenuItem("Follow Ups", "Your due-now worklist", Icons.Default.AccessTime, "followups"),
+        MenuItem("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance"),
         MenuItem("Calls", "Call history and recordings", Icons.Default.Call, "calls"),
-        MenuItem("Follow Ups", "Never miss a callback", Icons.Default.CalendarMonth, "followups"),
         MenuItem("Campaigns", "Import lists & auto-dial", Icons.Default.Campaign, "campaign"),
         MenuItem("Reports & Team", "Leaderboard, talk-time, conversions", Icons.Default.Leaderboard, "team"),
-        MenuItem("AI Assistant", "Smart call scripts & summaries", Icons.Default.AutoAwesome, null, "NEW"),
         MenuItem("Investor Videos", "AI-generated property videos", Icons.Default.Videocam, null, "Soon"),
         MenuItem("Brochures", "Share project brochures", Icons.Default.Description, null, "Soon"),
         MenuItem("Training & Support", "Guides and best practices", Icons.Default.School, null, "Soon"),

@@ -79,6 +79,10 @@ data class AppState(
     // attendance (today's shift)
     val attendance: Attendance? = null,
     val attendanceBusy: Boolean = false,
+    val attendanceHistory: List<Attendance> = emptyList(),
+    // follow-up calendar (includes completed)
+    val calendar: List<FollowUp> = emptyList(),
+    val calendarLoading: Boolean = false,
     // team leaderboard
     val leaderboard: List<LeaderboardRow> = emptyList(),
     val leaderboardPeriod: String = "today",
@@ -818,14 +822,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { Repository.todayAttendance() }
                 .onSuccess { a -> set { it.copy(attendance = a) } }
         }
+        viewModelScope.launch {
+            runCatching { Repository.recentAttendance() }
+                .onSuccess { list -> set { it.copy(attendanceHistory = list) } }
+        }
     }
 
-    fun punchIn() {
+    /** Punch in, optionally with a selfie (base64 data-URL) + GPS proof. */
+    fun punchIn(selfie: String? = null, lat: Double? = null, lng: Double? = null, locationLabel: String? = null) {
         viewModelScope.launch {
             set { it.copy(attendanceBusy = true) }
-            runCatching { Repository.punchIn() }
-                .onSuccess { a -> set { it.copy(attendance = a, attendanceBusy = false, message = "✓ Punched in. Have a great shift!") } }
+            runCatching { Repository.punchIn(selfie, lat, lng, locationLabel) }
+                .onSuccess { a ->
+                    set { it.copy(attendance = a, attendanceBusy = false, message = "✓ Punched in. Have a great shift!") }
+                    loadAttendance()
+                }
                 .onFailure { e -> set { it.copy(attendanceBusy = false, error = e.message) } }
+        }
+    }
+
+    /** Loads every follow-up (pending + completed) for the calendar view. */
+    fun loadCalendar() {
+        viewModelScope.launch {
+            set { it.copy(calendarLoading = true) }
+            runCatching { Repository.fetchFollowUps(includeDone = true) }
+                .onSuccess { list -> set { it.copy(calendar = list, calendarLoading = false) } }
+                .onFailure { e -> set { it.copy(calendarLoading = false, error = e.message) } }
         }
     }
 

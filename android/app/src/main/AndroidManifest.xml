@@ -24,6 +24,10 @@
     <!-- Exact reminders for scheduled follow-up callbacks (degrades to inexact if denied) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
+    <!-- GPS-tagged attendance punch-in (selfie uses the camera app, no CAMERA perm needed) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:name=".SalesAutoCallApp"
         android:allowBackup="true"

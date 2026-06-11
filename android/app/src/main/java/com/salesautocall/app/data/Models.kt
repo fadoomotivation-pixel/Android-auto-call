@@ -108,6 +108,10 @@ data class Attendance(
     @SerialName("work_date") val workDate: String? = null,
     @SerialName("punch_in_at") val punchInAt: String? = null,
     @SerialName("punch_out_at") val punchOutAt: String? = null,
+    @SerialName("punch_in_lat") val punchInLat: Double? = null,
+    @SerialName("punch_in_lng") val punchInLng: Double? = null,
+    val selfie: String? = null,
+    @SerialName("location_label") val locationLabel: String? = null,
     val status: String = "present",
 )
 
