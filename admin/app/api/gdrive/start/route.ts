@@ -1,19 +1,26 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-// Super-admin starts the Google Drive OAuth flow for a company.
+// Starts the Google Drive OAuth flow. A super admin may connect any company;
+// a company admin may connect their OWN company.
 // GET /api/gdrive/start?company=<uuid>
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
 
+  const url = new URL(request.url);
+  let company = url.searchParams.get("company") ?? "";
+
   const { data: pa } = await supabase
     .from("platform_admins").select("user_id").eq("user_id", user.id).maybeSingle();
-  if (!pa) return new NextResponse("Super admin only", { status: 403 });
-
-  const url = new URL(request.url);
-  const company = url.searchParams.get("company") ?? "";
+  if (!pa) {
+    // Not a super admin → must be a company admin connecting their own company.
+    const { data: me } = await supabase
+      .from("profiles").select("role, company_id").eq("id", user.id).maybeSingle<{ role: string; company_id: string | null }>();
+    if (me?.role !== "admin" || !me.company_id) return new NextResponse("Admins only", { status: 403 });
+    company = me.company_id; // ignore any passed company; lock to their own
+  }
   if (!company) return new NextResponse("missing company", { status: 400 });
 
   const clientId = process.env.GOOGLE_CLIENT_ID;

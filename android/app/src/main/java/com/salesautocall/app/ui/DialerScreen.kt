@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Call
@@ -30,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,6 +53,8 @@ private val KEYPAD = listOf(
 fun DialerScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
     var number by remember { mutableStateOf("") }
+    val cloudAvailable = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank()
+    var useCloud by remember(cloudAvailable) { mutableStateOf(cloudAvailable) }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 24.dp),
@@ -58,6 +62,29 @@ fun DialerScreen(vm: MainViewModel) {
     ) {
         Spacer(Modifier.height(24.dp))
         Text("Dialer", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        // ---- call method: SIM (your number) vs Cloud (uroperator) ----
+        if (cloudAvailable) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                ModePill("📱 SIM", !useCloud, Modifier.weight(1f)) { useCloud = false }
+                ModePill("☁ Cloud", useCloud, Modifier.weight(1f)) { useCloud = true }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (useCloud) "Cloud: rings your phone, then connects the customer."
+                else "SIM: dials directly from your phone's number.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
 
         // ---- number display ----
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -98,9 +125,10 @@ fun DialerScreen(vm: MainViewModel) {
             Spacer(Modifier.weight(1f))
             Surface(
                 shape = CircleShape,
-                color = CallGreen,
+                color = if (useCloud && cloudAvailable) MaterialTheme.colorScheme.primary else CallGreen,
                 modifier = Modifier.size(68.dp).clickable(enabled = number.isNotBlank()) {
-                    vm.dialManual(number)
+                    if (useCloud && cloudAvailable) vm.cloudCall(number.trim(), null, null)
+                    else vm.dialManual(number)
                 },
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -116,6 +144,25 @@ fun DialerScreen(vm: MainViewModel) {
             }
         }
         Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun ModePill(label: String, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
+            .clickable { onClick() }
+            .padding(vertical = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }
 

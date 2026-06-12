@@ -734,8 +734,11 @@ private fun Stat(label: String, value: String) {
 @Composable
 fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val app by vm.state.collectAsState()
+    val context = LocalContext.current
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
         Text("Settings", style = MaterialTheme.typography.headlineSmall)
+        Text("Your changes are saved automatically. Tap Save when you're done.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
 
         // Company: invite code (admin) or join/switch by code (everyone else).
@@ -809,9 +812,17 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 )
             }
         }
-        Spacer(Modifier.height(20.dp))
-        OutlinedButton(onClick = onBack) { Text("Back") }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(24.dp))
+        Button(
+            onClick = {
+                android.widget.Toast.makeText(context, "✓ Settings saved", android.widget.Toast.LENGTH_SHORT).show()
+                onBack()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Save settings") }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
+        Spacer(Modifier.height(16.dp))
         app.profile?.let {
             Text("Signed in as ${it.fullName ?: "—"}", style = MaterialTheme.typography.bodySmall)
         }

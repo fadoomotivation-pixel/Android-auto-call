@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { CallLog, Profile } from "@/lib/types";
 import { RecordingPlayer } from "./RecordingPlayer";
-import { RecordingToggle } from "./RecordingToggle";
+import { RecordingSetup } from "./RecordingSetup";
 
 function fmt(seconds: number | null) {
   if (!seconds) return "—";
@@ -55,7 +55,7 @@ export default async function RecordingsPage() {
         Recordings auto-delete after 30 days.
       </p>
 
-      {company && <RecordingToggle companyId={company.id} enabled={company.recording_enabled} />}
+      {company && <RecordingSetup companyId={company.id} enabled={company.recording_enabled} />}
 
       {error && <div className="error">{error.message}</div>}
 
