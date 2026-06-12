@@ -30,9 +30,20 @@ object SipManager {
     private var speakerOn: Boolean = false
     private var recordFile: String? = null
     private var recordingActive: Boolean = false
+    
+    var appContext: Context? = null
+    var incomingCall: Call? = null
 
     /** Called on every meaningful state change. Set by the ViewModel. */
     var onState: ((String) -> Unit)? = null
+
+    fun acceptIncomingCall() {
+        val call = incomingCall ?: core?.currentCall ?: return
+        val p = runCatching { core?.createCallParams(call) }.getOrNull()
+        if (p != null && recordFile != null) runCatching { p.recordFile = recordFile }
+        runCatching { if (p != null) call.acceptWithParams(p) else call.accept() }
+        incomingCall = null
+    }
 
     /** Set the path the next call should record to (null = no recording). */
     fun setRecordFile(path: String?) {
@@ -80,12 +91,35 @@ object SipManager {
         ) {
             when (state) {
                 Call.State.IncomingReceived -> {
-                    // uroperator is ringing our extension — answer immediately, with the
-                    // record file set on the call params so both sides get captured.
                     onState?.invoke("ringing")
-                    val p = runCatching { core.createCallParams(call) }.getOrNull()
-                    if (p != null && recordFile != null) runCatching { p.recordFile = recordFile }
-                    runCatching { if (p != null) call.acceptWithParams(p) else call.accept() }
+                    incomingCall = call
+                    
+                    // Trigger the native Android incoming call UI via TelecomManager
+                    appContext?.let { ctx ->
+                        val telecomManager = ctx.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
+                        val componentName = android.content.ComponentName(ctx, SalesConnectionService::class.java)
+                        val phoneAccountHandle = android.telecom.PhoneAccountHandle(componentName, "SalesAutoCallSIP")
+                        
+                        // Register PhoneAccount if not already registered
+                        try {
+                            val account = android.telecom.PhoneAccount.builder(phoneAccountHandle, "SalesAutoCall SIP")
+                                .setCapabilities(android.telecom.PhoneAccount.CAPABILITY_CALL_PROVIDER)
+                                .build()
+                            telecomManager.registerPhoneAccount(account)
+                            
+                            val extras = android.os.Bundle().apply {
+                                putString(android.telecom.TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, call.remoteAddress?.asStringUriOnly() ?: "Unknown")
+                            }
+                            telecomManager.addNewIncomingCall(phoneAccountHandle, extras)
+                        } catch (e: Exception) {
+                            android.util.Log.e("SipManager", "Failed to add incoming call via Telecom", e)
+                            // Fallback to auto-answer if Telecom fails (e.g., missing permissions)
+                            acceptIncomingCall()
+                        }
+                    } ?: run {
+                        // Fallback
+                        acceptIncomingCall()
+                    }
                 }
                 Call.State.OutgoingProgress,
                 Call.State.OutgoingRinging -> onState?.invoke("ringing")

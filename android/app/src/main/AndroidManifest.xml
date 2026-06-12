@@ -58,6 +58,20 @@
             android:name=".dialer.ManualCallService"
             android:exported="false"
             android:foregroundServiceType="phoneCall" />
+            
+        <service
+            android:name=".sip.SipBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall" />
+
+        <service
+            android:name=".sip.SalesConnectionService"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
 
         <!-- Fires local notifications when a scheduled follow-up callback is due -->
         <receiver

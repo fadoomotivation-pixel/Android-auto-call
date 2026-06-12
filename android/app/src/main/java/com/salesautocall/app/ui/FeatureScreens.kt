@@ -398,6 +398,26 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
             }
             if (app.cloudEnabled) {
                 Spacer(Modifier.height(12.dp))
+                
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Available for incoming calls", style = MaterialTheme.typography.titleSmall)
+                            Text("Keep app connected in background to receive calls. (Uses more battery)",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = app.cloudIncomingEnabled, onCheckedChange = { vm.setIncomingEnabled(it) })
+                    }
+                }
+
                 OutlinedTextField(
                     app.cloudAgentId, { vm.setCloudAgentId(it) },
                     label = { Text("Agent ID / extension (from your admin)") },

@@ -38,6 +38,7 @@ data class AppState(
     val reviewAfterCall: Boolean = true,
     val dailyGoal: Int = 50,
     val cloudEnabled: Boolean = false,
+    val cloudIncomingEnabled: Boolean = false,
     val cloudAgentId: String = "",
     val cloudCallerId: String = "",
     val cloudSipPassword: String = "",
@@ -123,6 +124,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             reviewAfterCall = AppPrefs.getReviewAfterCall(app),
             dailyGoal = AppPrefs.getDailyGoal(app),
             cloudEnabled = AppPrefs.getCloudEnabled(app),
+            cloudIncomingEnabled = AppPrefs.getIncomingEnabled(app),
             cloudAgentId = AppPrefs.getAgentId(app),
             cloudCallerId = AppPrefs.getCallerId(app),
             cloudSipPassword = AppPrefs.getSipPassword(app),
@@ -236,6 +238,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setCloudEnabled(v: Boolean) {
         AppPrefs.setCloudEnabled(getApplication(), v)
         set { it.copy(cloudEnabled = v) }
+        if (!v && _state.value.cloudIncomingEnabled) {
+            setIncomingEnabled(false)
+        }
+    }
+
+    fun setIncomingEnabled(v: Boolean) {
+        AppPrefs.setIncomingEnabled(getApplication(), v)
+        set { it.copy(cloudIncomingEnabled = v) }
+        if (v) {
+            com.salesautocall.app.sip.SipBackgroundService.start(getApplication())
+        } else {
+            com.salesautocall.app.sip.SipBackgroundService.stop(getApplication())
+        }
     }
 
     fun setCloudAgentId(v: String) {
