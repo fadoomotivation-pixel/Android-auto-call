@@ -113,19 +113,19 @@ private fun openWhatsApp(context: android.content.Context, phone: String) {
 // Campaign tab — create / running / session summary
 // ============================================================
 @Composable
-fun CampaignScreen(vm: MainViewModel) {
+fun CampaignScreen(vm: MainViewModel, onPickLeads: () -> Unit = {}) {
     val app by vm.state.collectAsState()
     val dial by DialerController.state.collectAsState()
 
     when {
         dial.isRunning -> RunningView(vm)
         dial.finished && dial.total > 0 -> SessionSummaryView(vm, onNew = { DialerController.reset() })
-        else -> CreateCampaignView(vm, app)
+        else -> CreateCampaignView(vm, app, onPickLeads)
     }
 }
 
 @Composable
-private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
+private fun CreateCampaignView(vm: MainViewModel, app: AppState, onPickLeads: () -> Unit) {
     val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { vm.pickFile(it) }
@@ -142,13 +142,30 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState) {
         TodayCard(app)
         Spacer(Modifier.height(16.dp))
 
+        // Easiest path for a telecaller: just pick from leads the admin uploaded.
+        Card(
+            Modifier.fillMaxWidth().clickable { onPickLeads() },
+            colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text("📞 Call your assigned leads", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("No file needed. Pick the leads your admin gave you and dial them one after another.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onPickLeads, modifier = Modifier.fillMaxWidth()) {
+                    Text("Select leads & start calling")
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+
         if (app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank()) {
             CloudDialCard(vm, app)
             Spacer(Modifier.height(16.dp))
         }
 
-        Text("Start New Campaign", style = MaterialTheme.typography.headlineSmall)
-        Text("Create a campaign to organize and track your calls", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Or upload a new list", style = MaterialTheme.typography.headlineSmall)
+        Text("Advanced: import a CSV/Excel file to start a fresh campaign", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
 
         // Step 1 — name

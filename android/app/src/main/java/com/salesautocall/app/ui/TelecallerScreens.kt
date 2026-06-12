@@ -499,6 +499,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var selectMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
 
+    // Allow other screens (Campaign tab) to launch us straight into select mode.
+    LaunchedEffect(app.leadsSelectRequested) {
+        if (app.leadsSelectRequested) { selectMode = true; vm.consumeLeadSelect() }
+    }
+
     val base = when (selected) {
         "all" -> app.leads
         else -> app.leads.filter { stageOf(it.status).key == selected || it.status in (STAGES.firstOrNull { s -> s.key == selected }?.statuses ?: emptySet()) }
@@ -527,12 +532,12 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     if (!selectMode) {
                         Box(
                             Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
-                                .clickable { selectMode = true }.padding(horizontal = 14.dp, vertical = 8.dp),
+                                .clickable { selectMode = true }.padding(horizontal = 16.dp, vertical = 10.dp),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Checklist, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Checklist, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Select", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                                Text("Select & Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                             }
                         }
                     } else {

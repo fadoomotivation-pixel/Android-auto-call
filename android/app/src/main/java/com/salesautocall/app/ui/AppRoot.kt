@@ -432,7 +432,16 @@ private fun MainShell(vm: MainViewModel) {
                         })
                     }
                     composable(Tab.Dialer.route) { DialerScreen(vm) }
-                    composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                    composable(Tab.Campaign.route) {
+                        CampaignScreen(vm, onPickLeads = {
+                            vm.requestLeadSelect()
+                            nav.navigate(Tab.Leads.route) {
+                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        })
+                    }
                     composable(Tab.Team.route) {
                         TeamScreen(
                             vm,

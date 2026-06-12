@@ -73,6 +73,8 @@ data class AppState(
     val leads: List<Contact> = emptyList(),
     val leadsLoading: Boolean = false,
     val leadFilter: String = "open",
+    /** Set when another screen (e.g. Campaign tab) asks Leads to open in select mode. */
+    val leadsSelectRequested: Boolean = false,
     // follow-up / callback scheduler
     val followUpList: List<FollowUp> = emptyList(),
     val followUpsLoading: Boolean = false,
@@ -695,6 +697,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (f.key == _state.value.leadFilter) return
         set { it.copy(leadFilter = f.key) }
     }
+
+    /** Ask the Leads tab to open directly in multi-select ("start campaign") mode. */
+    fun requestLeadSelect() = set { it.copy(leadsSelectRequested = true) }
+    fun consumeLeadSelect() = set { it.copy(leadsSelectRequested = false) }
 
     fun loadLeads() {
         viewModelScope.launch {
