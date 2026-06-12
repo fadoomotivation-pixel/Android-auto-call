@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -85,7 +87,10 @@ fun CallsScreen(vm: MainViewModel) {
                 modifier = Modifier.padding(top = 16.dp),
             )
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(rows, key = { it.id ?: "${it.phone}-${it.startedAt}" }) { CallRow(it) }
+                items(rows, key = { it.id ?: "${it.phone}-${it.startedAt}" }) {
+                    CallRow(it, playing = it.id != null && it.id == app.playingCallId,
+                        onPlay = { it.id?.let { id -> vm.playRecording(id) } }, onStop = { vm.stopRecording() })
+                }
             }
         }
     }
@@ -119,7 +124,7 @@ private fun SummaryStat(label: String, value: String, color: Color = Color.Unspe
 }
 
 @Composable
-private fun CallRow(c: CallLog) {
+private fun CallRow(c: CallLog, playing: Boolean, onPlay: () -> Unit, onStop: () -> Unit) {
     val context = LocalContext.current
     Card(Modifier.fillMaxWidth()) {
         Row(
@@ -138,6 +143,15 @@ private fun CallRow(c: CallLog) {
                     if (meta.isNotBlank()) Text(
                         meta, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (c.recordingStatus == "ready") {
+                IconButton(onClick = { if (playing) onStop() else onPlay() }) {
+                    Icon(
+                        if (playing) Icons.Default.Stop else Icons.Default.PlayArrow,
+                        contentDescription = if (playing) "Stop" else "Play recording",
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                 }
             }

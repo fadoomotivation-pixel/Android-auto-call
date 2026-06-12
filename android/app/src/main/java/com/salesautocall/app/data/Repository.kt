@@ -6,6 +6,7 @@ import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -90,6 +91,16 @@ object Repository {
             setBody(bytes)
         }
         return resp.bodyAsText()
+    }
+
+    /** Downloads a recording's audio bytes (RLS-gated) for in-app playback. */
+    suspend fun fetchRecording(callLogId: String): ByteArray? {
+        val resp = client.functions.invoke(
+            function = "recording-url",
+            body = buildJsonObject { put("call_log_id", callLogId) },
+        )
+        if (resp.status.value !in 200..299) return null
+        return runCatching { resp.body<ByteArray>() }.getOrNull()
     }
 
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {

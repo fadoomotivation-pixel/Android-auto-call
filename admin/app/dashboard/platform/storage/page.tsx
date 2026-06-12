@@ -16,22 +16,46 @@ export default async function StoragePage({
     .from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle();
   if (!pa) return <div className="empty">Not authorized — super admin only.</div>;
 
-  const [{ data: companies }, { data: integ }] = await Promise.all([
+  const [{ data: companies }, { data: integ }, { data: platform }] = await Promise.all([
     supabase.from("companies").select("id, name").order("name").returns<CompanyRow[]>(),
     supabase.from("storage_integrations").select("company_id, account_email, folder_id").returns<StorageRow[]>(),
+    supabase.from("platform_storage").select("account_email, refresh_token").eq("id", true).maybeSingle<{ account_email: string | null; refresh_token: string | null }>(),
   ]);
   const byCompany = new Map((integ ?? []).map((i) => [i.company_id, i]));
+  const platformConnected = !!platform?.refresh_token;
 
   return (
     <>
       <h2>Recording storage (Google Drive)</h2>
       <p className="subtitle">
-        Connect a Google Drive account per company. Recordings are uploaded there and auto-deleted after 30 days.
+        Recordings upload to a company&apos;s own Drive if it has one, otherwise to your <strong>platform Drive</strong> below
+        (each company in its own subfolder). Auto-deleted after 30 days.
       </p>
 
       {sp.ok && <div className="success">✓ Google Drive connected.</div>}
       {sp.err && <div className="error">Connect failed: {sp.err}</div>}
 
+      <div className="card" style={{ margin: "12px 0 20px" }}>
+        <div className="label">Platform Drive (default for all companies)</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+          {platformConnected ? (
+            <>
+              <span className="badge connected">Connected</span>
+              {platform?.account_email && <span className="subtitle">{platform.account_email}</span>}
+              <a className="link" style={{ color: "var(--accent)" }} href="/api/gdrive/start?platform=1">Reconnect</a>
+            </>
+          ) : (
+            <a className="primary" style={{ width: "auto", padding: "8px 14px", textDecoration: "none" }} href="/api/gdrive/start?platform=1">
+              Connect platform Drive (your 5TB)
+            </a>
+          )}
+        </div>
+        <p className="subtitle" style={{ margin: "8px 0 0" }}>
+          Every company without its own Drive saves recordings here, each in its own subfolder.
+        </p>
+      </div>
+
+      <div className="label">Per-company Drive (optional override)</div>
       <table>
         <thead>
           <tr>

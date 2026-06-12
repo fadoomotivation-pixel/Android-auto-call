@@ -67,6 +67,8 @@ data class AppState(
     val callList: List<CallLog> = emptyList(),
     val callsLoading: Boolean = false,
     val callSummary: CallSummary = CallSummary(),
+    /** id of the call whose recording is currently playing/loading (null = none). */
+    val playingCallId: String? = null,
     // notes typed during an active cloud call
     val inCallNote: String = "",
     // lead pipeline (all my contacts across campaigns)
@@ -912,6 +914,49 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearMessage() = set { it.copy(message = null, error = null) }
+
+    // ---------- recording playback ----------
+    private var player: android.media.MediaPlayer? = null
+
+    /** Streams a call's recording from the cloud and plays it in-app. */
+    fun playRecording(callId: String) {
+        stopRecording()
+        set { it.copy(playingCallId = callId, message = "Loading recording…") }
+        viewModelScope.launch {
+            val bytes = withContext(Dispatchers.IO) { runCatching { Repository.fetchRecording(callId) }.getOrNull() }
+            if (bytes == null || bytes.isEmpty()) {
+                set { it.copy(playingCallId = null, message = null, error = "Recording not available yet.") }
+                return@launch
+            }
+            runCatching {
+                val f = java.io.File(getApplication<Application>().cacheDir, "play_rec.audio")
+                withContext(Dispatchers.IO) { f.writeBytes(bytes) }
+                val mp = android.media.MediaPlayer().apply {
+                    setDataSource(f.absolutePath)
+                    setOnCompletionListener { stopRecording() }
+                    prepare()
+                    start()
+                }
+                player = mp
+                set { it.copy(message = null) }
+            }.onFailure { e ->
+                set { it.copy(playingCallId = null, message = null, error = "Playback error: ${e.message}") }
+            }
+        }
+    }
+
+    fun stopRecording() {
+        runCatching { player?.stop() }
+        runCatching { player?.release() }
+        player = null
+        if (_state.value.playingCallId != null) set { it.copy(playingCallId = null) }
+    }
+
+    override fun onCleared() {
+        runCatching { player?.release() }
+        player = null
+        super.onCleared()
+    }
 
     private fun parseInstant(iso: String): Long =
         runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
