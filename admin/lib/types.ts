@@ -62,6 +62,8 @@ export interface CallLog {
   recording_status: string;
   recording_seconds: number | null;
   recording_source: string | null;
+  summary: string | null;
+  summary_status: string;
 }
 
 export interface CompanyIntegration {
