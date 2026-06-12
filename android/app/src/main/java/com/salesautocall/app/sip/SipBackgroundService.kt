@@ -24,7 +24,7 @@ class SipBackgroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             SipManager.stop()
-            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopForeground(true)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -39,8 +39,8 @@ class SipBackgroundService : Service() {
         val channelId = SalesAutoCallApp.DIALER_CHANNEL_ID
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NotificationManager::class.java)
-            if (nm.getNotificationChannel(channelId) == null) {
-                nm.createNotificationChannel(
+            if (nm?.getNotificationChannel(channelId) == null) {
+                nm?.createNotificationChannel(
                     NotificationChannel(channelId, "SIP Service", NotificationManager.IMPORTANCE_LOW)
                 )
             }

@@ -135,6 +135,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<AppState> = _state.asStateFlow()
 
     init {
+        com.salesautocall.app.sip.SipManager.appContext = app
         refreshSession()
     }
 
