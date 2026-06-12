@@ -8,19 +8,26 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const company = url.searchParams.get("state") ?? "";
-  const back = new URL("/dashboard/platform/storage", url.origin);
-
-  if (!code || !company) {
-    back.searchParams.set("err", "missing code/company");
-    return NextResponse.redirect(back, { status: 303 });
-  }
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(new URL("/login", url.origin), { status: 303 });
   const { data: pa } = await supabase
     .from("platform_admins").select("user_id").eq("user_id", user.id).maybeSingle();
-  if (!pa) return new NextResponse("Super admin only", { status: 403 });
+
+  // Super admin → return to the platform storage page; company admin → recordings.
+  const { data: me } = await supabase
+    .from("profiles").select("role, company_id").eq("id", user.id).maybeSingle<{ role: string; company_id: string | null }>();
+  const back = new URL(pa ? "/dashboard/platform/storage" : "/dashboard/recordings", url.origin);
+
+  if (!code || !company) {
+    back.searchParams.set("err", "missing code/company");
+    return NextResponse.redirect(back, { status: 303 });
+  }
+  // Authorize: super admin (any company) OR company admin of THIS company.
+  if (!pa && !(me?.role === "admin" && me.company_id === company)) {
+    return new NextResponse("Not authorized", { status: 403 });
+  }
 
   const clientId = process.env.GOOGLE_CLIENT_ID!;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
