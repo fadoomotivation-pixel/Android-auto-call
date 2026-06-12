@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.School
@@ -343,9 +342,6 @@ private fun MainShell(vm: MainViewModel) {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { /* notifications placeholder */ }) {
-                            Icon(Icons.Default.Notifications, contentDescription = "Notifications")
-                        }
                         IconButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
