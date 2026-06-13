@@ -172,6 +172,19 @@ object SipManager {
         return c
     }
 
+    /** Called by SipBackgroundService to ensure SIP is running even if the UI is dead. */
+    fun registerFromPrefs(context: Context) {
+        val agentId = com.salesautocall.app.data.AppPrefs.getAgentId(context)
+        val sipPass = com.salesautocall.app.data.AppPrefs.getSipPassword(context)
+        if (agentId.isBlank() || sipPass.isBlank()) return
+        
+        var server = com.salesautocall.app.data.AppPrefs.getSipServer(context)
+        if (server.isBlank()) server = "sip.uroperator.com"
+        
+        val p = com.salesautocall.app.data.AppPrefs.getSipPort(context).toIntOrNull() ?: 6060
+        register(context, agentId, sipPass, server, p, "udp")
+    }
+
     /**
      * Registers [username] against the PBX. [server]/[port] default to the public
      * uroperator gateway but can be overridden (e.g. a private IP reached via VPN).

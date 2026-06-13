@@ -29,9 +29,9 @@ class SipBackgroundService : Service() {
             return START_NOT_STICKY
         }
         
-        // Ensure SIP is running
-        // Normally, the ViewModel handles registration credentials. 
-        // If SipManager loses registration, the app's network listeners should re-trigger it.
+        // Ensure SIP is running and has context even if the UI was killed
+        SipManager.appContext = applicationContext
+        SipManager.registerFromPrefs(applicationContext)
         return START_STICKY
     }
 
