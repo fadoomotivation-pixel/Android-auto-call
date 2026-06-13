@@ -100,7 +100,7 @@ private fun stageOf(status: String): Stage =
     STAGES.firstOrNull { status in it.statuses }
         ?: when (status) {
             "not_interested", "lost" -> Stage("lost", "Lost", emptySet(), Red)
-            "dnc" -> Stage("dnc", "DNC", emptySet(), Slate)
+            "dnc" -> Stage("dnc", "Do Not Call", emptySet(), Slate)
             else -> STAGES[0]
         }
 
@@ -113,7 +113,7 @@ private val SETTABLE_STAGES = listOf(
     "callback" to "Callback",
     "not_interested" to "Not interested",
     "lost" to "Lost",
-    "dnc" to "DNC",
+    "dnc" to "Do Not Call",
 )
 
 private data class TempMeta(val label: String, val fg: Color, val bg: Color)
