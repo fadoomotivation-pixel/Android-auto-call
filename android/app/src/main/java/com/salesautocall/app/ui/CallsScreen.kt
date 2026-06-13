@@ -167,7 +167,7 @@ private fun CallRow(c: CallLog, playing: Boolean, onPlay: () -> Unit, onStop: ()
                 }
             }
             if (playing && c.id != null) {
-                AudioPlayer(callLogId = c.id, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                AudioPlayer(callLogId = c.id!!, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
         }
     }

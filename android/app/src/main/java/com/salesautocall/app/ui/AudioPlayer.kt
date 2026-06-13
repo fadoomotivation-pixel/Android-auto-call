@@ -48,13 +48,13 @@ fun AudioPlayer(
             
             // Create a factory that intercepts the DataSpec to inject the POST body and Auth headers
             val baseFactory = DefaultHttpDataSource.Factory()
-            val resolvingFactory = ResolvingDataSource.Factory(baseFactory) { dataSpec ->
+            val resolvingFactory = ResolvingDataSource.Factory(baseFactory, ResolvingDataSource.Resolver { dataSpec ->
                 dataSpec.buildUpon()
                     .setHttpMethod(DataSpec.HTTP_METHOD_POST)
                     .setHttpBody("""{"call_log_id":"$callLogId"}""".toByteArray())
                     .setHttpRequestHeaders(mapOf("Authorization" to "Bearer $token"))
                     .build()
-            }
+            })
 
             val mediaSource = ProgressiveMediaSource.Factory(resolvingFactory)
                 .createMediaSource(MediaItem.fromUri(Uri.parse("$functionsUrl/recording-url")))

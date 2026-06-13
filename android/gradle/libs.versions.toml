@@ -36,8 +36,8 @@ supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgre
 supabase-auth = { group = "io.github.jan-tennert.supabase", name = "auth-kt" }
 supabase-functions = { group = "io.github.jan-tennert.supabase", name = "functions-kt" }
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
-androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version = "1.4.1" }
-androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version = "1.4.1" }
+androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version = "1.2.1" }
+androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version = "1.2.1" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
