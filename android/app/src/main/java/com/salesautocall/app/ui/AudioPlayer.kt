@@ -119,7 +119,7 @@ fun AudioPlayer(
             value = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f,
             onValueChange = { percent ->
                 if (duration > 0) {
-                    val newPos = (percent * duration).toLong()
+                    val newPos = (percent * duration.toFloat()).toLong()
                     exoPlayer.seekTo(newPos)
                     currentPosition = newPos
                 }
