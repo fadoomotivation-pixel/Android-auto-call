@@ -161,7 +161,8 @@ private fun lastLocation(context: Context): android.location.Location? {
         var best: android.location.Location? = null
         for (p in lm.getProviders(true)) {
             val l = runCatching { lm.getLastKnownLocation(p) }.getOrNull() ?: continue
-            if (best == null || l.accuracy < best!!.accuracy) best = l
+            val currentBest = best
+            if (currentBest == null || l.accuracy < currentBest.accuracy) best = l
         }
         best
     }.getOrNull()
@@ -204,6 +205,19 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                 }
                 vm.punchIn(selfie, lat, lng, label)
             }
+        }
+    }
+
+    // Camera permission gate — request first, launch camera only on grant.
+    val cameraPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) cameraLauncher.launch(null)
+    }
+
+    fun launchCameraWithPermission() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            cameraLauncher.launch(null)
+        } else {
+            cameraPermLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -268,7 +282,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White)
                             .clickable(enabled = canPunch) {
-                                if (onShift) vm.punchOut() else cameraLauncher.launch(null)
+                                if (onShift) vm.punchOut() else launchCameraWithPermission()
                             }.padding(vertical = 14.dp),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -488,12 +502,15 @@ private fun AddFollowUpDialog(onDismiss: () -> Unit, onAdd: (String, String?, Lo
     var note by remember { mutableStateOf("") }
     val now = java.time.ZonedDateTime.now()
     fun at(days: Long, hour: Int) = now.plusDays(days).withHour(hour).withMinute(0).withSecond(0).toInstant().toEpochMilli()
-    val options = listOf(
-        "In 1 hour" to now.plusHours(1).toInstant().toEpochMilli(),
-        "Today 5 PM" to now.withHour(17).withMinute(0).withSecond(0).toInstant().toEpochMilli(),
-        "Tomorrow 10 AM" to at(1, 10),
-        "Tomorrow 4 PM" to at(1, 16),
-    )
+    val options = buildList {
+        add("In 1 hour" to now.plusHours(1).toInstant().toEpochMilli())
+        // Hide "Today 5 PM" if it's already past 5 PM
+        if (now.hour < 17) {
+            add("Today 5 PM" to now.withHour(17).withMinute(0).withSecond(0).toInstant().toEpochMilli())
+        }
+        add("Tomorrow 10 AM" to at(1, 10))
+        add("Tomorrow 4 PM" to at(1, 16))
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add follow-up") },

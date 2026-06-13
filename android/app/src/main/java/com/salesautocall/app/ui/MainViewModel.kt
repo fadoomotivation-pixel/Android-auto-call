@@ -543,7 +543,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) {
                     val name = displayName(uri)
                     val bytes = getApplication<Application>().contentResolver
-                        .openInputStream(uri)!!.use { it.readBytes() }
+                        .openInputStream(uri)?.use { it.readBytes() }
+                        ?: throw Exception("Could not read file")
                     name to ContactImport.parse(bytes, name)
                 }
             }.onSuccess { (name, parsed) ->

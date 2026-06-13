@@ -128,7 +128,7 @@ fun CampaignScreen(vm: MainViewModel, onPickLeads: () -> Unit = {}) {
 @Composable
 private fun CreateCampaignView(vm: MainViewModel, app: AppState, onPickLeads: () -> Unit) {
     val context = LocalContext.current
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { vm.pickFile(it) }
     }
 
@@ -183,7 +183,15 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState, onPickLeads: ()
 
         // Step 2 — upload
         StepCard(number = "2", title = "Upload Contacts") {
-            Button(onClick = { picker.launch("*/*") }, enabled = !app.loading, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = {
+                picker.launch(arrayOf(
+                    "text/csv",
+                    "text/comma-separated-values",
+                    "text/tab-separated-values",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "application/vnd.ms-excel",
+                ))
+            }, enabled = !app.loading, modifier = Modifier.fillMaxWidth()) {
                 Text(if (app.loading) "Reading…" else "Choose File")
             }
             Spacer(Modifier.height(8.dp))
@@ -698,6 +706,9 @@ fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
             Text("No campaigns yet. Start one from the Campaign tab.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
+            var confirmDeleteId by remember { mutableStateOf<String?>(null) }
+            var confirmDeleteName by remember { mutableStateOf("") }
+
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(app.campaigns, key = { it.campaignId }) { c ->
                     Card(
@@ -716,7 +727,10 @@ fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
-                                IconButton(onClick = { vm.deleteCampaign(c.campaignId) }) {
+                                IconButton(onClick = {
+                                    confirmDeleteId = c.campaignId
+                                    confirmDeleteName = c.name
+                                }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete",
                                         tint = MaterialTheme.colorScheme.error)
                                 }
@@ -736,6 +750,24 @@ fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
                         }
                     }
                 }
+            }
+
+            // Confirmation dialog for campaign deletion
+            if (confirmDeleteId != null) {
+                AlertDialog(
+                    onDismissRequest = { confirmDeleteId = null },
+                    title = { Text("Delete campaign?") },
+                    text = { Text("Are you sure you want to delete \"$confirmDeleteName\"? This will remove all its contacts and call logs. This cannot be undone.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmDeleteId?.let { vm.deleteCampaign(it) }
+                            confirmDeleteId = null
+                        }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmDeleteId = null }) { Text("Cancel") }
+                    },
+                )
             }
         }
     }

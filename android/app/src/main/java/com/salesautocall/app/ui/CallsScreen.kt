@@ -56,7 +56,7 @@ fun CallsScreen(vm: MainViewModel) {
 
         // ---- date filter ----
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CallFilter.values().forEach { f ->
+            CallFilter.entries.forEach { f ->
                 FilterChip(
                     selected = app.callFilter == f,
                     onClick = { vm.setCallFilter(f) },

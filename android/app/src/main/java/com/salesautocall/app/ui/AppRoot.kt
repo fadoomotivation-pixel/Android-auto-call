@@ -110,14 +110,13 @@ fun AppRoot(vm: MainViewModel) {
     crash?.let { text ->
         AlertDialog(
             onDismissRequest = { AppPrefs.clearLastCrash(context); crash = null },
-            title = { Text("Last crash details") },
+            title = { Text("Something went wrong") },
             text = {
-                Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
-                    Text(text, style = MaterialTheme.typography.bodySmall)
-                }
+                Text("The app ran into an issue last time. If this keeps happening, contact your admin.",
+                    style = MaterialTheme.typography.bodyMedium)
             },
             confirmButton = {
-                TextButton(onClick = { AppPrefs.clearLastCrash(context); crash = null }) { Text("Dismiss") }
+                TextButton(onClick = { AppPrefs.clearLastCrash(context); crash = null }) { Text("OK") }
             },
         )
     }
@@ -287,7 +286,7 @@ private sealed class Tab(val route: String, val label: String) {
     data object Home : Tab("home", "Dashboard")
     data object Leads : Tab("leads", "Leads")
     data object Dialer : Tab("dialer", "Dialer")
-    data object Campaign : Tab("campaign", "Campaign")
+    data object Campaign : Tab("campaign", "Call List")
     data object Team : Tab("team", "Reports")
 }
 
@@ -501,11 +500,8 @@ private fun AppDrawer(
         MenuItem("Follow Ups", "Your due-now worklist", Icons.Default.AccessTime, "followups"),
         MenuItem("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance"),
         MenuItem("Calls", "Call history and recordings", Icons.Default.Call, "calls"),
-        MenuItem("Campaigns", "Import lists & auto-dial", Icons.Default.Campaign, "campaign"),
+        MenuItem("Call Lists", "Import lists & auto-dial", Icons.Default.Campaign, "campaign"),
         MenuItem("Reports & Team", "Leaderboard, talk-time, conversions", Icons.Default.Leaderboard, "team"),
-        MenuItem("Investor Videos", "AI-generated property videos", Icons.Default.Videocam, null, "Soon"),
-        MenuItem("Brochures", "Share project brochures", Icons.Default.Description, null, "Soon"),
-        MenuItem("Training & Support", "Guides and best practices", Icons.Default.School, null, "Soon"),
     )
 
     ModalDrawerSheet(Modifier.fillMaxWidth(0.84f)) {

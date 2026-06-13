@@ -7,6 +7,8 @@
     <!-- In-app softphone (WebRTC) audio -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Attendance selfie capture (TakePicturePreview) -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- Place calls programmatically (auto-dialer) -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -24,7 +26,7 @@
     <!-- Exact reminders for scheduled follow-up callbacks (degrades to inexact if denied) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
-    <!-- GPS-tagged attendance punch-in (selfie uses the camera app, no CAMERA perm needed) -->
+    <!-- GPS-tagged attendance punch-in (selfie uses CAMERA perm above + location) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
