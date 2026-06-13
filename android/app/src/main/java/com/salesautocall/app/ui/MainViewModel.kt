@@ -476,6 +476,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Calls tab (history / follow-up / summary) ----------
 
+    fun playRecording(callId: String) {
+        _state.value = _state.value.copy(playingCallId = callId)
+    }
+
+    fun stopRecording() {
+        _state.value = _state.value.copy(playingCallId = null)
+    }
+
     fun setCallFilter(f: CallFilter) {
         if (f == _state.value.callFilter) return
         set { it.copy(callFilter = f) }

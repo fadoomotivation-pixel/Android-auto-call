@@ -127,42 +127,47 @@ private fun SummaryStat(label: String, value: String, color: Color = Color.Unspe
 private fun CallRow(c: CallLog, playing: Boolean, onPlay: () -> Unit, onStop: () -> Unit) {
     val context = LocalContext.current
     Card(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(c.phone, style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutcomeBadge(c.outcome)
-                    Spacer(Modifier.size(8.dp))
-                    val meta = buildString {
-                        c.startedAt?.let { append(prettyTime(it)) }
-                        if (c.durationSeconds > 0) append("  ·  ${formatDuration(c.durationSeconds)}")
+        Column {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(c.phone, style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutcomeBadge(c.outcome)
+                        Spacer(Modifier.size(8.dp))
+                        val meta = buildString {
+                            c.startedAt?.let { append(prettyTime(it)) }
+                            if (c.durationSeconds > 0) append("  ·  ${formatDuration(c.durationSeconds)}")
+                        }
+                        if (meta.isNotBlank()) Text(
+                            meta, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    if (meta.isNotBlank()) Text(
-                        meta, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                }
+                if (c.recordingStatus == "ready" && !playing) {
+                    IconButton(onClick = onPlay) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = "Play recording",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                IconButton(onClick = { QuickActions.whatsApp(context, c.phone) }) {
+                    Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsAppGreen)
+                }
+                IconButton(onClick = { QuickActions.call(context, c.phone) }) {
+                    Icon(Icons.Default.Call, contentDescription = "Call back", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = { QuickActions.copy(context, c.phone) }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                 }
             }
-            if (c.recordingStatus == "ready") {
-                IconButton(onClick = { if (playing) onStop() else onPlay() }) {
-                    Icon(
-                        if (playing) Icons.Default.Stop else Icons.Default.PlayArrow,
-                        contentDescription = if (playing) "Stop" else "Play recording",
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-            IconButton(onClick = { QuickActions.whatsApp(context, c.phone) }) {
-                Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsAppGreen)
-            }
-            IconButton(onClick = { QuickActions.call(context, c.phone) }) {
-                Icon(Icons.Default.Call, contentDescription = "Call back", tint = MaterialTheme.colorScheme.primary)
-            }
-            IconButton(onClick = { QuickActions.copy(context, c.phone) }) {
-                Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+            if (playing && c.id != null) {
+                AudioPlayer(callLogId = c.id, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
         }
     }
