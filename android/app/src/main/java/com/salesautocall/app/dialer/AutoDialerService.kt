@@ -245,18 +245,29 @@ class AutoDialerService : Service() {
         ) return false
 
         return try {
-            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone")).apply {
+            fun buildIntent(withPackage: Boolean) = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone")).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 phoneAccountForSlot(simSlot)?.let {
                     putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)
                 }
+                // Force the device's default phone app so a SIP app (e.g. ZoiPer) can't
+                // intercept the SIM call with an "Open with" chooser.
+                if (withPackage) systemDialerPackage()?.let { pkg -> setPackage(pkg) }
             }
-            startActivity(intent)
+            try {
+                startActivity(buildIntent(true))
+            } catch (_: android.content.ActivityNotFoundException) {
+                startActivity(buildIntent(false))
+            }
             true
         } catch (e: SecurityException) {
             false
         }
     }
+
+    private fun systemDialerPackage(): String? = runCatching {
+        (getSystemService(Context.TELECOM_SERVICE) as TelecomManager).defaultDialerPackage
+    }.getOrNull()
 
     private fun phoneAccountForSlot(simSlot: Int?): android.telecom.PhoneAccountHandle? {
         if (simSlot == null) return null
