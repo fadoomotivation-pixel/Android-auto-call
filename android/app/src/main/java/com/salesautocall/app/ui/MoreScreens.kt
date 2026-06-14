@@ -161,7 +161,8 @@ private fun lastLocation(context: Context): android.location.Location? {
         var best: android.location.Location? = null
         for (p in lm.getProviders(true)) {
             val l = runCatching { lm.getLastKnownLocation(p) }.getOrNull() ?: continue
-            if (best == null || l.accuracy < best!!.accuracy) best = l
+            val currentBest = best
+            if (currentBest == null || l.accuracy < currentBest.accuracy) best = l
         }
         best
     }.getOrNull()
@@ -207,6 +208,19 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
     }
 
+    // Camera permission gate — request first, launch camera only on grant.
+    val cameraPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) cameraLauncher.launch(null)
+    }
+
+    fun launchCameraWithPermission() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            cameraLauncher.launch(null)
+        } else {
+            cameraPermLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     val a = app.attendance
     val onShift = a?.punchInAt != null && a.punchOutAt == null
     val done = a?.punchOutAt != null
@@ -231,7 +245,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                                 modifier = Modifier.size(64.dp).clip(CircleShape).border(2.dp, Color.White, CircleShape))
                         } else {
                             Box(Modifier.size(64.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.White)
+                                Icon(Icons.Default.CameraAlt, contentDescription = "Camera", tint = Color.White)
                             }
                         }
                         Spacer(Modifier.width(14.dp))
@@ -249,7 +263,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                     a?.locationLabel?.takeIf { it.isNotBlank() }?.let {
                         Spacer(Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(5.dp))
                             Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f))
                         }
@@ -268,7 +282,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White)
                             .clickable(enabled = canPunch) {
-                                if (onShift) vm.punchOut() else cameraLauncher.launch(null)
+                                if (onShift) vm.punchOut() else launchCameraWithPermission()
                             }.padding(vertical = 14.dp),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -316,10 +330,10 @@ private fun AttendanceHistoryCard(row: Attendance) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             val selfie = decodeSelfie(row.selfie)
             if (selfie != null) {
-                Image(selfie, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)))
+                Image(selfie, contentDescription = "Selfie", contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)))
             } else {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Camera", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 }
             }
             Spacer(Modifier.width(12.dp))
@@ -474,7 +488,7 @@ private fun CalendarItem(f: FollowUp, state: String, onCall: () -> Unit, onDone:
                 Icon(Icons.Default.Call, contentDescription = "Call", tint = OkGreen,
                     modifier = Modifier.size(40.dp).clip(CircleShape).background(OkGreen.copy(alpha = 0.12f)).padding(9.dp).clickable { onCall() })
                 Spacer(Modifier.width(8.dp))
-                Icon(Icons.Default.CheckCircle, contentDescription = "Done", tint = MaterialTheme.colorScheme.primary,
+                Icon(Icons.Default.CheckCircle, contentDescription = "Mark as done", tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)).padding(9.dp).clickable { onDone() })
             }
         }
@@ -488,12 +502,15 @@ private fun AddFollowUpDialog(onDismiss: () -> Unit, onAdd: (String, String?, Lo
     var note by remember { mutableStateOf("") }
     val now = java.time.ZonedDateTime.now()
     fun at(days: Long, hour: Int) = now.plusDays(days).withHour(hour).withMinute(0).withSecond(0).toInstant().toEpochMilli()
-    val options = listOf(
-        "In 1 hour" to now.plusHours(1).toInstant().toEpochMilli(),
-        "Today 5 PM" to now.withHour(17).withMinute(0).withSecond(0).toInstant().toEpochMilli(),
-        "Tomorrow 10 AM" to at(1, 10),
-        "Tomorrow 4 PM" to at(1, 16),
-    )
+    val options = buildList {
+        add("In 1 hour" to now.plusHours(1).toInstant().toEpochMilli())
+        // Hide "Today 5 PM" if it's already past 5 PM
+        if (now.hour < 17) {
+            add("Today 5 PM" to now.withHour(17).withMinute(0).withSecond(0).toInstant().toEpochMilli())
+        }
+        add("Tomorrow 10 AM" to at(1, 10))
+        add("Tomorrow 4 PM" to at(1, 16))
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add follow-up") },
@@ -547,7 +564,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                 .background(Brush.linearGradient(listOf(Color(0xFF7C3AED), Color(0xFF2563EB)))).padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(46.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI", tint = Color.White)
                     }
                     Spacer(Modifier.width(14.dp))
                     Column {
@@ -599,7 +616,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Bolt, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Bolt, contentDescription = "Quick action", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -634,7 +651,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                 answer?.let {
                     Card(Modifier.fillMaxWidth()) {
                         Row(Modifier.padding(14.dp)) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "AI Answer", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(10.dp))
                             Text(it, style = MaterialTheme.typography.bodyMedium)
                         }

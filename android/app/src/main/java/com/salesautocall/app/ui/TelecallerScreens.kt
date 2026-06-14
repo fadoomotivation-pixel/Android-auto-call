@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -100,7 +101,7 @@ private fun stageOf(status: String): Stage =
     STAGES.firstOrNull { status in it.statuses }
         ?: when (status) {
             "not_interested", "lost" -> Stage("lost", "Lost", emptySet(), Red)
-            "dnc" -> Stage("dnc", "DNC", emptySet(), Slate)
+            "dnc" -> Stage("dnc", "Do Not Call", emptySet(), Slate)
             else -> STAGES[0]
         }
 
@@ -113,7 +114,7 @@ private val SETTABLE_STAGES = listOf(
     "callback" to "Callback",
     "not_interested" to "Not interested",
     "lost" to "Lost",
-    "dnc" to "DNC",
+    "dnc" to "Do Not Call",
 )
 
 private data class TempMeta(val label: String, val fg: Color, val bg: Color)
@@ -295,11 +296,11 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
         modifier.clip(RoundedCornerShape(10.dp))
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
             .clickable { onClick() }
-            .padding(vertical = 8.dp),
+            .padding(vertical = 14.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(16.dp))
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(5.dp))
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
     }
@@ -529,13 +530,16 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         Text(if (selectMode) "Tap leads to add them to a campaign" else "Manage and follow up with your leads",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    IconButton(onClick = { vm.loadLeads() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
                     if (!selectMode) {
                         Box(
                             Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
                                 .clickable { selectMode = true }.padding(horizontal = 16.dp, vertical = 10.dp),
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Checklist, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Checklist, contentDescription = "Checklist", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text("Select & Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                             }
@@ -617,7 +621,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         },
                         enabled = selectedIds.isNotEmpty(),
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Start Campaign")
                     }
@@ -700,7 +704,7 @@ private fun LeadCard(
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (!c.companyName.isNullOrBlank()) {
-                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(c.companyName!!, style = MaterialTheme.typography.bodySmall, maxLines = 1)
                     }
@@ -869,6 +873,9 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Text("Follow Ups", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("Never miss a follow-up", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                IconButton(onClick = { vm.loadFollowUps() }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                }
                 TextButton(onClick = onBack) { Text("Back") }
             }
         }
@@ -893,7 +900,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Bolt, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+                        Icon(Icons.Default.Bolt, contentDescription = "Auto queue", tint = MaterialTheme.colorScheme.onPrimary)
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
@@ -908,7 +915,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                             .padding(horizontal = 14.dp, vertical = 9.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Call next", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("Call next", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
                         }
@@ -965,7 +972,7 @@ private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit
                         (if (overdue) Red else MaterialTheme.colorScheme.primary).copy(alpha = 0.12f))
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccessTime, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(12.dp))
+                        Icon(Icons.Default.AccessTime, contentDescription = "Due time", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(3.dp))
                         Text("${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}", style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1020,7 +1027,7 @@ private fun LeaderboardCard(vm: MainViewModel, app: AppState, compact: Boolean) 
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Groups, contentDescription = "Team", tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
                     Text("Leaderboard", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,12 +52,17 @@ fun CallsScreen(vm: MainViewModel) {
     var sub by remember { mutableIntStateOf(0) } // 0 = Recent, 1 = Follow-up
 
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
-        Text("Calls", style = MaterialTheme.typography.headlineSmall)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Calls", style = MaterialTheme.typography.headlineSmall)
+            IconButton(onClick = { vm.loadCalls() }) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            }
+        }
         Spacer(Modifier.height(12.dp))
 
         // ---- date filter ----
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CallFilter.values().forEach { f ->
+            CallFilter.entries.forEach { f ->
                 FilterChip(
                     selected = app.callFilter == f,
                     onClick = { vm.setCallFilter(f) },
@@ -127,42 +133,47 @@ private fun SummaryStat(label: String, value: String, color: Color = Color.Unspe
 private fun CallRow(c: CallLog, playing: Boolean, onPlay: () -> Unit, onStop: () -> Unit) {
     val context = LocalContext.current
     Card(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(c.phone, style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutcomeBadge(c.outcome)
-                    Spacer(Modifier.size(8.dp))
-                    val meta = buildString {
-                        c.startedAt?.let { append(prettyTime(it)) }
-                        if (c.durationSeconds > 0) append("  ·  ${formatDuration(c.durationSeconds)}")
+        Column {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(c.phone, style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutcomeBadge(c.outcome)
+                        Spacer(Modifier.size(8.dp))
+                        val meta = buildString {
+                            c.startedAt?.let { append(prettyTime(it)) }
+                            if (c.durationSeconds > 0) append("  ·  ${formatDuration(c.durationSeconds)}")
+                        }
+                        if (meta.isNotBlank()) Text(
+                            meta, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    if (meta.isNotBlank()) Text(
-                        meta, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                }
+                if (c.recordingStatus == "ready" && !playing) {
+                    IconButton(onClick = onPlay) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = "Play recording",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                IconButton(onClick = { QuickActions.whatsApp(context, c.phone) }) {
+                    Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsAppGreen)
+                }
+                IconButton(onClick = { QuickActions.call(context, c.phone) }) {
+                    Icon(Icons.Default.Call, contentDescription = "Call back", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = { QuickActions.copy(context, c.phone) }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                 }
             }
-            if (c.recordingStatus == "ready") {
-                IconButton(onClick = { if (playing) onStop() else onPlay() }) {
-                    Icon(
-                        if (playing) Icons.Default.Stop else Icons.Default.PlayArrow,
-                        contentDescription = if (playing) "Stop" else "Play recording",
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-            IconButton(onClick = { QuickActions.whatsApp(context, c.phone) }) {
-                Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsAppGreen)
-            }
-            IconButton(onClick = { QuickActions.call(context, c.phone) }) {
-                Icon(Icons.Default.Call, contentDescription = "Call back", tint = MaterialTheme.colorScheme.primary)
-            }
-            IconButton(onClick = { QuickActions.copy(context, c.phone) }) {
-                Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+            if (playing && c.id != null) {
+                AudioPlayer(callLogId = c.id!!, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
         }
     }

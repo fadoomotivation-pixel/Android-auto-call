@@ -7,6 +7,8 @@
     <!-- In-app softphone (WebRTC) audio -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Attendance selfie capture (TakePicturePreview) -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- Place calls programmatically (auto-dialer) -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -26,7 +28,7 @@
     <!-- Exact reminders for scheduled follow-up callbacks (degrades to inexact if denied) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
-    <!-- GPS-tagged attendance punch-in (selfie uses the camera app, no CAMERA perm needed) -->
+    <!-- GPS-tagged attendance punch-in (selfie uses CAMERA perm above + location) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
@@ -60,6 +62,20 @@
             android:name=".dialer.ManualCallService"
             android:exported="false"
             android:foregroundServiceType="phoneCall|microphone" />
+
+        <service
+            android:name=".sip.SipBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall" />
+
+        <service
+            android:name=".sip.SalesConnectionService"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
 
         <!-- Fires local notifications when a scheduled follow-up callback is due -->
         <receiver

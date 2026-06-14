@@ -23,6 +23,9 @@ object Repository {
 
     private val client get() = Supabase.client
 
+    fun getSessionToken(): String? = client.auth.currentSessionOrNull()?.accessToken
+    fun getFunctionsUrl(): String = com.salesautocall.app.BuildConfig.SUPABASE_URL + "/functions/v1"
+
     // ---------- auth ----------
 
     suspend fun signIn(email: String, password: String) {

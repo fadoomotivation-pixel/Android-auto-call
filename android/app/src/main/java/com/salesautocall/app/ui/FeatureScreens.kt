@@ -40,6 +40,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -78,7 +79,7 @@ private val QUICK_DISPOSITIONS = listOf(
     "callback" to "Callback",
     "interested" to "Interested",
     "not_interested" to "Not interested",
-    "dnc" to "DNC",
+    "dnc" to "Do Not Call",
 )
 
 private fun statusLabel(status: String): String =
@@ -127,7 +128,7 @@ fun CampaignScreen(vm: MainViewModel, onPickLeads: () -> Unit = {}) {
 @Composable
 private fun CreateCampaignView(vm: MainViewModel, app: AppState, onPickLeads: () -> Unit) {
     val context = LocalContext.current
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { vm.pickFile(it) }
     }
 
@@ -182,7 +183,15 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState, onPickLeads: ()
 
         // Step 2 — upload
         StepCard(number = "2", title = "Upload Contacts") {
-            Button(onClick = { picker.launch("*/*") }, enabled = !app.loading, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = {
+                picker.launch(arrayOf(
+                    "text/csv",
+                    "text/comma-separated-values",
+                    "text/tab-separated-values",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "application/vnd.ms-excel",
+                ))
+            }, enabled = !app.loading, modifier = Modifier.fillMaxWidth()) {
                 Text(if (app.loading) "Reading…" else "Choose File")
             }
             Spacer(Modifier.height(8.dp))
@@ -230,7 +239,7 @@ private fun CloudDialCard(vm: MainViewModel, app: AppState) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("📞 Cloud dial", style = MaterialTheme.typography.titleMedium)
-            Text("Call any number through uroperator — your phone rings first, then the customer connects.",
+            Text("Call any number through your office phone system — your phone rings first, then the customer connects.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
@@ -374,7 +383,7 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Cloud calling (uroperator)", style = MaterialTheme.typography.titleMedium)
+                    Text("Office line calling", style = MaterialTheme.typography.titleMedium)
                     Text("Optional. Rings your phone, then bridges the customer — no SIM auto-dial.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -398,39 +407,68 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
             }
             if (app.cloudEnabled) {
                 Spacer(Modifier.height(12.dp))
+                
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Available for incoming calls", style = MaterialTheme.typography.titleSmall)
+                            Text("Keep app connected in background to receive calls. (Uses more battery)",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = app.cloudIncomingEnabled, onCheckedChange = { vm.setIncomingEnabled(it) })
+                    }
+                }
+
                 OutlinedTextField(
                     app.cloudAgentId, { vm.setCloudAgentId(it) },
-                    label = { Text("Agent ID / extension (from your admin)") },
+                    label = { Text("Your extension number (from your admin)") },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
                 )
+
+                // Advanced SIP settings — hidden by default
+                var showAdvanced by remember { mutableStateOf(false) }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    app.cloudCallerId, { vm.setCloudCallerId(it) },
-                    label = { Text("Caller ID / DID (optional)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    app.cloudSipPassword, { vm.setCloudSipPassword(it) },
-                    label = { Text("SIP password (for in-app calling)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        app.cloudSipServer, { vm.setCloudSipServer(it) },
-                        label = { Text("SIP server (advanced, optional)") },
-                        singleLine = true, modifier = Modifier.weight(2f),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedTextField(
-                        app.cloudSipPort, { vm.setCloudSipPort(it) },
-                        label = { Text("Port") },
-                        singleLine = true, modifier = Modifier.weight(1f),
-                    )
+                TextButton(onClick = { showAdvanced = !showAdvanced }) {
+                    Text(if (showAdvanced) "▲ Hide advanced settings" else "▼ Advanced settings")
                 }
-                Text("Calls open an in-app phone: your extension registers over SIP, then connects you to the customer — real two-way audio, like Zoiper. Leave SIP server blank to use uroperator's default (sip.uroperator.com:6060). Only fill it if your PBX uses a private address (then keep the VPN on).",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (showAdvanced) {
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        app.cloudCallerId, { vm.setCloudCallerId(it) },
+                        label = { Text("Caller ID / DID (optional)") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        app.cloudSipPassword, { vm.setCloudSipPassword(it) },
+                        label = { Text("SIP password") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            app.cloudSipServer, { vm.setCloudSipServer(it) },
+                            label = { Text("SIP server") },
+                            singleLine = true, modifier = Modifier.weight(2f),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedTextField(
+                            app.cloudSipPort, { vm.setCloudSipPort(it) },
+                            label = { Text("Port") },
+                            singleLine = true, modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Text("Leave SIP server blank to use the default. Only change if your admin gives you different settings.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
@@ -677,6 +715,9 @@ fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
             Text("No campaigns yet. Start one from the Campaign tab.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
+            var confirmDeleteId by remember { mutableStateOf<String?>(null) }
+            var confirmDeleteName by remember { mutableStateOf("") }
+
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(app.campaigns, key = { it.campaignId }) { c ->
                     Card(
@@ -695,7 +736,10 @@ fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
-                                IconButton(onClick = { vm.deleteCampaign(c.campaignId) }) {
+                                IconButton(onClick = {
+                                    confirmDeleteId = c.campaignId
+                                    confirmDeleteName = c.name
+                                }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete",
                                         tint = MaterialTheme.colorScheme.error)
                                 }
@@ -715,6 +759,24 @@ fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
                         }
                     }
                 }
+            }
+
+            // Confirmation dialog for campaign deletion
+            if (confirmDeleteId != null) {
+                AlertDialog(
+                    onDismissRequest = { confirmDeleteId = null },
+                    title = { Text("Delete campaign?") },
+                    text = { Text("Are you sure you want to delete \"$confirmDeleteName\"? This will remove all its contacts and call logs. This cannot be undone.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmDeleteId?.let { vm.deleteCampaign(it) }
+                            confirmDeleteId = null
+                        }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmDeleteId = null }) { Text("Cancel") }
+                    },
+                )
             }
         }
     }
@@ -838,7 +900,7 @@ private val DISPOSITIONS = listOf(
     "callback" to "Callback",
     "not_interested" to "Not interested",
     "called" to "Done",
-    "dnc" to "DNC",
+    "dnc" to "Do Not Call",
 )
 
 @OptIn(ExperimentalLayoutApi::class)
