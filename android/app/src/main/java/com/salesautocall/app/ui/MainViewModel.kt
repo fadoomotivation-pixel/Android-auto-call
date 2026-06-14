@@ -150,6 +150,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshSession() {
         viewModelScope.launch {
+            // Wait for the saved session to load before deciding — otherwise a cold
+            // start can flash the login screen and "log out" an active telecaller.
+            Repository.awaitSession()
             val uid = Repository.currentUserId()
             if (uid == null) {
                 set { it.copy(signedIn = false, profile = null) }

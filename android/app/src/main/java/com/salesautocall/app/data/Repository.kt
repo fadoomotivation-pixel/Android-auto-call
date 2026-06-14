@@ -57,6 +57,12 @@ object Repository {
 
     suspend fun signOut() = client.auth.signOut()
 
+    /** Suspends until the persisted session has finished loading from storage,
+     *  so a cold start never mistakes "still loading" for "logged out". */
+    suspend fun awaitSession() {
+        runCatching { client.auth.awaitInitialization() }
+    }
+
     fun currentUserId(): String? = client.auth.currentUserOrNull()?.id
 
     suspend fun myProfile(): Profile? {
