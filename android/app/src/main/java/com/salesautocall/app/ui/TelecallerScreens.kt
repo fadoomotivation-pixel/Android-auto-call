@@ -1,5 +1,6 @@
 package com.salesautocall.app.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,6 +66,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -326,6 +329,112 @@ private fun PipelineBar(counts: List<Pair<Stage, Int>>) {
 // ════════════════════════════════════════════════════════════
 //  DASHBOARD
 // ════════════════════════════════════════════════════════════
+// ── premium dashboard helpers ──
+private fun parseBudgetRupees(s: String?): Double {
+    if (s.isNullOrBlank()) return 0.0
+    val t = s.lowercase().replace(",", "").trim()
+    val num = Regex("[0-9]+(\\.[0-9]+)?").find(t)?.value?.toDoubleOrNull() ?: return 0.0
+    return when {
+        "cr" in t || "crore" in t -> num * 10_000_000
+        "lakh" in t || "lac" in t || Regex("[0-9]\\s*l\\b").containsMatchIn(t) || t.endsWith("l") -> num * 100_000
+        t.endsWith("k") -> num * 1_000
+        else -> num
+    }
+}
+
+private fun formatRupees(v: Double): String = when {
+    v >= 10_000_000 -> "₹%.2f Cr".format(v / 10_000_000)
+    v >= 100_000 -> "₹%.1f L".format(v / 100_000)
+    v >= 1_000 -> "₹%.0f K".format(v / 1_000)
+    v <= 0 -> "₹0"
+    else -> "₹%.0f".format(v)
+}
+
+/** 0-100 composite of calls-vs-goal and connect rate for the Today gauge. */
+private fun perfScore(app: AppState): Int {
+    val callPart = if (app.dailyGoal > 0) (app.todayCalls.toFloat() / app.dailyGoal).coerceIn(0f, 1f) else 0f
+    val connPart = if (app.todayCalls > 0) (app.todayConnected.toFloat() / app.todayCalls).coerceIn(0f, 1f) else 0f
+    return ((callPart * 0.6f + connPart * 0.4f) * 100).toInt()
+}
+
+@Composable
+private fun ScoreGauge(score: Int, modifier: Modifier = Modifier) {
+    val color = when { score >= 75 -> Green; score >= 50 -> Amber; else -> Red }
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    Box(modifier.size(104.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(104.dp)) {
+            val stroke = 11.dp.toPx()
+            drawArc(color = track, startAngle = 135f, sweepAngle = 270f, useCenter = false, style = Stroke(stroke, cap = StrokeCap.Round))
+            drawArc(color = color, startAngle = 135f, sweepAngle = 270f * (score.coerceIn(0, 100) / 100f), useCenter = false, style = Stroke(stroke, cap = StrokeCap.Round))
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("$score", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = color)
+            Text("Score", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun PerfBar(label: String, value: Int, target: Int, color: Color) {
+    val pct = if (target > 0) (value.toFloat() / target).coerceIn(0f, 1f) else 0f
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodySmall)
+            Text("$value / $target", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = color)
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)) {
+            Box(Modifier.fillMaxWidth(pct).height(7.dp).clip(RoundedCornerShape(50)).background(color))
+        }
+    }
+}
+
+@Composable
+private fun PerformanceCard(app: AppState) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            SectionHeader("Today's Performance")
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PerfBar("Calls made", app.todayCalls, app.dailyGoal, MaterialTheme.colorScheme.primary)
+                    PerfBar("Connected", app.todayConnected, app.todayCalls.coerceAtLeast(1), Green)
+                    PerfBar("Follow-ups", app.followUpList.size, (app.followUpList.size).coerceAtLeast(1), Amber)
+                }
+                Spacer(Modifier.width(16.dp))
+                ScoreGauge(perfScore(app))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiInsightCard(onOpenLeads: () -> Unit, hotUncontacted: Int) {
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .background(Brush.linearGradient(listOf(Color(0xFF7C3AED), Color(0xFF2563EB)))).padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("AI Insight", style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    if (hotUncontacted > 0) "You have $hotUncontacted hot leads not contacted yet — call them to lift conversions."
+                    else "You're on top of your hot leads. Keep the follow-ups flowing!",
+                    style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f),
+                )
+                Spacer(Modifier.height(8.dp))
+                Box(Modifier.clip(RoundedCornerShape(50)).background(Color.White).clickable { onOpenLeads() }.padding(horizontal = 14.dp, vertical = 7.dp)) {
+                    Text("View your leads", color = Color(0xFF2563EB), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -> Unit, onNavigate: (String) -> Unit) {
     val app by vm.state.collectAsState()
@@ -335,6 +444,8 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     val due = vm.dueNowCount()
     val newLeads = app.leads.count { it.status in setOf("new", "queued") }
     val stageCounts = STAGES.map { st -> st to app.leads.count { it.status in st.statuses } }
+    val pipelineValue = app.leads.filter { it.status !in setOf("lost", "not_interested", "dnc") }.sumOf { parseBudgetRupees(it.budget) }
+    val hotUncontacted = app.leads.count { it.temperature == "hot" && it.status in setOf("new", "queued") }
 
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -354,9 +465,12 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile("✨", newLeads.toString(), "New leads", Amber, Modifier.weight(1f))
-                StatTile("🔔", app.followUpList.size.toString(), "Follow-ups", Purple, Modifier.weight(1f))
+                StatTile("💰", formatRupees(pipelineValue), "Pipeline value", Green, Modifier.weight(1f))
             }
         }
+
+        // Today's performance (gauge + progress bars)
+        item { PerformanceCard(app) }
 
         // Lead pipeline
         item {
@@ -412,6 +526,9 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 }
             }
         }
+
+        // AI insight
+        item { AiInsightCard(onOpenLeads = onOpenLeads, hotUncontacted = hotUncontacted) }
 
         // Team peek
         item { LeaderboardCard(vm, app, compact = true) }
