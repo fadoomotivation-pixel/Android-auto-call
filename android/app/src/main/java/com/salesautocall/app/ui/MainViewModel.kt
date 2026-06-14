@@ -70,6 +70,8 @@ data class AppState(
     val callSummary: CallSummary = CallSummary(),
     /** id of the call whose recording is currently playing/loading (null = none). */
     val playingCallId: String? = null,
+    /** id of the call whose AI summary is currently being generated (null = none). */
+    val summarizingCallId: String? = null,
     // notes typed during an active cloud call
     val inCallNote: String = "",
     // lead pipeline (all my contacts across campaigns)
@@ -508,6 +510,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     set { it.copy(callList = list, callSummary = summary, callsLoading = false) }
                 }
                 .onFailure { e -> set { it.copy(callsLoading = false, error = e.message ?: "Couldn't load calls") } }
+        }
+    }
+
+    /**
+     * Generates (or fetches the cached) AI summary for a call and merges the
+     * result back into the visible call list so it shows inline.
+     */
+    fun generateSummary(callLogId: String) {
+        if (_state.value.summarizingCallId != null) return
+        viewModelScope.launch {
+            set { it.copy(summarizingCallId = callLogId) }
+            val text = runCatching { Repository.generateSummary(callLogId) }.getOrNull()
+            set { st ->
+                val updated = st.callList.map { c ->
+                    if (c.id == callLogId && text != null)
+                        c.copy(summary = text, summaryStatus = "ready") else c
+                }
+                st.copy(
+                    callList = updated,
+                    summarizingCallId = null,
+                    error = if (text == null) "Couldn't summarize this call yet." else st.error,
+                )
+            }
         }
     }
 

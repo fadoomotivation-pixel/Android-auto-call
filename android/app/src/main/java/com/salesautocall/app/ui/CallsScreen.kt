@@ -1,5 +1,6 @@
 package com.salesautocall.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
@@ -95,7 +97,9 @@ fun CallsScreen(vm: MainViewModel) {
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(rows, key = { it.id ?: "${it.phone}-${it.startedAt}" }) {
                     CallRow(it, playing = it.id != null && it.id == app.playingCallId,
-                        onPlay = { it.id?.let { id -> vm.playRecording(id) } }, onStop = { vm.stopRecording() })
+                        summarizing = it.id != null && it.id == app.summarizingCallId,
+                        onPlay = { it.id?.let { id -> vm.playRecording(id) } }, onStop = { vm.stopRecording() },
+                        onSummarize = { it.id?.let { id -> vm.generateSummary(id) } })
                 }
             }
         }
@@ -130,8 +134,16 @@ private fun SummaryStat(label: String, value: String, color: Color = Color.Unspe
 }
 
 @Composable
-private fun CallRow(c: CallLog, playing: Boolean, onPlay: () -> Unit, onStop: () -> Unit) {
+private fun CallRow(
+    c: CallLog,
+    playing: Boolean,
+    summarizing: Boolean,
+    onPlay: () -> Unit,
+    onStop: () -> Unit,
+    onSummarize: () -> Unit,
+) {
     val context = LocalContext.current
+    var expanded by remember(c.id) { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
         Column {
             Row(
@@ -175,6 +187,59 @@ private fun CallRow(c: CallLog, playing: Boolean, onPlay: () -> Unit, onStop: ()
             if (playing && c.id != null) {
                 AudioPlayer(callLogId = c.id!!, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
+            AiSummarySection(c, summarizing, expanded, onToggle = { expanded = !expanded }, onSummarize = onSummarize)
+        }
+    }
+}
+
+/**
+ * Inline AI call summary: shows the text (collapsible) when ready, a spinner
+ * while it generates (auto after each recording), or a one-tap "Summarize"
+ * action for older recordings that don't have one yet.
+ */
+@Composable
+private fun AiSummarySection(
+    c: CallLog,
+    summarizing: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onSummarize: () -> Unit,
+) {
+    val accent = Color(0xFF6D4DF2)
+    val processing = summarizing || c.summaryStatus == "processing"
+    val hasSummary = !c.summary.isNullOrBlank()
+    // Nothing to show unless there's a recording to summarize.
+    if (c.recordingStatus != "ready" && !hasSummary) return
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        when {
+            hasSummary -> {
+                Row(
+                    Modifier.fillMaxWidth().clickable { onToggle() },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("✨ AI Summary", style = MaterialTheme.typography.labelLarge,
+                        color = accent, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    Text(if (expanded) "Hide" else "Show",
+                        style = MaterialTheme.typography.labelMedium, color = accent)
+                }
+                if (expanded) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(c.summary!!.trim(), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            processing -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = accent)
+                Spacer(Modifier.size(8.dp))
+                Text("Summarizing with AI…", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            else -> Text("✨ AI summary",
+                style = MaterialTheme.typography.labelLarge, color = accent,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { onSummarize() })
         }
     }
 }

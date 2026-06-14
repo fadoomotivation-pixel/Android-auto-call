@@ -4,6 +4,11 @@
 // Headers: x-call-id, x-source ('sip'|'sim'), x-duration
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { hasGroq, summarizeAndStore } from "../_shared/summarize.ts";
+
+// EdgeRuntime.waitUntil keeps a background task alive after the response is
+// returned (declared here so TypeScript is happy outside the Supabase runtime).
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -100,6 +105,15 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: `Drive upload failed: ${JSON.stringify(ud2)}` });
     }
     await admin.from("call_logs").update({ recording_path: ud2.id, recording_status: "ready", recording_seconds: duration, recording_source: source }).eq("id", callId);
+
+    // Fire-and-forget AI summary so the admin gets it automatically. Reuses the
+    // bytes already in memory (no second Drive download) and runs in the
+    // background so the phone's upload isn't blocked on Whisper/Llama.
+    if (hasGroq() && bytes.length > 0) {
+      const task = summarizeAndStore(admin, callId, bytes, source);
+      if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(task);
+      else await task;
+    }
     return json({ ok: true, file_id: ud2.id });
   } catch (e) {
     await admin.from("call_logs").update({ recording_status: "failed" }).eq("id", callId);
