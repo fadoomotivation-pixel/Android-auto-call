@@ -10,8 +10,11 @@ import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
@@ -110,6 +113,21 @@ object Repository {
         )
         if (resp.status.value !in 200..299) return null
         return runCatching { resp.body<ByteArray>() }.getOrNull()
+    }
+
+    /**
+     * Asks the backend to generate (or return the cached) AI summary for a call.
+     * Returns the summary text, or null if it failed / isn't ready.
+     */
+    suspend fun generateSummary(callLogId: String): String? {
+        val resp = client.functions.invoke(
+            function = "call-summary",
+            body = buildJsonObject { put("call_log_id", callLogId) },
+        )
+        if (resp.status.value !in 200..299) return null
+        return runCatching {
+            resp.body<JsonObject>()["summary"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
     }
 
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {
