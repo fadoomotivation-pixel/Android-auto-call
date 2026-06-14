@@ -77,11 +77,22 @@ class AutoDialerService : Service() {
         return START_STICKY
     }
 
+    /** phoneCall + microphone FGS types so SIM-call recording is allowed on Android 14+. */
+    private fun callFgsType(): Int =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R)
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        else 0
+
     private fun startRun() {
         // Best-effort foreground promotion. On some OEMs / Android 14 the phoneCall
         // FGS type can be restricted; never let that crash the app — the dial loop
         // still runs while the app is in the foreground.
-        runCatching { startForeground(NOTIF_ID, buildNotification("Starting auto-dial…")) }
+        runCatching {
+            androidx.core.app.ServiceCompat.startForeground(this, NOTIF_ID, buildNotification("Starting auto-dial…"), callFgsType())
+        }.onFailure {
+            runCatching { startForeground(NOTIF_ID, buildNotification("Starting auto-dial…")) }
+        }
         if (loopJob?.isActive == true) return
         loopJob = scope.launch { runQueue() }
     }
