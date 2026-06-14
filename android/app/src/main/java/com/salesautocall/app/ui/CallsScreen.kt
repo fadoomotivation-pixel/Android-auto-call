@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -51,7 +52,12 @@ fun CallsScreen(vm: MainViewModel) {
     var sub by remember { mutableIntStateOf(0) } // 0 = Recent, 1 = Follow-up
 
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
-        Text("Calls", style = MaterialTheme.typography.headlineSmall)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Calls", style = MaterialTheme.typography.headlineSmall)
+            IconButton(onClick = { vm.loadCalls() }) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            }
+        }
         Spacer(Modifier.height(12.dp))
 
         // ---- date filter ----

@@ -307,6 +307,7 @@ private fun MainShell(vm: MainViewModel) {
                 role = state.profile?.role ?: "salesperson",
                 companyName = state.company?.name,
                 onNavigate = { route ->
+                    vm.clearMessage()
                     scope.launch { drawerState.close() }
                     nav.navigate(route) {
                         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -362,6 +363,7 @@ private fun MainShell(vm: MainViewModel) {
                         NavigationBarItem(
                             selected = route == tab.route,
                             onClick = {
+                                vm.clearMessage()
                                 // Standard bottom-nav behaviour: don't stack tabs and keep
                                 // each tab's state so switching back doesn't reload everything.
                                 nav.navigate(tab.route) {
@@ -515,7 +517,7 @@ private fun AppDrawer(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.onPrimary),
                         contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
@@ -575,7 +577,7 @@ private fun DrawerRow(item: MenuItem, onClick: () -> Unit) {
     ) {
         Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center) {
-            Icon(item.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Icon(item.icon, contentDescription = item.label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {

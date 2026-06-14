@@ -245,7 +245,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                                 modifier = Modifier.size(64.dp).clip(CircleShape).border(2.dp, Color.White, CircleShape))
                         } else {
                             Box(Modifier.size(64.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color.White)
+                                Icon(Icons.Default.CameraAlt, contentDescription = "Camera", tint = Color.White)
                             }
                         }
                         Spacer(Modifier.width(14.dp))
@@ -263,7 +263,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                     a?.locationLabel?.takeIf { it.isNotBlank() }?.let {
                         Spacer(Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(5.dp))
                             Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f))
                         }
@@ -330,10 +330,10 @@ private fun AttendanceHistoryCard(row: Attendance) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             val selfie = decodeSelfie(row.selfie)
             if (selfie != null) {
-                Image(selfie, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)))
+                Image(selfie, contentDescription = "Selfie", contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)))
             } else {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Camera", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 }
             }
             Spacer(Modifier.width(12.dp))
@@ -488,7 +488,7 @@ private fun CalendarItem(f: FollowUp, state: String, onCall: () -> Unit, onDone:
                 Icon(Icons.Default.Call, contentDescription = "Call", tint = OkGreen,
                     modifier = Modifier.size(40.dp).clip(CircleShape).background(OkGreen.copy(alpha = 0.12f)).padding(9.dp).clickable { onCall() })
                 Spacer(Modifier.width(8.dp))
-                Icon(Icons.Default.CheckCircle, contentDescription = "Done", tint = MaterialTheme.colorScheme.primary,
+                Icon(Icons.Default.CheckCircle, contentDescription = "Mark as done", tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)).padding(9.dp).clickable { onDone() })
             }
         }
@@ -564,7 +564,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                 .background(Brush.linearGradient(listOf(Color(0xFF7C3AED), Color(0xFF2563EB)))).padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(46.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI", tint = Color.White)
                     }
                     Spacer(Modifier.width(14.dp))
                     Column {
@@ -616,7 +616,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                 Card(Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Bolt, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Bolt, contentDescription = "Quick action", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
@@ -651,7 +651,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                 answer?.let {
                     Card(Modifier.fillMaxWidth()) {
                         Row(Modifier.padding(14.dp)) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "AI Answer", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(10.dp))
                             Text(it, style = MaterialTheme.typography.bodyMedium)
                         }
