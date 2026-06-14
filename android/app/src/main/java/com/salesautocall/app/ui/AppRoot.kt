@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dialpad
@@ -46,6 +47,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.AlertDialog
@@ -480,9 +483,17 @@ private data class MenuItem(
     val label: String,
     val desc: String,
     val icon: ImageVector,
-    val route: String?,        // null = "coming soon"
+    val route: String?,        // null = "coming soon" / handled by onClick
+    val color: Color,
     val badge: String? = null,
 )
+
+// Premium dark menu palette.
+private val MenuBg = Color(0xFF0C1426)
+private val MenuText = Color(0xFFE8EDF7)
+private val MenuMuted = Color(0xFF8A97AE)
+private val MenuDivider = Color(0xFF1B2740)
+private val Gold = Color(0xFFF5B23E)
 
 @Composable
 private fun AppDrawer(
@@ -495,41 +506,50 @@ private fun AppDrawer(
 ) {
     val context = LocalContext.current
     val items = listOf(
-        MenuItem("Dashboard", "Calls, leads & team performance", Icons.Default.Dashboard, "home"),
-        MenuItem("Leads", "Manage and follow up your leads", Icons.Default.People, "leads"),
-        MenuItem("AI Assistant", "Insights & next-best actions", Icons.Default.AutoAwesome, "ai", "NEW"),
-        MenuItem("Follow-up Calendar", "Day & week callback planner", Icons.Default.CalendarMonth, "calendar"),
-        MenuItem("Follow Ups", "Your due-now worklist", Icons.Default.AccessTime, "followups"),
-        MenuItem("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance"),
-        MenuItem("Calls", "Call history and recordings", Icons.Default.Call, "calls"),
-        MenuItem("Call Lists", "Import lists & auto-dial", Icons.Default.Campaign, "campaign"),
-        MenuItem("Reports & Team", "Leaderboard, talk-time, conversions", Icons.Default.Leaderboard, "team"),
+        MenuItem("Dashboard", "Calls, leads & team performance", Icons.Default.Dashboard, "home", Color(0xFF3B82F6)),
+        MenuItem("Leads", "Manage and follow up your leads", Icons.Default.People, "leads", Color(0xFF22C55E)),
+        MenuItem("AI Assistant", "Insights & next-best actions", Icons.Default.AutoAwesome, "ai", Color(0xFF8B5CF6), "NEW"),
+        MenuItem("Follow-up Calendar", "Day & week callback planner", Icons.Default.CalendarMonth, "calendar", Color(0xFFF59E0B)),
+        MenuItem("Follow Ups", "Your due-now worklist", Icons.Default.AccessTime, "followups", Color(0xFF14B8A6)),
+        MenuItem("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance", Color(0xFF10B981)),
+        MenuItem("Calls", "Call history and recordings", Icons.Default.Call, "calls", Color(0xFFEC4899)),
+        MenuItem("Call Lists", "Import lists & auto-dial", Icons.Default.Campaign, "campaign", Color(0xFFEF4444)),
+        MenuItem("Reports & Team", "Leaderboard, talk-time, conversions", Icons.Default.Leaderboard, "team", Color(0xFFA855F7)),
+        MenuItem("Investor Videos", "AI-generated property videos", Icons.Default.Videocam, null, Color(0xFFF43F5E), "Soon"),
+        MenuItem("Brochures", "Smart brochures in one tap", Icons.Default.Description, null, Color(0xFF06B6D4), "Soon"),
     )
 
-    ModalDrawerSheet(Modifier.fillMaxWidth(0.84f)) {
+    ModalDrawerSheet(
+        Modifier.fillMaxWidth(0.86f),
+        drawerContainerColor = MenuBg,
+        drawerContentColor = MenuText,
+    ) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            // Brand header
+            // Brand header — gradient band with a Premium chip.
             Column(
                 Modifier.fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.primary)
+                    .background(Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF0C1426))))
                     .padding(20.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.onPrimary),
+                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF2563EB)),
                         contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = Color.White, modifier = Modifier.size(24.dp))
                     }
                     Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
-                        Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+                    Column(Modifier.weight(1f)) {
+                        Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
+                    }
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(Gold.copy(alpha = 0.2f)).padding(horizontal = 9.dp, vertical = 3.dp)) {
+                        Text("Premium", style = MaterialTheme.typography.labelSmall, color = Gold, fontWeight = FontWeight.Bold)
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                Text("Everything you need. One app.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f))
+                Text("Everything you need. One app.", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f))
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             items.forEach { item ->
                 DrawerRow(item) {
                     if (item.route != null) onNavigate(item.route)
@@ -537,33 +557,36 @@ private fun AppDrawer(
                 }
             }
 
-            Spacer(Modifier.height(4.dp))
-            DrawerRow(MenuItem("Settings", "Calling, goals & cloud setup", Icons.Default.Settings, null)) { onSettings() }
-            DrawerRow(MenuItem("Help & Support", "Get help using the app", Icons.AutoMirrored.Filled.HelpOutline, null)) {
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(MenuDivider))
+            Spacer(Modifier.height(8.dp))
+            DrawerRow(MenuItem("Settings", "Calling, goals & cloud setup", Icons.Default.Settings, null, Color(0xFF64748B))) { onSettings() }
+            DrawerRow(MenuItem("Help & Support", "Get help using the app", Icons.AutoMirrored.Filled.HelpOutline, null, Color(0xFF0EA5E9))) {
                 android.widget.Toast.makeText(context, "Help & Support — coming soon", android.widget.Toast.LENGTH_SHORT).show()
             }
 
             Spacer(Modifier.height(8.dp))
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(MenuDivider))
             // Profile footer
             Row(
                 Modifier.fillMaxWidth().clickable { onSignOut() }.padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-                    Text(userName.trim().take(1).uppercase().ifBlank { "?" }, color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)))), contentAlignment = Alignment.Center) {
+                    Text(userName.trim().take(1).uppercase().ifBlank { "?" }, color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(userName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(userName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MenuText)
                     Text(
                         buildString {
-                            append(if (role == "admin") "Admin" else "Telecaller")
+                            append(if (role == "admin") "Super Admin" else "Telecaller")
                             companyName?.let { append(" · "); append(it) }
                         },
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall, color = MenuMuted,
                     )
                 }
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = MenuMuted)
             }
         }
     }
@@ -572,22 +595,27 @@ private fun AppDrawer(
 @Composable
 private fun DrawerRow(item: MenuItem, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(item.color.copy(alpha = 0.18f)),
             contentAlignment = Alignment.Center) {
-            Icon(item.icon, contentDescription = item.label, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Icon(item.icon, contentDescription = item.label, tint = item.color, modifier = Modifier.size(21.dp))
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(item.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-            Text(item.desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        }
-        item.badge?.let {
-            Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondaryContainer).padding(horizontal = 8.dp, vertical = 2.dp)) {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(item.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MenuText)
+                item.badge?.let {
+                    Spacer(Modifier.width(8.dp))
+                    val badgeColor = if (it == "Soon") MenuMuted else item.color
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(badgeColor.copy(alpha = 0.2f)).padding(horizontal = 7.dp, vertical = 1.dp)) {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = badgeColor, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
+            Text(item.desc, style = MaterialTheme.typography.bodySmall, color = MenuMuted, maxLines = 1)
         }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MenuMuted, modifier = Modifier.size(18.dp))
     }
 }
