@@ -72,6 +72,18 @@ service-bearer auth.
 ## LOG (newest first — prepend new entries)
 
 ### 2026-06-15 — Claude Code
+- WHAT: WhatsApp Cloud API — backend slice. One company number, shared team inbox;
+  every in/out message logged + tagged by rep + lead for super-admin oversight.
+- FILES: supabase/migrations/0022_whatsapp_cloud_api.sql (whatsapp_integrations,
+  whatsapp_messages, wa_match_contact), supabase/functions/whatsapp-webhook (verify_jwt OFF),
+  supabase/functions/whatsapp-send.
+- WHY: super admin loses grip when reps WhatsApp from personal phones.
+- BUILD: supabase-only PR (no Android CI). Functions deployed.
+- NEXT/NOTE: still to build — admin "Conversations" screen + app send-via-API + in-app
+  chat view + admin connect-WhatsApp setup form. Needs the company's Meta credentials
+  (phone_number_id, access_token, verify_token) in whatsapp_integrations to go live.
+
+### 2026-06-15 — Claude Code
 - WHAT: Built the full free-AI suite + this sync log. Manager AI coach nightly automation
   verified end-to-end (real digest generated for 2026-06-11).
 - FILES: supabase/functions/{call-summary,recording-upload,lead-insights,manager-digest,
