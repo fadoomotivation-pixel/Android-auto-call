@@ -23,11 +23,11 @@ export default async function LeadsPage() {
 
   const { data: salespeople } = await supabase
     .from("profiles")
-    .select("id, full_name")
+    .select("id, full_name, territory")
     .eq("company_id", profile.company_id)
     .eq("role", "salesperson")
     .order("full_name")
-    .returns<{ id: string; full_name: string | null }[]>();
+    .returns<{ id: string; full_name: string | null; territory: string | null }[]>();
 
   return (
     <>

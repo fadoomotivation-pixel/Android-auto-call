@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ImportLeads } from "./ImportLeads";
 
-type Sp = { id: string; full_name: string | null };
+type Sp = { id: string; full_name: string | null; territory: string | null };
 type Lead = {
   id: string;
   name: string | null;
@@ -13,6 +13,7 @@ type Lead = {
   status: string;
   salesperson_id: string | null;
   budget: string | null;
+  territory: string | null;
   created_at: string;
 };
 
@@ -48,7 +49,7 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
   const buildQuery = useCallback(() => {
     let q = supabase
       .from("contacts")
-      .select("id, name, phone, company_name, status, salesperson_id, budget, created_at")
+      .select("id, name, phone, company_name, status, salesperson_id, budget, territory, created_at")
       .order("created_at", { ascending: false });
     if (tab === "unassigned") {
       q = q.is("salesperson_id", null);
@@ -160,6 +161,54 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
     await refreshStats();
   }
 
+  async function autoAssignByTerritory() {
+    setBusy(true);
+    // Fetch all unassigned leads that have a territory
+    const { data: unassigned } = await supabase
+      .from("contacts")
+      .select("id, territory")
+      .is("salesperson_id", null)
+      .not("territory", "is", null);
+
+    if (!unassigned || unassigned.length === 0) {
+      setBusy(false);
+      setMsg("No unassigned leads with a specified territory found.");
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
+
+    let assignedCount = 0;
+    const updates: { id: string; salesperson_id: string }[] = [];
+
+    // For each lead, find a matching salesperson
+    // To balance load, we could track assignment counts, but for simplicity we pick randomly among matching
+    for (const lead of unassigned) {
+      if (!lead.territory) continue;
+      const t = lead.territory.trim().toLowerCase();
+      const matches = salespeople.filter(sp => sp.territory && sp.territory.trim().toLowerCase() === t);
+      if (matches.length > 0) {
+        const chosen = matches[Math.floor(Math.random() * matches.length)];
+        updates.push({ id: lead.id, salesperson_id: chosen.id });
+        assignedCount++;
+      }
+    }
+
+    if (updates.length > 0) {
+      for (const part of chunk(updates, 500)) {
+        // Upsert by ID to update the salesperson_id
+        await supabase.from("contacts").upsert(part, { onConflict: "id" });
+      }
+      setMsg(`Auto-assigned ${assignedCount} leads by territory.`);
+      await load(true);
+      await refreshStats();
+    } else {
+      setMsg("No telecallers found matching the leads' territories.");
+    }
+    
+    setBusy(false);
+    setTimeout(() => setMsg(null), 4000);
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -221,9 +270,14 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
           Assign selected ({selected.size})
         </button>
         {tab === "unassigned" && (
-          <button className="link" style={{ color: "var(--accent)" }} disabled={busy || !assignTo || stats.unassigned === 0} onClick={assignAllUnassigned}>
-            Assign all unassigned ({stats.unassigned})
-          </button>
+          <>
+            <button className="link" style={{ color: "var(--accent)" }} disabled={busy || !assignTo || stats.unassigned === 0} onClick={assignAllUnassigned}>
+              Assign all unassigned ({stats.unassigned})
+            </button>
+            <button className="link" style={{ color: "var(--success)" }} disabled={busy || stats.unassigned === 0} onClick={autoAssignByTerritory}>
+              ✨ Auto-assign by Territory
+            </button>
+          </>
         )}
         {tab === "assigned" && selected.size > 0 && (
           <button className="link" style={{ color: "var(--muted)" }} disabled={busy} onClick={unassignSelected}>
@@ -255,6 +309,7 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
                 <div style={{ color: "var(--muted)", fontSize: 13 }}>
                   {l.phone}
                   {l.company_name ? ` · ${l.company_name}` : ""}
+                  {l.territory ? ` · 📍 ${l.territory}` : ""}
                   {l.budget ? ` · ${l.budget}` : ""}
                 </div>
                 {tab === "assigned" && <div style={{ color: "var(--muted)", fontSize: 12 }}>→ {nameOf(l.salesperson_id)}</div>}

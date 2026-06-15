@@ -9,10 +9,11 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
   const [dateRange, setDateRange] = useState("this_week");
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
-  const [columns, setColumns] = useState<{key: string, label: string}[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function generateReport() {
     setLoading(true);
+    setErrorMsg(null);
     let startDate = new Date();
     let endDate = new Date();
     
@@ -143,6 +144,11 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
       setData(stats);
     }
 
+    if (stats.length === 0) {
+      setErrorMsg("No data found for this date range.");
+      setData([]);
+    }
+
     setLoading(false);
   }
 
@@ -203,6 +209,12 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
           {loading ? "Generating..." : "Generate Report"}
         </button>
       </div>
+
+      {errorMsg && (
+        <div className="card" style={{ background: "#fef2f2", color: "#991b1b", border: "1px solid #f87171", marginBottom: 24 }}>
+          {errorMsg}
+        </div>
+      )}
 
       {/* Results (Printable Area) */}
       {data.length > 0 && (
