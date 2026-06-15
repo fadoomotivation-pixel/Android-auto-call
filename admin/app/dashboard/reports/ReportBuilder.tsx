@@ -9,6 +9,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
   const [dateRange, setDateRange] = useState("this_week");
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
+  const [columns, setColumns] = useState<{key: string, label: string}[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function generateReport() {
