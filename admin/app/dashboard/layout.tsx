@@ -52,6 +52,7 @@ export default async function DashboardLayout({
         <NavLink href="/dashboard/contacts" label="Contacts" />
         <NavLink href="/dashboard/calls" label="Call logs" />
         <NavLink href="/dashboard/recordings" label="Recordings" />
+        {profile?.role === "admin" && <NavLink href="/dashboard/reports" label="📊 Reports" />}
         {isSuper && (
           <>
             <div style={{ margin: "14px 6px 4px", fontSize: 11, letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" }}>
