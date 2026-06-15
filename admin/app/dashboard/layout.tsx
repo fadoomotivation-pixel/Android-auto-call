@@ -47,6 +47,7 @@ export default async function DashboardLayout({
         {profile?.role === "admin" && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/cloud-calling" label="☁️ Cloud calling" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/whatsapp" label="💬 WhatsApp" />}
+        {profile?.role === "admin" && <NavLink href="/dashboard/facebook" label="📱 Facebook Leads" />}
         <NavLink href="/dashboard/contacts" label="Contacts" />
         <NavLink href="/dashboard/calls" label="Call logs" />
         <NavLink href="/dashboard/recordings" label="Recordings" />
