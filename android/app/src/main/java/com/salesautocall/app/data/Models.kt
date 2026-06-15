@@ -80,6 +80,9 @@ data class Contact(
     val temperature: String? = null,
     /** Free-text budget the rep captured (e.g. "₹45L", "1.2 Cr"). */
     val budget: String? = null,
+    /** AI-suggested next step for this lead (one short line); null = not scored. */
+    @SerialName("ai_next_action") val aiNextAction: String? = null,
+    @SerialName("ai_scored_at") val aiScoredAt: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
 )
 

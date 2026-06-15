@@ -648,6 +648,16 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         Text(if (selectMode) "Tap leads to add them to a campaign" else "Manage and follow up with your leads",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    if (!selectMode) {
+                        if (app.aiScoringLeads) {
+                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Indigo)
+                            Spacer(Modifier.width(8.dp))
+                        } else {
+                            IconButton(onClick = { vm.scoreLeads() }) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = "AI score leads", tint = Indigo)
+                            }
+                        }
+                    }
                     IconButton(onClick = { vm.loadLeads() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
@@ -840,6 +850,20 @@ private fun LeadCard(
                 Spacer(Modifier.weight(1f))
                 c.notes?.takeIf { it.isNotBlank() }?.let {
                     Text("📝", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            // AI next-best-action (from the AI lead-scoring run)
+            c.aiNextAction?.takeIf { it.isNotBlank() }?.let { action ->
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        .background(Indigo.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Indigo, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(action, style = MaterialTheme.typography.bodySmall, color = Indigo, fontWeight = FontWeight.Medium)
                 }
             }
 
