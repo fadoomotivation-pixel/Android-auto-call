@@ -86,6 +86,9 @@ data class Contact(
     @SerialName("created_at") val createdAt: String? = null,
 )
 
+/** One turn in the in-app AI assistant chat (local only). */
+data class ChatMsg(val role: String, val content: String)
+
 /** One WhatsApp message (either direction) shown in the in-app chat thread. */
 @Serializable
 data class WhatsAppMessage(

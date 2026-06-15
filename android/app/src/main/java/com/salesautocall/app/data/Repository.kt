@@ -12,6 +12,8 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -165,6 +167,32 @@ object Repository {
         val obj = runCatching { resp.body<JsonObject>() }.getOrNull()
         val ok = obj?.get("ok")?.jsonPrimitive?.booleanOrNull == true
         return if (ok) null else obj?.get("error")?.jsonPrimitive?.contentOrNull ?: "Couldn't send"
+    }
+
+    // ---------- AI assistant chat ----------
+
+    /** Asks the AI sales coach. Returns the reply text, or null on failure. */
+    suspend fun assistantChat(messages: List<ChatMsg>, lead: Contact? = null): String? {
+        val payload = buildJsonObject {
+            put(
+                "messages",
+                buildJsonArray {
+                    messages.forEach { add(buildJsonObject { put("role", it.role); put("content", it.content) }) }
+                },
+            )
+            lead?.let { l ->
+                put("lead", buildJsonObject {
+                    put("name", l.name ?: "")
+                    put("status", l.status ?: "")
+                    put("temperature", l.temperature ?: "")
+                })
+            }
+        }
+        val resp = client.functions.invoke("assistant-chat", payload)
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull()
+        return if (obj?.get("ok")?.jsonPrimitive?.booleanOrNull == true) {
+            obj["reply"]?.jsonPrimitive?.contentOrNull
+        } else null
     }
 
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {

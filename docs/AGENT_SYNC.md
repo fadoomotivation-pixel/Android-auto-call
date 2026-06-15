@@ -72,6 +72,20 @@ service-bearer auth.
 ## LOG (newest first — prepend new entries)
 
 ### 2026-06-15 — Claude Code
+- WHAT: (1) WhatsApp super-admin company picker + default rep for unknown inbound
+  (migration 0023, webhook update, admin page). (2) Real AI assistant chat for
+  telecallers — replaced the canned Q&A on the AI Assistant screen with a live
+  Groq-backed chat coach (objections, pitch, follow-up messages). Closed backwards PR #36.
+- FILES: supabase/functions/assistant-chat (new), supabase/migrations/0023*,
+  whatsapp-webhook; admin/app/dashboard/whatsapp/{page,CompanyPicker,WhatsAppSetup};
+  android .../data/{Models.kt ChatMsg, Repository.kt assistantChat},
+  .../ui/MainViewModel.kt (askAssistant), .../ui/MoreScreens.kt (AiAssistantScreen chat).
+- WHY: easy WhatsApp assignment for super admin; in-app AI help for reps.
+- BUILD: AI-assistant touches android/** -> verify CI. WhatsApp slice was supabase/admin only.
+- NEXT/NOTE: assistant uses free Groq (GROQ_API_KEY). Could later feed it live lead
+  context from the open lead. WhatsApp templates still pending.
+
+### 2026-06-15 — Claude Code
 - WHAT: WhatsApp Cloud API — app slice. In-app chat dialog from the Leads
   WhatsApp button; sends through the company number (tracked), falls back to the
   phone's WhatsApp app if not connected. Admin slice (setup + conversations) also done.

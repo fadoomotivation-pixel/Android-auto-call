@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -550,8 +552,6 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
     val siteVisits = app.leads.filter { it.status == "site_visit" }
     val top = app.leaderboard.maxByOrNull { it.leads }
 
-    var answer by remember { mutableStateOf<String?>(null) }
-
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -631,32 +631,73 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
         }
 
-        item { Text("Ask the assistant", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
         item {
-            val qa = listOf(
-                "Which leads should I call first?" to "Start with your ${hotNew.size} hot leads that were never contacted, then clear ${overdueFu.size} overdue callbacks.",
-                "Who's my top performer today?" to (top?.let { "${it.fullName ?: "Top rep"} — ${it.leads} leads, ${it.connected} connects." } ?: "No team activity recorded yet today."),
-                "How am I tracking on calls?" to "You've made ${app.todayCalls} of your ${app.dailyGoal} target calls today.",
-                "What's stuck in my pipeline?" to "${siteVisits.size} leads are at site-visit and ${interested.size} are interested — push these toward a proposal.",
-            )
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    qa.forEach { (q, a) ->
-                        Box(Modifier.clip(RoundedCornerShape(50)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
-                            .clickable { answer = a }.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            Text(q, style = MaterialTheme.typography.labelMedium)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Ask the assistant", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                if (app.assistantMessages.isNotEmpty()) {
+                    TextButton(onClick = { vm.clearAssistant() }) { Text("Clear") }
+                }
+            }
+        }
+
+        // Starter prompts — tapping one sends it straight to the AI coach.
+        if (app.assistantMessages.isEmpty()) {
+            item {
+                val prompts = listOf(
+                    "Which leads should I call first?",
+                    "Customer says price is too high — what do I say?",
+                    "Write a short WhatsApp follow-up message",
+                    "How do I get a hesitant buyer to book a site visit?",
+                )
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    prompts.forEach { q ->
+                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                            .clickable { vm.askAssistant(q) }.padding(horizontal = 14.dp, vertical = 12.dp)) {
+                            Text(q, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
-                answer?.let {
-                    Card(Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(14.dp)) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = "AI Answer", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Text(it, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
+            }
+        }
+
+        // Conversation.
+        items(app.assistantMessages) { msg ->
+            val mine = msg.role == "user"
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
+                Box(
+                    Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(14.dp))
+                        .background(if (mine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Text(msg.content, style = MaterialTheme.typography.bodyMedium,
+                        color = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
                 }
+            }
+        }
+        if (app.assistantThinking) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Thinking…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        // Composer.
+        item {
+            var draft by remember { mutableStateOf("") }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    draft, { draft = it },
+                    placeholder = { Text("Ask anything — pitch, objection, message…") },
+                    modifier = Modifier.weight(1f), maxLines = 4,
+                )
+                Button(
+                    onClick = { vm.askAssistant(draft); draft = "" },
+                    enabled = draft.isNotBlank() && !app.assistantThinking,
+                ) { Text("Send") }
             }
         }
     }
