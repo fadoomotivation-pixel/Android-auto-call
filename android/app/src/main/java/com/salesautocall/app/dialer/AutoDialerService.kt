@@ -77,11 +77,22 @@ class AutoDialerService : Service() {
         return START_STICKY
     }
 
+    /** phoneCall + microphone FGS types so SIM-call recording is allowed on Android 14+. */
+    private fun callFgsType(): Int =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R)
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        else 0
+
     private fun startRun() {
         // Best-effort foreground promotion. On some OEMs / Android 14 the phoneCall
         // FGS type can be restricted; never let that crash the app — the dial loop
         // still runs while the app is in the foreground.
-        runCatching { startForeground(NOTIF_ID, buildNotification("Starting auto-dial…")) }
+        runCatching {
+            androidx.core.app.ServiceCompat.startForeground(this, NOTIF_ID, buildNotification("Starting auto-dial…"), callFgsType())
+        }.onFailure {
+            runCatching { startForeground(NOTIF_ID, buildNotification("Starting auto-dial…")) }
+        }
         if (loopJob?.isActive == true) return
         loopJob = scope.launch { runQueue() }
     }
@@ -234,18 +245,29 @@ class AutoDialerService : Service() {
         ) return false
 
         return try {
-            val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone")).apply {
+            fun buildIntent(withPackage: Boolean) = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone")).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 phoneAccountForSlot(simSlot)?.let {
                     putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)
                 }
+                // Force the device's default phone app so a SIP app (e.g. ZoiPer) can't
+                // intercept the SIM call with an "Open with" chooser.
+                if (withPackage) systemDialerPackage()?.let { pkg -> setPackage(pkg) }
             }
-            startActivity(intent)
+            try {
+                startActivity(buildIntent(true))
+            } catch (_: android.content.ActivityNotFoundException) {
+                startActivity(buildIntent(false))
+            }
             true
         } catch (e: SecurityException) {
             false
         }
     }
+
+    private fun systemDialerPackage(): String? = runCatching {
+        (getSystemService(Context.TELECOM_SERVICE) as TelecomManager).defaultDialerPackage
+    }.getOrNull()
 
     private fun phoneAccountForSlot(simSlot: Int?): android.telecom.PhoneAccountHandle? {
         if (simSlot == null) return null

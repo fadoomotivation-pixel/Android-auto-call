@@ -34,70 +34,85 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun SoftphoneScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
-    val number = app.cloudCallNumber ?: return
+    val number = app.cloudCallNumber
     var muted by remember { mutableStateOf(false) }
     var speaker by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(vm.recordingAllowed()) }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            Modifier.fillMaxSize().padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                "Cloud call", style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(16.dp))
-            Text(number, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(10.dp))
-            Text(
-                app.cloudCallStatus.ifBlank { "Connecting…" },
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.height(40.dp))
+        if (number != null) {
+            Column(
+                Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    "Cloud call", style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(number, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    app.cloudCallStatus.ifBlank { "Connecting…" },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(40.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = {
-                    muted = !muted
-                    vm.setMuted(muted)
-                }) { Text(if (muted) "Unmute" else "Mute") }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = {
+                        muted = !muted
+                        vm.setMuted(muted)
+                    }) { Text(if (muted) "Unmute" else "Mute") }
 
-                Spacer(Modifier.width(12.dp))
-
-                OutlinedButton(onClick = {
-                    speaker = !speaker
-                    vm.setSpeaker(speaker)
-                }) { Text(if (speaker) "Speaker ✓" else "Speaker") }
-
-                if (vm.recordingAllowed()) {
                     Spacer(Modifier.width(12.dp))
-                    OutlinedButton(onClick = { recording = vm.toggleRecording() }) {
-                        Text(if (recording) "● Rec" else "Record")
+
+                    OutlinedButton(onClick = {
+                        speaker = !speaker
+                        vm.setSpeaker(speaker)
+                    }) { Text(if (speaker) "Speaker ✓" else "Speaker") }
+
+                    if (vm.recordingAllowed()) {
+                        Spacer(Modifier.width(12.dp))
+                        OutlinedButton(onClick = { recording = vm.toggleRecording() }) {
+                            Text(if (recording) "● Rec" else "Record")
+                        }
                     }
                 }
+
+                Spacer(Modifier.height(24.dp))
+
+                // In-call notes — saved onto this call's log when you hang up.
+                OutlinedTextField(
+                    value = app.inCallNote,
+                    onValueChange = { vm.setInCallNote(it) },
+                    label = { Text("Notes") },
+                    placeholder = { Text("Jot down what was discussed…") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+
+                Spacer(Modifier.height(20.dp))
+
+                Button(
+                    onClick = { vm.endCloudCall() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD7263D)),
+                ) { Text("Hang up") }
             }
-
-            Spacer(Modifier.height(24.dp))
-
-            // In-call notes — saved onto this call's log when you hang up.
-            OutlinedTextField(
-                value = app.inCallNote,
-                onValueChange = { vm.setInCallNote(it) },
-                label = { Text("Notes") },
-                placeholder = { Text("Jot down what was discussed…") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-            )
-
-            Spacer(Modifier.height(20.dp))
-
-            Button(
-                onClick = { vm.endCloudCall() },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD7263D)),
-            ) { Text("Hang up") }
+        } else {
+            // cloudCallNumber became null — call is ending, show a graceful state.
+            Column(
+                Modifier.fillMaxSize().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    "Ending call…",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

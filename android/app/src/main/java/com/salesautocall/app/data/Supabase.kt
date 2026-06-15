@@ -24,7 +24,12 @@ object Supabase {
                 ignoreUnknownKeys = true
                 coerceInputValues = true
             })
-            install(Auth)
+            install(Auth) {
+                // Keep telecallers signed in until they explicitly log out:
+                // load the saved session on launch and silently refresh the token.
+                autoLoadFromStorage = true
+                alwaysAutoRefresh = true
+            }
             install(Postgrest)
             install(Functions)
         }

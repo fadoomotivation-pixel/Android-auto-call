@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import type { CallLog, Profile } from "@/lib/types";
+import { CallSummary } from "./CallSummary";
 import { RecordingPlayer } from "./RecordingPlayer";
-import { RecordingToggle } from "./RecordingToggle";
+import { RecordingSetup } from "./RecordingSetup";
 
 function fmt(seconds: number | null) {
   if (!seconds) return "—";
@@ -21,7 +22,9 @@ export default async function RecordingsPage() {
     supabase.from("profiles").select("role, company_id").eq("id", user!.id).maybeSingle<{ role: string; company_id: string | null }>(),
     supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
   ]);
-  const canDelete = me?.role === "admin" || !!pa;
+  // Only the super admin may delete recordings (companies/telecallers can listen).
+  const canDelete = !!pa;
+  const canSummarize = me?.role === "admin" || !!pa;
 
   // Company admins get a recording on/off switch for their company.
   let company: { id: string; recording_enabled: boolean } | null = null;
@@ -55,7 +58,7 @@ export default async function RecordingsPage() {
         Recordings auto-delete after 30 days.
       </p>
 
-      {company && <RecordingToggle companyId={company.id} enabled={company.recording_enabled} />}
+      {company && <RecordingSetup companyId={company.id} enabled={company.recording_enabled} />}
 
       {error && <div className="error">{error.message}</div>}
 
@@ -71,6 +74,7 @@ export default async function RecordingsPage() {
               <th>Length</th>
               <th>Source</th>
               <th>Recording</th>
+              {canSummarize && <th>AI summary</th>}
             </tr>
           </thead>
           <tbody>
@@ -84,6 +88,11 @@ export default async function RecordingsPage() {
                 <td>
                   <RecordingPlayer callId={c.id} canDelete={canDelete} />
                 </td>
+                {canSummarize && (
+                  <td>
+                    <CallSummary callId={c.id} initial={c.summary} />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

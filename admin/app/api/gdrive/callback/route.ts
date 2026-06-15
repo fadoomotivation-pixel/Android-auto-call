@@ -7,20 +7,31 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const company = url.searchParams.get("state") ?? "";
-  const back = new URL("/dashboard/platform/storage", url.origin);
-
-  if (!code || !company) {
-    back.searchParams.set("err", "missing code/company");
-    return NextResponse.redirect(back, { status: 303 });
-  }
+  const state = url.searchParams.get("state") ?? "";
+  const isPlatform = state === "platform";
+  const company = isPlatform ? "" : state;
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(new URL("/login", url.origin), { status: 303 });
   const { data: pa } = await supabase
     .from("platform_admins").select("user_id").eq("user_id", user.id).maybeSingle();
-  if (!pa) return new NextResponse("Super admin only", { status: 403 });
+
+  // Super admin → platform storage page; company admin → recordings.
+  const { data: me } = await supabase
+    .from("profiles").select("role, company_id").eq("id", user.id).maybeSingle<{ role: string; company_id: string | null }>();
+  const back = new URL(pa ? "/dashboard/platform/storage" : "/dashboard/recordings", url.origin);
+
+  if (!code || !state) {
+    back.searchParams.set("err", "missing code/state");
+    return NextResponse.redirect(back, { status: 303 });
+  }
+  // Authorize: platform → super admin; company → super admin or that company's admin.
+  if (isPlatform) {
+    if (!pa) return new NextResponse("Super admin only", { status: 403 });
+  } else if (!pa && !(me?.role === "admin" && me.company_id === company)) {
+    return new NextResponse("Not authorized", { status: 403 });
+  }
 
   const clientId = process.env.GOOGLE_CLIENT_ID!;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
@@ -62,15 +73,26 @@ export async function GET(request: Request) {
       email = (await me.json()).email ?? "";
     } catch (_) { /* optional */ }
 
-    // 4. Persist (super-admin RLS allows the write).
-    await supabase.from("storage_integrations").upsert({
-      company_id: company,
-      provider: "gdrive",
-      refresh_token: tok.refresh_token,
-      folder_id: folderId || null,
-      account_email: email || null,
-      updated_at: new Date().toISOString(),
-    });
+    // 4. Persist (RLS allows: platform → super admin; company → its admin/super).
+    if (isPlatform) {
+      await supabase.from("platform_storage").upsert({
+        id: true,
+        provider: "gdrive",
+        refresh_token: tok.refresh_token,
+        folder_id: folderId || null,
+        account_email: email || null,
+        updated_at: new Date().toISOString(),
+      });
+    } else {
+      await supabase.from("storage_integrations").upsert({
+        company_id: company,
+        provider: "gdrive",
+        refresh_token: tok.refresh_token,
+        folder_id: folderId || null,
+        account_email: email || null,
+        updated_at: new Date().toISOString(),
+      });
+    }
 
     back.searchParams.set("ok", "1");
     return NextResponse.redirect(back, { status: 303 });

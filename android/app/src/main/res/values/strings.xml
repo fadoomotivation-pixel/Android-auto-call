@@ -2,4 +2,6 @@
     <string name="app_name">Call Pro AI</string>
     <string name="dialer_channel_name">Auto Dialer</string>
     <string name="dialer_channel_desc">Shows progress while auto-dialing your contact queue.</string>
+    <string name="followup_channel_name">Follow-up reminders</string>
+    <string name="followup_channel_desc">Alerts you the moment a scheduled callback is due.</string>
 </resources>

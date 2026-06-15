@@ -7,6 +7,8 @@
     <!-- In-app softphone (WebRTC) audio -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Attendance selfie capture (TakePicturePreview) -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- Place calls programmatically (auto-dialer) -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -18,9 +20,17 @@
     <!-- Foreground service that runs the auto-dial queue -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <!-- Required so the call services may use the mic (record the SIM call) on Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Required so the phoneCall foreground-service type is allowed on Android 14+ -->
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Exact reminders for scheduled follow-up callbacks (degrades to inexact if denied) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!-- GPS-tagged attendance punch-in (selfie uses CAMERA perm above + location) -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
         android:name=".SalesAutoCallApp"
@@ -46,12 +56,31 @@
         <service
             android:name=".dialer.AutoDialerService"
             android:exported="false"
-            android:foregroundServiceType="phoneCall" />
+            android:foregroundServiceType="phoneCall|microphone" />
 
         <service
             android:name=".dialer.ManualCallService"
             android:exported="false"
+            android:foregroundServiceType="phoneCall|microphone" />
+
+        <service
+            android:name=".sip.SipBackgroundService"
+            android:exported="false"
             android:foregroundServiceType="phoneCall" />
+
+        <service
+            android:name=".sip.SalesConnectionService"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+
+        <!-- Fires local notifications when a scheduled follow-up callback is due -->
+        <receiver
+            android:name=".notify.FollowUpAlarmReceiver"
+            android:exported="false" />
 
     </application>
 </manifest>

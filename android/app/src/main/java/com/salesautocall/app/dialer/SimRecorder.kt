@@ -10,10 +10,19 @@ import androidx.core.app.ActivityCompat
 import java.io.File
 
 /**
- * Best-effort SIM-call recorder. Android restricts capturing call audio since
- * Android 10, so this records through the microphone with the loudspeaker forced
- * on, which picks up both sides. Quality and availability are device-dependent —
- * every call here is wrapped so a failure never disrupts the dial loop.
+ * Best-effort SIM-call recorder.
+ *
+ * Strategy (first that works wins):
+ *   1. VOICE_CALL        — true both-sides (up+down link), native quality, NO
+ *                          speakerphone. Allowed on many OEMs (MIUI/Xiaomi,
+ *                          Realme, Oppo, Vivo …); throws on locked-down stock.
+ *   2. VOICE_RECOGNITION — clean mic capture, no speakerphone.
+ *   3. VOICE_COMMUNICATION + speakerphone — mic hears the remote via loudspeaker.
+ *   4. MIC + speakerphone — last resort.
+ *
+ * Android restricts call-audio capture since Android 10, so the remote party
+ * may only be captured on permissive devices — every step is wrapped so a
+ * failure never disrupts the dial loop.
  */
 object SimRecorder {
 
@@ -21,6 +30,15 @@ object SimRecorder {
     private var outputPath: String? = null
     private var audioManager: AudioManager? = null
     private var prevSpeaker = false
+
+    private data class Attempt(val source: Int, val speakerphone: Boolean)
+
+    private val ATTEMPTS = listOf(
+        Attempt(MediaRecorder.AudioSource.VOICE_CALL, false),
+        Attempt(MediaRecorder.AudioSource.VOICE_RECOGNITION, false),
+        Attempt(MediaRecorder.AudioSource.VOICE_COMMUNICATION, true),
+        Attempt(MediaRecorder.AudioSource.MIC, true),
+    )
 
     /** Starts recording; returns true if it actually began. */
     fun start(context: Context): Boolean {
@@ -32,18 +50,19 @@ object SimRecorder {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager = am
         prevSpeaker = am.isSpeakerphoneOn
-        runCatching { am.isSpeakerphoneOn = true } // so the mic hears the remote party
 
         val file = File(context.cacheDir, "simrec_${System.currentTimeMillis()}.m4a")
-        // Try the richer call-oriented source first, then fall back to the plain mic.
-        for (source in intArrayOf(MediaRecorder.AudioSource.VOICE_COMMUNICATION, MediaRecorder.AudioSource.MIC)) {
+        for ((source, speakerphone) in ATTEMPTS) {
+            // Only force the loudspeaker for the mic-based fallbacks; native call
+            // sources capture both sides without disturbing the call.
+            runCatching { am.isSpeakerphoneOn = speakerphone }
             val ok = runCatching {
                 val r = newRecorder(context)
                 r.setAudioSource(source)
                 r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                 r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                r.setAudioEncodingBitRate(32_000)
-                r.setAudioSamplingRate(16_000)
+                r.setAudioEncodingBitRate(96_000)
+                r.setAudioSamplingRate(44_100)
                 r.setOutputFile(file.absolutePath)
                 r.prepare()
                 r.start()

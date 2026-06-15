@@ -11,11 +11,16 @@ object AppPrefs {
     private const val KEY_REVIEW = "review_after_call"
     private const val KEY_GOAL = "daily_goal"
     private const val KEY_CLOUD = "cloud_enabled"
+    private const val KEY_INCOMING = "cloud_incoming_enabled"
     private const val KEY_AGENT = "cloud_agent_id"
     private const val KEY_CALLERID = "cloud_caller_id"
 
     fun getCloudEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_CLOUD, false)
     fun setCloudEnabled(context: Context, v: Boolean) = prefs(context).edit().putBoolean(KEY_CLOUD, v).apply()
+    
+    fun getIncomingEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_INCOMING, false)
+    fun setIncomingEnabled(context: Context, v: Boolean) = prefs(context).edit().putBoolean(KEY_INCOMING, v).apply()
+    
     fun getAgentId(context: Context): String = prefs(context).getString(KEY_AGENT, "") ?: ""
     fun setAgentId(context: Context, v: String) = prefs(context).edit().putString(KEY_AGENT, v.trim()).apply()
     fun getCallerId(context: Context): String = prefs(context).getString(KEY_CALLERID, "") ?: ""

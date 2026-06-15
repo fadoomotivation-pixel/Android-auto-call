@@ -58,7 +58,11 @@ class ManualCallService : Service() {
         val companyId = intent.getStringExtra(EXTRA_COMPANY_ID)
         val salespersonId = intent.getStringExtra(EXTRA_SALESPERSON_ID)
         val record = intent.getBooleanExtra(EXTRA_RECORD, true)
-        runCatching { startForeground(NOTIF_ID, notification("Calling $phone…")) }
+        runCatching {
+            androidx.core.app.ServiceCompat.startForeground(this, NOTIF_ID, notification("Calling $phone…"), callFgsType())
+        }.onFailure {
+            runCatching { startForeground(NOTIF_ID, notification("Calling $phone…")) }
+        }
         if (job?.isActive != true) {
             job = scope.launch { runCall(phone, companyId, salespersonId, record) }
         }
@@ -132,15 +136,26 @@ class ManualCallService : Service() {
             != PackageManager.PERMISSION_GRANTED
         ) return false
         return try {
-            startActivity(
-                Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
+            fun buildIntent(withPackage: Boolean) = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // Force the device's default phone app so a SIP app (e.g. ZoiPer) can't
+                // intercept the SIM call with an "Open with" chooser.
+                if (withPackage) systemDialerPackage()?.let { pkg -> setPackage(pkg) }
+            }
+            try {
+                startActivity(buildIntent(true))
+            } catch (_: android.content.ActivityNotFoundException) {
+                startActivity(buildIntent(false))
+            }
             true
         } catch (e: SecurityException) {
             false
         }
     }
+
+    private fun systemDialerPackage(): String? = runCatching {
+        (getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager).defaultDialerPackage
+    }.getOrNull()
 
     private fun registerListener() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
@@ -162,6 +177,13 @@ class ManualCallService : Service() {
             telephonyManager.listen(l, PhoneStateListener.LISTEN_CALL_STATE)
         }
     }
+
+    /** phoneCall + microphone FGS types so SIM-call recording is allowed on Android 14+. */
+    private fun callFgsType(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL or
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        else 0
 
     private fun notification(text: String): Notification =
         NotificationCompat.Builder(this, SalesAutoCallApp.DIALER_CHANNEL_ID)

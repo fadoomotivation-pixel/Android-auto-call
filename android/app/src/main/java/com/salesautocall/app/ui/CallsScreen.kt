@@ -1,5 +1,6 @@
 package com.salesautocall.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +15,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -28,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
@@ -49,12 +57,17 @@ fun CallsScreen(vm: MainViewModel) {
     var sub by remember { mutableIntStateOf(0) } // 0 = Recent, 1 = Follow-up
 
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
-        Text("Calls", style = MaterialTheme.typography.headlineSmall)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Calls", style = MaterialTheme.typography.headlineSmall)
+            IconButton(onClick = { vm.loadCalls() }) {
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+            }
+        }
         Spacer(Modifier.height(12.dp))
 
         // ---- date filter ----
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CallFilter.values().forEach { f ->
+            CallFilter.entries.forEach { f ->
                 FilterChip(
                     selected = app.callFilter == f,
                     onClick = { vm.setCallFilter(f) },
@@ -85,7 +98,17 @@ fun CallsScreen(vm: MainViewModel) {
                 modifier = Modifier.padding(top = 16.dp),
             )
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(rows, key = { it.id ?: "${it.phone}-${it.startedAt}" }) { CallRow(it) }
+                items(rows, key = { it.id ?: "${it.phone}-${it.startedAt}" }) {
+                    CallRow(it, playing = it.id != null && it.id == app.playingCallId,
+                        summarizing = it.id != null && it.id == app.summarizingCallId,
+                        onPlay = { it.id?.let { id -> vm.playRecording(id) } }, onStop = { vm.stopRecording() },
+                        onSummarize = { it.id?.let { id -> vm.generateSummary(id) } },
+                        onApplyDisposition = { status ->
+                            val cid = it.id; val contact = it.contactId
+                            if (cid != null && contact != null) vm.applyDisposition(cid, contact, status)
+                        },
+                        onDismissDisposition = { it.id?.let { id -> vm.dismissDisposition(id) } })
+                }
             }
         }
     }
@@ -119,37 +142,160 @@ private fun SummaryStat(label: String, value: String, color: Color = Color.Unspe
 }
 
 @Composable
-private fun CallRow(c: CallLog) {
+private fun CallRow(
+    c: CallLog,
+    playing: Boolean,
+    summarizing: Boolean,
+    onPlay: () -> Unit,
+    onStop: () -> Unit,
+    onSummarize: () -> Unit,
+    onApplyDisposition: (String) -> Unit,
+    onDismissDisposition: () -> Unit,
+) {
     val context = LocalContext.current
+    var expanded by remember(c.id) { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(c.phone, style = MaterialTheme.typography.titleMedium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutcomeBadge(c.outcome)
-                    Spacer(Modifier.size(8.dp))
-                    val meta = buildString {
-                        c.startedAt?.let { append(prettyTime(it)) }
-                        if (c.durationSeconds > 0) append("  ·  ${formatDuration(c.durationSeconds)}")
+        Column {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(c.phone, style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutcomeBadge(c.outcome)
+                        Spacer(Modifier.size(8.dp))
+                        val meta = buildString {
+                            c.startedAt?.let { append(prettyTime(it)) }
+                            if (c.durationSeconds > 0) append("  ·  ${formatDuration(c.durationSeconds)}")
+                        }
+                        if (meta.isNotBlank()) Text(
+                            meta, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    if (meta.isNotBlank()) Text(
-                        meta, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                }
+                if (c.recordingStatus == "ready" && !playing) {
+                    IconButton(onClick = onPlay) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = "Play recording",
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                IconButton(onClick = { QuickActions.whatsApp(context, c.phone) }) {
+                    Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsAppGreen)
+                }
+                IconButton(onClick = { QuickActions.call(context, c.phone) }) {
+                    Icon(Icons.Default.Call, contentDescription = "Call back", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = { QuickActions.copy(context, c.phone) }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                 }
             }
-            IconButton(onClick = { QuickActions.whatsApp(context, c.phone) }) {
-                Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsAppGreen)
+            if (playing && c.id != null) {
+                AudioPlayer(callLogId = c.id!!, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
-            IconButton(onClick = { QuickActions.call(context, c.phone) }) {
-                Icon(Icons.Default.Call, contentDescription = "Call back", tint = MaterialTheme.colorScheme.primary)
+            AiSummarySection(c, summarizing, expanded, onToggle = { expanded = !expanded }, onSummarize = onSummarize)
+            DispositionSuggestion(c, onApply = onApplyDisposition, onDismiss = onDismissDisposition)
+        }
+    }
+}
+
+/** Human label for an AI-suggested lead stage (mirror of SETTABLE_STAGES). */
+private fun dispositionLabel(status: String): String = when (status) {
+    "interested" -> "Interested"
+    "site_visit" -> "Site Visit"
+    "proposal" -> "Proposal"
+    "booked" -> "Closed / Won"
+    "callback" -> "Callback"
+    "not_interested" -> "Not interested"
+    "dnc" -> "Do Not Call"
+    else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
+
+/**
+ * One-tap AI auto-disposition: the summarizer guessed the lead's stage from the
+ * call. The rep confirms (applies it to the linked lead) or dismisses it.
+ */
+@Composable
+private fun DispositionSuggestion(c: CallLog, onApply: (String) -> Unit, onDismiss: () -> Unit) {
+    val status = c.suggestedDisposition ?: return
+    val canApply = c.contactId != null
+    val accent = Color(0xFF6D4DF2)
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (canApply) "✨ AI: set lead to ${dispositionLabel(status)}?"
+            else "✨ AI: ${dispositionLabel(status)}",
+            style = MaterialTheme.typography.labelMedium, color = accent,
+            fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+        )
+        if (canApply) {
+            AssistChip(
+                onClick = { onApply(status) },
+                label = { Text("Apply") },
+                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, Modifier.size(16.dp)) },
+            )
+            Spacer(Modifier.size(6.dp))
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/**
+ * Inline AI call summary: shows the text (collapsible) when ready, a spinner
+ * while it generates (auto after each recording), or a one-tap "Summarize"
+ * action for older recordings that don't have one yet.
+ */
+@Composable
+private fun AiSummarySection(
+    c: CallLog,
+    summarizing: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onSummarize: () -> Unit,
+) {
+    val accent = Color(0xFF6D4DF2)
+    val processing = summarizing || c.summaryStatus == "processing"
+    val hasSummary = !c.summary.isNullOrBlank()
+    // Nothing to show unless there's a recording to summarize.
+    if (c.recordingStatus != "ready" && !hasSummary) return
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        when {
+            hasSummary -> {
+                Row(
+                    Modifier.fillMaxWidth().clickable { onToggle() },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("✨ AI Summary", style = MaterialTheme.typography.labelLarge,
+                        color = accent, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.weight(1f))
+                    Text(if (expanded) "Hide" else "Show",
+                        style = MaterialTheme.typography.labelMedium, color = accent)
+                }
+                if (expanded) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(c.summary!!.trim(), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            IconButton(onClick = { QuickActions.copy(context, c.phone) }) {
-                Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+            processing -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = accent)
+                Spacer(Modifier.size(8.dp))
+                Text("Summarizing with AI…", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            else -> Text("✨ AI summary",
+                style = MaterialTheme.typography.labelLarge, color = accent,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { onSummarize() })
         }
     }
 }

@@ -8,6 +8,28 @@ A sales productivity platform with three parts:
 | **`admin/`** | Next.js + Supabase | Web dashboard for admins/owners to see each company, its salespeople, contacts, call logs and productivity stats — i.e. *what data is stored on the cloud*. |
 | **`supabase/`** | Postgres + RLS | Cloud backend. Multi-tenant schema: every company's data is isolated, salespeople see only their own assignments. |
 
+## Telecaller suite (the salesperson's full grip on the sale)
+
+Beyond auto-dialing, the app gives each telecaller end-to-end control of their day:
+
+- **🏠 Home** — punch in / punch out attendance, today's calls/connected/talk-time
+  against the daily goal, a count of follow-ups due now, and a peek at the team
+  leaderboard.
+- **👥 Lead pipeline** — every contact across campaigns in one list, filterable by
+  stage (Open / Hot / Interested / Booked / All). Set the **disposition**
+  (Interested, Callback, Booked, Not interested, Lost, DNC), tag a **Hot / Warm /
+  Cold** temperature, and call / WhatsApp / cloud-call in one tap.
+- **⏰ Follow-up scheduler** — schedule a callback on any lead (in 1h, tomorrow 10 AM,
+  next week, …). The app fires an **on-device reminder notification** the moment it's
+  due — with a one-tap *Call* action — so deals never slip. A *Due now / Upcoming*
+  worklist keeps the chase organised.
+- **🏆 Team leaderboard** — company-wide rankings (today / this week) by leads,
+  connects and talk-time, scored so reps can see exactly where they stand.
+
+These are backed by `follow_ups`, `attendance`, and lead-pipeline columns added in
+[`supabase/migrations/0012_telecaller_suite.sql`](supabase/migrations/0012_telecaller_suite.sql),
+all guarded by the same per-company Row-Level Security as the rest of the schema.
+
 ## How it fits together
 
 ```

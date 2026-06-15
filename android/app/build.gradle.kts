@@ -100,4 +100,8 @@ dependencies {
 
     // Native SIP/VoIP engine (registers over SIP-UDP like Zoiper, handles audio).
     implementation("org.linphone:linphone-sdk-android:5.3.+")
+
+    // Media3/ExoPlayer for recording playback
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
 }

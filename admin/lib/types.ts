@@ -25,6 +25,8 @@ export interface Profile {
   is_active: boolean;
   sip_agent_id: string | null;
   caller_id: string | null;
+  sip_server: string | null;
+  sip_port: number | null;
   created_at: string;
 }
 
@@ -60,6 +62,8 @@ export interface CallLog {
   recording_status: string;
   recording_seconds: number | null;
   recording_source: string | null;
+  summary: string | null;
+  summary_status: string;
 }
 
 export interface CompanyIntegration {
@@ -67,6 +71,25 @@ export interface CompanyIntegration {
   uro_token: string | null;
   uro_tenant_id: string | null;
   default_caller_id: string | null;
+  sip_server: string;
+  sip_port: number;
+  transport: string;
+  wss_url: string | null;
+  outbound_proxy: string | null;
+  api_base_url: string;
+}
+
+/** An agent extension returned by UrOperator's registration-info endpoint. */
+export interface UroAgent {
+  username: string;
+  name: string | null;
+}
+
+/** A DID / caller-ID returned by UrOperator. */
+export interface UroCallerId {
+  did: string;
+  name?: string | null;
+  status?: string | null;
 }
 
 export interface CompanyOverview {
@@ -121,4 +144,19 @@ export interface SalespersonStats {
   no_answer_calls: number;
   total_talk_seconds: number;
   last_call_at: string | null;
+}
+
+export interface Attendance {
+  id: string;
+  company_id: string;
+  salesperson_id: string;
+  work_date: string;
+  punch_in_at: string | null;
+  punch_out_at: string | null;
+  punch_in_lat: number | null;
+  punch_in_lng: number | null;
+  selfie: string | null;
+  location_label: string | null;
+  status: "present" | "half_day" | "absent";
+  created_at: string;
 }

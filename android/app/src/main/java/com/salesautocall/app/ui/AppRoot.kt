@@ -5,7 +5,9 @@ package com.salesautocall.app.ui
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,19 +16,41 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PinDrop
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -89,14 +113,13 @@ fun AppRoot(vm: MainViewModel) {
     crash?.let { text ->
         AlertDialog(
             onDismissRequest = { AppPrefs.clearLastCrash(context); crash = null },
-            title = { Text("Last crash details") },
+            title = { Text("Something went wrong") },
             text = {
-                Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
-                    Text(text, style = MaterialTheme.typography.bodySmall)
-                }
+                Text("The app ran into an issue last time. If this keeps happening, contact your admin.",
+                    style = MaterialTheme.typography.bodyMedium)
             },
             confirmButton = {
-                TextButton(onClick = { AppPrefs.clearLastCrash(context); crash = null }) { Text("Dismiss") }
+                TextButton(onClick = { AppPrefs.clearLastCrash(context); crash = null }) { Text("OK") }
             },
         )
     }
@@ -263,10 +286,11 @@ private fun LoginScreen(vm: MainViewModel) {
 }
 
 private sealed class Tab(val route: String, val label: String) {
-    data object Campaign : Tab("campaign", "Campaign")
+    data object Home : Tab("home", "Dashboard")
+    data object Leads : Tab("leads", "Leads")
     data object Dialer : Tab("dialer", "Dialer")
-    data object Calls : Tab("calls", "Calls")
-    data object Analytics : Tab("analytics", "Analytics")
+    data object Campaign : Tab("campaign", "Call List")
+    data object Team : Tab("team", "Reports")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -274,7 +298,7 @@ private sealed class Tab(val route: String, val label: String) {
 private fun MainShell(vm: MainViewModel) {
     val state by vm.state.collectAsState()
     val nav = rememberNavController()
-    val tabs = listOf(Tab.Campaign, Tab.Dialer, Tab.Calls, Tab.Analytics)
+    val tabs = listOf(Tab.Home, Tab.Leads, Tab.Dialer, Tab.Campaign, Tab.Team)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -285,6 +309,15 @@ private fun MainShell(vm: MainViewModel) {
                 userName = state.profile?.fullName ?: "Your account",
                 role = state.profile?.role ?: "salesperson",
                 companyName = state.company?.name,
+                onNavigate = { route ->
+                    vm.clearMessage()
+                    scope.launch { drawerState.close() }
+                    nav.navigate(route) {
+                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
                 onSettings = {
                     scope.launch { drawerState.close() }
                     nav.navigate("settings") { launchSingleTop = true }
@@ -299,7 +332,13 @@ private fun MainShell(vm: MainViewModel) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Call Pro AI") },
+                    title = {
+                        Column {
+                            Text("Call Pro AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
@@ -310,12 +349,12 @@ private fun MainShell(vm: MainViewModel) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
                     },
-                    // Navy bar with a gold-tinted menu icon — the brand signature.
+                    // Clean white app bar with a blue menu icon — modern CRM signature.
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                        navigationIconContentColor = MaterialTheme.colorScheme.secondary,
-                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.primary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 )
             },
@@ -327,6 +366,7 @@ private fun MainShell(vm: MainViewModel) {
                         NavigationBarItem(
                             selected = route == tab.route,
                             onClick = {
+                                vm.clearMessage()
                                 // Standard bottom-nav behaviour: don't stack tabs and keep
                                 // each tab's state so switching back doesn't reload everything.
                                 nav.navigate(tab.route) {
@@ -338,10 +378,11 @@ private fun MainShell(vm: MainViewModel) {
                             icon = {
                                 Icon(
                                     when (tab) {
-                                        is Tab.Campaign -> Icons.Default.Campaign
+                                        is Tab.Home -> Icons.Default.Home
+                                        is Tab.Leads -> Icons.Default.People
                                         is Tab.Dialer -> Icons.Default.Dialpad
-                                        is Tab.Calls -> Icons.Default.Call
-                                        else -> Icons.Default.QueryStats
+                                        is Tab.Campaign -> Icons.Default.Campaign
+                                        else -> Icons.Default.Leaderboard
                                     },
                                     contentDescription = tab.label,
                                 )
@@ -360,17 +401,60 @@ private fun MainShell(vm: MainViewModel) {
             Column(Modifier.padding(padding)) {
                 NavHost(
                     nav,
-                    startDestination = Tab.Campaign.route,
+                    startDestination = Tab.Home.route,
                     // Instant tab switches — the default ~700ms crossfade reads as lag.
                     enterTransition = { EnterTransition.None },
                     exitTransition = { ExitTransition.None },
                     popEnterTransition = { EnterTransition.None },
                     popExitTransition = { ExitTransition.None },
                 ) {
-                    composable(Tab.Campaign.route) { CampaignScreen(vm) }
+                    composable(Tab.Home.route) {
+                        HomeScreen(
+                            vm,
+                            onOpenFollowUps = { nav.navigate("followups") },
+                            onOpenLeads = {
+                                nav.navigate(Tab.Leads.route) {
+                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            onNavigate = { route -> nav.navigate(route) { launchSingleTop = true } },
+                        )
+                    }
+                    composable(Tab.Leads.route) {
+                        LeadsScreen(vm, onStartCampaign = {
+                            nav.navigate(Tab.Campaign.route) {
+                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        })
+                    }
                     composable(Tab.Dialer.route) { DialerScreen(vm) }
-                    composable(Tab.Calls.route) { CallsScreen(vm) }
-                    composable(Tab.Analytics.route) {
+                    composable(Tab.Campaign.route) {
+                        CampaignScreen(vm, onPickLeads = {
+                            vm.requestLeadSelect()
+                            nav.navigate(Tab.Leads.route) {
+                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        })
+                    }
+                    composable(Tab.Team.route) {
+                        TeamScreen(
+                            vm,
+                            onCampaigns = { nav.navigate("analytics") },
+                            onCallHistory = { nav.navigate("calls") },
+                        )
+                    }
+                    composable("followups") { FollowUpsScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("attendance") { AttendanceScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("calendar") { CalendarScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("ai") { AiAssistantScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("calls") { CallsScreen(vm) }
+                    composable("analytics") {
                         AnalyticsScreen(vm, onOpen = { id, name ->
                             vm.openCampaign(id, name)
                             nav.navigate("campaign_detail")
@@ -395,57 +479,143 @@ private fun MainShell(vm: MainViewModel) {
     }
 }
 
+private data class MenuItem(
+    val label: String,
+    val desc: String,
+    val icon: ImageVector,
+    val route: String?,        // null = "coming soon" / handled by onClick
+    val color: Color,
+    val badge: String? = null,
+)
+
+// Premium dark menu palette.
+private val MenuBg = Color(0xFF0C1426)
+private val MenuText = Color(0xFFE8EDF7)
+private val MenuMuted = Color(0xFF8A97AE)
+private val MenuDivider = Color(0xFF1B2740)
+private val Gold = Color(0xFFF5B23E)
+
 @Composable
 private fun AppDrawer(
     userName: String,
     role: String,
     companyName: String?,
+    onNavigate: (String) -> Unit,
     onSettings: () -> Unit,
     onSignOut: () -> Unit,
 ) {
-    ModalDrawerSheet {
-        // Navy brand band at the top of the drawer.
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.primary)
-                .padding(horizontal = 24.dp, vertical = 24.dp),
-        ) {
-            Text(
-                "Call Pro AI",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                userName,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onPrimary,
-            )
-            Text(
-                buildString {
-                    append(if (role == "admin") "Admin" else "Salesperson")
-                    companyName?.let { append(" · "); append(it) }
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
-            )
-        }
-        Spacer(Modifier.height(12.dp))
+    val context = LocalContext.current
+    val items = listOf(
+        MenuItem("Dashboard", "Calls, leads & team performance", Icons.Default.Dashboard, "home", Color(0xFF3B82F6)),
+        MenuItem("Leads", "Manage and follow up your leads", Icons.Default.People, "leads", Color(0xFF22C55E)),
+        MenuItem("AI Assistant", "Insights & next-best actions", Icons.Default.AutoAwesome, "ai", Color(0xFF8B5CF6), "NEW"),
+        MenuItem("Follow-up Calendar", "Day & week callback planner", Icons.Default.CalendarMonth, "calendar", Color(0xFFF59E0B)),
+        MenuItem("Follow Ups", "Your due-now worklist", Icons.Default.AccessTime, "followups", Color(0xFF14B8A6)),
+        MenuItem("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance", Color(0xFF10B981)),
+        MenuItem("Calls", "Call history and recordings", Icons.Default.Call, "calls", Color(0xFFEC4899)),
+        MenuItem("Call Lists", "Import lists & auto-dial", Icons.Default.Campaign, "campaign", Color(0xFFEF4444)),
+        MenuItem("Reports & Team", "Leaderboard, talk-time, conversions", Icons.Default.Leaderboard, "team", Color(0xFFA855F7)),
+        MenuItem("Investor Videos", "AI-generated property videos", Icons.Default.Videocam, null, Color(0xFFF43F5E), "Soon"),
+        MenuItem("Brochures", "Smart brochures in one tap", Icons.Default.Description, null, Color(0xFF06B6D4), "Soon"),
+    )
 
-        NavigationDrawerItem(
-            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-            label = { Text("Settings") },
-            selected = false,
-            onClick = onSettings,
-            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-        )
-        NavigationDrawerItem(
-            icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
-            label = { Text("Sign out") },
-            selected = false,
-            onClick = onSignOut,
-            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-        )
+    ModalDrawerSheet(
+        Modifier.fillMaxWidth(0.86f),
+        drawerContainerColor = MenuBg,
+        drawerContentColor = MenuText,
+    ) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            // Brand header — gradient band with a Premium chip.
+            Column(
+                Modifier.fillMaxWidth()
+                    .background(Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF0C1426))))
+                    .padding(20.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF2563EB)),
+                        contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = Color.White, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
+                    }
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(Gold.copy(alpha = 0.2f)).padding(horizontal = 9.dp, vertical = 3.dp)) {
+                        Text("Premium", style = MaterialTheme.typography.labelSmall, color = Gold, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("Everything you need. One app.", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f))
+            }
+
+            Spacer(Modifier.height(10.dp))
+            items.forEach { item ->
+                DrawerRow(item) {
+                    if (item.route != null) onNavigate(item.route)
+                    else android.widget.Toast.makeText(context, "${item.label} — coming soon", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(MenuDivider))
+            Spacer(Modifier.height(8.dp))
+            DrawerRow(MenuItem("Settings", "Calling, goals & cloud setup", Icons.Default.Settings, null, Color(0xFF64748B))) { onSettings() }
+            DrawerRow(MenuItem("Help & Support", "Get help using the app", Icons.AutoMirrored.Filled.HelpOutline, null, Color(0xFF0EA5E9))) {
+                android.widget.Toast.makeText(context, "Help & Support — coming soon", android.widget.Toast.LENGTH_SHORT).show()
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(MenuDivider))
+            // Profile footer
+            Row(
+                Modifier.fillMaxWidth().clickable { onSignOut() }.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)))), contentAlignment = Alignment.Center) {
+                    Text(userName.trim().take(1).uppercase().ifBlank { "?" }, color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(userName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MenuText)
+                    Text(
+                        buildString {
+                            append(if (role == "admin") "Super Admin" else "Telecaller")
+                            companyName?.let { append(" · "); append(it) }
+                        },
+                        style = MaterialTheme.typography.bodySmall, color = MenuMuted,
+                    )
+                }
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = MenuMuted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawerRow(item: MenuItem, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(item.color.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center) {
+            Icon(item.icon, contentDescription = item.label, tint = item.color, modifier = Modifier.size(21.dp))
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(item.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MenuText)
+                item.badge?.let {
+                    Spacer(Modifier.width(8.dp))
+                    val badgeColor = if (it == "Soon") MenuMuted else item.color
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(badgeColor.copy(alpha = 0.2f)).padding(horizontal = 7.dp, vertical = 1.dp)) {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = badgeColor, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Text(item.desc, style = MaterialTheme.typography.bodySmall, color = MenuMuted, maxLines = 1)
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MenuMuted, modifier = Modifier.size(18.dp))
     }
 }
