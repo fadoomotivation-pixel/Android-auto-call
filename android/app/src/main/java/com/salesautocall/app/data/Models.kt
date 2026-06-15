@@ -86,6 +86,17 @@ data class Contact(
     @SerialName("created_at") val createdAt: String? = null,
 )
 
+/** One WhatsApp message (either direction) shown in the in-app chat thread. */
+@Serializable
+data class WhatsAppMessage(
+    val id: String? = null,
+    @SerialName("contact_id") val contactId: String? = null,
+    val direction: String = "out",
+    val body: String? = null,
+    val status: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
 /** A scheduled callback for a lead. Drives the Follow-ups worklist + reminders. */
 @Serializable
 data class FollowUp(

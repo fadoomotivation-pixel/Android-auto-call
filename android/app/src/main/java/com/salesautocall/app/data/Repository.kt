@@ -13,6 +13,7 @@ import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -141,6 +142,29 @@ object Repository {
         return runCatching {
             resp.body<JsonObject>()["scored"]?.jsonPrimitive?.intOrNull
         }.getOrNull() ?: 0
+    }
+
+    // ---------- WhatsApp (Cloud API, tracked) ----------
+
+    /** Conversation thread for a lead (RLS-scoped to the rep / company). */
+    suspend fun fetchWhatsThread(contactId: String): List<WhatsAppMessage> =
+        client.from("whatsapp_messages").select {
+            filter { eq("contact_id", contactId) }
+            order("created_at", Order.ASCENDING)
+        }.decodeList()
+
+    /**
+     * Sends a WhatsApp message through the company number (logged for the admin).
+     * Returns null on success, or an error string (e.g. not connected) to show.
+     */
+    suspend fun sendWhatsApp(contactId: String, text: String): String? {
+        val resp = client.functions.invoke(
+            "whatsapp-send",
+            buildJsonObject { put("contact_id", contactId); put("text", text) },
+        )
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull()
+        val ok = obj?.get("ok")?.jsonPrimitive?.booleanOrNull == true
+        return if (ok) null else obj?.get("error")?.jsonPrimitive?.contentOrNull ?: "Couldn't send"
     }
 
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {
