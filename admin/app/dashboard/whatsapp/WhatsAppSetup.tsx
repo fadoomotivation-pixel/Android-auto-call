@@ -10,8 +10,10 @@ type Integration = {
   access_token: string;
   verify_token: string;
   display_number: string | null;
+  default_salesperson_id: string | null;
   active: boolean;
 } | null;
+type Member = { id: string; full_name: string | null };
 
 const input: React.CSSProperties = {
   padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)",
@@ -21,8 +23,8 @@ const field: React.CSSProperties = { display: "flex", flexDirection: "column", g
 const lbl: React.CSSProperties = { fontSize: 12, color: "var(--muted)" };
 
 export function WhatsAppSetup({
-  companyId, integration, webhookUrl,
-}: { companyId: string; integration: Integration; webhookUrl: string }) {
+  companyId, integration, webhookUrl, members,
+}: { companyId: string; integration: Integration; webhookUrl: string; members: Member[] }) {
   const router = useRouter();
   const [form, setForm] = useState({
     phone_number_id: integration?.phone_number_id ?? "",
@@ -30,6 +32,7 @@ export function WhatsAppSetup({
     access_token: integration?.access_token ?? "",
     verify_token: integration?.verify_token ?? crypto.randomUUID().replace(/-/g, ""),
     display_number: integration?.display_number ?? "",
+    default_salesperson_id: integration?.default_salesperson_id ?? "",
     active: integration?.active ?? true,
   });
   const [saving, setSaving] = useState(false);
@@ -47,6 +50,7 @@ export function WhatsAppSetup({
       access_token: form.access_token.trim(),
       verify_token: form.verify_token.trim(),
       display_number: form.display_number.trim() || null,
+      default_salesperson_id: form.default_salesperson_id || null,
       active: form.active,
       updated_at: new Date().toISOString(),
     });
@@ -70,6 +74,11 @@ export function WhatsAppSetup({
           <input style={input} value={form.waba_id} onChange={(e) => set("waba_id", e.target.value)} /></label>
         <label style={field}><span style={lbl}>Verify token (auto-generated)</span>
           <input style={input} value={form.verify_token} onChange={(e) => set("verify_token", e.target.value)} /></label>
+        <label style={{ ...field, gridColumn: "1 / -1" }}><span style={lbl}>Default rep for messages from unknown numbers</span>
+          <select style={input} value={form.default_salesperson_id} onChange={(e) => set("default_salesperson_id", e.target.value)}>
+            <option value="">— none (leave unassigned) —</option>
+            {members.map((m) => <option key={m.id} value={m.id}>{m.full_name ?? m.id}</option>)}
+          </select></label>
       </div>
 
       <label style={{ display: "flex", alignItems: "center", gap: 8 }}>

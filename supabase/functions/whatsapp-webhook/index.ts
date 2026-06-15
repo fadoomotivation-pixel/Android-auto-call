@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
         const phoneNumberId = v.metadata?.phone_number_id;
         if (!phoneNumberId) continue;
         const { data: integ } = await admin.from("whatsapp_integrations")
-          .select("company_id").eq("phone_number_id", phoneNumberId).maybeSingle();
+          .select("company_id, default_salesperson_id").eq("phone_number_id", phoneNumberId).maybeSingle();
         if (!integ) continue;
         const companyId = integ.company_id;
 
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
           await admin.from("whatsapp_messages").insert({
             company_id: companyId,
             contact_id: row?.contact_id ?? null,
-            salesperson_id: row?.salesperson_id ?? null,
+            salesperson_id: row?.salesperson_id ?? integ.default_salesperson_id ?? null,
             direction: "in",
             wa_message_id: m.id ?? null,
             counterparty: from,
