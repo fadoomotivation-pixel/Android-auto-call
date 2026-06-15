@@ -15,10 +15,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -99,7 +102,12 @@ fun CallsScreen(vm: MainViewModel) {
                     CallRow(it, playing = it.id != null && it.id == app.playingCallId,
                         summarizing = it.id != null && it.id == app.summarizingCallId,
                         onPlay = { it.id?.let { id -> vm.playRecording(id) } }, onStop = { vm.stopRecording() },
-                        onSummarize = { it.id?.let { id -> vm.generateSummary(id) } })
+                        onSummarize = { it.id?.let { id -> vm.generateSummary(id) } },
+                        onApplyDisposition = { status ->
+                            val cid = it.id; val contact = it.contactId
+                            if (cid != null && contact != null) vm.applyDisposition(cid, contact, status)
+                        },
+                        onDismissDisposition = { it.id?.let { id -> vm.dismissDisposition(id) } })
                 }
             }
         }
@@ -141,6 +149,8 @@ private fun CallRow(
     onPlay: () -> Unit,
     onStop: () -> Unit,
     onSummarize: () -> Unit,
+    onApplyDisposition: (String) -> Unit,
+    onDismissDisposition: () -> Unit,
 ) {
     val context = LocalContext.current
     var expanded by remember(c.id) { mutableStateOf(false) }
@@ -188,6 +198,52 @@ private fun CallRow(
                 AudioPlayer(callLogId = c.id!!, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             }
             AiSummarySection(c, summarizing, expanded, onToggle = { expanded = !expanded }, onSummarize = onSummarize)
+            DispositionSuggestion(c, onApply = onApplyDisposition, onDismiss = onDismissDisposition)
+        }
+    }
+}
+
+/** Human label for an AI-suggested lead stage (mirror of SETTABLE_STAGES). */
+private fun dispositionLabel(status: String): String = when (status) {
+    "interested" -> "Interested"
+    "site_visit" -> "Site Visit"
+    "proposal" -> "Proposal"
+    "booked" -> "Closed / Won"
+    "callback" -> "Callback"
+    "not_interested" -> "Not interested"
+    "dnc" -> "Do Not Call"
+    else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
+
+/**
+ * One-tap AI auto-disposition: the summarizer guessed the lead's stage from the
+ * call. The rep confirms (applies it to the linked lead) or dismisses it.
+ */
+@Composable
+private fun DispositionSuggestion(c: CallLog, onApply: (String) -> Unit, onDismiss: () -> Unit) {
+    val status = c.suggestedDisposition ?: return
+    val canApply = c.contactId != null
+    val accent = Color(0xFF6D4DF2)
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (canApply) "✨ AI: set lead to ${dispositionLabel(status)}?"
+            else "✨ AI: ${dispositionLabel(status)}",
+            style = MaterialTheme.typography.labelMedium, color = accent,
+            fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+        )
+        if (canApply) {
+            AssistChip(
+                onClick = { onApply(status) },
+                label = { Text("Apply") },
+                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, Modifier.size(16.dp)) },
+            )
+            Spacer(Modifier.size(6.dp))
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

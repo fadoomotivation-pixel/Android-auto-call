@@ -146,4 +146,5 @@ data class CallLog(
     @SerialName("recording_source") val recordingSource: String? = null,
     val summary: String? = null,
     @SerialName("summary_status") val summaryStatus: String? = null,
+    @SerialName("suggested_disposition") val suggestedDisposition: String? = null,
 )

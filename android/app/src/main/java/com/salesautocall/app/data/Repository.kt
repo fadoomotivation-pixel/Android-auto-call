@@ -171,6 +171,13 @@ object Repository {
         client.from("call_logs").update(mapOf("notes" to note)) { filter { eq("id", callLogId) } }
     }
 
+    /** Clears an AI disposition suggestion after the rep confirms or dismisses it. */
+    suspend fun clearSuggestedDisposition(callLogId: String) {
+        client.from("call_logs").update(mapOf("suggested_disposition" to null as String?)) {
+            filter { eq("id", callLogId) }
+        }
+    }
+
     // ---------- campaigns ----------
 
     /**
