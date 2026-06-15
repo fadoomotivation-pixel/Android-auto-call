@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -74,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.FollowUp
+import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.data.LeaderboardRow
 import kotlin.math.abs
 
@@ -724,7 +726,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         onToggleSelect = { c.id?.let { id -> selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id } },
                         onCall = { vm.dialManual(c.phone) },
                         onCloudCall = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
-                        onWhatsApp = { openWhatsApp(context, c.phone) },
+                        onWhatsApp = { vm.openWaChat(c) },
                         onSchedule = { scheduleFor = c },
                         onMore = { actionFor = c },
                     )
@@ -778,6 +780,85 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             },
         )
     }
+    app.waChatContact?.let { c ->
+        WhatsAppChatDialog(
+            who = c.name ?: c.phone,
+            phone = c.phone,
+            thread = app.waThread,
+            loading = app.waLoading,
+            sending = app.waSending,
+            error = app.waError,
+            onSend = { vm.sendWa(it) },
+            onOpenPhoneApp = { openWhatsApp(context, c.phone) },
+            onDismiss = { vm.closeWaChat() },
+        )
+    }
+}
+
+/**
+ * In-app WhatsApp chat for a lead. Messages go through the company number
+ * (tracked for the admin). If the number isn't connected yet, the rep can fall
+ * back to the phone's WhatsApp app.
+ */
+@Composable
+private fun WhatsAppChatDialog(
+    who: String,
+    phone: String,
+    thread: List<WhatsAppMessage>,
+    loading: Boolean,
+    sending: Boolean,
+    error: String?,
+    onSend: (String) -> Unit,
+    onOpenPhoneApp: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var draft by remember { mutableStateOf("") }
+    val waGreen = Color(0xFF25D366)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("WhatsApp · $who") },
+        text = {
+            Column {
+                when {
+                    loading -> Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    thread.isEmpty() -> Text("No messages yet. Say hello 👋", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else -> Column(
+                        Modifier.fillMaxWidth().heightIn(max = 280.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        thread.forEach { m ->
+                            val out = m.direction == "out"
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = if (out) Arrangement.End else Arrangement.Start) {
+                                Box(
+                                    Modifier.clip(RoundedCornerShape(10.dp))
+                                        .background(if (out) waGreen.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                ) { Text(m.body ?: "", style = MaterialTheme.typography.bodyMedium) }
+                            }
+                        }
+                    }
+                }
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = onOpenPhoneApp) { Text("Open in WhatsApp app instead") }
+                }
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    draft, { draft = it },
+                    placeholder = { Text("Type a message…") },
+                    modifier = Modifier.fillMaxWidth(), maxLines = 4,
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSend(draft); draft = "" },
+                enabled = draft.isNotBlank() && !sending,
+            ) { Text(if (sending) "Sending…" else "Send") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
 }
 
 @Composable

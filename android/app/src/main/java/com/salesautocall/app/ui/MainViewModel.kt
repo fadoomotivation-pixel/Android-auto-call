@@ -16,6 +16,7 @@ import com.salesautocall.app.data.LeaderboardRow
 import com.salesautocall.app.data.ParseResult
 import com.salesautocall.app.data.Profile
 import com.salesautocall.app.data.Repository
+import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.notify.FollowUpReminder
 import com.salesautocall.app.dialer.AutoDialerService
 import com.salesautocall.app.dialer.DialerConfig
@@ -82,6 +83,12 @@ data class AppState(
     val leadFilter: String = "open",
     /** Set when another screen (e.g. Campaign tab) asks Leads to open in select mode. */
     val leadsSelectRequested: Boolean = false,
+    // in-app WhatsApp chat (tracked via the company number)
+    val waChatContact: Contact? = null,
+    val waThread: List<WhatsAppMessage> = emptyList(),
+    val waLoading: Boolean = false,
+    val waSending: Boolean = false,
+    val waError: String? = null,
     // follow-up / callback scheduler
     val followUpList: List<FollowUp> = emptyList(),
     val followUpsLoading: Boolean = false,
@@ -810,6 +817,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onSuccess { list -> set { it.copy(leads = list, aiScoringLeads = false,
                     message = if (n > 0) "AI scored $n lead(s) ✨" else "Couldn't score leads right now") } }
                 .onFailure { set { it.copy(aiScoringLeads = false) } }
+        }
+    }
+
+    // ---------- WhatsApp chat ----------
+
+    fun openWaChat(c: Contact) {
+        set { it.copy(waChatContact = c, waThread = emptyList(), waError = null) }
+        c.id?.let { loadWaThread(it) }
+    }
+
+    fun closeWaChat() = set { it.copy(waChatContact = null, waError = null) }
+
+    fun loadWaThread(contactId: String) {
+        viewModelScope.launch {
+            set { it.copy(waLoading = true) }
+            runCatching { Repository.fetchWhatsThread(contactId) }
+                .onSuccess { list -> set { it.copy(waThread = list, waLoading = false) } }
+                .onFailure { set { it.copy(waLoading = false) } }
+        }
+    }
+
+    /** Sends via the company WhatsApp number (tracked). Reloads the thread on success. */
+    fun sendWa(text: String) {
+        val contactId = _state.value.waChatContact?.id ?: return
+        if (text.isBlank() || _state.value.waSending) return
+        viewModelScope.launch {
+            set { it.copy(waSending = true, waError = null) }
+            val err = runCatching { Repository.sendWhatsApp(contactId, text) }.getOrDefault("Couldn't send")
+            if (err == null) {
+                runCatching { Repository.fetchWhatsThread(contactId) }
+                    .onSuccess { list -> set { it.copy(waThread = list, waSending = false) } }
+                    .onFailure { set { it.copy(waSending = false) } }
+            } else {
+                set { it.copy(waSending = false, waError = err) }
+            }
         }
     }
 

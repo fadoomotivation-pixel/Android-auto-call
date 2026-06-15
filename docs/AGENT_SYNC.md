@@ -72,6 +72,17 @@ service-bearer auth.
 ## LOG (newest first — prepend new entries)
 
 ### 2026-06-15 — Claude Code
+- WHAT: WhatsApp Cloud API — app slice. In-app chat dialog from the Leads
+  WhatsApp button; sends through the company number (tracked), falls back to the
+  phone's WhatsApp app if not connected. Admin slice (setup + conversations) also done.
+- FILES: android .../data/{Models.kt (WhatsAppMessage), Repository.kt (fetchWhatsThread,
+  sendWhatsApp)}, .../ui/MainViewModel.kt (wa* state + openWaChat/sendWa),
+  .../ui/TelecallerScreens.kt (WhatsAppChatDialog); admin/app/dashboard/whatsapp/*.
+- WHY: reps send via company number so super admin sees every message.
+- BUILD: android PR — verify "Build Android APK" CI before merge.
+- NEXT/NOTE: first-touch (outside 24h window) needs approved templates — not built yet.
+
+### 2026-06-15 — Claude Code
 - WHAT: WhatsApp Cloud API — backend slice. One company number, shared team inbox;
   every in/out message logged + tagged by rep + lead for super-admin oversight.
 - FILES: supabase/migrations/0022_whatsapp_cloud_api.sql (whatsapp_integrations,
