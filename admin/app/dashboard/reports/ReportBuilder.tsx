@@ -38,6 +38,8 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
     const startIso = startDate.toISOString();
     const endIso = endDate.toISOString();
 
+    let finalStats: any[] = [];
+
     if (reportType === "team_performance") {
       // Need calls, connected, talk time per salesperson
       const { data: calls } = await supabase
@@ -74,6 +76,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
         { key: "connect_rate", label: "Connect Rate" },
         { key: "talk_time", label: "Talk Time" }
       ]);
+      finalStats = stats;
       setData(stats);
       
     } else if (reportType === "attendance") {
@@ -113,6 +116,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
         { key: "days_late", label: "Days Late" },
         { key: "days_absent", label: "Days Absent" }
       ]);
+      finalStats = stats;
       setData(stats);
       
     } else if (reportType === "pipeline") {
@@ -141,10 +145,11 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
         { key: "metric", label: "Metric" },
         { key: "count", label: "Count" }
       ]);
+      finalStats = stats;
       setData(stats);
     }
 
-    if (stats.length === 0) {
+    if (finalStats.length === 0) {
       setErrorMsg("No data found for this date range.");
       setData([]);
     }
