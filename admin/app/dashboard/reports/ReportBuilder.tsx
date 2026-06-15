@@ -131,9 +131,9 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
       });
 
       const stats = [
-        ...Object.entries(counts).map(([k, v]) => ({ metric: \`Stage: \${k}\`, count: v })),
+        ...Object.entries(counts).map(([k, v]) => ({ metric: `Stage: ${k}`, count: v })),
         { metric: "---", count: "---" },
-        ...Object.entries(temps).map(([k, v]) => ({ metric: \`Temperature: \${k}\`, count: v }))
+        ...Object.entries(temps).map(([k, v]) => ({ metric: `Temperature: ${k}`, count: v }))
       ];
 
       setColumns([
@@ -149,12 +149,12 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
   function downloadCsv() {
     if (!data.length) return;
     const headers = columns.map(c => c.label);
-    const rows = data.map(row => columns.map(c => \`"\${row[c.key]}"\`).join(","));
+    const rows = data.map(row => columns.map(c => `"${row[c.key]}"`).join(","));
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", \`\${reportType}_report.csv\`);
+    link.setAttribute("download", `${reportType}_report.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -220,7 +220,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
           </div>
           
           <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
-            {reportType !== "pipeline" && \`Date Range: \${dateRange.replace("_", " ")}\`}
+            {reportType !== "pipeline" && `Date Range: ${dateRange.replace("_", " ")}`}
           </div>
 
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -246,7 +246,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
             </tbody>
           </table>
           
-          <style dangerouslySetInnerHTML={{__html: \`
+          <style dangerouslySetInnerHTML={{__html: `
             @media print {
               body * { visibility: hidden; }
               .printable-report, .printable-report * { visibility: visible; }
@@ -256,7 +256,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
               th, td { border: 1px solid #ddd !important; padding: 8px !important; color: black !important; }
               th { background-color: #f5f5f5 !important; -webkit-print-color-adjust: exact; }
             }
-          \`}} />
+          `}} />
         </div>
       )}
     </div>
