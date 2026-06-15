@@ -41,6 +41,7 @@ data class Profile(
     val role: String = "salesperson",
     @SerialName("sip_agent_id") val sipAgentId: String? = null,
     @SerialName("caller_id") val callerId: String? = null,
+    val territory: String? = null,
 )
 
 @Serializable
@@ -83,6 +84,9 @@ data class Contact(
     /** AI-suggested next step for this lead (one short line); null = not scored. */
     @SerialName("ai_next_action") val aiNextAction: String? = null,
     @SerialName("ai_scored_at") val aiScoredAt: String? = null,
+    val territory: String? = null,
+    @SerialName("site_visit_at") val siteVisitAt: String? = null,
+    @SerialName("site_visit_project") val siteVisitProject: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
 )
 

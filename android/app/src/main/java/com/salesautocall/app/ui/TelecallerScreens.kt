@@ -764,8 +764,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         LeadActionSheet(
             c = c,
             onDismiss = { actionFor = null },
-            onApply = { status, temp, budget, note ->
-                c.id?.let { vm.applyLead(it, status, temp, budget, note) }
+            onApply = { status, temp, budget, note, svProj, svAt ->
+                c.id?.let { vm.applyLead(it, status, temp, budget, note, svProj, svAt) }
                 actionFor = null
             },
         )
@@ -966,11 +966,14 @@ private fun LeadCard(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LeadActionSheet(c: Contact, onDismiss: () -> Unit, onApply: (String?, String?, String?, String?) -> Unit) {
+private fun LeadActionSheet(c: Contact, onDismiss: () -> Unit, onApply: (String?, String?, String?, String?, String?, String?) -> Unit) {
     var stage by remember(c.id) { mutableStateOf<String?>(null) }
     var temp by remember(c.id) { mutableStateOf<String?>(null) }
     var budget by remember(c.id) { mutableStateOf(c.budget ?: "") }
     var note by remember(c.id) { mutableStateOf(c.notes ?: "") }
+    var svProject by remember(c.id) { mutableStateOf(c.siteVisitProject ?: "") }
+    var svAt by remember(c.id) { mutableStateOf(c.siteVisitAt ?: "") }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1005,6 +1008,35 @@ private fun LeadActionSheet(c: Contact, onDismiss: () -> Unit, onApply: (String?
                     }
                 }
                 Spacer(Modifier.height(12.dp))
+                if ((stage ?: c.status) == "site_visit") {
+                    OutlinedTextField(svProject, { svProject = it }, label = { Text("Site Visit Project") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = {
+                        val cal = java.util.Calendar.getInstance()
+                        android.app.DatePickerDialog(
+                            context,
+                            { _, y, m, d ->
+                                android.app.TimePickerDialog(
+                                    context,
+                                    { _, hr, min ->
+                                        val chosen = java.time.LocalDateTime.of(y, m + 1, d, hr, min)
+                                        svAt = chosen.atZone(java.time.ZoneId.systemDefault()).toInstant().toString()
+                                    },
+                                    cal.get(java.util.Calendar.HOUR_OF_DAY),
+                                    cal.get(java.util.Calendar.MINUTE),
+                                    false
+                                ).show()
+                            },
+                            cal.get(java.util.Calendar.YEAR),
+                            cal.get(java.util.Calendar.MONTH),
+                            cal.get(java.util.Calendar.DAY_OF_MONTH)
+                        ).show()
+                    }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (svAt.isBlank()) "📅 Pick Date & Time" else "📅 Scheduled: ${svAt.substring(0, 16).replace('T', ' ')}")
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
                 OutlinedTextField(budget, { budget = it }, label = { Text("Budget (e.g. ₹45L)") },
                     singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
@@ -1019,6 +1051,8 @@ private fun LeadActionSheet(c: Contact, onDismiss: () -> Unit, onApply: (String?
                     temp,
                     budget.trim().ifBlank { null }.takeIf { it != c.budget },
                     note.trim().ifBlank { null }.takeIf { it != c.notes },
+                    svProject.trim().ifBlank { null }.takeIf { it != c.siteVisitProject },
+                    svAt.trim().ifBlank { null }.takeIf { it != c.siteVisitAt },
                 )
             }) { Text("Save") }
         },

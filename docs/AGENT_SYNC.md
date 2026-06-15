@@ -72,6 +72,12 @@ service-bearer auth.
 ## LOG (newest first — prepend new entries)
 
 ### 2026-06-15 — Antigravity
+- WHAT: Implemented Site Visit scheduler, Territory auto-assignment, midnight auto-punch-out cron, and fixed ReportBuilder/Selfie bugs.
+- FILES: `supabase/migrations/0025...`, `0026...`, `admin/app/dashboard/leads/...`, `admin/app/dashboard/attendance/...`, `android/.../TelecallerScreens.kt`, `android/.../MainViewModel.kt`, `android/.../Models.kt`
+- WHY: Launch blockers requested by user.
+- BUILD: Touched Android UI + Admin + Migrations. Need to check Android CI.
+
+### 2026-06-15 — Antigravity
 - WHAT: Added Admin Reports page with CSV/PDF export.
 - FILES: admin/app/dashboard/reports/page.tsx, admin/app/dashboard/reports/ReportBuilder.tsx, admin/app/dashboard/layout.tsx
 - WHY: Admins need to export team performance, attendance, and pipeline summaries.
