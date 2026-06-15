@@ -1,0 +1,69 @@
+// AI sales assistant for telecallers. A lightweight chat coach: objection
+// handling, what-to-say, next steps, pitch help. Uses Groq (free tier) like the
+// rest of the app's AI. Body: { messages: [{role,content}], lead?: {...} }
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+function json(o: unknown, s = 200) {
+  return new Response(JSON.stringify(o), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
+}
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
+const GROQ = Deno.env.get("GROQ_API_KEY") ?? "";
+
+const SYSTEM = `You are a sharp, friendly sales coach for telecallers at an Indian company (real estate / services CRM).
+Help the rep close more deals. Be concise and practical — short answers, ready to use on a live call or in a WhatsApp reply.
+When the rep faces an objection, give 2-3 specific lines they can say. Indian English, simple words.
+If lead context is given, tailor advice to that lead. Never invent facts about the company or prices; if unknown, tell the rep to confirm. Keep replies under ~120 words unless asked for more.`;
+
+type Msg = { role: string; content: string };
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+
+  const auth = req.headers.get("Authorization") ?? "";
+  const u = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
+  const { data: ud } = await u.auth.getUser();
+  if (!ud?.user) return json({ ok: false, error: "Unauthorized" }, 401);
+
+  if (!GROQ) return json({ ok: false, error: "AI is not configured (GROQ_API_KEY)." }, 200);
+
+  const { messages, lead } = await req.json().catch(() => ({ messages: [] }));
+  const history: Msg[] = Array.isArray(messages) ? messages.slice(-12) : [];
+  if (history.length === 0) return json({ ok: false, error: "empty" }, 400);
+
+  let sys = SYSTEM;
+  if (lead && typeof lead === "object") {
+    const parts = [
+      lead.name && `Name: ${lead.name}`,
+      lead.status && `Status: ${lead.status}`,
+      lead.temperature && `Temperature: ${lead.temperature}`,
+      lead.notes && `Notes: ${lead.notes}`,
+    ].filter(Boolean).join("; ");
+    if (parts) sys += `\n\nCurrent lead — ${parts}`;
+  }
+
+  try {
+    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile", temperature: 0.4, max_tokens: 500,
+        messages: [{ role: "system", content: sys }, ...history.map((m) => ({
+          role: m.role === "assistant" ? "assistant" : "user", content: String(m.content ?? "").slice(0, 4000),
+        }))],
+      }),
+    });
+    const j = await r.json();
+    const reply: string = j.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!reply) return json({ ok: false, error: "no reply" }, 200);
+    return json({ ok: true, reply });
+  } catch (e) {
+    return json({ ok: false, error: String(e) }, 200);
+  }
+});

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.salesautocall.app.data.AppPrefs
 import com.salesautocall.app.data.Attendance
 import com.salesautocall.app.data.CallLog
+import com.salesautocall.app.data.ChatMsg
 import com.salesautocall.app.data.CampaignStat
 import com.salesautocall.app.data.Company
 import com.salesautocall.app.data.Contact
@@ -89,6 +90,9 @@ data class AppState(
     val waLoading: Boolean = false,
     val waSending: Boolean = false,
     val waError: String? = null,
+    // AI assistant chat
+    val assistantMessages: List<ChatMsg> = emptyList(),
+    val assistantThinking: Boolean = false,
     // follow-up / callback scheduler
     val followUpList: List<FollowUp> = emptyList(),
     val followUpsLoading: Boolean = false,
@@ -819,6 +823,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onFailure { set { it.copy(aiScoringLeads = false) } }
         }
     }
+
+    // ---------- AI assistant chat ----------
+
+    /** Sends a question to the AI sales coach and appends its reply. */
+    fun askAssistant(text: String) {
+        val q = text.trim()
+        if (q.isBlank() || _state.value.assistantThinking) return
+        val msgs = _state.value.assistantMessages + ChatMsg("user", q)
+        set { it.copy(assistantMessages = msgs, assistantThinking = true) }
+        viewModelScope.launch {
+            val reply = runCatching { Repository.assistantChat(msgs) }.getOrNull()
+            set {
+                it.copy(
+                    assistantMessages = it.assistantMessages +
+                        ChatMsg("assistant", reply ?: "Sorry, I couldn't answer right now. Please try again."),
+                    assistantThinking = false,
+                )
+            }
+        }
+    }
+
+    fun clearAssistant() = set { it.copy(assistantMessages = emptyList(), assistantThinking = false) }
 
     // ---------- WhatsApp chat ----------
 
