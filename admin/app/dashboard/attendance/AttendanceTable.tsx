@@ -153,10 +153,10 @@ export function AttendanceTable({
                     <td>
                       {r.selfie ? (
                         <img 
-                          src={r.selfie} 
+                          src={r.selfie.startsWith("data:") ? r.selfie : `data:image/jpeg;base64,${r.selfie}`} 
                           alt="selfie" 
-                          style={{ width: 36, height: 36, borderRadius: "50%", cursor: "pointer", objectFit: "cover" }}
-                          onClick={() => setSelectedSelfie(r.selfie)}
+                          style={{ width: 36, height: 36, borderRadius: "50%", cursor: "pointer", objectFit: "cover", backgroundColor: "#333" }}
+                          onClick={() => setSelectedSelfie(r.selfie?.startsWith("data:") ? r.selfie : `data:image/jpeg;base64,${r.selfie}`)}
                         />
                       ) : "—"}
                     </td>

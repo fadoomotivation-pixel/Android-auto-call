@@ -71,6 +71,7 @@ export function ImportLeads({
       email: l.email,
       company_name: l.project,
       budget: l.budget,
+      territory: l.territory,
       notes: l.notes,
       status: "new",
     }));

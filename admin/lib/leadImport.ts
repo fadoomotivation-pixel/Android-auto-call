@@ -8,6 +8,7 @@ export interface ParsedLead {
   email: string | null;
   project: string | null; // stored in contacts.company_name
   budget: string | null;
+  territory: string | null;
   notes: string | null;
 }
 
@@ -22,6 +23,7 @@ const NAME_KEYS = ["name", "customer", "client", "fullname", "full name", "lead"
 const EMAIL_KEYS = ["email", "mail", "e-mail"];
 const PROJECT_KEYS = ["project", "property", "township", "society", "company", "location", "scheme", "interest", "enquiry"];
 const BUDGET_KEYS = ["budget", "amount", "value", "price", "investment"];
+const TERRITORY_KEYS = ["territory", "city", "location", "area", "region", "zone"];
 const NOTE_KEYS = ["note", "notes", "remark", "remarks", "comment", "requirement", "message", "source"];
 
 function digitsLen(s: string): number {
@@ -54,7 +56,7 @@ export function parseRows(rows: string[][]): ParseResult {
   const headerLooks = findCol(first, PHONE_KEYS) >= 0 || findCol(first, NAME_KEYS) >= 0;
   const hasHeader = headerLooks && !firstHasPhone;
 
-  let phoneCol = -1, nameCol = -1, emailCol = -1, projectCol = -1, budgetCol = -1, noteCol = -1;
+  let phoneCol = -1, nameCol = -1, emailCol = -1, projectCol = -1, budgetCol = -1, territoryCol = -1, noteCol = -1;
   let dataRows: string[][];
 
   if (hasHeader) {
@@ -64,6 +66,7 @@ export function parseRows(rows: string[][]): ParseResult {
     emailCol = findCol(h, EMAIL_KEYS);
     projectCol = findCol(h, PROJECT_KEYS);
     budgetCol = findCol(h, BUDGET_KEYS);
+    territoryCol = findCol(h, TERRITORY_KEYS);
     noteCol = findCol(h, NOTE_KEYS);
     dataRows = clean.slice(1);
   } else {
@@ -99,6 +102,7 @@ export function parseRows(rows: string[][]): ParseResult {
       email: val(emailCol) || null,
       project: val(projectCol) || null,
       budget: val(budgetCol) || null,
+      territory: val(territoryCol) || null,
       notes: val(noteCol) || null,
     });
   }
