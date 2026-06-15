@@ -147,7 +147,8 @@ export default async function OverviewPage() {
       {leaders.length === 0 ? (
         <div className="empty">No calls in the last 24 hours.</div>
       ) : (
-        <table>
+        <div className="table-responsive">
+<table>
           <thead>
             <tr><th>#</th><th>Telecaller</th><th>Calls</th><th>Connected</th><th>Connect rate</th></tr>
           </thead>
@@ -163,7 +164,9 @@ export default async function OverviewPage() {
             ))}
           </tbody>
         </table>
+</div>
       )}
     </>
   );
 }
+

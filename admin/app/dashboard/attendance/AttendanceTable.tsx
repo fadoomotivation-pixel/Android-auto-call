@@ -121,7 +121,8 @@ export function AttendanceTable({
         <div className="empty">No attendance records found for this month.</div>
       ) : (
         <div style={{ overflowX: "auto", marginTop: 20 }}>
-          <table style={{ minWidth: 800 }}>
+          <div className="table-responsive">
+<table style={{ minWidth: 800 }}>
             <thead>
               <tr>
                 <th>Date</th>
@@ -165,6 +166,7 @@ export function AttendanceTable({
               })}
             </tbody>
           </table>
+</div>
         </div>
       )}
 
@@ -184,3 +186,4 @@ export function AttendanceTable({
     </div>
   );
 }
+

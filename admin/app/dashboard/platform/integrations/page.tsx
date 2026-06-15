@@ -42,7 +42,8 @@ export default async function IntegrationsPage() {
       {rows.length === 0 ? (
         <div className="empty">No companies yet.</div>
       ) : (
-        <table>
+        <div className="table-responsive">
+<table>
           <thead>
             <tr>
               <th>Company</th>
@@ -74,7 +75,9 @@ export default async function IntegrationsPage() {
             })}
           </tbody>
         </table>
+</div>
       )}
     </>
   );
 }
+
