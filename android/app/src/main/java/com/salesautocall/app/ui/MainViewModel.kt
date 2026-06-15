@@ -728,6 +728,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Confirms the AI's suggested disposition: sets the linked lead's status and
+     * clears the suggestion. Optimistically updates the visible call/lead lists.
+     */
+    fun applyDisposition(callLogId: String, contactId: String, status: String) {
+        viewModelScope.launch {
+            runCatching {
+                Repository.setDisposition(contactId, status, null)
+                Repository.clearSuggestedDisposition(callLogId)
+            }.onSuccess {
+                set { st ->
+                    st.copy(
+                        callList = st.callList.map { c ->
+                            if (c.id == callLogId) c.copy(suggestedDisposition = null) else c
+                        },
+                        leads = st.leads.map { c ->
+                            if (c.id == contactId) c.copy(status = status) else c
+                        },
+                        message = "Lead updated ✓",
+                    )
+                }
+            }.onFailure { e -> set { it.copy(error = e.message ?: "Couldn't update the lead") } }
+        }
+    }
+
+    /** Dismisses the AI suggestion without changing the lead. */
+    fun dismissDisposition(callLogId: String) {
+        viewModelScope.launch {
+            runCatching { Repository.clearSuggestedDisposition(callLogId) }
+            set { st ->
+                st.copy(callList = st.callList.map { c ->
+                    if (c.id == callLogId) c.copy(suggestedDisposition = null) else c
+                })
+            }
+        }
+    }
+
     // ---------- Home dashboard ----------
 
     /** Loads everything the Home tab needs in one go. */
