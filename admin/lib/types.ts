@@ -145,3 +145,18 @@ export interface SalespersonStats {
   total_talk_seconds: number;
   last_call_at: string | null;
 }
+
+export interface Attendance {
+  id: string;
+  company_id: string;
+  salesperson_id: string;
+  work_date: string;
+  punch_in_at: string | null;
+  punch_out_at: string | null;
+  punch_in_lat: number | null;
+  punch_in_lng: number | null;
+  selfie: string | null;
+  location_label: string | null;
+  status: "present" | "half_day" | "absent";
+  created_at: string;
+}

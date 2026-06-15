@@ -44,6 +44,7 @@ export default async function DashboardLayout({
         <NavLink href="/dashboard" label="Overview" />
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
+        {profile?.role === "admin" && <NavLink href="/dashboard/attendance" label="📅 Attendance" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/cloud-calling" label="☁️ Cloud calling" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/whatsapp" label="💬 WhatsApp" />}

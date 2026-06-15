@@ -72,6 +72,13 @@ service-bearer auth.
 ## LOG (newest first — prepend new entries)
 
 ### 2026-06-15 — Antigravity
+- WHAT: Added Admin Attendance Dashboard (selfies, GPS, late flags, CSV export).
+- FILES: admin/app/dashboard/attendance/page.tsx, admin/app/dashboard/attendance/AttendanceTable.tsx, admin/app/dashboard/layout.tsx, admin/lib/types.ts
+- WHY: Admin needs to see all 100+ telecallers' punch-in records easily.
+- BUILD: Admin web only. No Android CI needed.
+- NEXT/NOTE: Late threshold is set to hardcoded 09:30 AM local time.
+
+### 2026-06-15 — Antigravity
 - WHAT: Added Facebook Lead Ads webhook + lead_source field to contacts. Admin can connect their Meta App and page.
 - FILES: supabase/migrations/0024_facebook_leads_and_source.sql, supabase/functions/facebook-webhook/index.ts, admin/app/dashboard/facebook/page.tsx, admin/app/dashboard/layout.tsx
 - WHY: Auto-import leads from Facebook Lead Ads
