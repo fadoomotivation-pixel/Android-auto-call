@@ -42,6 +42,7 @@ export default async function DashboardLayout({
       <aside className="sidebar">
         <h1>📞 SalesAutoCall</h1>
         <NavLink href="/dashboard" label="Overview" />
+        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
         {profile?.role === "admin" && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/cloud-calling" label="☁️ Cloud calling" />}
