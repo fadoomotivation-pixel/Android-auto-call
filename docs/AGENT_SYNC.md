@@ -71,6 +71,27 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-15 — Antigravity
+- WHAT: Added Admin Reports page with CSV/PDF export.
+- FILES: admin/app/dashboard/reports/page.tsx, admin/app/dashboard/reports/ReportBuilder.tsx, admin/app/dashboard/layout.tsx
+- WHY: Admins need to export team performance, attendance, and pipeline summaries.
+- BUILD: Admin web only. No Android CI needed.
+- NEXT/NOTE: Print CSS is used for PDF export to keep the bundle small.
+
+### 2026-06-15 — Antigravity
+- WHAT: Added Admin Attendance Dashboard (selfies, GPS, late flags, CSV export).
+- FILES: admin/app/dashboard/attendance/page.tsx, admin/app/dashboard/attendance/AttendanceTable.tsx, admin/app/dashboard/layout.tsx, admin/lib/types.ts
+- WHY: Admin needs to see all 100+ telecallers' punch-in records easily.
+- BUILD: Admin web only. No Android CI needed.
+- NEXT/NOTE: Late threshold is set to hardcoded 09:30 AM local time.
+
+### 2026-06-15 — Antigravity
+- WHAT: Added Facebook Lead Ads webhook + lead_source field to contacts. Admin can connect their Meta App and page.
+- FILES: supabase/migrations/0024_facebook_leads_and_source.sql, supabase/functions/facebook-webhook/index.ts, admin/app/dashboard/facebook/page.tsx, admin/app/dashboard/layout.tsx
+- WHY: Auto-import leads from Facebook Lead Ads
+- BUILD: Admin/Supabase only. No Android CI needed.
+- NEXT/NOTE: User confirmed they have Meta App credentials.
+
 ### 2026-06-15 — Claude Code
 - WHAT: (1) WhatsApp super-admin company picker + default rep for unknown inbound
   (migration 0023, webhook update, admin page). (2) Real AI assistant chat for

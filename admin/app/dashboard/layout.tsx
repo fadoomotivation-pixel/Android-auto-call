@@ -44,12 +44,15 @@ export default async function DashboardLayout({
         <NavLink href="/dashboard" label="Overview" />
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
+        {profile?.role === "admin" && <NavLink href="/dashboard/attendance" label="📅 Attendance" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/cloud-calling" label="☁️ Cloud calling" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/whatsapp" label="💬 WhatsApp" />}
+        {profile?.role === "admin" && <NavLink href="/dashboard/facebook" label="📱 Facebook Leads" />}
         <NavLink href="/dashboard/contacts" label="Contacts" />
         <NavLink href="/dashboard/calls" label="Call logs" />
         <NavLink href="/dashboard/recordings" label="Recordings" />
+        {profile?.role === "admin" && <NavLink href="/dashboard/reports" label="📊 Reports" />}
         {isSuper && (
           <>
             <div style={{ margin: "14px 6px 4px", fontSize: 11, letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" }}>
