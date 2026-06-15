@@ -53,8 +53,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, full_name")
-        .eq("company_id", companyId)
-        .eq("role", "salesperson");
+        .eq("company_id", companyId);
 
       const stats = (profiles || []).map(p => {
         const pCalls = (calls || []).filter(c => c.salesperson_id === p.id);
@@ -91,8 +90,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, full_name")
-        .eq("company_id", companyId)
-        .eq("role", "salesperson");
+        .eq("company_id", companyId);
 
       const isLate = (iso: string | null) => {
         if (!iso) return false;
