@@ -69,8 +69,12 @@ Deno.serve(async (req) => {
   const admin = createClient(SUPABASE_URL, SERVICE);
 
   // --- Cron mode: generate for every active company ---
+  // Triggered either by a matching x-cron-secret, or by the nightly pg_cron job
+  // which authenticates with the project's service-role key (already trusted).
   const cronHeader = req.headers.get("x-cron-secret") ?? "";
-  if (CRON_SECRET && cronHeader === CRON_SECRET) {
+  const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const isCron = (CRON_SECRET && cronHeader === CRON_SECRET) || (!!bearer && bearer === SERVICE);
+  if (isCron) {
     const date = body.date ?? istDate(0); // run after the day's close for "today" IST
     const { data: companies } = await admin.from("companies").select("id");
     let generated = 0;
