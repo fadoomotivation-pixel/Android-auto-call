@@ -77,6 +77,8 @@ data class AppState(
     // lead pipeline (all my contacts across campaigns)
     val leads: List<Contact> = emptyList(),
     val leadsLoading: Boolean = false,
+    /** True while the AI lead-scoring call is running. */
+    val aiScoringLeads: Boolean = false,
     val leadFilter: String = "open",
     /** Set when another screen (e.g. Campaign tab) asks Leads to open in select mode. */
     val leadsSelectRequested: Boolean = false,
@@ -792,6 +794,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { Repository.fetchLeads() }
                 .onSuccess { list -> set { it.copy(leads = list, leadsLoading = false) } }
                 .onFailure { e -> set { it.copy(leadsLoading = false, error = e.message) } }
+        }
+    }
+
+    /**
+     * AI-scores the rep's open leads (hot/warm/cold + a next action) in one call,
+     * then reloads so the new triage + tips show immediately.
+     */
+    fun scoreLeads() {
+        if (_state.value.aiScoringLeads) return
+        viewModelScope.launch {
+            set { it.copy(aiScoringLeads = true) }
+            val n = runCatching { Repository.scoreLeads() }.getOrDefault(0)
+            runCatching { Repository.fetchLeads() }
+                .onSuccess { list -> set { it.copy(leads = list, aiScoringLeads = false,
+                    message = if (n > 0) "AI scored $n lead(s) ✨" else "Couldn't score leads right now") } }
+                .onFailure { set { it.copy(aiScoringLeads = false) } }
         }
     }
 

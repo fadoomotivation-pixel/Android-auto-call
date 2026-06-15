@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
@@ -128,6 +129,18 @@ object Repository {
         return runCatching {
             resp.body<JsonObject>()["summary"]?.jsonPrimitive?.contentOrNull
         }.getOrNull()
+    }
+
+    /**
+     * Runs AI scoring over the rep's open leads (one Groq call). Writes
+     * hot/warm/cold + a next action back to the leads. Returns how many scored.
+     */
+    suspend fun scoreLeads(): Int {
+        val resp = client.functions.invoke(function = "lead-insights", body = buildJsonObject { })
+        if (resp.status.value !in 200..299) return 0
+        return runCatching {
+            resp.body<JsonObject>()["scored"]?.jsonPrimitive?.intOrNull
+        }.getOrNull() ?: 0
     }
 
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {
