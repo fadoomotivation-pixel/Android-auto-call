@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { TelecallerOverview } from "@/lib/types";
+import Link from "next/link";
 
 export default async function PlatformTelecallersPage() {
   const supabase = await createClient();
@@ -24,15 +25,23 @@ export default async function PlatformTelecallersPage() {
 
   return (
     <>
-      <h2>Telecallers (all companies)</h2>
-      <p className="subtitle">Who is working on what, across every company.</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Telecallers (all companies)</h2>
+          <p className="subtitle" style={{ margin: "4px 0 0" }}>Who is working on what, across every company.</p>
+        </div>
+        <Link href="/dashboard/platform/telecallers/new" className="badge new" style={{ padding: "8px 16px", textDecoration: "none" }}>
+          + New Telecaller
+        </Link>
+      </div>
 
       {error && <div className="error">{error.message}</div>}
 
       {rows.length === 0 ? (
         <div className="empty">No telecallers yet.</div>
       ) : (
-        <table>
+        <div className="table-responsive">
+<table>
           <thead>
             <tr>
               <th>Telecaller</th>
@@ -64,7 +73,9 @@ export default async function PlatformTelecallersPage() {
             ))}
           </tbody>
         </table>
+</div>
       )}
     </>
   );
 }
+

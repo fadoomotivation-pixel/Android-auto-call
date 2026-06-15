@@ -45,7 +45,8 @@ export default async function SalespeoplePage() {
       {rows.length === 0 ? (
         <div className="empty">No salespeople yet. Share the invite code above.</div>
       ) : (
-        <table>
+        <div className="table-responsive">
+<table>
           <thead>
             <tr>
               <th>Name</th>
@@ -81,6 +82,7 @@ export default async function SalespeoplePage() {
             })}
           </tbody>
         </table>
+</div>
       )}
 
       {memberList.length > 0 && (
@@ -90,7 +92,8 @@ export default async function SalespeoplePage() {
             Set each rep&apos;s uroperator <strong>agent extension</strong> + <strong>caller ID (DID)</strong>. The app uses these
             automatically for the 📞 Cloud call button.
           </p>
-          <table>
+          <div className="table-responsive">
+<table>
             <thead>
               <tr>
                 <th>Telecaller</th>
@@ -108,8 +111,10 @@ export default async function SalespeoplePage() {
               ))}
             </tbody>
           </table>
+</div>
         </>
       )}
     </>
   );
 }
+

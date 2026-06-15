@@ -22,7 +22,8 @@ export default async function ContactsPage() {
       {rows.length === 0 ? (
         <div className="empty">No contacts imported yet.</div>
       ) : (
-        <table>
+        <div className="table-responsive">
+<table>
           <thead>
             <tr>
               <th>Name</th>
@@ -48,7 +49,9 @@ export default async function ContactsPage() {
             ))}
           </tbody>
         </table>
+</div>
       )}
     </>
   );
 }
+

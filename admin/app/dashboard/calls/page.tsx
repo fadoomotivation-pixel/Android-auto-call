@@ -33,7 +33,8 @@ export default async function CallsPage() {
       {rows.length === 0 ? (
         <div className="empty">No calls logged yet.</div>
       ) : (
-        <table>
+        <div className="table-responsive">
+<table>
           <thead>
             <tr>
               <th>When</th>
@@ -59,7 +60,9 @@ export default async function CallsPage() {
             ))}
           </tbody>
         </table>
+</div>
       )}
     </>
   );
 }
+

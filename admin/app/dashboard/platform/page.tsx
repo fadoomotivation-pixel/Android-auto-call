@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { CompanyOverview } from "@/lib/types";
+import Link from "next/link";
 
 export default async function PlatformCompaniesPage() {
   const supabase = await createClient();
@@ -33,8 +34,15 @@ export default async function PlatformCompaniesPage() {
 
   return (
     <>
-      <h2>Companies (all)</h2>
-      <p className="subtitle">Platform-wide view of every company and its activity.</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Companies (all)</h2>
+          <p className="subtitle" style={{ margin: "4px 0 0" }}>Platform-wide view of every company and its activity.</p>
+        </div>
+        <Link href="/dashboard/platform/companies/new" className="badge new" style={{ padding: "8px 16px", textDecoration: "none" }}>
+          + New Company
+        </Link>
+      </div>
 
       <div className="cards">
         <div className="card"><div className="label">Companies</div><div className="value">{totals.companies}</div></div>

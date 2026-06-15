@@ -85,3 +85,58 @@ button.primary:hover { filter: brightness(1.08); }
 button.link { background: none; border: none; color: var(--muted); cursor: pointer; }
 .error { color: var(--bad); font-size: 13px; margin-top: 12px; }
 .empty { color: var(--muted); padding: 40px; text-align: center; }
+
+/* Mobile Optimization */
+@media (max-width: 768px) {
+  .app { flex-direction: column; }
+  
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 16px;
+    display: none;
+  }
+  
+  .sidebar.mobile-open {
+    display: flex;
+  }
+  
+  .main { padding: 16px; }
+  
+  .cards { grid-template-columns: 1fr; }
+  
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+  }
+  
+  table { border-radius: 0; border: none; }
+  th, td { white-space: nowrap; }
+  
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  
+  .mobile-menu-btn {
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-topbar { display: none; }
+}

@@ -56,7 +56,8 @@ export default async function StoragePage({
       </div>
 
       <div className="label">Per-company Drive (optional override)</div>
-      <table>
+      <div className="table-responsive">
+<table>
         <thead>
           <tr>
             <th>Company</th>
@@ -83,6 +84,7 @@ export default async function StoragePage({
           })}
         </tbody>
       </table>
+</div>
 
       <p className="subtitle" style={{ marginTop: 16 }}>
         Setup: create an OAuth client (type “Web application”) in Google Cloud, add
@@ -93,3 +95,4 @@ export default async function StoragePage({
     </>
   );
 }
+
