@@ -9,6 +9,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
   const [dateRange, setDateRange] = useState("this_week");
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any[]>([]);
+  const [columns, setColumns] = useState<{key: string, label: string}[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function generateReport() {
@@ -37,6 +38,8 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
 
     const startIso = startDate.toISOString();
     const endIso = endDate.toISOString();
+
+    let finalStats: any[] = [];
 
     if (reportType === "team_performance") {
       // Need calls, connected, talk time per salesperson
@@ -74,6 +77,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
         { key: "connect_rate", label: "Connect Rate" },
         { key: "talk_time", label: "Talk Time" }
       ]);
+      finalStats = stats;
       setData(stats);
       
     } else if (reportType === "attendance") {
@@ -113,6 +117,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
         { key: "days_late", label: "Days Late" },
         { key: "days_absent", label: "Days Absent" }
       ]);
+      finalStats = stats;
       setData(stats);
       
     } else if (reportType === "pipeline") {
@@ -141,10 +146,11 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
         { key: "metric", label: "Metric" },
         { key: "count", label: "Count" }
       ]);
+      finalStats = stats;
       setData(stats);
     }
 
-    if (stats.length === 0) {
+    if (finalStats.length === 0) {
       setErrorMsg("No data found for this date range.");
       setData([]);
     }
