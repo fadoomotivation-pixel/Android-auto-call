@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { read, utils } from "xlsx";
+import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/client";
 import { parseRows, parsePasted, type ParsedLead } from "@/lib/leadImport";
 
@@ -40,9 +40,9 @@ export function ImportLeads({
     setFileName(file.name);
     try {
       const buf = await file.arrayBuffer();
-      const wb = read(buf, { type: "array" });
+      const wb = XLSX.read(buf, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = utils.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
+      const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
       const res = parseRows(rows as string[][]);
       setParsed(res.leads);
       setSkipped(res.skipped);
