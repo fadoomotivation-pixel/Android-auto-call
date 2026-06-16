@@ -147,22 +147,30 @@ export default async function OverviewPage() {
       {leaders.length === 0 ? (
         <div className="empty">No calls in the last 24 hours.</div>
       ) : (
-        <table>
+        <div style={{ overflowX: "auto", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(10, 10, 12, 0.4)", backdropFilter: "blur(24px)", boxShadow: "0 16px 40px rgba(0,0,0,0.3)" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
           <thead>
-            <tr><th>#</th><th>Telecaller</th><th>Calls</th><th>Connected</th><th>Connect rate</th></tr>
+            <tr style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>#</th>
+              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>Telecaller</th>
+              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>Calls</th>
+              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>Connected</th>
+              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>Connect rate</th>
+            </tr>
           </thead>
           <tbody>
             {leaders.map((l, i) => (
-              <tr key={l.id}>
-                <td>{i + 1}</td>
-                <td>{l.name}</td>
-                <td>{l.calls}</td>
-                <td>{l.connected}</td>
-                <td>{l.calls ? Math.round((l.connected / l.calls) * 100) : 0}%</td>
+              <tr key={l.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background 0.2s" }} className="hover-row">
+                <td style={{ padding: "16px 20px", fontWeight: 500, color: "var(--muted)" }}>{i + 1}</td>
+                <td style={{ padding: "16px 20px", fontWeight: 500, color: "#fff" }}>{l.name}</td>
+                <td style={{ padding: "16px 20px", color: "var(--text)" }}>{l.calls}</td>
+                <td style={{ padding: "16px 20px", color: "var(--good)" }}>{l.connected}</td>
+                <td style={{ padding: "16px 20px", color: "var(--accent)" }}>{l.calls ? Math.round((l.connected / l.calls) * 100) : 0}%</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </>
   );
