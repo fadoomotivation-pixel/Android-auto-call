@@ -220,9 +220,9 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
 
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-        <StatCard label="Unassigned" value={stats.unassigned} tone="#b45309" bg="#fffbeb" />
-        <StatCard label="Assigned" value={stats.assigned} tone="#1d4ed8" bg="#eff6ff" />
-        <StatCard label="Total" value={stats.total} tone="#15803d" bg="#f0fdf4" />
+        <StatCard label="Unassigned" value={stats.unassigned} tone="#f59e0b" bg="rgba(245, 158, 11, 0.05)" />
+        <StatCard label="Assigned" value={stats.assigned} tone="#3b82f6" bg="rgba(59, 130, 246, 0.05)" />
+        <StatCard label="Total" value={stats.total} tone="#10b981" bg="rgba(16, 185, 129, 0.05)" />
       </div>
 
       {/* Tabs */}
@@ -250,16 +250,16 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
         placeholder="Search by name or phone…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text)" }}
+        style={{ padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", backdropFilter: "blur(12px)", outline: "none", transition: "border 0.2s" }}
       />
 
       {/* Assign bar */}
-      <div className="card" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <div className="card" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", backdropFilter: "blur(12px)" }}>
         <span style={{ fontWeight: 600 }}>Assign to:</span>
         <select
           value={assignTo}
           onChange={(e) => setAssignTo(e.target.value)}
-          style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text)" }}
+          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text)", outline: "none" }}
         >
           <option value="">Choose telecaller…</option>
           {salespeople.map((sp) => (
@@ -302,19 +302,19 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {leads.map((l) => (
-            <label key={l.id} className="card" style={{ display: "flex", gap: 12, alignItems: "center", cursor: "pointer", padding: 12 }}>
-              <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
+            <label key={l.id} className="card" style={{ display: "flex", gap: 12, alignItems: "center", cursor: "pointer", padding: 16, background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", transition: "all 0.2s ease" }}>
+              <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{l.name || l.phone}</div>
-                <div style={{ color: "var(--muted)", fontSize: 13 }}>
-                  {l.phone}
-                  {l.company_name ? ` · ${l.company_name}` : ""}
-                  {l.territory ? ` · 📍 ${l.territory}` : ""}
-                  {l.budget ? ` · ${l.budget}` : ""}
+                <div style={{ fontWeight: 600, fontSize: 15, color: "#fff" }}>{l.name || l.phone}</div>
+                <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4, display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  <span style={{ color: "#cbd5e1" }}>📞 {l.phone}</span>
+                  {l.company_name && <span>· 🏢 {l.company_name}</span>}
+                  {l.territory && <span>· 📍 {l.territory}</span>}
+                  {l.budget && <span>· 💰 {l.budget}</span>}
                 </div>
-                {tab === "assigned" && <div style={{ color: "var(--muted)", fontSize: 12 }}>→ {nameOf(l.salesperson_id)}</div>}
+                {tab === "assigned" && <div style={{ color: "var(--accent)", fontSize: 12, marginTop: 6, fontWeight: 500 }}>→ Assigned to: {nameOf(l.salesperson_id)}</div>}
               </div>
-              <span className={`badge ${l.status}`}>{l.status}</span>
+              <span className={`badge ${l.status}`} style={{ boxShadow: "0 0 10px rgba(255,255,255,0.05)" }}>{l.status}</span>
             </label>
           ))}
         </div>
@@ -346,9 +346,9 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
 
 function StatCard({ label, value, tone, bg }: { label: string; value: number; tone: string; bg: string }) {
   return (
-    <div className="card" style={{ background: bg }}>
-      <div style={{ color: tone, fontSize: 13, fontWeight: 600 }}>{label}</div>
-      <div style={{ color: tone, fontSize: 26, fontWeight: 800 }}>{value.toLocaleString()}</div>
+    <div className="card" style={{ background: bg, border: `1px solid ${tone}22`, boxShadow: `0 8px 32px ${tone}10`, padding: "20px" }}>
+      <div style={{ color: tone, fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+      <div style={{ color: tone, fontSize: 32, fontWeight: 800, marginTop: 8 }}>{value.toLocaleString()}</div>
     </div>
   );
 }
@@ -358,13 +358,15 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
     <button
       onClick={onClick}
       style={{
-        padding: "8px 14px",
+        padding: "8px 16px",
         borderRadius: 50,
         border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-        background: active ? "var(--accent)" : "transparent",
+        background: active ? "var(--accent)" : "rgba(255,255,255,0.02)",
         color: active ? "#fff" : "var(--text)",
         cursor: "pointer",
         fontWeight: 600,
+        transition: "all 0.2s ease",
+        boxShadow: active ? "0 4px 12px rgba(16, 185, 129, 0.2)" : "none",
       }}
     >
       {children}
@@ -377,16 +379,17 @@ function Chip({ active, onClick, label, count }: { active: boolean; onClick: () 
     <button
       onClick={onClick}
       style={{
-        padding: "6px 12px",
+        padding: "6px 14px",
         borderRadius: 50,
         border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-        background: active ? "var(--accent)" : "var(--panel-2)",
+        background: active ? "var(--accent)" : "rgba(255,255,255,0.03)",
         color: active ? "#fff" : "var(--text)",
         cursor: "pointer",
         fontSize: 13,
+        transition: "all 0.2s ease",
       }}
     >
-      {label} <span style={{ opacity: 0.7 }}>{count}</span>
+      {label} <span style={{ opacity: 0.7, marginLeft: 6 }}>{count}</span>
     </button>
   );
 }

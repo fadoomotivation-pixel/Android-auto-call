@@ -78,51 +78,53 @@ export default function FacebookSetupPage() {
   if (loading) return <div>Loading...</div>;
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      <h2>📱 Facebook Lead Ads Setup</h2>
-      <p className="subtitle">Automatically sync leads from your Facebook & Instagram campaigns.</p>
+    <div style={{ maxWidth: 700, display: "flex", flexDirection: "column", gap: 20 }}>
+      <div>
+        <h2 style={{ margin: "0 0 4px 0", letterSpacing: "-0.5px" }}>📱 Facebook Lead Ads Setup</h2>
+        <p className="subtitle" style={{ margin: 0 }}>Automatically sync leads from your Facebook & Instagram campaigns.</p>
+      </div>
       
-      <div className="card" style={{ marginTop: 24 }}>
-        <h3>Step 1: Setup Meta App</h3>
-        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16 }}>
+      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
+        <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 1: Setup Meta App</h3>
+        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>
           1. Go to developers.facebook.com and create an app (Type: Business).<br />
           2. Add the "Webhooks" product and select "Page".<br />
-          3. Subscribe to the <b>leadgen</b> field.<br />
+          3. Subscribe to the <b style={{ color: "var(--text)" }}>leadgen</b> field.<br />
           4. Use the Webhook URL and Verify Token below.
         </p>
         
-        <div style={{ background: "var(--panel-2)", padding: 12, borderRadius: 6, marginBottom: 16, fontFamily: "monospace", fontSize: 13 }}>
-          <div><b>Webhook URL:</b> {webhookUrl}</div>
-          <div style={{ marginTop: 8 }}><b>Verify Token:</b> {verifyToken}</div>
+        <div style={{ background: "rgba(24, 119, 242, 0.05)", border: "1px solid rgba(24, 119, 242, 0.3)", padding: 16, borderRadius: 12, marginBottom: 32, fontFamily: "monospace", fontSize: 13, boxShadow: "0 0 20px rgba(24, 119, 242, 0.1)" }}>
+          <div><b style={{ color: "#1877F2" }}>Webhook URL:</b> {webhookUrl}</div>
+          <div style={{ marginTop: 8 }}><b style={{ color: "#1877F2" }}>Verify Token:</b> {verifyToken}</div>
         </div>
         
-        <h3>Step 2: Connect Page</h3>
-        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16 }}>
-          1. Go to Graph API Explorer or your App settings to generate a <b>Page Access Token</b>.<br />
-          2. Find your <b>Page ID</b> from your Facebook Page About section.
+        <h3 style={{ margin: "0 0 8px 0", color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 2: Connect Page</h3>
+        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>
+          1. Go to Graph API Explorer or your App settings to generate a <b style={{ color: "var(--text)" }}>Page Access Token</b>.<br />
+          2. Find your <b style={{ color: "var(--text)" }}>Page ID</b> from your Facebook Page About section.
         </p>
 
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Facebook Page ID</label>
+            <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 500, color: "var(--muted)", letterSpacing: "0.2px" }}>Facebook Page ID</label>
             <input 
               type="text" 
               value={pageId} 
               onChange={e => setPageId(e.target.value)} 
               placeholder="e.g. 1029384756"
-              style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text)" }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" }}
               required
             />
           </div>
           
           <div>
-            <label style={{ display: "block", marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Page Access Token</label>
+            <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 500, color: "var(--muted)", letterSpacing: "0.2px" }}>Page Access Token</label>
             <input 
               type="password" 
               value={accessToken} 
               onChange={e => setAccessToken(e.target.value)} 
               placeholder="EAABw..."
-              style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text)" }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" }}
               required
             />
           </div>
@@ -131,13 +133,15 @@ export default function FacebookSetupPage() {
             type="submit" 
             disabled={saving}
             style={{ 
-              background: "var(--primary)", 
+              background: "linear-gradient(135deg, #1877F2, #0A52CC)", 
               color: "white", 
-              padding: "10px 16px", 
-              borderRadius: 6, 
+              padding: "12px 20px", 
+              borderRadius: 8, 
               border: "none", 
               fontWeight: 600,
-              cursor: saving ? "wait" : "pointer"
+              cursor: saving ? "wait" : "pointer",
+              boxShadow: "0 4px 16px rgba(24, 119, 242, 0.3)",
+              marginTop: 8,
             }}
           >
             {saving ? "Saving..." : "Save Integration"}
