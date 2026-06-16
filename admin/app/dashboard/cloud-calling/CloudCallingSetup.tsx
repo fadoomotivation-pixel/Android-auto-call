@@ -8,15 +8,18 @@ import type { CompanyIntegration, Profile, UroAgent, UroCallerId } from "@/lib/t
 type Member = Pick<Profile, "id" | "full_name" | "sip_agent_id" | "caller_id" | "sip_server" | "sip_port">;
 
 const input: React.CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 6,
+  padding: "10px 14px",
+  borderRadius: 8,
   border: "1px solid var(--border)",
-  background: "var(--panel-2)",
+  background: "rgba(255,255,255,0.02)",
   color: "var(--text)",
   width: "100%",
+  outline: "none",
+  backdropFilter: "blur(12px)",
+  transition: "all 0.2s",
 };
-const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, minWidth: 0 };
-const lbl: React.CSSProperties = { fontSize: 12, color: "var(--muted)" };
+const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
+const lbl: React.CSSProperties = { fontSize: 13, color: "var(--muted)", fontWeight: 500, letterSpacing: "0.2px" };
 
 export function CloudCallingSetup({
   companyId,
@@ -122,9 +125,9 @@ export function CloudCallingSetup({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Step 1 — connection */}
-      <div className="card">
-        <div className="label">1 · UrOperator account</div>
-        <p className="subtitle" style={{ margin: "6px 0 14px" }}>
+      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}>
+        <div className="label" style={{ fontSize: 14, color: "var(--accent)", letterSpacing: "1px" }}>1 · UROPERATOR ACCOUNT</div>
+        <p className="subtitle" style={{ margin: "8px 0 20px" }}>
           Paste the <strong>FS_ token</strong>, <strong>tenant ID</strong> and default <strong>number (DID)</strong> that
           UrOperator gave you for {companyName}. The token is stored securely server-side — your telecallers never see it.
         </p>
@@ -147,8 +150,8 @@ export function CloudCallingSetup({
           </label>
         </div>
 
-        <div className="label" style={{ marginTop: 16 }}>SIP server (for the in-app softphone)</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginTop: 8 }}>
+        <div className="label" style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.05)", fontSize: 14, color: "var(--accent)", letterSpacing: "1px" }}>SIP SERVER (FOR THE IN-APP SOFTPHONE)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16, marginTop: 12 }}>
           <label style={field}>
             <span style={lbl}>SIP server</span>
             <input style={input} value={form.sip_server} onChange={(e) => set("sip_server", e.target.value)} />
@@ -175,14 +178,14 @@ export function CloudCallingSetup({
           </label>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
-          <button className="primary" style={{ width: "auto", padding: "9px 16px" }} onClick={saveConfig} disabled={savingCfg}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 24, flexWrap: "wrap" }}>
+          <button className="primary" style={{ width: "auto", padding: "10px 20px", fontWeight: 600, boxShadow: "0 0 16px rgba(16, 185, 129, 0.4)" }} onClick={saveConfig} disabled={savingCfg}>
             {savingCfg ? "Saving…" : cfgSaved ? "Saved ✓" : "Save settings"}
           </button>
-          <button className="link" style={{ color: "var(--accent)" }} onClick={testConnection} disabled={testing || !configured}>
+          <button className="link" style={{ color: "var(--accent)", fontWeight: 600, padding: "10px 16px", borderRadius: 8, background: "rgba(16, 185, 129, 0.1)" }} onClick={testConnection} disabled={testing || !configured}>
             {testing ? "Testing…" : "Test connection"}
           </button>
-          <span className={`badge ${configured ? "connected" : "new"}`}>{configured ? "configured" : "not set"}</span>
+          <span className={`badge ${configured ? "connected" : "new"}`} style={{ padding: "6px 12px", boxShadow: "0 0 10px rgba(255,255,255,0.05)" }}>{configured ? "configured" : "not set"}</span>
           {testResult && (
             <span style={{ color: testResult.ok ? "var(--accent)" : "var(--danger, #e5484d)", fontSize: 13 }}>{testResult.msg}</span>
           )}
@@ -193,10 +196,10 @@ export function CloudCallingSetup({
       </div>
 
       {/* Step 2 — assignment */}
-      <div className="card">
+      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <div className="label">2 · Assign extensions &amp; numbers to telecallers</div>
-          <button className="link" style={{ color: "var(--accent)" }} onClick={loadLists} disabled={loadingLists || !configured}>
+          <div className="label" style={{ fontSize: 14, color: "var(--accent)", letterSpacing: "1px" }}>2 · ASSIGN EXTENSIONS &amp; NUMBERS TO TELECALLERS</div>
+          <button className="link" style={{ color: "var(--accent)", fontWeight: 600 }} onClick={loadLists} disabled={loadingLists || !configured}>
             {loadingLists ? "Loading…" : "Load agents & numbers from UrOperator"}
           </button>
         </div>
