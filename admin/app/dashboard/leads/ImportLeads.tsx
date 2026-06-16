@@ -39,11 +39,22 @@ export function ImportLeads({
     setError(null);
     setFileName(file.name);
     try {
-      const XLSX = await import("xlsx");
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
+      let rows: string[][];
+
+      if (file.name.toLowerCase().endsWith(".csv")) {
+        const text = await file.text();
+        rows = text.split(/\r?\n/).map((l) => l.split(","));
+      } else {
+        const xlsxModule = await import("xlsx");
+        const readFn = xlsxModule.read || (xlsxModule as any).default?.read;
+        const utilsObj = xlsxModule.utils || (xlsxModule as any).default?.utils;
+        if (!readFn || !utilsObj) throw new Error("Excel library failed to load properly.");
+
+        const buf = await file.arrayBuffer();
+        const wb = readFn(buf, { type: "array" });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = utilsObj.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
+      }
       const res = parseRows(rows as string[][]);
       setParsed(res.leads);
       setSkipped(res.skipped);
