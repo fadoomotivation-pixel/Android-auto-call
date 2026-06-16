@@ -55,7 +55,7 @@ export default async function DashboardLayout({
         {profile?.role === "admin" && <NavLink href="/dashboard/reports" label="📊 Reports" />}
         {isSuper && (
           <>
-            <div style={{ margin: "14px 6px 4px", fontSize: 11, letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" }}>
+            <div style={{ margin: "24px 14px 8px", fontSize: 11, letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600 }}>
               Super admin
             </div>
             <NavLink href="/dashboard/platform" label="🏢 Companies" />
@@ -66,11 +66,11 @@ export default async function DashboardLayout({
           </>
         )}
         <div className="spacer" />
-        <div style={{ padding: "0 6px 10px", color: "var(--muted)", fontSize: 12 }}>
-          <div style={{ color: "var(--text)", fontWeight: 600 }}>
+        <div style={{ padding: "16px 14px", background: "rgba(0, 0, 0, 0.2)", borderRadius: "10px", border: "1px solid rgba(255, 255, 255, 0.05)", marginBottom: "8px" }}>
+          <div style={{ color: "#fff", fontWeight: 600, fontSize: 14, letterSpacing: "-0.01em", marginBottom: 2 }}>
             {company?.name ?? "No company"}
           </div>
-          <div>{profile?.full_name ?? user.email}</div>
+          <div style={{ color: "var(--muted)", fontSize: 12 }}>{profile?.full_name ?? user.email}</div>
         </div>
         <form action="/auth/signout" method="post">
           <button className="link" type="submit">
