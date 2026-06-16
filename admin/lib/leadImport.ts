@@ -110,6 +110,14 @@ export function parseRows(rows: string[][]): ParseResult {
 }
 
 export function parseCSV(text: string): string[][] {
+  let delim = ',';
+  const firstLine = text.split(/\r?\n/)[0] || "";
+  const commas = (firstLine.match(/,/g) || []).length;
+  const tabs = (firstLine.match(/\t/g) || []).length;
+  const semis = (firstLine.match(/;/g) || []).length;
+  if (tabs > commas && tabs > semis) delim = '\t';
+  else if (semis > commas && semis > tabs) delim = ';';
+
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -123,7 +131,7 @@ export function parseCSV(text: string): string[][] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (c === ',' && !inQuotes) {
+    } else if (c === delim && !inQuotes) {
       row.push(cell);
       cell = "";
     } else if ((c === '\n' || c === '\r') && !inQuotes) {
