@@ -22,7 +22,7 @@ const PHONE_KEYS = ["phone", "mobile", "number", "contact", "whatsapp", "tel", "
 const NAME_KEYS = ["name", "customer", "client", "fullname", "full name", "lead", "person"];
 const EMAIL_KEYS = ["email", "mail", "e-mail"];
 const PROJECT_KEYS = ["project", "property", "township", "society", "company", "location", "scheme", "interest", "enquiry"];
-const BUDGET_KEYS = ["budget", "amount", "value", "price", "investment"];
+const BUDGET_KEYS = ["budget", "amount", "value", "price", "investment", "बजट"];
 const TERRITORY_KEYS = ["territory", "city", "location", "area", "region", "zone"];
 const NOTE_KEYS = ["note", "notes", "remark", "remarks", "comment", "requirement", "message", "source"];
 
@@ -31,7 +31,7 @@ function digitsLen(s: string): number {
 }
 
 function cleanPhone(s: string): string {
-  const t = (s ?? "").toString().trim();
+  const t = (s ?? "").toString().trim().replace(/^p:/i, "");
   const plus = t.startsWith("+");
   const digits = t.replace(/\D/g, "");
   return plus ? `+${digits}` : digits;
