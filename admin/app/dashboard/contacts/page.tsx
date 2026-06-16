@@ -37,10 +37,10 @@ export default async function ContactsPage() {
           <tbody>
             {rows.map((c) => (
               <tr key={c.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background 0.2s" }} className="hover-row">
-                <td style={{ padding: "16px 20px", fontWeight: 500, color: "#fff" }}>{c.name || "—"}</td>
-                <td style={{ padding: "16px 20px", color: "var(--text)" }}>{c.phone}</td>
-                <td style={{ padding: "16px 20px", color: "var(--muted)" }}>{c.email || "—"}</td>
-                <td style={{ padding: "16px 20px", color: "var(--text)" }}>{c.company_name || "—"}</td>
+                <td style={{ padding: "16px 20px", fontWeight: 500, color: "#fff", maxWidth: "250px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.name || ""}>{c.name || "—"}</td>
+                <td style={{ padding: "16px 20px", color: "var(--text)", whiteSpace: "nowrap" }}>{c.phone}</td>
+                <td style={{ padding: "16px 20px", color: "var(--muted)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.email || ""}>{c.email || "—"}</td>
+                <td style={{ padding: "16px 20px", color: "var(--text)", maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.company_name || ""}>{c.company_name || "—"}</td>
                 <td style={{ padding: "16px 20px" }}>
                   <span className={`badge ${c.status}`} style={{ boxShadow: "0 0 10px rgba(255,255,255,0.05)" }}>{c.status}</span>
                 </td>
