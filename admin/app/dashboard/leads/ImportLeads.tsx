@@ -39,10 +39,15 @@ export function ImportLeads({
     setError(null);
     setFileName(file.name);
     try {
+      const xlsxModule = await import("xlsx");
+      const readFn = xlsxModule.read || (xlsxModule as any).default?.read;
+      const utilsObj = xlsxModule.utils || (xlsxModule as any).default?.utils;
+      if (!readFn || !utilsObj) throw new Error("Excel library failed to load properly.");
+
       const buf = await file.arrayBuffer();
-      const wb = read(buf, { type: "array" });
+      const wb = readFn(buf, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = utils.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
+      const rows = utilsObj.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
       const res = parseRows(rows as string[][]);
       setParsed(res.leads);
       setSkipped(res.skipped);
