@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { read, utils } from "xlsx";
+
 import { createClient } from "@/lib/supabase/client";
 import { parseRows, parsePasted, type ParsedLead } from "@/lib/leadImport";
 
