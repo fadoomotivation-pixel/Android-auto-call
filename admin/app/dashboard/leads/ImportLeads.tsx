@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
-import { parseRows, parsePasted, type ParsedLead } from "@/lib/leadImport";
+import { parseRows, parsePasted, parseCSV, type ParsedLead } from "@/lib/leadImport";
 
 type Sp = { id: string; full_name: string | null };
 
@@ -39,16 +39,24 @@ export function ImportLeads({
     setError(null);
     setFileName(file.name);
     try {
-      const xlsxModule = await import("xlsx");
-      const readFn = xlsxModule.read || (xlsxModule as any).default?.read;
-      const utilsObj = xlsxModule.utils || (xlsxModule as any).default?.utils;
-      if (!readFn || !utilsObj) throw new Error("Excel library failed to load properly.");
+      let rows: string[][];
 
-      const buf = await file.arrayBuffer();
-      const wb = readFn(buf, { type: "array" });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = utilsObj.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
-      const res = parseRows(rows as string[][]);
+      if (file.name.toLowerCase().endsWith(".csv")) {
+        const text = await file.text();
+        rows = parseCSV(text);
+      } else {
+        const xlsxModule = await import("xlsx");
+        const readFn = xlsxModule.read || (xlsxModule as any).default?.read;
+        const utilsObj = xlsxModule.utils || (xlsxModule as any).default?.utils;
+        if (!readFn || !utilsObj) throw new Error("Excel library failed to load properly.");
+
+        const buf = await file.arrayBuffer();
+        const wb = readFn(buf, { type: "array" });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = utilsObj.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
+      }
+      
+      const res = parseRows(rows);
       setParsed(res.leads);
       setSkipped(res.skipped);
       if (res.leads.length === 0) setError("No valid phone numbers found in that file.");

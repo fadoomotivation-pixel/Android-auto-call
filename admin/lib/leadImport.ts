@@ -109,10 +109,44 @@ export function parseRows(rows: string[][]): ParseResult {
   return { leads, skipped, total: dataRows.length };
 }
 
+export function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === ',' && !inQuotes) {
+      row.push(cell);
+      cell = "";
+    } else if ((c === '\n' || c === '\r') && !inQuotes) {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell);
+      if (row.some((x) => x.trim())) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += c;
+    }
+  }
+  if (cell || row.length) {
+    row.push(cell);
+    if (row.some((x) => x.trim())) rows.push(row);
+  }
+  return rows;
+}
+
 /** Parse pasted text (TSV from Excel, or CSV). */
 export function parsePasted(text: string): ParseResult {
-  const rows = text
-    .split(/\r?\n/)
-    .map((l) => (l.includes("\t") ? l.split("\t") : l.split(",")));
+  const rows = text.includes("\t") 
+    ? text.split(/\r?\n/).map((l) => l.split("\t"))
+    : parseCSV(text);
   return parseRows(rows);
 }
