@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { WhatsAppSetup } from "./WhatsAppSetup";
 import { CompanyPicker } from "./CompanyPicker";
+import { WhatsAppInbox } from "./WhatsAppInbox";
 
 const WEBHOOK_URL = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/whatsapp-webhook";
 
@@ -89,31 +90,16 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
         <div className="empty">{isSuper ? "Create a company first, then connect its WhatsApp here." : "Your account isn't linked to a company yet."}</div>
       )}
 
-      <h3 style={{ marginTop: 28 }}>Recent conversations</h3>
+      <h3 style={{ marginTop: 28, marginBottom: 16 }}>Team Inbox</h3>
       {rows.length === 0 ? (
         <div className="empty">No WhatsApp messages yet. Connect the number above, then messages appear here.</div>
       ) : (
-        <div className="table-responsive">
-<table>
-          <thead>
-            <tr><th>When</th><th>Direction</th><th>Customer</th><th>Rep</th><th>Message</th><th>Status</th></tr>
-          </thead>
-          <tbody>
-            {rows.map((m) => (
-              <tr key={m.id}>
-                <td style={{ whiteSpace: "nowrap" }}>{new Date(m.created_at).toLocaleString()}</td>
-                <td>{m.direction === "in" ? "⬅️ in" : "➡️ out"}</td>
-                <td>{(m.contact_id && leadName.get(m.contact_id)) || m.counterparty}</td>
-                <td>{m.salesperson_id ? repName.get(m.salesperson_id) ?? "—" : "—"}</td>
-                <td style={{ maxWidth: 360 }}>{m.body}</td>
-                <td style={{ color: "var(--muted)", fontSize: 12 }}>{m.status ?? ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-</div>
+        <WhatsAppInbox 
+          initialMessages={rows} 
+          companyId={companyId!} 
+          leadName={leadName} 
+        />
       )}
     </>
   );
 }
-
