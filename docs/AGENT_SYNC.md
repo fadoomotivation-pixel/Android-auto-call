@@ -71,6 +71,19 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Security hardening — part 3: Facebook token → Vault + deploy fix)
+- WHAT: (1) Facebook page_access_token → Supabase Vault (migration 0029: drop plaintext
+  column, set_facebook_token / get_facebook_token RPCs, same pattern as WhatsApp 0028).
+  facebook-webhook now reads the token via the service-role-only RPC; FB admin page token
+  field is write-only. (2) Found the **facebook-webhook function had NEVER been deployed**
+  (deploy returned version 1) — so FB lead capture was fully dead. Now deployed.
+- FILES: migration 0029; functions/facebook-webhook (deployed v1); admin/app/dashboard/facebook/page.tsx.
+- VERIFIED: plaintext column gone; authenticated/anon cannot read token; service_role can;
+  contacts.extra + profiles.is_active columns (used by the webhook) exist.
+- ⚠️ Antigravity: edge functions must be DEPLOYED, not just committed. Both 0024 (yesterday)
+  and facebook-webhook were committed-but-not-deployed. Worth auditing all functions are live.
+- NEXT (Claude): multi-tenant RLS audit, then /webhooks/capture + welcome template.
+
 ### 2026-06-17 — Claude Code (⚠️ SCHEMA DRIFT fixed: migration 0024 was never applied)
 - WHAT: While starting the FB-token→Vault work I found migration **0024 (facebook
   leads + lead_source) was committed to the repo but NEVER applied to the remote DB**
