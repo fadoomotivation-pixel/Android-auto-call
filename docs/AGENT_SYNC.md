@@ -71,6 +71,19 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Lead capture engine — backend)
+- WHAT: Generic inbound lead-capture webhook. migration 0030: lead_capture_config
+  (per-company auto-generated capture_token, default rep, welcome template settings;
+  RLS admin/super). Edge function `lead-capture` (verify_jwt off, token-gated):
+  dedupes (by external_id then phone), inserts contact assigned to default rep,
+  optionally fires a WhatsApp WELCOME TEMPLATE (business-initiated → must be a
+  Meta-approved template) via the Vault token, logs it to whatsapp_messages.
+- FILES: migration 0030; supabase/functions/lead-capture (deployed v1).
+- USAGE: POST /functions/v1/lead-capture?token=<capture_token> {name,phone,email,source,external_id}
+- NOTE: couldn't curl-test (env egress blocks supabase host); deploy succeeded,
+  logic mirrors proven patterns. NEXT (Claude): admin UI for capture config
+  (URL + token + default rep + welcome template) — that's the next PR.
+
 ### 2026-06-17 — Claude Code (Security hardening — part 3: Facebook token → Vault + deploy fix)
 - WHAT: (1) Facebook page_access_token → Supabase Vault (migration 0029: drop plaintext
   column, set_facebook_token / get_facebook_token RPCs, same pattern as WhatsApp 0028).
