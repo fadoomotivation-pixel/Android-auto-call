@@ -9,7 +9,7 @@ type Integration = {
   company_id: string;
   phone_number_id: string;
   waba_id: string | null;
-  access_token: string;
+  access_token_secret_id: string | null;
   verify_token: string;
   display_number: string | null;
   default_salesperson_id: string | null;

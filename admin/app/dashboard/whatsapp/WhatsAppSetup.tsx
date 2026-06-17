@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 type Integration = {
   phone_number_id: string;
   waba_id: string | null;
-  access_token: string;
+  access_token_secret_id: string | null; // token itself lives in Vault, never sent to the client
   verify_token: string;
   display_number: string | null;
   default_salesperson_id: string | null;
@@ -27,10 +27,11 @@ export function WhatsAppSetup({
   companyId, integration, webhookUrl, members,
 }: { companyId: string; integration: Integration; webhookUrl: string; members: Member[] }) {
   const router = useRouter();
+  const tokenSaved = !!integration?.access_token_secret_id;
   const [form, setForm] = useState({
     phone_number_id: integration?.phone_number_id ?? "",
     waba_id: integration?.waba_id ?? "",
-    access_token: integration?.access_token ?? "",
+    access_token: "", // write-only; never prefilled from the server (token is in Vault)
     verify_token: integration?.verify_token ?? crypto.randomUUID().replace(/-/g, ""),
     display_number: integration?.display_number ?? "",
     default_salesperson_id: integration?.default_salesperson_id ?? "",
@@ -44,19 +45,27 @@ export function WhatsAppSetup({
   async function save() {
     setSaving(true); setErr(null); setSaved(false);
     const supabase = createClient();
+    // 1) Upsert the (non-secret) integration row first so it exists for the token RPC.
     const { error } = await supabase.from("whatsapp_integrations").upsert({
       company_id: companyId,
       phone_number_id: form.phone_number_id.trim(),
       waba_id: form.waba_id.trim() || null,
-      access_token: form.access_token.trim(),
       verify_token: form.verify_token.trim(),
       display_number: form.display_number.trim() || null,
       default_salesperson_id: form.default_salesperson_id || null,
       active: form.active,
       updated_at: new Date().toISOString(),
     });
+    if (error) { setSaving(false); setErr(error.message); return; }
+    // 2) Store the token in Vault only if a new one was entered (blank = keep current).
+    if (form.access_token.trim()) {
+      const { error: tErr } = await supabase.rpc("set_whatsapp_token", {
+        p_company: companyId, p_token: form.access_token.trim(),
+      });
+      if (tErr) { setSaving(false); setErr(tErr.message); return; }
+    }
     setSaving(false);
-    if (error) { setErr(error.message); return; }
+    setForm((f) => ({ ...f, access_token: "" }));
     setSaved(true); router.refresh(); setTimeout(() => setSaved(false), 1500);
   }
 
@@ -69,8 +78,9 @@ export function WhatsAppSetup({
           <input style={input} value={form.phone_number_id} onChange={(e) => set("phone_number_id", e.target.value)} placeholder="from Meta → WhatsApp → API setup" /></label>
         <label style={field}><span style={lbl}>Display number (+91…)</span>
           <input style={input} value={form.display_number} onChange={(e) => set("display_number", e.target.value)} placeholder="+91 98xxxxxxx" /></label>
-        <label style={{ ...field, gridColumn: "1 / -1" }}><span style={lbl}>Permanent access token</span>
-          <input style={input} value={form.access_token} onChange={(e) => set("access_token", e.target.value)} placeholder="System-user token from Meta" /></label>
+        <label style={{ ...field, gridColumn: "1 / -1" }}><span style={lbl}>Permanent access token {tokenSaved && <span style={{ color: "#25D366" }}>· saved 🔒</span>}</span>
+          <input style={input} type="password" autoComplete="off" value={form.access_token} onChange={(e) => set("access_token", e.target.value)}
+            placeholder={tokenSaved ? "Stored securely — leave blank to keep current" : "System-user token from Meta"} /></label>
         <label style={field}><span style={lbl}>WABA ID (optional)</span>
           <input style={input} value={form.waba_id} onChange={(e) => set("waba_id", e.target.value)} /></label>
         <label style={field}><span style={lbl}>Verify token (auto-generated)</span>

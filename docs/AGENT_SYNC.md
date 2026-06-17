@@ -71,6 +71,21 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Security hardening — part 2: WhatsApp token → Vault)
+- WHAT: Moved WhatsApp Cloud API access tokens out of the plaintext
+  `whatsapp_integrations.access_token` column into **Supabase Vault**. Dropped the
+  plaintext column. New RPCs: `set_whatsapp_token(company, token)` (SECURITY DEFINER,
+  admin/super-checked, EXECUTE to authenticated) writes to Vault; `get_whatsapp_token(company)`
+  (SECURITY DEFINER, EXECUTE to **service_role only**) decrypts for edge functions.
+  Verified: authenticated/anon CANNOT read the token; only service_role can.
+- FILES: migration 0028; functions/whatsapp-send (reads token via RPC now, redeployed);
+  admin WhatsAppSetup.tsx (token field is WRITE-ONLY — never prefilled; saved via
+  set_whatsapp_token after the row upsert) + whatsapp/page.tsx Integration type.
+- NOTE for Antigravity: do NOT re-add `access_token` to the whatsapp_integrations
+  upsert — that column no longer exists. Token entry is write-only via the RPC.
+- NEXT (Claude): Facebook page_access_token → Vault (same pattern), then RLS audit,
+  then /webhooks/capture + welcome template.
+
 ### 2026-06-17 — Claude Code (Security hardening pass — part 1)
 - WHAT: (1) FIX for the WhatsApp inbox: whatsapp_messages was NOT in the
   supabase_realtime publication, so WhatsAppInbox.tsx received ZERO live events
