@@ -139,14 +139,6 @@ object Repository {
                 limit(500)
             }.decodeList<CallLog>()
 
-        // Use approximate start time (within a few minutes) to dedupe, or just exact timestamp strings
-        // Since we insert with Instant.now().toString(), it might not perfectly match CallLog timestamp format
-        // Better to just store recent phone numbers called in the last X days.
-        // For simplicity, we just use the `started_at` parsed back to epoch if possible, but actually let's just 
-        // use phone + roughly date.
-        
-        // Let's create a dedupe set of "phone_day" or just check if Supabase already has a call for that phone within the last hour.
-        
         // 4. Query Android CallLog
         val timeLimitMillis = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L) // Last 7 days
         val cursor = context.contentResolver.query(
@@ -159,8 +151,11 @@ object Repository {
             ),
             "${AndroidCallLog.Calls.DATE} > ?",
             arrayOf(timeLimitMillis.toString()),
-            "${AndroidCallLog.Calls.DATE} DESC"
+            "${AndroidCallLog.Calls.DATE} ASC" // Ascending to process oldest first
         ) ?: return
+
+        data class NativeCall(val num: String, val cleanNum: String, val contactId: String, val startedAt: Instant, val durationSec: Int)
+        val nativeCalls = mutableListOf<NativeCall>()
 
         cursor.use { c ->
             val numIdx = c.getColumnIndex(AndroidCallLog.Calls.NUMBER)
@@ -175,37 +170,50 @@ object Repository {
                 val dateMillis = c.getLong(dateIdx)
                 val durationSec = c.getInt(durIdx)
 
-                // Only outgoing calls
                 if (type != AndroidCallLog.Calls.OUTGOING_TYPE) continue
 
                 val contactId = contactMap[cleanNum] ?: contactMap.entries.firstOrNull { cleanNum.endsWith(it.key) || it.key.endsWith(cleanNum) }?.value
-                if (contactId == null) continue // Not a CRM contact
+                if (contactId == null) continue
 
-                val startedAt = Instant.ofEpochMilli(dateMillis)
-                val endedAt = startedAt.plusSeconds(durationSec.toLong())
+                nativeCalls.add(NativeCall(num, cleanNum, contactId, Instant.ofEpochMilli(dateMillis), durationSec))
+            }
+        }
 
-                // Deduplicate: check if there's any Supabase log for this phone where the timestamp is within 60 seconds
-                val isDuplicate = recentLogs.any {
+        // 5. Greedy bipartite matching
+        val matchedSupabaseIds = mutableSetOf<String>()
+
+        for (nativeCall in nativeCalls) {
+            // Find closest unmatched Supabase log within 120 seconds
+            val closestLog = recentLogs
+                .filter { it.id != null && !matchedSupabaseIds.contains(it.id) }
+                .filter {
                     val sbPhone = it.phone.replace("\\D".toRegex(), "")
-                    if (!sbPhone.endsWith(cleanNum) && !cleanNum.endsWith(sbPhone)) return@any false
-                    val sbStart = runCatching { Instant.parse(it.startedAt) }.getOrNull() ?: return@any false
-                    Math.abs(sbStart.epochSecond - startedAt.epochSecond) < 60
+                    sbPhone.endsWith(nativeCall.cleanNum) || nativeCall.cleanNum.endsWith(sbPhone)
                 }
+                .mapNotNull {
+                    val sbStart = runCatching { Instant.parse(it.startedAt) }.getOrNull() ?: return@mapNotNull null
+                    val diff = Math.abs(sbStart.epochSecond - nativeCall.startedAt.epochSecond)
+                    if (diff < 120) it to diff else null
+                }
+                .minByOrNull { it.second }
+                ?.first
 
-                if (isDuplicate) continue
-
-                // Not in Supabase! Backfill it.
-                val outcome = if (durationSec > 0) "connected" else "no_answer"
+            if (closestLog != null) {
+                // Matched!
+                matchedSupabaseIds.add(closestLog.id!!)
+            } else {
+                // Unmatched: Backfill to Supabase
+                val outcome = if (nativeCall.durationSec > 0) "connected" else "no_answer"
                 val newLog = CallLog(
                     companyId = companyId,
                     salespersonId = salesId,
-                    contactId = contactId,
-                    phone = num,
+                    contactId = nativeCall.contactId,
+                    phone = nativeCall.num,
                     direction = "outgoing",
                     outcome = outcome,
-                    startedAt = startedAt.toString(),
-                    endedAt = endedAt.toString(),
-                    durationSeconds = durationSec,
+                    startedAt = nativeCall.startedAt.toString(),
+                    endedAt = nativeCall.startedAt.plusSeconds(nativeCall.durationSec.toLong()).toString(),
+                    durationSeconds = nativeCall.durationSec,
                     recordingStatus = "none"
                 )
                 runCatching { logCall(newLog) }
