@@ -309,16 +309,16 @@ private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Colo
 @Composable
 private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(
-        modifier.clip(RoundedCornerShape(10.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+        modifier.clip(RoundedCornerShape(12.dp))
+            .background(tint.copy(alpha = 0.12f))
             .clickable { onClick() }
-            .padding(vertical = 14.dp),
+            .padding(vertical = 13.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(5.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(19.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = tint, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -688,53 +688,59 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Leads", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text(if (selectMode) "Tap leads to add them to a campaign" else "Manage and follow up with your leads",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (!selectMode) {
-                        if (app.aiScoringLeads) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Indigo)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Scoring…", style = MaterialTheme.typography.labelMedium, color = Indigo)
+                if (!selectMode) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Leads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                                Text("${app.leads.size} total · ${app.leads.count { it.status in setOf("new", "queued") }} new",
+                                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Spacer(Modifier.width(8.dp))
-                        } else {
-                            // Labelled so any telecaller knows what it does (was a bare ✨ icon).
                             Box(
-                                Modifier.clip(RoundedCornerShape(50))
-                                    .border(1.dp, Indigo.copy(alpha = 0.45f), RoundedCornerShape(50))
+                                Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface)
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                                    .clickable { vm.loadLeads() },
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
+                        }
+                        // Two big, premium actions — clear tap targets for any telecaller.
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(
+                                Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(14.dp))
+                                    .border(1.5.dp, Indigo.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
                                     .background(Indigo.copy(alpha = 0.08f))
-                                    .clickable { vm.scoreLeads() }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    .clickable(enabled = !app.aiScoringLeads) { vm.scoreLeads() },
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Indigo, modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(5.dp))
-                                    Text("AI Score", color = Indigo, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                                    if (app.aiScoringLeads) {
+                                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Indigo)
+                                        Spacer(Modifier.width(7.dp)); Text("Scoring…", color = Indigo, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    } else {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(7.dp)); Text("AI Score", color = Indigo, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
-                            Spacer(Modifier.width(8.dp))
-                        }
-                    }
-                    IconButton(onClick = { vm.loadLeads() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                    if (!selectMode) {
-                        Box(
-                            Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
-                                .clickable { selectMode = true }.padding(horizontal = 16.dp, vertical = 10.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Checklist, contentDescription = "Checklist", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Select & Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Box(
+                                Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(14.dp))
+                                    .background(Brush.horizontalGradient(listOf(Color(0xFF2563EB), Color(0xFF4F46E5))))
+                                    .clickable { selectMode = true },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Checklist, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(7.dp)); Text("Select & Call", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
-                    } else {
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Select leads", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Text("Tap leads to add them to a campaign", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Text("Cancel", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.clickable { exitSelect() }.padding(8.dp))
                     }
@@ -939,13 +945,15 @@ private fun LeadCard(
     onMore: () -> Unit,
 ) {
     val cardMod = Modifier.fillMaxWidth()
-        .then(if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier)
+        .then(if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier)
         .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier)
     Card(
-        modifier = cardMod.border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        modifier = cardMod,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(c.name ?: c.phone)
                 Spacer(Modifier.width(12.dp))

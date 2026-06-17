@@ -71,6 +71,19 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Leads screen premium redesign, owner request)
+- WHAT: Redesigned the Leads screen (the telecaller's most-used screen) for a
+  premium, efficient feel. Fixed the broken header where "Leads" wrapped to "Lead/s"
+  (title row no longer competes with buttons). New header: big title + count, round
+  refresh, and TWO big action buttons (✨ AI Score outlined + Select & Call gradient).
+  Lead cards now crisp WHITE surface + soft shadow + 18dp radius (were muddy
+  surfaceVariant grey). Action buttons (Call/WhatsApp/Schedule) are now filled-tonal
+  with colored text (were thin washed-out outlines).
+- FILES: ui/TelecallerScreens.kt (LeadsScreen header, LeadCard Card, ActionButton).
+- BUILD: android/** -> verify CI.
+- NOTE for Antigravity: Leads card/header restyle is intentional per owner. Keep white
+  cards + the two-button header if you touch this screen.
+
 ### 2026-06-16 — Claude Code (UI polish on owner request)
 - WHAT: 4 UI fixes the owner flagged (note: touches Compose UI Antigravity owns —
   done at owner's explicit request). (1) Leads: bare ✨ icon → labelled "AI Score"
