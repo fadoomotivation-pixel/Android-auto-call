@@ -51,12 +51,21 @@ serve(async (req) => {
           // Find integration for this page
           const { data: integration, error: intError } = await supabaseAdmin
             .from("facebook_integrations")
-            .select("company_id, page_access_token")
+            .select("company_id")
             .eq("page_id", pageId)
             .single();
 
           if (intError || !integration) {
             console.error(`No integration found for page ${pageId}`);
+            continue;
+          }
+
+          // Token lives in Vault, not the DB. Service-role-only RPC decrypts it.
+          const { data: pageAccessToken } = await supabaseAdmin.rpc("get_facebook_token", {
+            p_company: integration.company_id,
+          });
+          if (!pageAccessToken) {
+            console.error(`No access token for page ${pageId}`);
             continue;
           }
 
@@ -78,7 +87,7 @@ serve(async (req) => {
 
               // Fetch lead details from Graph API
               const graphRes = await fetch(
-                `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${integration.page_access_token}`
+                `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${pageAccessToken}`
               );
 
               if (!graphRes.ok) {

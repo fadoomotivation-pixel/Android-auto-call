@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 
 interface FbIntegration {
   page_id: string;
-  page_access_token: string;
+  page_access_token_secret_id: string | null; // token itself lives in Vault, never sent to the client
   verify_token: string;
   created_at: string;
 }
@@ -39,8 +39,8 @@ export default function FacebookSetupPage() {
       if (data) {
         setIntegration(data);
         setPageId(data.page_id);
-        setAccessToken(data.page_access_token);
         setVerifyToken(data.verify_token);
+        // token is write-only — never fetched to the client (it's in Vault)
       } else {
         // Generate a random verify token for new setup
         setVerifyToken(Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15));
@@ -58,19 +58,33 @@ export default function FacebookSetupPage() {
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userData?.user?.id!).single();
     
     if (profile?.company_id) {
+      // 1) Upsert the non-secret row first so it exists for the token RPC.
       const { error } = await supabase.from("facebook_integrations").upsert({
         company_id: profile.company_id,
         page_id: pageId,
-        page_access_token: accessToken,
         verify_token: verifyToken,
         updated_at: new Date().toISOString()
       });
-      
-      if (!error) {
-        alert("Saved successfully! Now configure the webhook in your Meta App Dashboard.");
-      } else {
+
+      if (error) {
         alert("Error saving: " + error.message);
+        setSaving(false);
+        return;
       }
+
+      // 2) Store the token in Vault only if a new one was entered (blank = keep current).
+      if (accessToken.trim()) {
+        const { error: tErr } = await supabase.rpc("set_facebook_token", {
+          p_company: profile.company_id, p_token: accessToken.trim(),
+        });
+        if (tErr) {
+          alert("Error saving token: " + tErr.message);
+          setSaving(false);
+          return;
+        }
+        setAccessToken("");
+      }
+      alert("Saved successfully! Now configure the webhook in your Meta App Dashboard.");
     }
     setSaving(false);
   }
@@ -118,14 +132,17 @@ export default function FacebookSetupPage() {
           </div>
           
           <div>
-            <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 500, color: "var(--muted)", letterSpacing: "0.2px" }}>Page Access Token</label>
-            <input 
-              type="password" 
-              value={accessToken} 
-              onChange={e => setAccessToken(e.target.value)} 
-              placeholder="EAABw..."
+            <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 500, color: "var(--muted)", letterSpacing: "0.2px" }}>
+              Page Access Token {integration?.page_access_token_secret_id && <span style={{ color: "#1877F2" }}>· saved 🔒</span>}
+            </label>
+            <input
+              type="password"
+              autoComplete="off"
+              value={accessToken}
+              onChange={e => setAccessToken(e.target.value)}
+              placeholder={integration?.page_access_token_secret_id ? "Stored securely — leave blank to keep current" : "EAABw..."}
               style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" }}
-              required
+              required={!integration?.page_access_token_secret_id}
             />
           </div>
           
