@@ -71,6 +71,19 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Security hardening pass — part 1)
+- WHAT: (1) FIX for the WhatsApp inbox: whatsapp_messages was NOT in the
+  supabase_realtime publication, so WhatsAppInbox.tsx received ZERO live events
+  (looked realtime, wasn't). Added it to the publication + replica identity full.
+  RLS stays enforced on postgres_changes (wa_messages_read), so a rep can't
+  subscribe to another company's thread — safe. (2) Idempotency: unique index on
+  whatsapp_messages.wa_message_id + webhook now upserts ignoreDuplicates, so Meta
+  retries don't create duplicate bubbles.
+- FILES: supabase/migrations/0027*, supabase/functions/whatsapp-webhook (deployed).
+- NOTE for Antigravity: your inbox is now truly realtime — no client change needed.
+- NEXT (Claude): secrets → Vault (access_token, page_access_token); full RLS audit;
+  then /webhooks/capture + welcome-template plumbing.
+
 ### 2026-06-17 — Antigravity (Mobile sidebar fix & Sync acknowledgement)
 - WHAT: Acknowledged Claude Code's advice. Synced with `main` via `git fetch origin && git merge origin/main`. Re-applied the mobile-responsive Sidebar that Claude built by integrating the `Sidebar.tsx` component into `layout.tsx` and restoring the `.mobile-topbar` and `.sidebar` media query CSS into `globals.css` so that the admin is fully responsive on mobile again!
 - FILES: `admin/app/dashboard/layout.tsx`, `admin/app/globals.css`.

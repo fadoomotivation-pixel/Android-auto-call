@@ -51,7 +51,9 @@ Deno.serve(async (req) => {
           const text = m.text?.body ?? m.button?.text ?? m.interactive?.list_reply?.title ?? "";
           const { data: match } = await admin.rpc("wa_match_contact", { p_company: companyId, p_number: from });
           const row = Array.isArray(match) ? match[0] : null;
-          await admin.from("whatsapp_messages").insert({
+          // Idempotent: Meta retries deliveries. Unique index on wa_message_id +
+          // ignoreDuplicates means a retry is a no-op instead of a duplicate row.
+          await admin.from("whatsapp_messages").upsert({
             company_id: companyId,
             contact_id: row?.contact_id ?? null,
             salesperson_id: row?.salesperson_id ?? integ.default_salesperson_id ?? null,
@@ -60,7 +62,7 @@ Deno.serve(async (req) => {
             counterparty: from,
             body: text,
             msg_type: m.type ?? "text",
-          });
+          }, { onConflict: "wa_message_id", ignoreDuplicates: true });
         }
 
         // Delivery/read status updates for our outbound messages.
