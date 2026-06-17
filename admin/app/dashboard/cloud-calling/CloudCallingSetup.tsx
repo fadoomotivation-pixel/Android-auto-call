@@ -212,7 +212,8 @@ export function CloudCallingSetup({
         {members.length === 0 ? (
           <div className="empty">No telecallers yet. Invite them from the Salespeople page first.</div>
         ) : (
-          <table>
+          <div className="table-responsive">
+<table>
             <thead>
               <tr>
                 <th>Telecaller</th>
@@ -228,6 +229,7 @@ export function CloudCallingSetup({
               ))}
             </tbody>
           </table>
+</div>
         )}
       </div>
     </div>
@@ -311,3 +313,4 @@ function AgentRow({
     </tr>
   );
 }
+

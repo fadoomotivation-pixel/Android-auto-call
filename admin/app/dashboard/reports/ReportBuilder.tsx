@@ -53,8 +53,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, full_name")
-        .eq("company_id", companyId)
-        .eq("role", "salesperson");
+        .eq("company_id", companyId);
 
       const stats = (profiles || []).map(p => {
         const pCalls = (calls || []).filter(c => c.salesperson_id === p.id);
@@ -91,8 +90,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, full_name")
-        .eq("company_id", companyId)
-        .eq("role", "salesperson");
+        .eq("company_id", companyId);
 
       const isLate = (iso: string | null) => {
         if (!iso) return false;
@@ -241,7 +239,8 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
             {reportType !== "pipeline" && `Date Range: ${dateRange.replace("_", " ")}`}
           </div>
 
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <div className="table-responsive">
+<table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 {columns.map(c => (
@@ -263,6 +262,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
               ))}
             </tbody>
           </table>
+</div>
           
           <style dangerouslySetInnerHTML={{__html: `
             @media print {
@@ -280,3 +280,4 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
     </div>
   );
 }
+

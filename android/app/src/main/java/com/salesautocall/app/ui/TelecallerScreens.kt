@@ -44,6 +44,12 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -71,6 +77,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
@@ -319,15 +326,30 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 @Composable
 private fun PipelineBar(counts: List<Pair<Stage, Int>>) {
     val total = counts.sumOf { it.second }.coerceAtLeast(1)
-    Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(50))) {
-        var drew = false
-        counts.forEach { (stage, n) ->
-            if (n > 0) {
-                drew = true
-                Box(Modifier.weight(n.toFloat() / total).fillMaxSize().background(stage.color))
-            }
+    val active = counts.filter { it.second > 0 }
+    if (active.isEmpty()) {
+        Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant))
+        return
+    }
+    // Premium look: each stage is its own rounded segment with a small gap.
+    Row(Modifier.fillMaxWidth().height(12.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        active.forEach { (stage, n) ->
+            Box(
+                Modifier.weight(n.toFloat() / total).fillMaxSize()
+                    .clip(RoundedCornerShape(50))
+                    .background(Brush.verticalGradient(listOf(stage.color, stage.color.copy(alpha = 0.78f)))),
+            )
         }
-        if (!drew) Box(Modifier.weight(1f).fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+    }
+}
+
+/** Group an Indian 10-digit number as "98765 43210" for easy reading; otherwise return as-is. */
+private fun prettyPhone(raw: String): String {
+    val d = raw.filter { it.isDigit() }
+    return when {
+        d.length == 10 -> "${d.substring(0, 5)} ${d.substring(5)}"
+        d.length == 12 && d.startsWith("91") -> "+91 ${d.substring(2, 7)} ${d.substring(7)}"
+        else -> raw
     }
 }
 
@@ -489,12 +511,22 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 Column(Modifier.padding(16.dp)) {
                     SectionHeader("Lead Pipeline", "View all", onOpenLeads)
                     Spacer(Modifier.height(14.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(Modifier.fillMaxWidth()) {
                         stageCounts.forEach { (stage, n) ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
+                            ) {
                                 Text(n.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = stage.color)
-                                Text(stage.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1)
+                                Text(
+                                    stage.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    fontSize = 10.sp,
+                                    lineHeight = 12.sp,
+                                    maxLines = 2,
+                                )
                             }
                         }
                     }
@@ -664,12 +696,28 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                     if (!selectMode) {
                         if (app.aiScoringLeads) {
-                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Indigo)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Indigo)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Scoring…", style = MaterialTheme.typography.labelMedium, color = Indigo)
+                            }
                             Spacer(Modifier.width(8.dp))
                         } else {
-                            IconButton(onClick = { vm.scoreLeads() }) {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = "AI score leads", tint = Indigo)
+                            // Labelled so any telecaller knows what it does (was a bare ✨ icon).
+                            Box(
+                                Modifier.clip(RoundedCornerShape(50))
+                                    .border(1.dp, Indigo.copy(alpha = 0.45f), RoundedCornerShape(50))
+                                    .background(Indigo.copy(alpha = 0.08f))
+                                    .clickable { vm.scoreLeads() }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Indigo, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text("AI Score", color = Indigo, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                                }
                             }
+                            Spacer(Modifier.width(8.dp))
                         }
                     }
                     IconButton(onClick = { vm.loadLeads() }) {
@@ -909,7 +957,13 @@ private fun LeadCard(
                             Pill(it.label, it.fg, it.bg)
                         }
                     }
-                    Text(c.phone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(13.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                    }
                 }
                 if (selectMode) {
                     val ring = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
@@ -1079,6 +1133,7 @@ private fun LeadActionSheet(c: Contact, onDismiss: () -> Unit, onApply: (String?
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScheduleFollowUpDialog(who: String, onDismiss: () -> Unit, onPick: (Long, String?) -> Unit) {
     var note by remember { mutableStateOf("") }
@@ -1092,6 +1147,11 @@ private fun ScheduleFollowUpDialog(who: String, onDismiss: () -> Unit, onPick: (
         "In 2 days, 11 AM" to at(2, 11),
         "Next week" to at(7, 10),
     )
+
+    var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
+    var pickedDate by remember { mutableStateOf<Long?>(null) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Schedule follow-up · $who") },
@@ -1105,11 +1165,48 @@ private fun ScheduleFollowUpDialog(who: String, onDismiss: () -> Unit, onPick: (
                     OutlinedButton(onClick = { onPick(millis, note.ifBlank { null }) },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) { Text(label) }
                 }
+                Spacer(Modifier.height(2.dp))
+                // Custom date + time, for anything the presets don't cover.
+                Button(onClick = { showDate = true }, modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Pick a date & time")
+                }
             }
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+
+    if (showDate) {
+        val dps = rememberDatePickerState(initialSelectedDateMillis = now.toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                TextButton(onClick = { pickedDate = dps.selectedDateMillis; showDate = false; showTime = true }) { Text("Next") }
+            },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text("Cancel") } },
+        ) { DatePicker(state = dps) }
+    }
+
+    if (showTime) {
+        val tps = rememberTimePickerState(initialHour = 10, initialMinute = 0, is24Hour = false)
+        AlertDialog(
+            onDismissRequest = { showTime = false },
+            title = { Text("Pick a time") },
+            text = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { TimePicker(state = tps) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    val base = pickedDate ?: now.toInstant().toEpochMilli()
+                    val day = java.time.Instant.ofEpochMilli(base).atZone(java.time.ZoneId.of("UTC")).toLocalDate()
+                    val millis = day.atTime(tps.hour, tps.minute).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    showTime = false
+                    onPick(millis, note.ifBlank { null })
+                }) { Text("Set reminder") }
+            },
+            dismissButton = { TextButton(onClick = { showTime = false }) { Text("Back") } },
+        )
+    }
 }
 
 // ════════════════════════════════════════════════════════════

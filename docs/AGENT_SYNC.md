@@ -71,6 +71,19 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-16 — Claude Code (UI polish on owner request)
+- WHAT: 4 UI fixes the owner flagged (note: touches Compose UI Antigravity owns —
+  done at owner's explicit request). (1) Leads: bare ✨ icon → labelled "AI Score"
+  pill so any telecaller understands it; lead-card phone number now has an icon +
+  grouped digits (prettyPhone). (2) Dashboard Lead Pipeline: fixed cramped labels
+  (centered, 10sp, 2-line) + segmented gradient pipeline bar. (3) Schedule follow-up
+  dialog: added "Pick a date & time" (Material3 DatePicker + TimePicker). (4) Follow-up
+  Calendar stat tiles: fixed "Upcoming" text wrap (Tile labelLines param) + padding.
+- FILES: ui/TelecallerScreens.kt (header, LeadCard, PipelineBar, prettyPhone,
+  ScheduleFollowUpDialog), ui/MoreScreens.kt (Tile + calendar stats).
+- BUILD: touches android/** -> verify CI.
+- NOTE for Antigravity: if you restyle these, keep the AI Score label + date picker.
+
 ### 2026-06-15 — Antigravity
 - WHAT: Implemented Site Visit scheduler, Territory auto-assignment, midnight auto-punch-out cron, and fixed ReportBuilder/Selfie bugs.
 - FILES: `supabase/migrations/0025...`, `0026...`, `admin/app/dashboard/leads/...`, `admin/app/dashboard/attendance/...`, `android/.../TelecallerScreens.kt`, `android/.../MainViewModel.kt`, `android/.../Models.kt`

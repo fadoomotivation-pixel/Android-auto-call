@@ -33,7 +33,7 @@ function digitsLen(s: string): number {
 }
 
 function cleanPhone(s: string): string {
-  const t = (s ?? "").toString().trim();
+  const t = (s ?? "").toString().trim().replace(/^p:/i, "");
   const plus = t.startsWith("+");
   const digits = t.replace(/\D/g, "");
   return plus ? `+${digits}` : digits;

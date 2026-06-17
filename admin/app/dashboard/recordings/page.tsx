@@ -65,7 +65,8 @@ export default async function RecordingsPage() {
       {rows.length === 0 ? (
         <div className="empty">No recordings yet.</div>
       ) : (
-        <table>
+        <div className="table-responsive">
+<table>
           <thead>
             <tr>
               <th>When</th>
@@ -97,7 +98,9 @@ export default async function RecordingsPage() {
             ))}
           </tbody>
         </table>
+</div>
       )}
     </>
   );
 }
+

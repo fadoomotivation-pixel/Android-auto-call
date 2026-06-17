@@ -335,7 +335,8 @@ export function PlatformContacts({
       {rows.length === 0 ? (
         <div className="empty">No contacts yet.</div>
       ) : (
-        <table>
+        <div className="table-responsive">
+<table>
           <thead>
             <tr>
               <th style={{ width: 36 }}>
@@ -376,7 +377,9 @@ export function PlatformContacts({
             ))}
           </tbody>
         </table>
+</div>
       )}
     </>
   );
 }
+

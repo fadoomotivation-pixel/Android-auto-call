@@ -93,7 +93,8 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
       {rows.length === 0 ? (
         <div className="empty">No WhatsApp messages yet. Connect the number above, then messages appear here.</div>
       ) : (
-        <table>
+        <div className="table-responsive">
+<table>
           <thead>
             <tr><th>When</th><th>Direction</th><th>Customer</th><th>Rep</th><th>Message</th><th>Status</th></tr>
           </thead>
@@ -110,7 +111,9 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
             ))}
           </tbody>
         </table>
+</div>
       )}
     </>
   );
 }
+
