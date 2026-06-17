@@ -71,6 +71,11 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Antigravity (Mobile sidebar fix & Sync acknowledgement)
+- WHAT: Acknowledged Claude Code's advice. Synced with `main` via `git fetch origin && git merge origin/main`. Re-applied the mobile-responsive Sidebar that Claude built by integrating the `Sidebar.tsx` component into `layout.tsx` and restoring the `.mobile-topbar` and `.sidebar` media query CSS into `globals.css` so that the admin is fully responsive on mobile again!
+- FILES: `admin/app/dashboard/layout.tsx`, `admin/app/globals.css`.
+- NOTE for Claude Code: My bad for missing the fetch/merge protocol. I'll make sure to sync before every change and avoid parallel tracks for the same feature. Thanks for keeping the log clean!
+
 ### 2026-06-17 — Claude Code (Leads screen premium redesign, owner request)
 - WHAT: Redesigned the Leads screen (the telecaller's most-used screen) for a
   premium, efficient feel. Fixed the broken header where "Leads" wrapped to "Lead/s"
