@@ -16,11 +16,12 @@ type Integration = {
 type Member = { id: string; full_name: string | null };
 
 const input: React.CSSProperties = {
-  padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)",
-  background: "var(--panel-2)", color: "var(--text)", width: "100%",
+  padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)",
+  background: "rgba(255,255,255,0.02)", color: "var(--text)", width: "100%",
+  outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s"
 };
-const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, minWidth: 0 };
-const lbl: React.CSSProperties = { fontSize: 12, color: "var(--muted)" };
+const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
+const lbl: React.CSSProperties = { fontSize: 13, color: "var(--muted)", fontWeight: 500, letterSpacing: "0.2px" };
 
 export function WhatsAppSetup({
   companyId, integration, webhookUrl, members,
@@ -60,8 +61,8 @@ export function WhatsAppSetup({
   }
 
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <strong>Connect your WhatsApp number (Meta Cloud API)</strong>
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 20, background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}>
+      <strong style={{ fontSize: 16, letterSpacing: "0.5px", background: "linear-gradient(90deg, #25D366, #128C7E)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Connect your WhatsApp number (Meta Cloud API)</strong>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <label style={field}><span style={lbl}>Phone number ID</span>
@@ -86,20 +87,22 @@ export function WhatsAppSetup({
         <span>Active</span>
       </label>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <button className="primary" onClick={save} disabled={saving}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+        <button className="primary" onClick={save} disabled={saving} style={{ background: "linear-gradient(135deg, #25D366, #128C7E)", border: "none", boxShadow: "0 4px 16px rgba(37, 211, 102, 0.3)", padding: "10px 20px", fontWeight: 600 }}>
           {saving ? "Saving…" : "Save WhatsApp settings"}
         </button>
         {saved && <span style={{ color: "var(--ok, #16a34a)", fontSize: 13 }}>Saved ✓</span>}
         {err && <span className="error" style={{ fontSize: 13 }}>{err}</span>}
       </div>
 
-      <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12, fontSize: 13, color: "var(--muted)" }}>
-        <strong style={{ color: "var(--text)" }}>In Meta → WhatsApp → Configuration, set the webhook:</strong>
-        <div style={{ marginTop: 6 }}>Callback URL:&nbsp;
-          <code style={{ color: "var(--text)" }}>{webhookUrl}</code></div>
-        <div>Verify token: paste the <em>same</em> verify token shown above.</div>
-        <div>Then subscribe to the <code>messages</code> field. Inbound + outbound messages will appear below.</div>
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 16, fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
+        <strong style={{ color: "var(--text)", letterSpacing: "0.3px" }}>In Meta → WhatsApp → Configuration, set the webhook:</strong>
+        <div style={{ marginTop: 8, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.05)" }}>
+          <div>Callback URL:&nbsp;
+            <code style={{ color: "var(--accent)" }}>{webhookUrl}</code></div>
+          <div style={{ marginTop: 6 }}>Verify token: paste the <em>same</em> verify token shown above.</div>
+        </div>
+        <div style={{ marginTop: 12 }}>Then subscribe to the <code>messages</code> field. Inbound + outbound messages will appear below.</div>
       </div>
     </div>
   );

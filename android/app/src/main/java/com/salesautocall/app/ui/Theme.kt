@@ -45,26 +45,26 @@ private val LightColors = lightColorScheme(
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF93B4FF),
-    onPrimary = Color(0xFF0A1A3A),
+    primary = Color(0xFF3B82F6), // Sapphire
+    onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFF1E3A8A),
     onPrimaryContainer = Color(0xFFDBEAFE),
-    secondary = Color(0xFF7DA8FF),
-    onSecondary = Color(0xFF0A1A3A),
-    secondaryContainer = Color(0xFF1B3470),
-    onSecondaryContainer = Color(0xFFDBEAFE),
-    tertiary = Color(0xFFC4B5FD),
-    onTertiary = Color(0xFF2A1065),
-    background = Color(0xFF0A1322),
-    onBackground = Color(0xFFE4EAF4),
-    surface = Color(0xFF111C30),
-    onSurface = Color(0xFFE4EAF4),
-    surfaceVariant = Color(0xFF1B2840),
-    onSurfaceVariant = Color(0xFF9DAAC4),
-    outline = Color(0xFF3A4760),
-    outlineVariant = Color(0xFF26344E),
-    error = Color(0xFFEF6E78),
-    onError = Color(0xFF370B0B),
+    secondary = Color(0xFF10B981), // Emerald Accent
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFF065F46),
+    onSecondaryContainer = Color(0xFFD1FAE5),
+    tertiary = Color(0xFF8B5CF6),
+    onTertiary = Color(0xFFFFFFFF),
+    background = Color(0xFF0B0F19), // Deep Obsidian
+    onBackground = Color(0xFFF8FAFC),
+    surface = Color(0xFF151C2C), // Elevated Glass Surface
+    onSurface = Color(0xFFF8FAFC),
+    surfaceVariant = Color(0xFF1E293B),
+    onSurfaceVariant = Color(0xFF94A3B8),
+    outline = Color(0xFF334155),
+    outlineVariant = Color(0xFF1E293B),
+    error = Color(0xFFEF4444),
+    onError = Color.White,
 )
 
 // Softer, more rounded geometry reads as modern/premium.

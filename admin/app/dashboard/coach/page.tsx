@@ -62,15 +62,15 @@ export default async function CoachPage() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 20 }}>
           {rows.map((d) => (
-            <div key={d.id} style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <strong>
+            <div key={d.id} className="card hover-scale" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", borderRadius: 16, padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+                <strong style={{ fontSize: 16, color: "#fff", letterSpacing: "0.2px" }}>
                   {new Date(d.digest_date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
                   {isSuper && <span style={{ color: "var(--muted)", fontWeight: 400 }}> · {nameById.get(d.company_id) ?? "—"}</span>}
                 </strong>
                 {d.stats && <DigestStats stats={d.stats} />}
               </div>
-              <div style={{ whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.5 }}>{d.content}</div>
+              <div style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.6, color: "rgba(255,255,255,0.85)" }}>{d.content}</div>
             </div>
           ))}
         </div>
@@ -81,12 +81,12 @@ export default async function CoachPage() {
 
 function DigestStats({ stats }: { stats: Record<string, number> }) {
   const chip = (label: string, value: number | undefined) => (
-    <span style={{ fontSize: 12, color: "var(--muted)" }}>
-      <strong style={{ color: "var(--text)" }}>{value ?? 0}</strong> {label}
+    <span style={{ fontSize: 12, color: "var(--text)", background: "rgba(255,255,255,0.05)", padding: "6px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: 6, fontWeight: 500, letterSpacing: "0.5px" }}>
+      <strong style={{ color: "#fff", fontSize: 14 }}>{value ?? 0}</strong> <span style={{ color: "var(--muted)", textTransform: "uppercase", fontSize: 10 }}>{label}</span>
     </span>
   );
   return (
-    <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {chip("calls", stats.calls_total)}
       {chip("connected", stats.calls_connected)}
       {chip("booked", stats.booked_today)}

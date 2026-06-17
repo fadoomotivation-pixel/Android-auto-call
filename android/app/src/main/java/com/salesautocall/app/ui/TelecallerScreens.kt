@@ -233,8 +233,11 @@ private fun Avatar(name: String, size: Int = 44) {
 
 @Composable
 private fun StatTile(emoji: String, value: String, label: String, accent: Color, modifier: Modifier = Modifier) {
-    Card(modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
+    Card(
+        modifier = modifier.border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(Modifier.padding(14.dp)) {
             Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(accent.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center) {
@@ -415,7 +418,10 @@ private fun PerfBar(label: String, value: Int, target: Int, color: Color) {
 
 @Composable
 private fun PerformanceCard(app: AppState) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(Modifier.padding(16.dp)) {
             SectionHeader("Today's Performance")
             Spacer(Modifier.height(12.dp))
@@ -498,7 +504,10 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
 
         // Lead pipeline
         item {
-            Card(Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
                 Column(Modifier.padding(16.dp)) {
                     SectionHeader("Lead Pipeline", "View all", onOpenLeads)
                     Spacer(Modifier.height(14.dp))
@@ -543,7 +552,10 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
 
         // Upcoming follow-ups
         item {
-            Card(Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
                 Column(Modifier.padding(16.dp)) {
                     SectionHeader(if (due > 0) "Follow-ups · $due due now" else "Upcoming Follow-ups", "View all", onOpenFollowUps)
                     Spacer(Modifier.height(10.dp))
@@ -740,7 +752,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             }
             if (selectMode) {
                 item {
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    ) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("${selectedIds.size} selected", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             TextButton(onClick = {
@@ -925,7 +941,10 @@ private fun LeadCard(
     val cardMod = Modifier.fillMaxWidth()
         .then(if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier)
         .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier)
-    Card(cardMod) {
+    Card(
+        modifier = cardMod.border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(c.name ?: c.phone)
@@ -1251,7 +1270,11 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
         // auto-queue
         item {
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+            Card(
+                modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Bolt, contentDescription = "Auto queue", tint = MaterialTheme.colorScheme.onPrimary)
@@ -1312,7 +1335,10 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
 @Composable
 private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onReschedule: () -> Unit, onDone: () -> Unit) {
     val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= System.currentTimeMillis()
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(f.name ?: f.phone)
@@ -1377,7 +1403,10 @@ fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit, onCallHistory: () -> 
 
 @Composable
 private fun LeaderboardCard(vm: MainViewModel, app: AppState, compact: Boolean) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
