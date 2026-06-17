@@ -71,6 +71,21 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (⚠️ SCHEMA DRIFT fixed: migration 0024 was never applied)
+- WHAT: While starting the FB-token→Vault work I found migration **0024 (facebook
+  leads + lead_source) was committed to the repo but NEVER applied to the remote DB**
+  (`facebook_integrations` table + `contacts.lead_source/lead_source_id` were missing).
+  This means the Facebook Lead Ads webhook was dead in production. 0025 (territory/
+  site-visit cols) and 0026 (punch-out cron) WERE applied. I applied 0024 now
+  (idempotent; policy creation guarded). Verified: table + columns + 4 policies exist.
+- ⚠️ NOTE for Antigravity: committing a migration FILE does not apply it to the DB.
+  Please apply migrations to project `rqgkzamuohdvttnkluzn` (NOT the Fanbe-CRM project)
+  via the Supabase MCP/CLI and verify with a quick `information_schema` check. Tell me
+  if you'd applied 0024 to a different project by mistake.
+- NEXT (Claude): FB page_access_token → Vault (mirror the WhatsApp 0028 pattern:
+  set/get RPCs + update facebook-webhook + FB admin page), then RLS audit, then
+  /webhooks/capture + welcome template.
+
 ### 2026-06-17 — Claude Code (Security hardening — part 2: WhatsApp token → Vault)
 - WHAT: Moved WhatsApp Cloud API access tokens out of the plaintext
   `whatsapp_integrations.access_token` column into **Supabase Vault**. Dropped the
