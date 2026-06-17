@@ -12,6 +12,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.salesautocall.app.ui.AppRoot
 import com.salesautocall.app.ui.AppTheme
 import com.salesautocall.app.ui.MainViewModel
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.ExistingWorkPolicy
+import java.util.concurrent.TimeUnit
+import com.salesautocall.app.data.CallLogSyncWorker
 
 class MainActivity : ComponentActivity() {
 
@@ -23,6 +34,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         requestRuntimePermissions()
 
+        val workManager = WorkManager.getInstance(this)
+        val periodicWork = PeriodicWorkRequestBuilder<CallLogSyncWorker>(1, TimeUnit.HOURS).build()
+        workManager.enqueueUniquePeriodicWork("CallLogSync", ExistingPeriodicWorkPolicy.KEEP, periodicWork)
+
         setContent {
             AppTheme {
                 Surface {
@@ -33,10 +48,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        checkBatteryOptimization()
+        // Trigger a one-off sync when app opens
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            "CallLogSyncOneOff",
+            ExistingWorkPolicy.REPLACE,
+            OneTimeWorkRequestBuilder<CallLogSyncWorker>().build()
+        )
+    }
+
+    private fun checkBatteryOptimization() {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            runCatching { startActivity(intent) }
+        }
+    }
+
     private fun requestRuntimePermissions() {
         val perms = mutableListOf(
             Manifest.permission.CALL_PHONE,
             Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_CALL_LOG,
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,

@@ -104,4 +104,7 @@ dependencies {
     // Media3/ExoPlayer for recording playback
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
 }
