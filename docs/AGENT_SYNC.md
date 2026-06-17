@@ -71,6 +71,14 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Lead capture — admin UI)
+- WHAT: Admin "🪝 Lead Capture" page (/dashboard/capture): shows the per-company
+  capture URL+token (copy button), pick default rep, toggle + configure the WhatsApp
+  welcome template, active toggle, and a usage/JSON example. Super admin uses the
+  shared CompanyPicker. Nav link added to Sidebar.
+- FILES: admin/app/dashboard/capture/{page,CaptureSetup}.tsx; admin/app/dashboard/Sidebar.tsx.
+- BUILD: admin only; tsc clean. Completes the /webhooks/capture + welcome-template feature.
+
 ### 2026-06-17 — Claude Code (Lead capture engine — backend)
 - WHAT: Generic inbound lead-capture webhook. migration 0030: lead_capture_config
   (per-company auto-generated capture_token, default rep, welcome template settings;
