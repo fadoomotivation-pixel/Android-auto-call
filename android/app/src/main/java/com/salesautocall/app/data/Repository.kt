@@ -20,6 +20,14 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import android.content.Context
+import android.provider.CallLog as AndroidCallLog
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Date
 
 /**
  * Thin data-access layer over Supabase. All reads/writes are constrained by
@@ -94,6 +102,115 @@ object Repository {
     /** Inserts a call log and returns its new id (so a recording can be attached). */
     suspend fun logCall(log: CallLog): String? {
         return client.from("call_logs").insert(log) { select() }.decodeSingleOrNull<CallLog>()?.id
+    }
+
+    /**
+     * Safety net: Reads the native Android CallLog, compares with Supabase,
+     * and backfills any missing calls made to our CRM contacts.
+     */
+    suspend fun syncCallLogs(context: Context) {
+        val companyId = myProfile()?.companyId ?: return
+        val salesId = currentUserId() ?: return
+
+        // 1. Check permission
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+
+        // 2. Fetch the user's CRM contacts
+        val myContacts = client.from("contacts")
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("id, phone")) {
+                filter { eq("company_id", companyId) }
+            }.decodeList<Contact>()
+
+        val contactMap = myContacts.mapNotNull {
+            val p = it.phone.replace("\\D".toRegex(), "")
+            if (p.isNotEmpty() && it.id != null) p to it.id else null
+        }.toMap()
+
+        if (contactMap.isEmpty()) return
+
+        // 3. Fetch recent Supabase call logs to deduplicate
+        // Limit to 500 to avoid large memory footprint, enough to catch missing ones.
+        val recentLogs = client.from("call_logs")
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("phone, started_at")) {
+                filter { eq("salesperson_id", salesId) }
+                order("started_at", Order.DESCENDING)
+                limit(500)
+            }.decodeList<CallLog>()
+
+        // Use approximate start time (within a few minutes) to dedupe, or just exact timestamp strings
+        // Since we insert with Instant.now().toString(), it might not perfectly match CallLog timestamp format
+        // Better to just store recent phone numbers called in the last X days.
+        // For simplicity, we just use the `started_at` parsed back to epoch if possible, but actually let's just 
+        // use phone + roughly date.
+        
+        // Let's create a dedupe set of "phone_day" or just check if Supabase already has a call for that phone within the last hour.
+        
+        // 4. Query Android CallLog
+        val timeLimitMillis = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L) // Last 7 days
+        val cursor = context.contentResolver.query(
+            AndroidCallLog.Calls.CONTENT_URI,
+            arrayOf(
+                AndroidCallLog.Calls.NUMBER,
+                AndroidCallLog.Calls.TYPE,
+                AndroidCallLog.Calls.DATE,
+                AndroidCallLog.Calls.DURATION
+            ),
+            "${AndroidCallLog.Calls.DATE} > ?",
+            arrayOf(timeLimitMillis.toString()),
+            "${AndroidCallLog.Calls.DATE} DESC"
+        ) ?: return
+
+        cursor.use { c ->
+            val numIdx = c.getColumnIndex(AndroidCallLog.Calls.NUMBER)
+            val typeIdx = c.getColumnIndex(AndroidCallLog.Calls.TYPE)
+            val dateIdx = c.getColumnIndex(AndroidCallLog.Calls.DATE)
+            val durIdx = c.getColumnIndex(AndroidCallLog.Calls.DURATION)
+
+            while (c.moveToNext()) {
+                val num = c.getString(numIdx) ?: continue
+                val cleanNum = num.replace("\\D".toRegex(), "")
+                val type = c.getInt(typeIdx)
+                val dateMillis = c.getLong(dateIdx)
+                val durationSec = c.getInt(durIdx)
+
+                // Only outgoing calls
+                if (type != AndroidCallLog.Calls.OUTGOING_TYPE) continue
+
+                val contactId = contactMap[cleanNum] ?: contactMap.entries.firstOrNull { cleanNum.endsWith(it.key) || it.key.endsWith(cleanNum) }?.value
+                if (contactId == null) continue // Not a CRM contact
+
+                val startedAt = Instant.ofEpochMilli(dateMillis)
+                val endedAt = startedAt.plusSeconds(durationSec.toLong())
+
+                // Deduplicate: check if there's any Supabase log for this phone where the timestamp is within 60 seconds
+                val isDuplicate = recentLogs.any {
+                    val sbPhone = it.phone.replace("\\D".toRegex(), "")
+                    if (!sbPhone.endsWith(cleanNum) && !cleanNum.endsWith(sbPhone)) return@any false
+                    val sbStart = runCatching { Instant.parse(it.startedAt) }.getOrNull() ?: return@any false
+                    Math.abs(sbStart.epochSecond - startedAt.epochSecond) < 60
+                }
+
+                if (isDuplicate) continue
+
+                // Not in Supabase! Backfill it.
+                val outcome = if (durationSec > 0) "connected" else "no_answer"
+                val newLog = CallLog(
+                    companyId = companyId,
+                    salespersonId = salesId,
+                    contactId = contactId,
+                    phone = num,
+                    direction = "outgoing",
+                    outcome = outcome,
+                    startedAt = startedAt.toString(),
+                    endedAt = endedAt.toString(),
+                    durationSeconds = durationSec,
+                    recordingStatus = "none"
+                )
+                runCatching { logCall(newLog) }
+            }
+        }
     }
 
     /** Uploads a recording file to the recording-upload edge function, which streams
