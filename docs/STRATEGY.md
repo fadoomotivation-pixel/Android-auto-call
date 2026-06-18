@@ -30,6 +30,10 @@ Dominate the Indian telecalling CRM space with a **mobile-first, AI-native, zero
 - **PR #80 — Real-time WhatsApp Unified Inbox (Antigravity).** Split-pane chat (`WhatsAppInbox.tsx`) inside the Next.js admin, on top of the Meta Cloud API webhook + `whatsapp_messages` backend.
 - **PR #81 — Security hardening, part 1 (Claude Code; migration `0027`).** Caught that `whatsapp_messages` was never in the `supabase_realtime` publication, so the "realtime" inbox received **zero live events** — fixed by adding it to the publication + `replica identity full`. Confirmed **RLS is enforced on `postgres_changes`** (no cross-tenant leak via the realtime channel). Added a **unique index on `wa_message_id`** + webhook upsert `ignoreDuplicates` for **idempotency** against Meta's delivery retries.
 - **PR #82 — Android SIM call-log reconciliation (Antigravity).** Safety net for OEMs (MIUI/ColorOS) that kill foreground services and silently drop call logs: `READ_CALL_LOG` permission, `CallLogSyncWorker` (WorkManager) that reads the native `CallLog.Calls` provider, filters outgoing calls to CRM contacts, diffs against Supabase `call_logs`, and backfills gaps; plus a startup prompt to disable battery optimization.
+- **PR #84 — Hardened call-log dedup, greedy bipartite matching (Antigravity).** The original reconciliation used a fuzzy 60s window that could swallow valid back-to-back calls to the same number (call → no answer → immediate redial). Replaced with greedy 1-to-1 matching: native calls processed chronologically (oldest first), each matched to the closest *unmatched* Supabase log within 120s (`matchedSupabaseIds` set). Exact tracking — no double-inserts, no dropped repeat calls. (Resolves the dedup watch-item below.)
+
+- **PR #85 / #87 — Secrets → Supabase Vault (Claude Code).** WhatsApp + Facebook access tokens moved out of plaintext DB columns into Vault; plaintext columns dropped; `set_*_token` (admin-checked) / `get_*_token` (service-role-only) RPCs. Also found + fixed deploy drift: migration 0024 and `facebook-webhook` were committed but never deployed → FB lead capture had been fully dead.
+- **PR #88 / #89 — Inbound lead-capture engine + welcome template (Claude Code).** Public token-gated `lead-capture` function: any website form/ad POSTs a lead → deduped → assigned to default rep → optional instant WhatsApp **welcome template**. Admin "🪝 Lead Capture" page for the URL/token/default-rep/template. Plus a clean multi-tenant **RLS audit** (passed) and the `docs/TESTING_CHECKLIST.md`.
 
 > Note: the briefing labeled the Android reconciliation as "PR #81" — it was actually **#82**. #81 was the realtime/idempotency hardening.
 
@@ -38,7 +42,7 @@ Dominate the Indian telecalling CRM space with a **mobile-first, AI-native, zero
 - **Antigravity (frontend/Android):** keep hardening the foreground-service + reconciliation loop; UI/UX.
 
 ## Known follow-ups / watch-items
-- **Secrets stored plaintext** in DB (`access_token`, `page_access_token`) — move to Vault before onboarding paying tenants.
-- **CallLog reconciliation dedupe is approximate** (phone + rough time) — worth hardening so backfill doesn't double-insert or miss same-number repeat calls.
+- ~~**Secrets stored plaintext** in DB~~ → DONE: WhatsApp (PR #85) + Facebook (PR #87) tokens moved to Supabase Vault; plaintext columns dropped; service-role-only reader RPCs.
+- ~~**CallLog reconciliation dedupe is approximate**~~ → DONE in PR #84 (greedy bipartite 1-to-1 matching, 120s window).
 - **Shared `GROQ_API_KEY`** across tenants — noisy-neighbor rate limits at scale.
 - **WhatsApp business-initiated messaging** requires approved templates; only one bounded "welcome" automation pre-launch — no drip/bulk (protects Meta quality rating).
