@@ -181,6 +181,7 @@ object SipManager {
         var server = com.salesautocall.app.data.AppPrefs.getSipServer(context)
         if (server.isBlank()) server = "sip.uroperator.com"
         
+        // Standard SIP port; self-hosted FreeSWITCH/Asterisk listen on 5060 by default.
         val p = com.salesautocall.app.data.AppPrefs.getSipPort(context).toIntOrNull() ?: 5060
         register(context, agentId, sipPass, server, p, "udp")
     }
