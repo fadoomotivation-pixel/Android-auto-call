@@ -395,7 +395,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // (click-to-call): their server rings our extension (the app auto-answers)
         // and bridges the customer through the proper trunk.
         if (raw == "registered" && !s.cloudBridged) {
-            set { it.copy(cloudBridged = true, cloudCallStatus = "Ringing you, then the customer…") }
+            val ctx = getApplication<Application>()
+            val sipServer = com.salesautocall.app.data.AppPrefs.getSipServer(ctx)
+            // A self-hosted PBX (FreeSWITCH/Asterisk) has no UrOperator click-to-call
+            // bridge API, so dial DIRECTLY over SIP — exactly like Zoiper does. Only
+            // UrOperator's gateway uses the server-side bridge.
+            val directDial = sipServer.isNotBlank() && !sipServer.contains("uroperator", ignoreCase = true)
+            set { it.copy(cloudBridged = true, cloudCallStatus = if (directDial) "Dialing $number…" else "Ringing you, then the customer…") }
             val ext = _state.value.cloudCallExt.ifBlank { agentId() }
             viewModelScope.launch {
                 val p = _state.value.profile
@@ -415,19 +421,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 set { it.copy(cloudCallLogId = logId) }
                 // Arm recording (captures both legs once the call is answered).
                 if (logId != null && recordingEnabled()) {
-                    val f = java.io.File(getApplication<Application>().cacheDir, "rec_$logId.wav")
+                    val f = java.io.File(ctx.cacheDir, "rec_$logId.wav")
                     com.salesautocall.app.sip.SipManager.setRecordFile(f.absolutePath)
                 } else {
                     com.salesautocall.app.sip.SipManager.setRecordFile(null)
                 }
 
-                runCatching { Repository.cloudCall(number, ext, callerId()) }
-                    .onSuccess { body ->
-                        if (!body.contains("\"ok\":true")) {
-                            set { it.copy(cloudCallStatus = "uroperator: ${body.take(160)}") }
+                if (directDial) {
+                    // Send the INVITE ourselves to <number>@<pbx>; the PBX dialplan routes it.
+                    runCatching { com.salesautocall.app.sip.SipManager.call(number) }
+                        .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't dial: ${e.message}") } }
+                } else {
+                    runCatching { Repository.cloudCall(number, ext, callerId()) }
+                        .onSuccess { body ->
+                            if (!body.contains("\"ok\":true")) {
+                                set { it.copy(cloudCallStatus = "uroperator: ${body.take(160)}") }
+                            }
                         }
-                    }
-                    .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't start call: ${e.message}") } }
+                        .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't start call: ${e.message}") } }
+                }
             }
         }
     }

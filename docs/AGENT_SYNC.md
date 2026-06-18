@@ -71,6 +71,19 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (FIX: cloud calling on self-hosted PBX — direct SIP dial)
+- WHAT: Root-caused why cloud calls failed on a self-hosted FreeSWITCH/Asterisk while
+  Zoiper worked over the same WireGuard VPN: after SIP register, our "Office line calling"
+  flow called Repository.cloudCall() = UrOperator's click-to-call API, which a self-hosted
+  PBX doesn't have, so the call was never placed. Fix: when the SIP server is NOT uroperator,
+  DIRECT-DIAL via SipManager.call(number) (sends the INVITE ourselves, like Zoiper). UrOperator
+  path unchanged (no regression). Also default SIP port 6060 -> 5060.
+- FILES: ui/MainViewModel.kt (onSipState registered branch), sip/SipManager.kt (port default).
+- BUILD: android/** -> verify CI.
+- NOTE: couldn't live-test (no device/PBX/egress). Logic matches the working Zoiper behavior;
+  needs a real-PBX test. Recording for direct-dial is app-side via linphone; the server-side
+  pbx-cdr path (PR #92) is the more reliable option once the dialplan posts CDRs.
+
 ### 2026-06-17 — Claude Code (Lead capture — admin UI)
 - WHAT: Admin "🪝 Lead Capture" page (/dashboard/capture): shows the per-company
   capture URL+token (copy button), pick default rep, toggle + configure the WhatsApp
