@@ -71,6 +71,18 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (FIX attempt: incoming cloud calls over NAT)
+- WHAT: Outgoing cloud calls now work (PR #94). Incoming didn't ring on a PUBLIC PBX
+  (157.66.102.30:5062) with no VPN. Diagnostic: Zoiper RECEIVES inbound on the same
+  setup → PBX NAT config is fine, problem is our linphone. Fixes in SipManager:
+  (1) c.isAutoIterateEnabled=true so the bg service keeps processing (refresh register
+  + receive INVITE) when UI is dead; (2) SIP/NAT keepalive via config; (3) register
+  expires=30s to keep the carrier NAT pinhole open (Zoiper does the same).
+- FILES: sip/SipManager.kt (ensureCore + register).
+- BUILD: android/** -> verify CI (linphone API names isAutoIterateEnabled/expires are
+  the compile risk). Couldn't live-test. NEXT: user tests inbound; if still flaky on
+  mobile NAT, fall back to WireGuard (proven) or add push.
+
 ### 2026-06-17 — Claude Code (FIX: cloud calling on self-hosted PBX — direct SIP dial)
 - WHAT: Root-caused why cloud calls failed on a self-hosted FreeSWITCH/Asterisk while
   Zoiper worked over the same WireGuard VPN: after SIP register, our "Office line calling"

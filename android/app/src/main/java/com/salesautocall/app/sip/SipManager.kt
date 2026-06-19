@@ -167,6 +167,15 @@ object SipManager {
             nat.isTurnEnabled = false
             c.natPolicy = nat
         }
+        // Keep the engine processing even when the UI is dead — without this the
+        // background service never refreshes the registration or receives the
+        // inbound INVITE, so incoming calls silently never ring.
+        runCatching { c.isAutoIterateEnabled = true }
+        // Send a SIP/NAT keepalive so the carrier NAT pinhole stays open between
+        // re-registrations (this is what lets the PBX push an incoming call back
+        // to a phone behind mobile NAT — exactly what Zoiper does).
+        runCatching { c.config?.setInt("net", "nat_sip_keepalive", 20) }
+        runCatching { c.config?.setInt("sip", "keepalive_period", 20000) }
         c.start()
         core = c
         return c
@@ -223,6 +232,10 @@ object SipManager {
         }
         params.serverAddress = proxy
         params.isRegisterEnabled = true
+        // Short registration so the carrier NAT pinhole is refreshed often enough
+        // that the PBX can still reach us for INCOMING calls (mobile NAT closes the
+        // hole in ~30-60s). Zoiper does the same; without it, inbound never rings.
+        runCatching { params.expires = 30 }
         // Send REGISTER and all in-dialog requests straight to this server.
         runCatching { params.isOutboundProxyEnabled = true }
 
