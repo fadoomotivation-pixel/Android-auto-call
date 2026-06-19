@@ -93,38 +93,19 @@ object SipManager {
                 Call.State.IncomingReceived -> {
                     onState?.invoke("ringing")
                     incomingCall = call
-                    
-                    // Trigger the native Android incoming call UI via TelecomManager
+                    // Ring with our own full-screen call screen (reliable, unlike the
+                    // Telecom calling-account which must be manually enabled).
+                    val from = runCatching { call.remoteAddress?.username }.getOrNull()
+                        ?: runCatching { call.remoteAddress?.asStringUriOnly() }.getOrNull() ?: "Unknown"
                     appContext?.let { ctx ->
-                        val telecomManager = ctx.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
-                        val componentName = android.content.ComponentName(ctx, SalesConnectionService::class.java)
-                        val phoneAccountHandle = android.telecom.PhoneAccountHandle(componentName, "SalesAutoCallSIP")
-                        
-                        // Register PhoneAccount if not already registered
-                        try {
-                            val account = android.telecom.PhoneAccount.builder(phoneAccountHandle, "SalesAutoCall SIP")
-                                .setCapabilities(android.telecom.PhoneAccount.CAPABILITY_CALL_PROVIDER)
-                                .build()
-                            telecomManager.registerPhoneAccount(account)
-                            
-                            val extras = android.os.Bundle().apply {
-                                putString(android.telecom.TelecomManager.EXTRA_INCOMING_CALL_ADDRESS, call.remoteAddress?.asStringUriOnly() ?: "Unknown")
-                            }
-                            telecomManager.addNewIncomingCall(phoneAccountHandle, extras)
-                        } catch (e: Exception) {
-                            android.util.Log.e("SipManager", "Failed to add incoming call via Telecom", e)
-                            // Fallback to auto-answer if Telecom fails (e.g., missing permissions)
-                            acceptIncomingCall()
-                        }
-                    } ?: run {
-                        // Fallback
-                        acceptIncomingCall()
+                        runCatching { com.salesautocall.app.notify.IncomingCallNotifier.show(ctx, from) }
                     }
                 }
                 Call.State.OutgoingProgress,
                 Call.State.OutgoingRinging -> onState?.invoke("ringing")
                 Call.State.Connected,
                 Call.State.StreamsRunning -> {
+                    appContext?.let { runCatching { com.salesautocall.app.notify.IncomingCallNotifier.cancel(it) } }
                     applyAudioRoute(core)
                     if (recordFile != null && !recordingActive) {
                         runCatching { call.startRecording() }.onSuccess { recordingActive = true }
@@ -134,6 +115,7 @@ object SipManager {
                 Call.State.End,
                 Call.State.Released,
                 Call.State.Error -> {
+                    appContext?.let { runCatching { com.salesautocall.app.notify.IncomingCallNotifier.cancel(it) } }
                     if (recordingActive) {
                         runCatching { call.stopRecording() }
                         recordingActive = false

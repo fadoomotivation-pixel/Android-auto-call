@@ -71,6 +71,22 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Incoming cloud call → full-screen ring)
+- WHAT: Identified the real system from page source: it's a self-hosted **ViciDial**
+  (Asterisk) at 10.10.10.3, agent ext 7777 — NOT the UrOperator cloud API doc. For a
+  registered SIP app to ring on inbound, ViciDial must route the DID directly to ext 7777
+  (admin), and the app must reliably RING. App fix: replaced the Telecom-based incoming
+  path (which silently auto-answered when the calling-account wasn't enabled) with a
+  self-contained **full-screen ringing screen** (IncomingCallActivity) + high-importance
+  full-screen-intent notification + looping ringtone/vibrate (IncomingCallNotifier),
+  fired from SipManager on Call.State.IncomingReceived; cancelled on Connected/End.
+- FILES: notify/IncomingCallNotifier.kt (new), ui/IncomingCallActivity.kt (new),
+  sip/SipManager.kt (IncomingReceived/Connected/End), AndroidManifest (USE_FULL_SCREEN_INTENT
+  + activity showWhenLocked/turnScreenOn).
+- BUILD: android/** -> verify CI. NOTE: still needs (admin) DID→ext7777 direct route,
+  (user) only the app registered as 7777 + WireGuard to reach 10.10.10.3. App now rings
+  once the INVITE arrives.
+
 ### 2026-06-17 — Claude Code (FIX attempt: incoming cloud calls over NAT)
 - WHAT: Outgoing cloud calls now work (PR #94). Incoming didn't ring on a PUBLIC PBX
   (157.66.102.30:5062) with no VPN. Diagnostic: Zoiper RECEIVES inbound on the same
