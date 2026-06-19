@@ -1,6 +1,7 @@
 package com.salesautocall.app.sip
 
 import android.content.Context
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.linphone.core.Account
 import org.linphone.core.AudioDevice
 import org.linphone.core.Call
@@ -36,6 +37,9 @@ object SipManager {
 
     /** Called on every meaningful state change. Set by the ViewModel. */
     var onState: ((String) -> Unit)? = null
+
+    /** Observable call state for the in-call UI (ringing/connected/ended). */
+    val callState = MutableStateFlow("idle")
 
     fun acceptIncomingCall() {
         val call = incomingCall ?: core?.currentCall ?: return
@@ -92,6 +96,7 @@ object SipManager {
             when (state) {
                 Call.State.IncomingReceived -> {
                     onState?.invoke("ringing")
+                    callState.value = "ringing"
                     incomingCall = call
                     // Ring with our own full-screen call screen (reliable, unlike the
                     // Telecom calling-account which must be manually enabled).
@@ -111,6 +116,7 @@ object SipManager {
                         runCatching { call.startRecording() }.onSuccess { recordingActive = true }
                     }
                     onState?.invoke("connected")
+                    callState.value = "connected"
                 }
                 Call.State.End,
                 Call.State.Released,
@@ -124,6 +130,7 @@ object SipManager {
                     val code = runCatching { call.errorInfo?.protocolCode ?: 0 }.getOrDefault(0)
                     val phrase = runCatching { call.errorInfo?.phrase ?: "" }.getOrDefault("")
                     if (code >= 300) onState?.invoke("callfailed:$code $phrase") else onState?.invoke("ended")
+                    callState.value = "ended"
                 }
                 else -> { /* nothing */ }
             }

@@ -71,6 +71,19 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Incoming call: in-call screen + audio/controls)
+- WHAT: Incoming now rings + is received. After answering it didn't show a call
+  screen and had no audio. Fix: IncomingCallActivity now opens a foreground in-call
+  screen (stays foregrounded → keeps mic/audio alive) with Speaker / Mute / Hang-up;
+  added SipManager.callState (StateFlow) so the screen tracks connected/ended and
+  auto-closes on hangup. Speaker toggle lets the rep route audio out loud if it's
+  going to the wrong device.
+- FILES: ui/IncomingCallActivity.kt (rewrite: ringing + in-call phases), sip/SipManager.kt
+  (callState StateFlow).
+- BUILD: android/** -> verify CI. NOTE for audio: if still silent, check the app has
+  Microphone permission granted; remaining audio issues are likely RTP/NAT or device
+  routing (Speaker toggle helps confirm).
+
 ### 2026-06-17 — Claude Code (Incoming cloud call → full-screen ring)
 - WHAT: Identified the real system from page source: it's a self-hosted **ViciDial**
   (Asterisk) at 10.10.10.3, agent ext 7777 — NOT the UrOperator cloud API doc. For a
