@@ -104,6 +104,28 @@ object Repository {
         return client.from("call_logs").insert(log) { select() }.decodeSingleOrNull<CallLog>()?.id
     }
 
+    /** Force a call's recording_status (e.g. "failed" when no audio was captured). */
+    suspend fun markRecordingStatus(callLogId: String, status: String) {
+        client.from("call_logs").update(mapOf("recording_status" to status)) {
+            filter { eq("id", callLogId) }
+        }
+    }
+
+    /** Logs an INCOMING cloud (SIP) call for the current user. Returns the new id. */
+    suspend fun logIncomingCloudCall(number: String, recording: Boolean): String? {
+        val p = myProfile() ?: return null
+        val cid = p.companyId ?: return null
+        return logCall(
+            CallLog(
+                companyId = cid, salespersonId = p.id,
+                phone = number, direction = "incoming", notes = "cloud-incoming",
+                startedAt = Instant.now().toString(),
+                recordingStatus = if (recording) "recording" else "none",
+                recordingSource = "sip",
+            ),
+        )
+    }
+
     /**
      * Safety net: Reads the native Android CallLog, compares with Supabase,
      * and backfills any missing calls made to our CRM contacts.
