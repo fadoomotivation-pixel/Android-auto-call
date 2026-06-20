@@ -52,6 +52,7 @@ object SipManager {
     private var inLogId: String? = null
     private var inNumber: String? = null
     private var inStartMs: Long = 0L
+    private var inConnectedMs: Long = 0L
     private var inRecordPath: String? = null
 
     fun acceptIncomingCall() {
@@ -126,6 +127,7 @@ object SipManager {
                         handlingIncoming = true
                         inNumber = from
                         inStartMs = System.currentTimeMillis()
+                        inConnectedMs = 0L
                         inRecordPath = appContext?.let { java.io.File(it.cacheDir, "rec_in_$inStartMs.wav").absolutePath }
                         setRecordFile(inRecordPath)
                     }
@@ -142,6 +144,7 @@ object SipManager {
                     onState?.invoke("connected")
                     callState.value = "connected"
                     // Create the inbound call_logs row once we know it connected.
+                    if (handlingIncoming && inConnectedMs == 0L) inConnectedMs = System.currentTimeMillis()
                     if (handlingIncoming && inLogId == null) {
                         val num = inNumber ?: "Unknown"
                         val rec = inRecordPath != null
@@ -167,14 +170,23 @@ object SipManager {
                         val logId = inLogId
                         val num = inNumber ?: "Unknown"
                         val path = inRecordPath
-                        val dur = if (inStartMs > 0) ((System.currentTimeMillis() - inStartMs) / 1000).toInt() else 0
+                        // Outcome: a call that reached StreamsRunning was answered;
+                        // otherwise it's a missed (unanswered) inbound call. Talk time
+                        // is measured from answer, not from when it started ringing.
+                        val connected = inConnectedMs > 0
+                        val dur = if (connected) ((System.currentTimeMillis() - inConnectedMs) / 1000).toInt() else 0
+                        val outcome = if (connected) "connected" else "no_answer"
                         handlingIncoming = false; inLogId = null; inNumber = null; inRecordPath = null
+                        inStartMs = 0L; inConnectedMs = 0L
                         setRecordFile(null)
                         ioScope.launch {
                             runCatching { com.salesautocall.app.data.Repository.awaitSession() }
                             val id = logId ?: runCatching {
                                 com.salesautocall.app.data.Repository.logIncomingCloudCall(num, path != null)
                             }.getOrNull()
+                            if (id != null) runCatching {
+                                com.salesautocall.app.data.Repository.updateCallResult(id, outcome, dur)
+                            }
                             if (id != null && path != null) {
                                 val f = java.io.File(path)
                                 if (f.exists() && f.length() > 44) {

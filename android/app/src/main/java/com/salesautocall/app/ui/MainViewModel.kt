@@ -151,6 +151,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         com.salesautocall.app.sip.SipManager.appContext = app
+        // If the rep opted in to inbound calls, make sure the SIP listener is
+        // running on every app start — the system may have killed the service
+        // (swipe-away / low memory) while the app wasn't open, which is why
+        // incoming calls stopped arriving until the app was reopened.
+        if (AppPrefs.getIncomingEnabled(app) &&
+            AppPrefs.getAgentId(app).isNotBlank() &&
+            AppPrefs.getSipPassword(app).isNotBlank()
+        ) {
+            runCatching { com.salesautocall.app.sip.SipBackgroundService.start(app) }
+        }
         refreshSession()
     }
 
@@ -601,6 +611,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.value.callList
             .filter { it.outcome == "no_answer" || it.outcome == "failed" }
             .distinctBy { it.phone }
+
+    /**
+     * Missed calls in the dialer sense: an inbound call the rep didn't answer.
+     * This is what the "Missed" tab shows so a telecaller can quickly see who
+     * tried to reach them and call back.
+     */
+    fun missedCalls(): List<CallLog> =
+        _state.value.callList.filter { it.direction == "incoming" && it.outcome != "connected" }
 
     /** Places a manually-keyed SIM call (recorded + logged) via the in-app keypad. */
     fun dialManual(phone: String) {
