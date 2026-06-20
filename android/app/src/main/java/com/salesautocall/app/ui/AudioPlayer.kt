@@ -66,6 +66,8 @@ fun AudioPlayer(
 
                 setMediaSource(mediaSource)
                 prepare()
+                // The user tapped Play to open this control — start as soon as ready.
+                playWhenReady = true
 
                 addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(playing: Boolean) {

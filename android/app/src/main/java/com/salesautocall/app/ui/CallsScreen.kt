@@ -175,11 +175,11 @@ private fun CallRow(
                         )
                     }
                 }
-                if (c.recordingStatus == "ready" && !playing) {
-                    IconButton(onClick = onPlay) {
+                if (c.recordingStatus == "ready") {
+                    IconButton(onClick = { if (playing) onStop() else onPlay() }) {
                         Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = "Play recording",
+                            if (playing) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = if (playing) "Stop recording" else "Play recording",
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     }
