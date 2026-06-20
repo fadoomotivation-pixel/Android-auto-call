@@ -168,6 +168,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var cloudConnectedAt: Long = 0L
     /** Guards the outgoing call's outcome write so it happens exactly once. */
     private var cloudResultLogged: Boolean = false
+    /** Bumped per outbound call so a delayed auto-dismiss only closes its own call. */
+    private var cloudCallToken: Int = 0
 
     private fun set(transform: (AppState) -> AppState) {
         _state.value = transform(_state.value)
@@ -319,6 +321,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Strip spaces/dashes so the SIP/URI and the API get clean digits.
         val clean = phone.filter { it.isDigit() || it == '+' }
         cloudResultLogged = false
+        cloudCallToken++
+        // Tell the SIP engine the next inbound INVITE is our own agent leg to
+        // auto-answer — not a genuine inbound call to ring.
+        com.salesautocall.app.sip.SipManager.expectingOutbound = true
         set {
             it.copy(
                 error = null, message = null,
@@ -402,8 +408,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         if (raw == "connected") cloudConnectedAt = System.currentTimeMillis()
         if (raw == "ended" || raw.startsWith("callfailed")) {
-            finalizeCloudResult(failed = raw.startsWith("callfailed"))
+            val failed = raw.startsWith("callfailed")
+            finalizeCloudResult(failed = failed)
             uploadCloudRecording()
+            // The remote hung up / the call failed. Detach immediately so a later
+            // inbound call rings instead of being auto-answered, then auto-dismiss
+            // the in-call screen (keeping the reason on-screen briefly).
+            com.salesautocall.app.sip.SipManager.expectingOutbound = false
+            val token = cloudCallToken
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(if (failed) 3500 else 1200)
+                if (cloudCallToken == token) finishCloudCall(reload = true)
+            }
         }
 
         // Once registered: log the call (to get its id, and set the recording file
@@ -508,18 +524,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun recordingEnabled(): Boolean = _state.value.company?.recordingEnabled ?: true
 
-    fun endCloudCall() {
+    /** Hang-up tapped by the rep. */
+    fun endCloudCall() = finishCloudCall(reload = true)
+
+    /**
+     * Single teardown path for a cloud call, used both when the rep taps hang-up
+     * and when the call ends on its own. Saves notes, finalises the log, hangs up
+     * and dismisses the in-call screen. Idempotent — safe to call more than once.
+     *
+     * Critically, it does NOT unregister SIP when the rep is listening for inbound
+     * calls (that would silence incoming calls after every outbound one); it only
+     * fully stops the engine when inbound is off, to save battery.
+     */
+    fun finishCloudCall(reload: Boolean = false) {
+        if (_state.value.cloudCallNumber == null) return // already torn down
+        cloudCallToken++ // cancel any pending auto-dismiss for this call
         if (_state.value.inCallNote.isNotBlank()) saveInCallNote()
         finalizeCloudResult(failed = false)
         uploadCloudRecording()
-        runCatching { com.salesautocall.app.sip.SipManager.stop() }
+        com.salesautocall.app.sip.SipManager.expectingOutbound = false
         com.salesautocall.app.sip.SipManager.onState = null
+        if (_state.value.cloudIncomingEnabled) {
+            runCatching { com.salesautocall.app.sip.SipManager.hangup() } // keep registration alive
+        } else {
+            runCatching { com.salesautocall.app.sip.SipManager.stop() }
+        }
         cloudConnectedAt = 0L
         set {
             it.copy(
                 cloudCallNumber = null, cloudCallStatus = "", cloudBridged = false,
                 cloudCallLogId = null, inCallNote = "",
             )
+        }
+        // Refresh the Calls list so the just-finished call shows up. The recording
+        // is uploaded asynchronously and only flips to "ready" (→ shows the Play
+        // button) a few seconds later, so refresh again after the upload settles.
+        if (reload) {
+            loadCalls()
+            val token = cloudCallToken
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(6000)
+                if (cloudCallToken == token) loadCalls()
+            }
         }
     }
 
