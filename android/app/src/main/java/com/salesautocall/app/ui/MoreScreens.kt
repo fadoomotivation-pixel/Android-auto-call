@@ -64,7 +64,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.salesautocall.app.data.Attendance
 import com.salesautocall.app.data.FollowUp
@@ -97,15 +99,22 @@ private fun localDateOf(iso: String?): LocalDate? =
     ms(iso)?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
 
 @Composable
-private fun Tile(emoji: String, value: String, label: String, accent: Color, modifier: Modifier = Modifier) {
+private fun Tile(emoji: String, value: String, label: String, accent: Color, modifier: Modifier = Modifier, labelLines: Int = 2) {
     Card(modifier, elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
-        Column(Modifier.padding(14.dp)) {
+        Column(Modifier.padding(horizontal = 11.dp, vertical = 13.dp)) {
             Box(Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
                 Text(emoji)
             }
             Spacer(Modifier.height(8.dp))
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = labelLines,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 14.sp,
+            )
         }
     }
 }
@@ -439,10 +448,10 @@ fun CalendarScreen(vm: MainViewModel, onBack: () -> Unit) {
         // Stats
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Tile("📋", total.toString(), "Total", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                Tile("✅", completed.toString(), "Done", OkGreen, Modifier.weight(1f))
-                Tile("🕑", upcoming.toString(), "Upcoming", WarnAmber, Modifier.weight(1f))
-                Tile("⚠️", overdue.toString(), "Overdue", BadRed, Modifier.weight(1f))
+                Tile("📋", total.toString(), "Total", MaterialTheme.colorScheme.primary, Modifier.weight(1f), labelLines = 1)
+                Tile("✅", completed.toString(), "Done", OkGreen, Modifier.weight(1f), labelLines = 1)
+                Tile("🕑", upcoming.toString(), "Upcoming", WarnAmber, Modifier.weight(1f), labelLines = 1)
+                Tile("⚠️", overdue.toString(), "Overdue", BadRed, Modifier.weight(1f), labelLines = 1)
             }
         }
         item {

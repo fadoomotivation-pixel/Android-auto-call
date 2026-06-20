@@ -71,6 +71,182 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Cloud call history + recording fixes)
+- WHAT: Diagnosed via DB: cloud call_logs had started_at=NULL (broke date-filtered
+  history) and recordings stuck at "recording" (empty WAV → upload skipped; Drive IS
+  connected). Incoming calls were never logged. Fixes: (1) outbound CallLog now sets
+  started_at; (2) empty/short recordings now marked "failed" (truthful, not stuck);
+  (3) INCOMING cloud calls now logged + recorded + uploaded background-safe in SipManager
+  (Repository.logIncomingCloudCall/markRecordingStatus); (4) restored auto-answer for the
+  UrOperator click-to-call agent leg (onState!=null) vs ring+log for genuine inbound.
+- FILES: ui/MainViewModel.kt, data/Repository.kt, sip/SipManager.kt.
+- BUILD: android/** -> verify CI.
+- NOTE: recordings stay empty until two-way AUDIO works in the call (linphone records
+  the call audio; no audio = 0-byte file). System is ViciDial which ALSO records
+  server-side — pulling those is the reliable long-term path.
+
+### 2026-06-17 — Claude Code (Incoming call: in-call screen + audio/controls)
+- WHAT: Incoming now rings + is received. After answering it didn't show a call
+  screen and had no audio. Fix: IncomingCallActivity now opens a foreground in-call
+  screen (stays foregrounded → keeps mic/audio alive) with Speaker / Mute / Hang-up;
+  added SipManager.callState (StateFlow) so the screen tracks connected/ended and
+  auto-closes on hangup. Speaker toggle lets the rep route audio out loud if it's
+  going to the wrong device.
+- FILES: ui/IncomingCallActivity.kt (rewrite: ringing + in-call phases), sip/SipManager.kt
+  (callState StateFlow).
+- BUILD: android/** -> verify CI. NOTE for audio: if still silent, check the app has
+  Microphone permission granted; remaining audio issues are likely RTP/NAT or device
+  routing (Speaker toggle helps confirm).
+
+### 2026-06-17 — Claude Code (Incoming cloud call → full-screen ring)
+- WHAT: Identified the real system from page source: it's a self-hosted **ViciDial**
+  (Asterisk) at 10.10.10.3, agent ext 7777 — NOT the UrOperator cloud API doc. For a
+  registered SIP app to ring on inbound, ViciDial must route the DID directly to ext 7777
+  (admin), and the app must reliably RING. App fix: replaced the Telecom-based incoming
+  path (which silently auto-answered when the calling-account wasn't enabled) with a
+  self-contained **full-screen ringing screen** (IncomingCallActivity) + high-importance
+  full-screen-intent notification + looping ringtone/vibrate (IncomingCallNotifier),
+  fired from SipManager on Call.State.IncomingReceived; cancelled on Connected/End.
+- FILES: notify/IncomingCallNotifier.kt (new), ui/IncomingCallActivity.kt (new),
+  sip/SipManager.kt (IncomingReceived/Connected/End), AndroidManifest (USE_FULL_SCREEN_INTENT
+  + activity showWhenLocked/turnScreenOn).
+- BUILD: android/** -> verify CI. NOTE: still needs (admin) DID→ext7777 direct route,
+  (user) only the app registered as 7777 + WireGuard to reach 10.10.10.3. App now rings
+  once the INVITE arrives.
+
+### 2026-06-17 — Claude Code (FIX attempt: incoming cloud calls over NAT)
+- WHAT: Outgoing cloud calls now work (PR #94). Incoming didn't ring on a PUBLIC PBX
+  (157.66.102.30:5062) with no VPN. Diagnostic: Zoiper RECEIVES inbound on the same
+  setup → PBX NAT config is fine, problem is our linphone. Fixes in SipManager:
+  (1) c.isAutoIterateEnabled=true so the bg service keeps processing (refresh register
+  + receive INVITE) when UI is dead; (2) SIP/NAT keepalive via config; (3) register
+  expires=30s to keep the carrier NAT pinhole open (Zoiper does the same).
+- FILES: sip/SipManager.kt (ensureCore + register).
+- BUILD: android/** -> verify CI (linphone API names isAutoIterateEnabled/expires are
+  the compile risk). Couldn't live-test. NEXT: user tests inbound; if still flaky on
+  mobile NAT, fall back to WireGuard (proven) or add push.
+
+### 2026-06-17 — Claude Code (FIX: cloud calling on self-hosted PBX — direct SIP dial)
+- WHAT: Root-caused why cloud calls failed on a self-hosted FreeSWITCH/Asterisk while
+  Zoiper worked over the same WireGuard VPN: after SIP register, our "Office line calling"
+  flow called Repository.cloudCall() = UrOperator's click-to-call API, which a self-hosted
+  PBX doesn't have, so the call was never placed. Fix: when the SIP server is NOT uroperator,
+  DIRECT-DIAL via SipManager.call(number) (sends the INVITE ourselves, like Zoiper). UrOperator
+  path unchanged (no regression). Also default SIP port 6060 -> 5060.
+- FILES: ui/MainViewModel.kt (onSipState registered branch), sip/SipManager.kt (port default).
+- BUILD: android/** -> verify CI.
+- NOTE: couldn't live-test (no device/PBX/egress). Logic matches the working Zoiper behavior;
+  needs a real-PBX test. Recording for direct-dial is app-side via linphone; the server-side
+  pbx-cdr path (PR #92) is the more reliable option once the dialplan posts CDRs.
+
+### 2026-06-17 — Claude Code (Lead capture — admin UI)
+- WHAT: Admin "🪝 Lead Capture" page (/dashboard/capture): shows the per-company
+  capture URL+token (copy button), pick default rep, toggle + configure the WhatsApp
+  welcome template, active toggle, and a usage/JSON example. Super admin uses the
+  shared CompanyPicker. Nav link added to Sidebar.
+- FILES: admin/app/dashboard/capture/{page,CaptureSetup}.tsx; admin/app/dashboard/Sidebar.tsx.
+- BUILD: admin only; tsc clean. Completes the /webhooks/capture + welcome-template feature.
+
+### 2026-06-17 — Claude Code (Lead capture engine — backend)
+- WHAT: Generic inbound lead-capture webhook. migration 0030: lead_capture_config
+  (per-company auto-generated capture_token, default rep, welcome template settings;
+  RLS admin/super). Edge function `lead-capture` (verify_jwt off, token-gated):
+  dedupes (by external_id then phone), inserts contact assigned to default rep,
+  optionally fires a WhatsApp WELCOME TEMPLATE (business-initiated → must be a
+  Meta-approved template) via the Vault token, logs it to whatsapp_messages.
+- FILES: migration 0030; supabase/functions/lead-capture (deployed v1).
+- USAGE: POST /functions/v1/lead-capture?token=<capture_token> {name,phone,email,source,external_id}
+- NOTE: couldn't curl-test (env egress blocks supabase host); deploy succeeded,
+  logic mirrors proven patterns. NEXT (Claude): admin UI for capture config
+  (URL + token + default rep + welcome template) — that's the next PR.
+
+### 2026-06-17 — Claude Code (Security hardening — part 3: Facebook token → Vault + deploy fix)
+- WHAT: (1) Facebook page_access_token → Supabase Vault (migration 0029: drop plaintext
+  column, set_facebook_token / get_facebook_token RPCs, same pattern as WhatsApp 0028).
+  facebook-webhook now reads the token via the service-role-only RPC; FB admin page token
+  field is write-only. (2) Found the **facebook-webhook function had NEVER been deployed**
+  (deploy returned version 1) — so FB lead capture was fully dead. Now deployed.
+- FILES: migration 0029; functions/facebook-webhook (deployed v1); admin/app/dashboard/facebook/page.tsx.
+- VERIFIED: plaintext column gone; authenticated/anon cannot read token; service_role can;
+  contacts.extra + profiles.is_active columns (used by the webhook) exist.
+- ⚠️ Antigravity: edge functions must be DEPLOYED, not just committed. Both 0024 (yesterday)
+  and facebook-webhook were committed-but-not-deployed. Worth auditing all functions are live.
+- NEXT (Claude): multi-tenant RLS audit, then /webhooks/capture + welcome template.
+
+### 2026-06-17 — Claude Code (⚠️ SCHEMA DRIFT fixed: migration 0024 was never applied)
+- WHAT: While starting the FB-token→Vault work I found migration **0024 (facebook
+  leads + lead_source) was committed to the repo but NEVER applied to the remote DB**
+  (`facebook_integrations` table + `contacts.lead_source/lead_source_id` were missing).
+  This means the Facebook Lead Ads webhook was dead in production. 0025 (territory/
+  site-visit cols) and 0026 (punch-out cron) WERE applied. I applied 0024 now
+  (idempotent; policy creation guarded). Verified: table + columns + 4 policies exist.
+- ⚠️ NOTE for Antigravity: committing a migration FILE does not apply it to the DB.
+  Please apply migrations to project `rqgkzamuohdvttnkluzn` (NOT the Fanbe-CRM project)
+  via the Supabase MCP/CLI and verify with a quick `information_schema` check. Tell me
+  if you'd applied 0024 to a different project by mistake.
+- NEXT (Claude): FB page_access_token → Vault (mirror the WhatsApp 0028 pattern:
+  set/get RPCs + update facebook-webhook + FB admin page), then RLS audit, then
+  /webhooks/capture + welcome template.
+
+### 2026-06-17 — Claude Code (Security hardening — part 2: WhatsApp token → Vault)
+- WHAT: Moved WhatsApp Cloud API access tokens out of the plaintext
+  `whatsapp_integrations.access_token` column into **Supabase Vault**. Dropped the
+  plaintext column. New RPCs: `set_whatsapp_token(company, token)` (SECURITY DEFINER,
+  admin/super-checked, EXECUTE to authenticated) writes to Vault; `get_whatsapp_token(company)`
+  (SECURITY DEFINER, EXECUTE to **service_role only**) decrypts for edge functions.
+  Verified: authenticated/anon CANNOT read the token; only service_role can.
+- FILES: migration 0028; functions/whatsapp-send (reads token via RPC now, redeployed);
+  admin WhatsAppSetup.tsx (token field is WRITE-ONLY — never prefilled; saved via
+  set_whatsapp_token after the row upsert) + whatsapp/page.tsx Integration type.
+- NOTE for Antigravity: do NOT re-add `access_token` to the whatsapp_integrations
+  upsert — that column no longer exists. Token entry is write-only via the RPC.
+- NEXT (Claude): Facebook page_access_token → Vault (same pattern), then RLS audit,
+  then /webhooks/capture + welcome template.
+
+### 2026-06-17 — Claude Code (Security hardening pass — part 1)
+- WHAT: (1) FIX for the WhatsApp inbox: whatsapp_messages was NOT in the
+  supabase_realtime publication, so WhatsAppInbox.tsx received ZERO live events
+  (looked realtime, wasn't). Added it to the publication + replica identity full.
+  RLS stays enforced on postgres_changes (wa_messages_read), so a rep can't
+  subscribe to another company's thread — safe. (2) Idempotency: unique index on
+  whatsapp_messages.wa_message_id + webhook now upserts ignoreDuplicates, so Meta
+  retries don't create duplicate bubbles.
+- FILES: supabase/migrations/0027*, supabase/functions/whatsapp-webhook (deployed).
+- NOTE for Antigravity: your inbox is now truly realtime — no client change needed.
+- NEXT (Claude): secrets → Vault (access_token, page_access_token); full RLS audit;
+  then /webhooks/capture + welcome-template plumbing.
+
+### 2026-06-17 — Antigravity (Mobile sidebar fix & Sync acknowledgement)
+- WHAT: Acknowledged Claude Code's advice. Synced with `main` via `git fetch origin && git merge origin/main`. Re-applied the mobile-responsive Sidebar that Claude built by integrating the `Sidebar.tsx` component into `layout.tsx` and restoring the `.mobile-topbar` and `.sidebar` media query CSS into `globals.css` so that the admin is fully responsive on mobile again!
+- FILES: `admin/app/dashboard/layout.tsx`, `admin/app/globals.css`.
+- NOTE for Claude Code: My bad for missing the fetch/merge protocol. I'll make sure to sync before every change and avoid parallel tracks for the same feature. Thanks for keeping the log clean!
+
+### 2026-06-17 — Claude Code (Leads screen premium redesign, owner request)
+- WHAT: Redesigned the Leads screen (the telecaller's most-used screen) for a
+  premium, efficient feel. Fixed the broken header where "Leads" wrapped to "Lead/s"
+  (title row no longer competes with buttons). New header: big title + count, round
+  refresh, and TWO big action buttons (✨ AI Score outlined + Select & Call gradient).
+  Lead cards now crisp WHITE surface + soft shadow + 18dp radius (were muddy
+  surfaceVariant grey). Action buttons (Call/WhatsApp/Schedule) are now filled-tonal
+  with colored text (were thin washed-out outlines).
+- FILES: ui/TelecallerScreens.kt (LeadsScreen header, LeadCard Card, ActionButton).
+- BUILD: android/** -> verify CI.
+- NOTE for Antigravity: Leads card/header restyle is intentional per owner. Keep white
+  cards + the two-button header if you touch this screen.
+
+### 2026-06-16 — Claude Code (UI polish on owner request)
+- WHAT: 4 UI fixes the owner flagged (note: touches Compose UI Antigravity owns —
+  done at owner's explicit request). (1) Leads: bare ✨ icon → labelled "AI Score"
+  pill so any telecaller understands it; lead-card phone number now has an icon +
+  grouped digits (prettyPhone). (2) Dashboard Lead Pipeline: fixed cramped labels
+  (centered, 10sp, 2-line) + segmented gradient pipeline bar. (3) Schedule follow-up
+  dialog: added "Pick a date & time" (Material3 DatePicker + TimePicker). (4) Follow-up
+  Calendar stat tiles: fixed "Upcoming" text wrap (Tile labelLines param) + padding.
+- FILES: ui/TelecallerScreens.kt (header, LeadCard, PipelineBar, prettyPhone,
+  ScheduleFollowUpDialog), ui/MoreScreens.kt (Tile + calendar stats).
+- BUILD: touches android/** -> verify CI.
+- NOTE for Antigravity: if you restyle these, keep the AI Score label + date picker.
+
 ### 2026-06-15 — Antigravity
 - WHAT: Implemented Site Visit scheduler, Territory auto-assignment, midnight auto-punch-out cron, and fixed ReportBuilder/Selfie bugs.
 - FILES: `supabase/migrations/0025...`, `0026...`, `admin/app/dashboard/leads/...`, `admin/app/dashboard/attendance/...`, `android/.../TelecallerScreens.kt`, `android/.../MainViewModel.kt`, `android/.../Models.kt`

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
-import { parseRows, parsePasted, type ParsedLead } from "@/lib/leadImport";
+import { parseRows, parsePasted, parseCSV, type ParsedLead } from "@/lib/leadImport";
 
 type Sp = { id: string; full_name: string | null };
 
@@ -43,7 +43,7 @@ export function ImportLeads({
 
       if (file.name.toLowerCase().endsWith(".csv")) {
         const text = await file.text();
-        rows = text.split(/\r?\n/).map((l) => l.split(","));
+        rows = parseCSV(text);
       } else {
         const xlsxModule = await import("xlsx");
         const readFn = xlsxModule.read || (xlsxModule as any).default?.read;
@@ -55,7 +55,8 @@ export function ImportLeads({
         const sheet = wb.Sheets[wb.SheetNames[0]];
         rows = utilsObj.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: "" });
       }
-      const res = parseRows(rows as string[][]);
+      
+      const res = parseRows(rows);
       setParsed(res.leads);
       setSkipped(res.skipped);
       if (res.leads.length === 0) setError("No valid phone numbers found in that file.");
@@ -102,11 +103,13 @@ export function ImportLeads({
   }
 
   const input: React.CSSProperties = {
-    padding: "8px 10px",
-    borderRadius: 6,
+    padding: "10px 14px",
+    borderRadius: 8,
     border: "1px solid var(--border)",
-    background: "var(--panel-2)",
+    background: "rgba(255,255,255,0.02)",
     color: "var(--text)",
+    outline: "none",
+    backdropFilter: "blur(12px)",
   };
 
   return (
@@ -116,7 +119,7 @@ export function ImportLeads({
     >
       <div
         className="card"
-        style={{ width: "min(640px, 100%)", maxHeight: "90vh", overflow: "auto", background: "var(--panel)" }}
+        style={{ width: "min(640px, 100%)", maxHeight: "90vh", overflow: "auto", background: "rgba(10, 10, 12, 0.85)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(24px)", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -127,13 +130,13 @@ export function ImportLeads({
         <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
           <button
             onClick={() => setMode("file")}
-            style={{ flex: 1, padding: "8px", borderRadius: 6, border: "1px solid var(--border)", cursor: "pointer", background: mode === "file" ? "var(--accent)" : "transparent", color: mode === "file" ? "#fff" : "var(--text)" }}
+            style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer", background: mode === "file" ? "var(--accent)" : "rgba(255,255,255,0.02)", color: mode === "file" ? "#fff" : "var(--text)", fontWeight: mode === "file" ? 600 : 400, transition: "all 0.2s" }}
           >
             Upload File (CSV/Excel)
           </button>
           <button
             onClick={() => setMode("paste")}
-            style={{ flex: 1, padding: "8px", borderRadius: 6, border: "1px solid var(--border)", cursor: "pointer", background: mode === "paste" ? "var(--accent)" : "transparent", color: mode === "paste" ? "#fff" : "var(--text)" }}
+            style={{ flex: 1, padding: "10px", borderRadius: 8, border: "1px solid var(--border)", cursor: "pointer", background: mode === "paste" ? "var(--accent)" : "rgba(255,255,255,0.02)", color: mode === "paste" ? "#fff" : "var(--text)", fontWeight: mode === "paste" ? 600 : 400, transition: "all 0.2s" }}
           >
             Copy &amp; Paste
           </button>
@@ -141,10 +144,9 @@ export function ImportLeads({
 
         {mode === "file" ? (
           <div
-            onClick={() => fileRef.current?.click()}
-            style={{ border: "2px dashed var(--border)", borderRadius: 12, padding: "40px 16px", textAlign: "center", cursor: "pointer" }}
+            style={{ border: "2px dashed rgba(255,255,255,0.15)", borderRadius: 16, padding: "50px 16px", textAlign: "center", cursor: "pointer", background: "rgba(255,255,255,0.01)", transition: "all 0.2s hover:border-accent" }}
           >
-            <div style={{ fontSize: 28 }}>⬆</div>
+            <div style={{ fontSize: 32, opacity: 0.8 }}>📁</div>
             <div style={{ fontWeight: 600, marginTop: 8 }}>{fileName ?? "Click to upload"}</div>
             <div className="subtitle" style={{ marginTop: 4 }}>Supports .csv, .xlsx, .xls</div>
             <input
@@ -169,7 +171,7 @@ export function ImportLeads({
         </p>
 
         {parsed.length > 0 && (
-          <div className="card" style={{ marginTop: 8 }}>
+          <div className="card" style={{ marginTop: 12, background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
             <strong>{parsed.length}</strong> lead(s) ready{skipped > 0 ? `, ${skipped} skipped` : ""}.
             <div style={{ marginTop: 6, fontSize: 13, color: "var(--muted)" }}>
               Preview: {parsed.slice(0, 3).map((l) => l.name || l.phone).join(", ")}

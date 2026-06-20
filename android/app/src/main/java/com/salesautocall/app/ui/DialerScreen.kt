@@ -126,13 +126,14 @@ fun DialerScreen(vm: MainViewModel) {
             Surface(
                 shape = CircleShape,
                 color = if (useCloud && cloudAvailable) MaterialTheme.colorScheme.primary else CallGreen,
-                modifier = Modifier.size(68.dp).clickable(enabled = number.isNotBlank()) {
+                modifier = Modifier.size(76.dp).clickable(enabled = number.isNotBlank()) {
                     if (useCloud && cloudAvailable) vm.cloudCall(number.trim(), null, null)
                     else vm.dialManual(number)
                 },
+                shadowElevation = 8.dp,
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(30.dp))
+                    Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(34.dp))
                 }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -168,20 +169,26 @@ private fun ModePill(label: String, active: Boolean, modifier: Modifier = Modifi
 
 @Composable
 private fun DialKey(key: Key, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(
+    Surface(
         modifier = modifier
-            .aspectRatio(1.6f)
-            .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center,
+            .aspectRatio(1.4f)
+            .padding(4.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shadowElevation = 4.dp
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(key.digit, fontSize = 26.sp, fontWeight = FontWeight.Medium)
-            if (key.letters.isNotEmpty()) {
-                Text(
-                    key.letters, fontSize = 10.sp, letterSpacing = 1.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        Box(
+            modifier = Modifier.fillMaxSize().clickable { onClick() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(key.digit, fontSize = 28.sp, fontWeight = FontWeight.Medium)
+                if (key.letters.isNotEmpty()) {
+                    Text(
+                        key.letters, fontSize = 10.sp, letterSpacing = 1.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

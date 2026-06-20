@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { NavLink } from "./NavLink";
 import { Sidebar } from "./Sidebar";
 import type { Company, Profile } from "@/lib/types";
 
@@ -40,12 +39,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="app">
-      <Sidebar 
-        profile={profile} 
-        company={company} 
-        email={user.email} 
-        isSuper={isSuper} 
-      />
+      <Sidebar profile={profile} company={company} email={user.email} isSuper={isSuper} />
       <main className="main">{children}</main>
     </div>
   );

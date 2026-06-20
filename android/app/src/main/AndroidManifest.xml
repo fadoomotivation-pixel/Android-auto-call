@@ -14,17 +14,21 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <!-- Detect when a call starts / ends so we can dial the next contact -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <!-- Identify SIM slots on dual-SIM devices -->
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
 
     <!-- Foreground service that runs the auto-dial queue -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     <!-- Required so the call services may use the mic (record the SIM call) on Android 14+ -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Required so the phoneCall foreground-service type is allowed on Android 14+ -->
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Ring a full-screen incoming-call screen even when the phone is locked -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Exact reminders for scheduled follow-up callbacks (degrades to inexact if denied) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
@@ -67,6 +71,16 @@
             android:name=".sip.SipBackgroundService"
             android:exported="false"
             android:foregroundServiceType="phoneCall" />
+
+        <!-- Full-screen ringing screen for incoming SIP calls (shows over lock screen) -->
+        <activity
+            android:name=".ui.IncomingCallActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.SalesAutoCall" />
 
         <service
             android:name=".sip.SalesConnectionService"

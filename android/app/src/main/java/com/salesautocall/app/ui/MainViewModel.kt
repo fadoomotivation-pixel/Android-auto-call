@@ -151,9 +151,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         com.salesautocall.app.sip.SipManager.appContext = app
-        // Persistent inbound listener so incoming/missed cloud calls get logged
-        // (the outgoing onState callback only exists during an active dial).
-        com.salesautocall.app.sip.SipManager.onIncoming = { event, number -> onIncomingCall(event, number) }
         refreshSession()
     }
 
@@ -161,10 +158,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var cloudConnectedAt: Long = 0L
     /** Guards the outgoing call's outcome write so it happens exactly once. */
     private var cloudResultLogged: Boolean = false
-    // Inbound (incoming) call bookkeeping.
-    private var incomingLogId: String? = null
-    private var incomingConnectedAt: Long = 0L
-    private var incomingRecordPath: String? = null
 
     private fun set(transform: (AppState) -> AppState) {
         _state.value = transform(_state.value)
@@ -408,7 +401,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // (click-to-call): their server rings our extension (the app auto-answers)
         // and bridges the customer through the proper trunk.
         if (raw == "registered" && !s.cloudBridged) {
-            set { it.copy(cloudBridged = true, cloudCallStatus = "Ringing you, then the customer…") }
+            val ctx = getApplication<Application>()
+            val sipServer = com.salesautocall.app.data.AppPrefs.getSipServer(ctx)
+            // A self-hosted PBX (FreeSWITCH/Asterisk) has no UrOperator click-to-call
+            // bridge API, so dial DIRECTLY over SIP — exactly like Zoiper does. Only
+            // UrOperator's gateway uses the server-side bridge.
+            val directDial = sipServer.isNotBlank() && !sipServer.contains("uroperator", ignoreCase = true)
+            set { it.copy(cloudBridged = true, cloudCallStatus = if (directDial) "Dialing $number…" else "Ringing you, then the customer…") }
             val ext = _state.value.cloudCallExt.ifBlank { agentId() }
             viewModelScope.launch {
                 val p = _state.value.profile
@@ -419,6 +418,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 companyId = p.companyId, salespersonId = p.id,
                                 contactId = s.cloudCallContactId, campaignId = s.cloudCallCampaignId,
                                 phone = number, direction = "outgoing", notes = "cloud",
+                                startedAt = java.time.Instant.now().toString(),
                                 recordingStatus = if (recordingEnabled()) "recording" else "none",
                                 recordingSource = "sip",
                             ),
@@ -428,19 +428,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 set { it.copy(cloudCallLogId = logId) }
                 // Arm recording (captures both legs once the call is answered).
                 if (logId != null && recordingEnabled()) {
-                    val f = java.io.File(getApplication<Application>().cacheDir, "rec_$logId.wav")
+                    val f = java.io.File(ctx.cacheDir, "rec_$logId.wav")
                     com.salesautocall.app.sip.SipManager.setRecordFile(f.absolutePath)
                 } else {
                     com.salesautocall.app.sip.SipManager.setRecordFile(null)
                 }
 
-                runCatching { Repository.cloudCall(number, ext, callerId()) }
-                    .onSuccess { body ->
-                        if (!body.contains("\"ok\":true")) {
-                            set { it.copy(cloudCallStatus = "uroperator: ${body.take(160)}") }
+                if (directDial) {
+                    // Send the INVITE ourselves to <number>@<pbx>; the PBX dialplan routes it.
+                    runCatching { com.salesautocall.app.sip.SipManager.call(number) }
+                        .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't dial: ${e.message}") } }
+                } else {
+                    runCatching { Repository.cloudCall(number, ext, callerId()) }
+                        .onSuccess { body ->
+                            if (!body.contains("\"ok\":true")) {
+                                set { it.copy(cloudCallStatus = "uroperator: ${body.take(160)}") }
+                            }
                         }
-                    }
-                    .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't start call: ${e.message}") } }
+                        .onFailure { e -> set { it.copy(cloudCallStatus = "Couldn't start call: ${e.message}") } }
+                }
             }
         }
     }
@@ -455,9 +461,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val f = java.io.File(path)
-                if (f.exists() && f.length() > 0) {
+                if (f.exists() && f.length() > 44) { // >WAV header = real audio captured
                     Repository.uploadRecording(id, "sip", dur, f.readBytes())
                     f.delete()
+                } else {
+                    // No audio was captured (empty recording) — mark it so the status
+                    // isn't stuck on "recording" and the admin sees the truth.
+                    runCatching { Repository.markRecordingStatus(id, "failed") }
+                    runCatching { f.delete() }
                 }
             }
         }
@@ -482,68 +493,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { Repository.updateCallResult(id, outcome, dur) }
-        }
-    }
-
-    /**
-     * Inbound cloud-call lifecycle from the SIP engine. Logs every incoming leg —
-     * including unanswered ones as "no_answer" — so the telecaller can see missed
-     * calls in the Calls tab, and records answered calls like outgoing ones.
-     */
-    fun onIncomingCall(event: String, number: String?) {
-        when (event) {
-            "ringing" -> {
-                val p = _state.value.profile
-                val cid = p?.companyId ?: return
-                incomingConnectedAt = 0L
-                incomingRecordPath = null
-                incomingLogId = null
-                val rec = recordingEnabled()
-                viewModelScope.launch {
-                    val logId = runCatching {
-                        Repository.logCall(
-                            CallLog(
-                                companyId = cid, salespersonId = p.id,
-                                phone = number ?: "Unknown", direction = "incoming", notes = "cloud",
-                                recordingStatus = if (rec) "recording" else "none",
-                                recordingSource = "sip",
-                            ),
-                        )
-                    }.getOrNull()
-                    incomingLogId = logId
-                    if (logId != null && rec) {
-                        val f = java.io.File(getApplication<Application>().cacheDir, "rec_in_$logId.wav")
-                        incomingRecordPath = f.absolutePath
-                        com.salesautocall.app.sip.SipManager.setRecordFile(f.absolutePath)
-                    }
-                }
-            }
-            "connected" -> incomingConnectedAt = System.currentTimeMillis()
-            "ended" -> finalizeIncoming()
-        }
-    }
-
-    private fun finalizeIncoming() {
-        val id = incomingLogId ?: return
-        incomingLogId = null
-        val connected = incomingConnectedAt > 0
-        val dur = if (connected) ((System.currentTimeMillis() - incomingConnectedAt) / 1000).toInt() else 0
-        val outcome = if (connected) "connected" else "no_answer" // never answered = missed
-        val path = incomingRecordPath
-        incomingRecordPath = null
-        incomingConnectedAt = 0L
-        com.salesautocall.app.sip.SipManager.setRecordFile(null)
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { Repository.updateCallResult(id, outcome, dur) }
-            if (path != null && connected) {
-                runCatching {
-                    val f = java.io.File(path)
-                    if (f.exists() && f.length() > 0) {
-                        Repository.uploadRecording(id, "sip", dur, f.readBytes())
-                        f.delete()
-                    }
-                }
-            }
         }
     }
 

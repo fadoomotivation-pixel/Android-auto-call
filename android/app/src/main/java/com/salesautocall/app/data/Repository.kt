@@ -20,6 +20,14 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import android.content.Context
+import android.provider.CallLog as AndroidCallLog
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Date
 
 /**
  * Thin data-access layer over Supabase. All reads/writes are constrained by
@@ -94,6 +102,145 @@ object Repository {
     /** Inserts a call log and returns its new id (so a recording can be attached). */
     suspend fun logCall(log: CallLog): String? {
         return client.from("call_logs").insert(log) { select() }.decodeSingleOrNull<CallLog>()?.id
+    }
+
+    /** Force a call's recording_status (e.g. "failed" when no audio was captured). */
+    suspend fun markRecordingStatus(callLogId: String, status: String) {
+        client.from("call_logs").update(mapOf("recording_status" to status)) {
+            filter { eq("id", callLogId) }
+        }
+    }
+
+    /** Logs an INCOMING cloud (SIP) call for the current user. Returns the new id. */
+    suspend fun logIncomingCloudCall(number: String, recording: Boolean): String? {
+        val p = myProfile() ?: return null
+        val cid = p.companyId ?: return null
+        return logCall(
+            CallLog(
+                companyId = cid, salespersonId = p.id,
+                phone = number, direction = "incoming", notes = "cloud-incoming",
+                startedAt = Instant.now().toString(),
+                recordingStatus = if (recording) "recording" else "none",
+                recordingSource = "sip",
+            ),
+        )
+    }
+
+    /**
+     * Safety net: Reads the native Android CallLog, compares with Supabase,
+     * and backfills any missing calls made to our CRM contacts.
+     */
+    suspend fun syncCallLogs(context: Context) {
+        val companyId = myProfile()?.companyId ?: return
+        val salesId = currentUserId() ?: return
+
+        // 1. Check permission
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+
+        // 2. Fetch the user's CRM contacts
+        val myContacts = client.from("contacts")
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("id, phone")) {
+                filter { eq("company_id", companyId) }
+            }.decodeList<Contact>()
+
+        val contactMap = myContacts.mapNotNull {
+            val p = it.phone.replace("\\D".toRegex(), "")
+            if (p.isNotEmpty() && it.id != null) p to it.id else null
+        }.toMap()
+
+        if (contactMap.isEmpty()) return
+
+        // 3. Fetch recent Supabase call logs to deduplicate
+        // Limit to 500 to avoid large memory footprint, enough to catch missing ones.
+        val recentLogs = client.from("call_logs")
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("phone, started_at")) {
+                filter { eq("salesperson_id", salesId) }
+                order("started_at", Order.DESCENDING)
+                limit(500)
+            }.decodeList<CallLog>()
+
+        // 4. Query Android CallLog
+        val timeLimitMillis = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L) // Last 7 days
+        val cursor = context.contentResolver.query(
+            AndroidCallLog.Calls.CONTENT_URI,
+            arrayOf(
+                AndroidCallLog.Calls.NUMBER,
+                AndroidCallLog.Calls.TYPE,
+                AndroidCallLog.Calls.DATE,
+                AndroidCallLog.Calls.DURATION
+            ),
+            "${AndroidCallLog.Calls.DATE} > ?",
+            arrayOf(timeLimitMillis.toString()),
+            "${AndroidCallLog.Calls.DATE} ASC" // Ascending to process oldest first
+        ) ?: return
+
+        data class NativeCall(val num: String, val cleanNum: String, val contactId: String, val startedAt: Instant, val durationSec: Int)
+        val nativeCalls = mutableListOf<NativeCall>()
+
+        cursor.use { c ->
+            val numIdx = c.getColumnIndex(AndroidCallLog.Calls.NUMBER)
+            val typeIdx = c.getColumnIndex(AndroidCallLog.Calls.TYPE)
+            val dateIdx = c.getColumnIndex(AndroidCallLog.Calls.DATE)
+            val durIdx = c.getColumnIndex(AndroidCallLog.Calls.DURATION)
+
+            while (c.moveToNext()) {
+                val num = c.getString(numIdx) ?: continue
+                val cleanNum = num.replace("\\D".toRegex(), "")
+                val type = c.getInt(typeIdx)
+                val dateMillis = c.getLong(dateIdx)
+                val durationSec = c.getInt(durIdx)
+
+                if (type != AndroidCallLog.Calls.OUTGOING_TYPE) continue
+
+                val contactId = contactMap[cleanNum] ?: contactMap.entries.firstOrNull { cleanNum.endsWith(it.key) || it.key.endsWith(cleanNum) }?.value
+                if (contactId == null) continue
+
+                nativeCalls.add(NativeCall(num, cleanNum, contactId, Instant.ofEpochMilli(dateMillis), durationSec))
+            }
+        }
+
+        // 5. Greedy bipartite matching
+        val matchedSupabaseIds = mutableSetOf<String>()
+
+        for (nativeCall in nativeCalls) {
+            // Find closest unmatched Supabase log within 120 seconds
+            val closestLog = recentLogs
+                .filter { it.id != null && !matchedSupabaseIds.contains(it.id) }
+                .filter {
+                    val sbPhone = it.phone.replace("\\D".toRegex(), "")
+                    sbPhone.endsWith(nativeCall.cleanNum) || nativeCall.cleanNum.endsWith(sbPhone)
+                }
+                .mapNotNull {
+                    val sbStart = runCatching { Instant.parse(it.startedAt) }.getOrNull() ?: return@mapNotNull null
+                    val diff = Math.abs(sbStart.epochSecond - nativeCall.startedAt.epochSecond)
+                    if (diff < 120) it to diff else null
+                }
+                .minByOrNull { it.second }
+                ?.first
+
+            if (closestLog != null) {
+                // Matched!
+                matchedSupabaseIds.add(closestLog.id!!)
+            } else {
+                // Unmatched: Backfill to Supabase
+                val outcome = if (nativeCall.durationSec > 0) "connected" else "no_answer"
+                val newLog = CallLog(
+                    companyId = companyId,
+                    salespersonId = salesId,
+                    contactId = nativeCall.contactId,
+                    phone = nativeCall.num,
+                    direction = "outgoing",
+                    outcome = outcome,
+                    startedAt = nativeCall.startedAt.toString(),
+                    endedAt = nativeCall.startedAt.plusSeconds(nativeCall.durationSec.toLong()).toString(),
+                    durationSeconds = nativeCall.durationSec,
+                    recordingStatus = "none"
+                )
+                runCatching { logCall(newLog) }
+            }
+        }
     }
 
     /** Uploads a recording file to the recording-upload edge function, which streams

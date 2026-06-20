@@ -50,13 +50,17 @@ Deno.serve(async (req) => {
   if (dest.length === 10) dest = "91" + dest;
 
   const { data: integ } = await admin.from("whatsapp_integrations")
-    .select("phone_number_id, access_token, active").eq("company_id", companyId).maybeSingle();
+    .select("phone_number_id, active").eq("company_id", companyId).maybeSingle();
   if (!integ || !integ.active) return json({ ok: false, error: "WhatsApp is not connected for this company." }, 400);
+
+  // Token lives in Vault, not the DB. Service-role-only RPC decrypts it.
+  const { data: accessToken } = await admin.rpc("get_whatsapp_token", { p_company: companyId });
+  if (!accessToken) return json({ ok: false, error: "WhatsApp token missing — reconnect in admin." }, 400);
 
   try {
     const resp = await fetch(`${GRAPH}/${integ.phone_number_id}/messages`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${integ.access_token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ messaging_product: "whatsapp", to: dest, type: "text", text: { body: String(text) } }),
     });
     const data = await resp.json();

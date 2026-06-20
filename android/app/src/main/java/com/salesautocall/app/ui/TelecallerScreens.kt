@@ -44,6 +44,12 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -71,6 +77,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
@@ -226,8 +233,11 @@ private fun Avatar(name: String, size: Int = 44) {
 
 @Composable
 private fun StatTile(emoji: String, value: String, label: String, accent: Color, modifier: Modifier = Modifier) {
-    Card(modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
+    Card(
+        modifier = modifier.border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(Modifier.padding(14.dp)) {
             Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(accent.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center) {
@@ -299,16 +309,16 @@ private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Colo
 @Composable
 private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(
-        modifier.clip(RoundedCornerShape(10.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+        modifier.clip(RoundedCornerShape(12.dp))
+            .background(tint.copy(alpha = 0.12f))
             .clickable { onClick() }
-            .padding(vertical = 14.dp),
+            .padding(vertical = 13.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(5.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(19.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = tint, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -316,15 +326,30 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 @Composable
 private fun PipelineBar(counts: List<Pair<Stage, Int>>) {
     val total = counts.sumOf { it.second }.coerceAtLeast(1)
-    Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(50))) {
-        var drew = false
-        counts.forEach { (stage, n) ->
-            if (n > 0) {
-                drew = true
-                Box(Modifier.weight(n.toFloat() / total).fillMaxSize().background(stage.color))
-            }
+    val active = counts.filter { it.second > 0 }
+    if (active.isEmpty()) {
+        Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant))
+        return
+    }
+    // Premium look: each stage is its own rounded segment with a small gap.
+    Row(Modifier.fillMaxWidth().height(12.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        active.forEach { (stage, n) ->
+            Box(
+                Modifier.weight(n.toFloat() / total).fillMaxSize()
+                    .clip(RoundedCornerShape(50))
+                    .background(Brush.verticalGradient(listOf(stage.color, stage.color.copy(alpha = 0.78f)))),
+            )
         }
-        if (!drew) Box(Modifier.weight(1f).fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+    }
+}
+
+/** Group an Indian 10-digit number as "98765 43210" for easy reading; otherwise return as-is. */
+private fun prettyPhone(raw: String): String {
+    val d = raw.filter { it.isDigit() }
+    return when {
+        d.length == 10 -> "${d.substring(0, 5)} ${d.substring(5)}"
+        d.length == 12 && d.startsWith("91") -> "+91 ${d.substring(2, 7)} ${d.substring(7)}"
+        else -> raw
     }
 }
 
@@ -393,7 +418,10 @@ private fun PerfBar(label: String, value: Int, target: Int, color: Color) {
 
 @Composable
 private fun PerformanceCard(app: AppState) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(Modifier.padding(16.dp)) {
             SectionHeader("Today's Performance")
             Spacer(Modifier.height(12.dp))
@@ -476,16 +504,29 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
 
         // Lead pipeline
         item {
-            Card(Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
                 Column(Modifier.padding(16.dp)) {
                     SectionHeader("Lead Pipeline", "View all", onOpenLeads)
                     Spacer(Modifier.height(14.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(Modifier.fillMaxWidth()) {
                         stageCounts.forEach { (stage, n) ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
+                            ) {
                                 Text(n.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = stage.color)
-                                Text(stage.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1)
+                                Text(
+                                    stage.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    fontSize = 10.sp,
+                                    lineHeight = 12.sp,
+                                    maxLines = 2,
+                                )
                             }
                         }
                     }
@@ -511,7 +552,10 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
 
         // Upcoming follow-ups
         item {
-            Card(Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
                 Column(Modifier.padding(16.dp)) {
                     SectionHeader(if (due > 0) "Follow-ups · $due due now" else "Upcoming Follow-ups", "View all", onOpenFollowUps)
                     Spacer(Modifier.height(10.dp))
@@ -644,37 +688,59 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Leads", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text(if (selectMode) "Tap leads to add them to a campaign" else "Manage and follow up with your leads",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (!selectMode) {
-                        if (app.aiScoringLeads) {
-                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Indigo)
-                            Spacer(Modifier.width(8.dp))
-                        } else {
-                            IconButton(onClick = { vm.scoreLeads() }) {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = "AI score leads", tint = Indigo)
+                if (!selectMode) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Leads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                                Text("${app.leads.size} total · ${app.leads.count { it.status in setOf("new", "queued") }} new",
+                                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Box(
+                                Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface)
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                                    .clickable { vm.loadLeads() },
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
+                        }
+                        // Two big, premium actions — clear tap targets for any telecaller.
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(
+                                Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(14.dp))
+                                    .border(1.5.dp, Indigo.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
+                                    .background(Indigo.copy(alpha = 0.08f))
+                                    .clickable(enabled = !app.aiScoringLeads) { vm.scoreLeads() },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (app.aiScoringLeads) {
+                                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Indigo)
+                                        Spacer(Modifier.width(7.dp)); Text("Scoring…", color = Indigo, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    } else {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(7.dp)); Text("AI Score", color = Indigo, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                            Box(
+                                Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(14.dp))
+                                    .background(Brush.horizontalGradient(listOf(Color(0xFF2563EB), Color(0xFF4F46E5))))
+                                    .clickable { selectMode = true },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Checklist, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(7.dp)); Text("Select & Call", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
-                    IconButton(onClick = { vm.loadLeads() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-                    if (!selectMode) {
-                        Box(
-                            Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
-                                .clickable { selectMode = true }.padding(horizontal = 16.dp, vertical = 10.dp),
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Checklist, contentDescription = "Checklist", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Select & Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                            }
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Select leads", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Text("Tap leads to add them to a campaign", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                    } else {
                         Text("Cancel", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.clickable { exitSelect() }.padding(8.dp))
                     }
@@ -692,7 +758,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             }
             if (selectMode) {
                 item {
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    ) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("${selectedIds.size} selected", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             TextButton(onClick = {
@@ -875,10 +945,15 @@ private fun LeadCard(
     onMore: () -> Unit,
 ) {
     val cardMod = Modifier.fillMaxWidth()
-        .then(if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier)
+        .then(if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier)
         .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier)
-    Card(cardMod) {
-        Column(Modifier.padding(14.dp)) {
+    Card(
+        modifier = cardMod,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+    ) {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(c.name ?: c.phone)
                 Spacer(Modifier.width(12.dp))
@@ -890,7 +965,13 @@ private fun LeadCard(
                             Pill(it.label, it.fg, it.bg)
                         }
                     }
-                    Text(c.phone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(13.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                    }
                 }
                 if (selectMode) {
                     val ring = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
@@ -1060,6 +1141,7 @@ private fun LeadActionSheet(c: Contact, onDismiss: () -> Unit, onApply: (String?
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ScheduleFollowUpDialog(who: String, onDismiss: () -> Unit, onPick: (Long, String?) -> Unit) {
     var note by remember { mutableStateOf("") }
@@ -1073,6 +1155,11 @@ private fun ScheduleFollowUpDialog(who: String, onDismiss: () -> Unit, onPick: (
         "In 2 days, 11 AM" to at(2, 11),
         "Next week" to at(7, 10),
     )
+
+    var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
+    var pickedDate by remember { mutableStateOf<Long?>(null) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Schedule follow-up · $who") },
@@ -1086,11 +1173,48 @@ private fun ScheduleFollowUpDialog(who: String, onDismiss: () -> Unit, onPick: (
                     OutlinedButton(onClick = { onPick(millis, note.ifBlank { null }) },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) { Text(label) }
                 }
+                Spacer(Modifier.height(2.dp))
+                // Custom date + time, for anything the presets don't cover.
+                Button(onClick = { showDate = true }, modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Pick a date & time")
+                }
             }
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+
+    if (showDate) {
+        val dps = rememberDatePickerState(initialSelectedDateMillis = now.toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                TextButton(onClick = { pickedDate = dps.selectedDateMillis; showDate = false; showTime = true }) { Text("Next") }
+            },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text("Cancel") } },
+        ) { DatePicker(state = dps) }
+    }
+
+    if (showTime) {
+        val tps = rememberTimePickerState(initialHour = 10, initialMinute = 0, is24Hour = false)
+        AlertDialog(
+            onDismissRequest = { showTime = false },
+            title = { Text("Pick a time") },
+            text = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { TimePicker(state = tps) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    val base = pickedDate ?: now.toInstant().toEpochMilli()
+                    val day = java.time.Instant.ofEpochMilli(base).atZone(java.time.ZoneId.of("UTC")).toLocalDate()
+                    val millis = day.atTime(tps.hour, tps.minute).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    showTime = false
+                    onPick(millis, note.ifBlank { null })
+                }) { Text("Set reminder") }
+            },
+            dismissButton = { TextButton(onClick = { showTime = false }) { Text("Back") } },
+        )
+    }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1154,7 +1278,11 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
         // auto-queue
         item {
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+            Card(
+                modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.Bolt, contentDescription = "Auto queue", tint = MaterialTheme.colorScheme.onPrimary)
@@ -1215,7 +1343,10 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
 @Composable
 private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onReschedule: () -> Unit, onDone: () -> Unit) {
     val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= System.currentTimeMillis()
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(f.name ?: f.phone)
@@ -1280,7 +1411,10 @@ fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit, onCallHistory: () -> 
 
 @Composable
 private fun LeaderboardCard(vm: MainViewModel, app: AppState, compact: Boolean) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
