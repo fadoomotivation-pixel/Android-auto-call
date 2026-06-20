@@ -412,6 +412,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 companyId = p.companyId, salespersonId = p.id,
                                 contactId = s.cloudCallContactId, campaignId = s.cloudCallCampaignId,
                                 phone = number, direction = "outgoing", notes = "cloud",
+                                startedAt = java.time.Instant.now().toString(),
                                 recordingStatus = if (recordingEnabled()) "recording" else "none",
                                 recordingSource = "sip",
                             ),
@@ -454,9 +455,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val f = java.io.File(path)
-                if (f.exists() && f.length() > 0) {
+                if (f.exists() && f.length() > 44) { // >WAV header = real audio captured
                     Repository.uploadRecording(id, "sip", dur, f.readBytes())
                     f.delete()
+                } else {
+                    // No audio was captured (empty recording) — mark it so the status
+                    // isn't stuck on "recording" and the admin sees the truth.
+                    runCatching { Repository.markRecordingStatus(id, "failed") }
+                    runCatching { f.delete() }
                 }
             }
         }

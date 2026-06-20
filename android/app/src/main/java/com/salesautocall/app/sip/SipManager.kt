@@ -1,7 +1,11 @@
 package com.salesautocall.app.sip
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import org.linphone.core.Account
 import org.linphone.core.AudioDevice
 import org.linphone.core.Call
@@ -40,6 +44,15 @@ object SipManager {
 
     /** Observable call state for the in-call UI (ringing/connected/ended). */
     val callState = MutableStateFlow("idle")
+
+    // Background-safe logging/recording for a genuine INBOUND call (the ViewModel
+    // only handles outbound). Active only when no outbound call is in progress.
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var handlingIncoming = false
+    private var inLogId: String? = null
+    private var inNumber: String? = null
+    private var inStartMs: Long = 0L
+    private var inRecordPath: String? = null
 
     fun acceptIncomingCall() {
         val call = incomingCall ?: core?.currentCall ?: return
@@ -95,15 +108,26 @@ object SipManager {
         ) {
             when (state) {
                 Call.State.IncomingReceived -> {
-                    onState?.invoke("ringing")
-                    callState.value = "ringing"
                     incomingCall = call
-                    // Ring with our own full-screen call screen (reliable, unlike the
-                    // Telecom calling-account which must be manually enabled).
                     val from = runCatching { call.remoteAddress?.username }.getOrNull()
                         ?: runCatching { call.remoteAddress?.asStringUriOnly() }.getOrNull() ?: "Unknown"
-                    appContext?.let { ctx ->
-                        runCatching { com.salesautocall.app.notify.IncomingCallNotifier.show(ctx, from) }
+                    if (onState != null) {
+                        // Agent leg of an outbound click-to-call bridge (UrOperator) →
+                        // auto-answer, don't ring. The ViewModel drives the outbound log.
+                        onState?.invoke("ringing")
+                        callState.value = "ringing"
+                        acceptIncomingCall()
+                    } else {
+                        // Genuine inbound call → ring full-screen + log + arm recording.
+                        callState.value = "ringing"
+                        appContext?.let { ctx ->
+                            runCatching { com.salesautocall.app.notify.IncomingCallNotifier.show(ctx, from) }
+                        }
+                        handlingIncoming = true
+                        inNumber = from
+                        inStartMs = System.currentTimeMillis()
+                        inRecordPath = appContext?.let { java.io.File(it.cacheDir, "rec_in_$inStartMs.wav").absolutePath }
+                        setRecordFile(inRecordPath)
                     }
                 }
                 Call.State.OutgoingProgress,
@@ -117,6 +141,17 @@ object SipManager {
                     }
                     onState?.invoke("connected")
                     callState.value = "connected"
+                    // Create the inbound call_logs row once we know it connected.
+                    if (handlingIncoming && inLogId == null) {
+                        val num = inNumber ?: "Unknown"
+                        val rec = inRecordPath != null
+                        ioScope.launch {
+                            runCatching { com.salesautocall.app.data.Repository.awaitSession() }
+                            inLogId = runCatching {
+                                com.salesautocall.app.data.Repository.logIncomingCloudCall(num, rec)
+                            }.getOrNull()
+                        }
+                    }
                 }
                 Call.State.End,
                 Call.State.Released,
@@ -125,6 +160,31 @@ object SipManager {
                     if (recordingActive) {
                         runCatching { call.stopRecording() }
                         recordingActive = false
+                    }
+                    // Finalize a genuine inbound call: ensure it's logged + upload (or
+                    // mark failed if there was no audio to record).
+                    if (handlingIncoming) {
+                        val logId = inLogId
+                        val num = inNumber ?: "Unknown"
+                        val path = inRecordPath
+                        val dur = if (inStartMs > 0) ((System.currentTimeMillis() - inStartMs) / 1000).toInt() else 0
+                        handlingIncoming = false; inLogId = null; inNumber = null; inRecordPath = null
+                        setRecordFile(null)
+                        ioScope.launch {
+                            runCatching { com.salesautocall.app.data.Repository.awaitSession() }
+                            val id = logId ?: runCatching {
+                                com.salesautocall.app.data.Repository.logIncomingCloudCall(num, path != null)
+                            }.getOrNull()
+                            if (id != null && path != null) {
+                                val f = java.io.File(path)
+                                if (f.exists() && f.length() > 44) {
+                                    runCatching { com.salesautocall.app.data.Repository.uploadRecording(id, "sip", dur, f.readBytes()) }
+                                } else {
+                                    runCatching { com.salesautocall.app.data.Repository.markRecordingStatus(id, "failed") }
+                                }
+                                runCatching { f.delete() }
+                            }
+                        }
                     }
                     // Surface the SIP failure code (403/404/488/603…) so the cause is visible.
                     val code = runCatching { call.errorInfo?.protocolCode ?: 0 }.getOrDefault(0)

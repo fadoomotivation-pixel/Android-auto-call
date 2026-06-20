@@ -71,6 +71,20 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-06-17 — Claude Code (Cloud call history + recording fixes)
+- WHAT: Diagnosed via DB: cloud call_logs had started_at=NULL (broke date-filtered
+  history) and recordings stuck at "recording" (empty WAV → upload skipped; Drive IS
+  connected). Incoming calls were never logged. Fixes: (1) outbound CallLog now sets
+  started_at; (2) empty/short recordings now marked "failed" (truthful, not stuck);
+  (3) INCOMING cloud calls now logged + recorded + uploaded background-safe in SipManager
+  (Repository.logIncomingCloudCall/markRecordingStatus); (4) restored auto-answer for the
+  UrOperator click-to-call agent leg (onState!=null) vs ring+log for genuine inbound.
+- FILES: ui/MainViewModel.kt, data/Repository.kt, sip/SipManager.kt.
+- BUILD: android/** -> verify CI.
+- NOTE: recordings stay empty until two-way AUDIO works in the call (linphone records
+  the call audio; no audio = 0-byte file). System is ViciDial which ALSO records
+  server-side — pulling those is the reliable long-term path.
+
 ### 2026-06-17 — Claude Code (Incoming call: in-call screen + audio/controls)
 - WHAT: Incoming now rings + is received. After answering it didn't show a call
   screen and had no audio. Fix: IncomingCallActivity now opens a foreground in-call
