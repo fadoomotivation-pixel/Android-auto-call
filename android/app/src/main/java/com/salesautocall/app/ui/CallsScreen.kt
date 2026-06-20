@@ -14,6 +14,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CallMade
+import androidx.compose.material.icons.filled.CallMissed
+import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -54,7 +57,7 @@ private val WhatsAppGreen = Color(0xFF25D366)
 fun CallsScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
     LaunchedEffect(Unit) { vm.loadCalls() }
-    var sub by remember { mutableIntStateOf(0) } // 0 = Recent, 1 = Follow-up
+    var sub by remember { mutableIntStateOf(0) } // 0 = All, 1 = Missed, 2 = Follow-up
 
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -82,18 +85,28 @@ fun CallsScreen(vm: MainViewModel) {
         Spacer(Modifier.height(12.dp))
 
         val followUps = vm.followUps()
+        val missed = vm.missedCalls()
         TabRow(selectedTabIndex = sub) {
-            Tab(selected = sub == 0, onClick = { sub = 0 }, text = { Text("Recent") })
-            Tab(selected = sub == 1, onClick = { sub = 1 }, text = { Text("Follow-up (${followUps.size})") })
+            Tab(selected = sub == 0, onClick = { sub = 0 }, text = { Text("All") })
+            Tab(selected = sub == 1, onClick = { sub = 1 }, text = { Text("Missed (${missed.size})") })
+            Tab(selected = sub == 2, onClick = { sub = 2 }, text = { Text("Follow-up (${followUps.size})") })
         }
         Spacer(Modifier.height(8.dp))
 
-        val rows = if (sub == 0) app.callList else followUps
+        val rows = when (sub) {
+            1 -> missed
+            2 -> followUps
+            else -> app.callList
+        }
 
         when {
             app.callsLoading -> Box(Modifier.fillMaxWidth().padding(32.dp)) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
             rows.isEmpty() -> Text(
-                if (sub == 1) "No follow-ups — every call connected 🎉" else "No calls in this period yet.",
+                when (sub) {
+                    1 -> "No missed calls 🎉"
+                    2 -> "No follow-ups — every call connected 🎉"
+                    else -> "No calls in this period yet."
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp),
             )
@@ -160,6 +173,8 @@ private fun CallRow(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                DirectionIcon(c)
+                Spacer(Modifier.size(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(c.phone, style = MaterialTheme.typography.titleMedium)
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -298,6 +313,19 @@ private fun AiSummarySection(
                 modifier = Modifier.clickable { onSummarize() })
         }
     }
+}
+
+/** Leading call-direction arrow, like a native dialer: outgoing ↗, incoming ↙,
+ *  missed (unanswered incoming) ↙ in red. */
+@Composable
+private fun DirectionIcon(c: CallLog) {
+    val missed = c.direction == "incoming" && c.outcome != "connected"
+    val (icon, tint) = when {
+        missed -> Icons.Default.CallMissed to MaterialTheme.colorScheme.error
+        c.direction == "incoming" -> Icons.Default.CallReceived to Color(0xFF2E7D32)
+        else -> Icons.Default.CallMade to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Icon(icon, contentDescription = c.direction, tint = tint, modifier = Modifier.size(18.dp))
 }
 
 @Composable

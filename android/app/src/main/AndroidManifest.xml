@@ -31,6 +31,8 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Exact reminders for scheduled follow-up callbacks (degrades to inexact if denied) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Restart the SIP listener after a reboot so inbound cloud calls keep arriving -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- GPS-tagged attendance punch-in (selfie uses CAMERA perm above + location) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -95,6 +97,18 @@
         <receiver
             android:name=".notify.FollowUpAlarmReceiver"
             android:exported="false" />
+
+        <!-- Re-registers SIP after a reboot / app update so inbound calls keep ringing -->
+        <receiver
+            android:name=".sip.BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

@@ -52,6 +52,7 @@ object SipManager {
     private var inLogId: String? = null
     private var inNumber: String? = null
     private var inStartMs: Long = 0L
+    private var inConnectedMs: Long = 0L
     private var inRecordPath: String? = null
 
     fun acceptIncomingCall() {
@@ -126,6 +127,7 @@ object SipManager {
                         handlingIncoming = true
                         inNumber = from
                         inStartMs = System.currentTimeMillis()
+                        inConnectedMs = 0L
                         inRecordPath = appContext?.let { java.io.File(it.cacheDir, "rec_in_$inStartMs.wav").absolutePath }
                         setRecordFile(inRecordPath)
                     }
@@ -142,6 +144,7 @@ object SipManager {
                     onState?.invoke("connected")
                     callState.value = "connected"
                     // Create the inbound call_logs row once we know it connected.
+                    if (handlingIncoming && inConnectedMs == 0L) inConnectedMs = System.currentTimeMillis()
                     if (handlingIncoming && inLogId == null) {
                         val num = inNumber ?: "Unknown"
                         val rec = inRecordPath != null
@@ -167,14 +170,23 @@ object SipManager {
                         val logId = inLogId
                         val num = inNumber ?: "Unknown"
                         val path = inRecordPath
-                        val dur = if (inStartMs > 0) ((System.currentTimeMillis() - inStartMs) / 1000).toInt() else 0
+                        // Outcome: a call that reached StreamsRunning was answered;
+                        // otherwise it's a missed (unanswered) inbound call. Talk time
+                        // is measured from answer, not from when it started ringing.
+                        val connected = inConnectedMs > 0
+                        val dur = if (connected) ((System.currentTimeMillis() - inConnectedMs) / 1000).toInt() else 0
+                        val outcome = if (connected) "connected" else "no_answer"
                         handlingIncoming = false; inLogId = null; inNumber = null; inRecordPath = null
+                        inStartMs = 0L; inConnectedMs = 0L
                         setRecordFile(null)
                         ioScope.launch {
                             runCatching { com.salesautocall.app.data.Repository.awaitSession() }
                             val id = logId ?: runCatching {
                                 com.salesautocall.app.data.Repository.logIncomingCloudCall(num, path != null)
                             }.getOrNull()
+                            if (id != null) runCatching {
+                                com.salesautocall.app.data.Repository.updateCallResult(id, outcome, dur)
+                            }
                             if (id != null && path != null) {
                                 val f = java.io.File(path)
                                 if (f.exists() && f.length() > 44) {
@@ -206,9 +218,9 @@ object SipManager {
         c.isVideoCaptureEnabled = false
         c.isVideoDisplayEnabled = false
         c.isMicEnabled = true
-        // Direct media, no ICE/STUN — matches Zoiper's behaviour on the private
-        // VPN path. (ICE candidates pointing at an unreachable STUN server inside
-        // the VPN can make the PBX drop the call instantly.)
+        // Safe default: no STUN/ICE. The real policy is chosen per server in
+        // applyNatPolicy() during register() — STUN on for a public PBX behind
+        // carrier NAT, off for a private PBX reached over VPN.
         runCatching {
             val nat = c.createNatPolicy()
             nat.isStunEnabled = false
@@ -258,6 +270,7 @@ object SipManager {
     ) {
         val c = ensureCore(context)
         domain = server
+        applyNatPolicy(c, server)
         onState?.invoke("registering")
 
         val factory = Factory.instance()
@@ -330,6 +343,50 @@ object SipManager {
         runCatching { c.clearAccounts() }
         runCatching { c.clearAllAuthInfo() }
         account = null
+    }
+
+    /**
+     * Chooses NAT traversal per server. On a **public** PBX (e.g. uroperator)
+     * reached over mobile data the phone sits behind carrier-grade NAT, so the
+     * SDP must advertise the phone's *public* address or the PBX sends the audio
+     * into a black hole — that's the "connected but no voice either way" symptom.
+     * Enabling STUN makes linphone discover and advertise that public address
+     * (the same non-ICE traversal Zoiper uses, which has working audio here).
+     *
+     * ICE/TURN stay off, and on a **private** PBX reached over VPN (a 10.x/192.168
+     * address) STUN is left off too — a STUN server is unreachable inside the VPN
+     * and gathering candidates against it can make the PBX drop the call.
+     */
+    private fun applyNatPolicy(c: Core, server: String) {
+        runCatching {
+            val nat = c.natPolicy ?: c.createNatPolicy()
+            val private = isPrivateAddress(server)
+            if (private) {
+                nat.isStunEnabled = false
+                nat.isIceEnabled = false
+                nat.isTurnEnabled = false
+            } else {
+                // Public, well-known STUN server (reachable on the open internet).
+                runCatching { nat.stunServer = "stun.l.google.com:19302" }
+                nat.isStunEnabled = true
+                nat.isIceEnabled = false
+                nat.isTurnEnabled = false
+            }
+            c.natPolicy = nat
+        }
+    }
+
+    /** True for RFC-1918 / loopback hosts — i.e. a private PBX reached over VPN. */
+    private fun isPrivateAddress(host: String): Boolean {
+        val h = host.substringBefore(':').trim()
+        if (h.equals("localhost", ignoreCase = true) || h.startsWith("127.")) return true
+        if (h.startsWith("10.") || h.startsWith("192.168.")) return true
+        // 172.16.0.0 – 172.31.255.255
+        if (h.startsWith("172.")) {
+            val second = h.split('.').getOrNull(1)?.toIntOrNull()
+            if (second != null && second in 16..31) return true
+        }
+        return false
     }
 
     private fun applyAudioRoute(c: Core) {
