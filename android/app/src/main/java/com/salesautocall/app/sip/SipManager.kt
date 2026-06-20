@@ -42,6 +42,20 @@ object SipManager {
     /** Called on every meaningful state change. Set by the ViewModel. */
     var onState: ((String) -> Unit)? = null
 
+    /**
+     * True only while the ViewModel is placing an OUTBOUND cloud call. The PBX's
+     * click-to-call bridge rings our own extension as the agent leg of that call,
+     * which we must auto-answer (not ring). A *genuine* inbound call arrives when
+     * this is false and must ring full-screen instead.
+     *
+     * This used to be inferred from `onState != null`, but that flag leaked when a
+     * call ended remotely (the in-call UI didn't dismiss), so later real inbound
+     * calls were silently auto-answered with no ringtone. An explicit flag that we
+     * clear on every call end fixes that.
+     */
+    @Volatile
+    var expectingOutbound: Boolean = false
+
     /** Observable call state for the in-call UI (ringing/connected/ended). */
     val callState = MutableStateFlow("idle")
 
@@ -112,7 +126,7 @@ object SipManager {
                     incomingCall = call
                     val from = runCatching { call.remoteAddress?.username }.getOrNull()
                         ?: runCatching { call.remoteAddress?.asStringUriOnly() }.getOrNull() ?: "Unknown"
-                    if (onState != null) {
+                    if (expectingOutbound) {
                         // Agent leg of an outbound click-to-call bridge (UrOperator) →
                         // auto-answer, don't ring. The ViewModel drives the outbound log.
                         onState?.invoke("ringing")
