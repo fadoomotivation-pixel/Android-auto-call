@@ -151,11 +151,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         com.salesautocall.app.sip.SipManager.appContext = app
+        // Persistent inbound listener so incoming/missed cloud calls get logged
+        // (the outgoing onState callback only exists during an active dial).
+        com.salesautocall.app.sip.SipManager.onIncoming = { event, number -> onIncomingCall(event, number) }
         refreshSession()
     }
 
     private val lenientJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
     private var cloudConnectedAt: Long = 0L
+    /** Guards the outgoing call's outcome write so it happens exactly once. */
+    private var cloudResultLogged: Boolean = false
+    // Inbound (incoming) call bookkeeping.
+    private var incomingLogId: String? = null
+    private var incomingConnectedAt: Long = 0L
+    private var incomingRecordPath: String? = null
 
     private fun set(transform: (AppState) -> AppState) {
         _state.value = transform(_state.value)
@@ -306,6 +315,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun cloudCall(phone: String, contactId: String?, campaignId: String?) {
         // Strip spaces/dashes so the SIP/URI and the API get clean digits.
         val clean = phone.filter { it.isDigit() || it == '+' }
+        cloudResultLogged = false
         set {
             it.copy(
                 error = null, message = null,
@@ -388,7 +398,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         set { it.copy(cloudCallStatus = pretty) }
 
         if (raw == "connected") cloudConnectedAt = System.currentTimeMillis()
-        if (raw == "ended" || raw.startsWith("callfailed")) uploadCloudRecording()
+        if (raw == "ended" || raw.startsWith("callfailed")) {
+            finalizeCloudResult(failed = raw.startsWith("callfailed"))
+            uploadCloudRecording()
+        }
 
         // Once registered: log the call (to get its id, and set the recording file
         // before the leg is answered), then ask uroperator to place the call
@@ -450,10 +463,95 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Writes the finished outgoing cloud call's outcome + talk time back onto its
+     * log row. Idempotent: a call is finalised once, whether it ends via the SIP
+     * engine (onSipState) or the user tapping hang-up (endCloudCall, which kills
+     * the SIP listener before the End event can arrive).
+     */
+    private fun finalizeCloudResult(failed: Boolean) {
+        val id = _state.value.cloudCallLogId ?: return
+        if (cloudResultLogged) return
+        cloudResultLogged = true
+        val connected = cloudConnectedAt > 0
+        val dur = if (connected) ((System.currentTimeMillis() - cloudConnectedAt) / 1000).toInt() else 0
+        val outcome = when {
+            failed -> "failed"
+            connected -> "connected"
+            else -> "no_answer"
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { Repository.updateCallResult(id, outcome, dur) }
+        }
+    }
+
+    /**
+     * Inbound cloud-call lifecycle from the SIP engine. Logs every incoming leg —
+     * including unanswered ones as "no_answer" — so the telecaller can see missed
+     * calls in the Calls tab, and records answered calls like outgoing ones.
+     */
+    fun onIncomingCall(event: String, number: String?) {
+        when (event) {
+            "ringing" -> {
+                val p = _state.value.profile
+                val cid = p?.companyId ?: return
+                incomingConnectedAt = 0L
+                incomingRecordPath = null
+                incomingLogId = null
+                val rec = recordingEnabled()
+                viewModelScope.launch {
+                    val logId = runCatching {
+                        Repository.logCall(
+                            CallLog(
+                                companyId = cid, salespersonId = p.id,
+                                phone = number ?: "Unknown", direction = "incoming", notes = "cloud",
+                                recordingStatus = if (rec) "recording" else "none",
+                                recordingSource = "sip",
+                            ),
+                        )
+                    }.getOrNull()
+                    incomingLogId = logId
+                    if (logId != null && rec) {
+                        val f = java.io.File(getApplication<Application>().cacheDir, "rec_in_$logId.wav")
+                        incomingRecordPath = f.absolutePath
+                        com.salesautocall.app.sip.SipManager.setRecordFile(f.absolutePath)
+                    }
+                }
+            }
+            "connected" -> incomingConnectedAt = System.currentTimeMillis()
+            "ended" -> finalizeIncoming()
+        }
+    }
+
+    private fun finalizeIncoming() {
+        val id = incomingLogId ?: return
+        incomingLogId = null
+        val connected = incomingConnectedAt > 0
+        val dur = if (connected) ((System.currentTimeMillis() - incomingConnectedAt) / 1000).toInt() else 0
+        val outcome = if (connected) "connected" else "no_answer" // never answered = missed
+        val path = incomingRecordPath
+        incomingRecordPath = null
+        incomingConnectedAt = 0L
+        com.salesautocall.app.sip.SipManager.setRecordFile(null)
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { Repository.updateCallResult(id, outcome, dur) }
+            if (path != null && connected) {
+                runCatching {
+                    val f = java.io.File(path)
+                    if (f.exists() && f.length() > 0) {
+                        Repository.uploadRecording(id, "sip", dur, f.readBytes())
+                        f.delete()
+                    }
+                }
+            }
+        }
+    }
+
     private fun recordingEnabled(): Boolean = _state.value.company?.recordingEnabled ?: true
 
     fun endCloudCall() {
         if (_state.value.inCallNote.isNotBlank()) saveInCallNote()
+        finalizeCloudResult(failed = false)
         uploadCloudRecording()
         runCatching { com.salesautocall.app.sip.SipManager.stop() }
         com.salesautocall.app.sip.SipManager.onState = null
@@ -1088,46 +1186,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun clearMessage() = set { it.copy(message = null, error = null) }
 
     // ---------- recording playback ----------
-    private var player: android.media.MediaPlayer? = null
 
-    /** Streams a call's recording from the cloud and plays it in-app. */
+    /**
+     * Opens the inline [AudioPlayer] (streaming ExoPlayer with a seek bar) for a
+     * call. Playback itself is owned by that composable — we only flag which row
+     * is expanded. (Previously this also span up a second hidden MediaPlayer,
+     * which fought the ExoPlayer and produced double audio with a frozen slider.)
+     */
     fun playRecording(callId: String) {
-        stopRecording()
-        set { it.copy(playingCallId = callId, message = "Loading recording…") }
-        viewModelScope.launch {
-            val bytes = withContext(Dispatchers.IO) { runCatching { Repository.fetchRecording(callId) }.getOrNull() }
-            if (bytes == null || bytes.isEmpty()) {
-                set { it.copy(playingCallId = null, message = null, error = "Recording not available yet.") }
-                return@launch
-            }
-            runCatching {
-                val f = java.io.File(getApplication<Application>().cacheDir, "play_rec.audio")
-                withContext(Dispatchers.IO) { f.writeBytes(bytes) }
-                val mp = android.media.MediaPlayer().apply {
-                    setDataSource(f.absolutePath)
-                    setOnCompletionListener { stopRecording() }
-                    prepare()
-                    start()
-                }
-                player = mp
-                set { it.copy(message = null) }
-            }.onFailure { e ->
-                set { it.copy(playingCallId = null, message = null, error = "Playback error: ${e.message}") }
-            }
-        }
+        set { it.copy(playingCallId = callId) }
     }
 
     fun stopRecording() {
-        runCatching { player?.stop() }
-        runCatching { player?.release() }
-        player = null
         if (_state.value.playingCallId != null) set { it.copy(playingCallId = null) }
-    }
-
-    override fun onCleared() {
-        runCatching { player?.release() }
-        player = null
-        super.onCleared()
     }
 
     private fun parseInstant(iso: String): Long =

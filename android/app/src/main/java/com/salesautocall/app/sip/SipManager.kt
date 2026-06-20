@@ -34,8 +34,20 @@ object SipManager {
     var appContext: Context? = null
     var incomingCall: Call? = null
 
+    // Tracks the lifecycle of an inbound leg so the ViewModel can log it (incl.
+    // missed calls) regardless of whether an outgoing call's [onState] is wired.
+    private var incomingActive: Boolean = false
+    private var incomingConnectedFired: Boolean = false
+
     /** Called on every meaningful state change. Set by the ViewModel. */
     var onState: ((String) -> Unit)? = null
+
+    /**
+     * Inbound-call lifecycle, surfaced independently of [onState] so incoming
+     * calls are logged even when no outgoing call is in progress. Events:
+     *   ringing(number) / connected(null) / ended(null)
+     */
+    var onIncoming: ((String, String?) -> Unit)? = null
 
     fun acceptIncomingCall() {
         val call = incomingCall ?: core?.currentCall ?: return
@@ -93,7 +105,15 @@ object SipManager {
                 Call.State.IncomingReceived -> {
                     onState?.invoke("ringing")
                     incomingCall = call
-                    
+                    incomingActive = true
+                    incomingConnectedFired = false
+
+                    // Surface the caller's number so the inbound leg can be logged
+                    // (and shown as a missed call if it's never answered).
+                    val caller = runCatching { call.remoteAddress?.username }.getOrNull()
+                        ?: runCatching { call.remoteAddress?.asStringUriOnly() }.getOrNull()
+                    onIncoming?.invoke("ringing", caller)
+
                     // Trigger the native Android incoming call UI via TelecomManager
                     appContext?.let { ctx ->
                         val telecomManager = ctx.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
@@ -129,6 +149,10 @@ object SipManager {
                     if (recordFile != null && !recordingActive) {
                         runCatching { call.startRecording() }.onSuccess { recordingActive = true }
                     }
+                    if (call.dir == Call.Dir.Incoming && !incomingConnectedFired) {
+                        incomingConnectedFired = true
+                        onIncoming?.invoke("connected", null)
+                    }
                     onState?.invoke("connected")
                 }
                 Call.State.End,
@@ -137,6 +161,13 @@ object SipManager {
                     if (recordingActive) {
                         runCatching { call.stopRecording() }
                         recordingActive = false
+                    }
+                    // Tear down the native incoming-call UI so a cancelled/ended leg
+                    // doesn't leave a ghost call ringing forever. No-op for outgoing.
+                    runCatching { SalesConnectionService.endCall() }
+                    if (incomingActive) {
+                        incomingActive = false
+                        onIncoming?.invoke("ended", null)
                     }
                     // Surface the SIP failure code (403/404/488/603…) so the cause is visible.
                     val code = runCatching { call.errorInfo?.protocolCode ?: 0 }.getOrDefault(0)

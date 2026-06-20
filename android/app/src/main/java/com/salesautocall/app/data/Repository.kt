@@ -236,6 +236,23 @@ object Repository {
         client.from("call_logs").update(mapOf("notes" to note)) { filter { eq("id", callLogId) } }
     }
 
+    /**
+     * Finalises a cloud (SIP) call log with its outcome + talk time. SIM/auto-dial
+     * calls insert a complete row up-front, but cloud calls are logged the moment
+     * the leg is placed (to attach a recording), so the outcome/duration have to be
+     * written back when the call ends — otherwise the call never counts as
+     * connected/no-answer in the summary, follow-ups or Today tracker.
+     */
+    suspend fun updateCallResult(callLogId: String, outcome: String, durationSeconds: Int) {
+        client.from("call_logs").update(
+            buildJsonObject {
+                put("outcome", outcome)
+                put("duration_seconds", durationSeconds)
+                put("ended_at", java.time.Instant.now().toString())
+            },
+        ) { filter { eq("id", callLogId) } }
+    }
+
     /** Clears an AI disposition suggestion after the rep confirms or dismisses it. */
     suspend fun clearSuggestedDisposition(callLogId: String) {
         client.from("call_logs").update(mapOf("suggested_disposition" to null as String?)) {
