@@ -661,6 +661,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var selected by remember { mutableStateOf("all") }
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
+    var contentFor by remember { mutableStateOf<Contact?>(null) }
+    var projectsFor by remember { mutableStateOf<Contact?>(null) }
     var selectMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
 
@@ -838,7 +840,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 c.id?.let { vm.applyLead(it, status, temp, budget, note, svProj, svAt) }
                 actionFor = null
             },
+            onShareContent = { actionFor = null; contentFor = c },
+            onProjects = { actionFor = null; projectsFor = c },
         )
+    }
+    contentFor?.let { c ->
+        ContentShareDialog(vm = vm, contact = c, onDismiss = { contentFor = null })
+    }
+    projectsFor?.let { c ->
+        ProjectInterestsDialog(vm = vm, contact = c, onDismiss = { projectsFor = null })
     }
     scheduleFor?.let { c ->
         ScheduleFollowUpDialog(
@@ -1047,7 +1057,13 @@ private fun LeadCard(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LeadActionSheet(c: Contact, onDismiss: () -> Unit, onApply: (String?, String?, String?, String?, String?, String?) -> Unit) {
+private fun LeadActionSheet(
+    c: Contact,
+    onDismiss: () -> Unit,
+    onApply: (String?, String?, String?, String?, String?, String?) -> Unit,
+    onShareContent: () -> Unit = {},
+    onProjects: () -> Unit = {},
+) {
     var stage by remember(c.id) { mutableStateOf<String?>(null) }
     var temp by remember(c.id) { mutableStateOf<String?>(null) }
     var budget by remember(c.id) { mutableStateOf(c.budget ?: "") }
@@ -1123,6 +1139,11 @@ private fun LeadActionSheet(c: Contact, onDismiss: () -> Unit, onApply: (String?
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(note, { note = it }, label = { Text("Notes / requirement") },
                     modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onProjects, modifier = Modifier.weight(1f)) { Text("🏢 Projects") }
+                    OutlinedButton(onClick = onShareContent, modifier = Modifier.weight(1f)) { Text("📚 Share content") }
+                }
             }
         },
         confirmButton = {

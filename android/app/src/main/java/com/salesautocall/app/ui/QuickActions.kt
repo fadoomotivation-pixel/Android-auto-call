@@ -37,6 +37,18 @@ object QuickActions {
         }.onFailure { toast(context, "WhatsApp not available") }
     }
 
+    /** Opens a WhatsApp chat with the number, pre-filling [text] (e.g. a content link). */
+    fun whatsAppText(context: Context, phone: String, text: String) {
+        val digits = phone.filter { it.isDigit() }
+        if (digits.isEmpty()) return
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits?text=${Uri.encode(text)}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.onFailure { toast(context, "WhatsApp not available") }
+    }
+
     fun copy(context: Context, phone: String) {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("phone", phone))
