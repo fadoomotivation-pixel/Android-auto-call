@@ -29,6 +29,7 @@ export function Sidebar({
         <h1 className="no-print" style={{ display: "none" }}>📞 SalesAutoCall</h1>
         <NavLink href="/dashboard" label="Overview" />
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}
+        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/ai-agents" label="🤖 AI Employees" />}
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
         {profile?.role === "admin" && <NavLink href="/dashboard/attendance" label="📅 Attendance" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
