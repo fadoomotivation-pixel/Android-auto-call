@@ -37,6 +37,7 @@ export function Sidebar({
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/whatsapp" label="💬 WhatsApp" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/facebook" label="📱 Facebook Leads" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/capture" label="🪝 Lead Capture" />}
+        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/content" label="📚 Content Library" />}
         <NavLink href="/dashboard/contacts" label="Contacts" />
         <NavLink href="/dashboard/calls" label="Call logs" />
         <NavLink href="/dashboard/recordings" label="Recordings" />
