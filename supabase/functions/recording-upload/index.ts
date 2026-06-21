@@ -18,6 +18,14 @@ const cors = {
 function json(o: unknown, s = 200) {
   return new Response(JSON.stringify(o), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 }
+// Mark a recording failed AND record why, so the cause is visible in the DB /
+// admin instead of being swallowed into a response body nobody reads.
+async function markFailed(admin: SupabaseClient, callId: string, reason: string) {
+  console.error(`recording-upload[${callId}] failed: ${reason}`);
+  await admin.from("call_logs")
+    .update({ recording_status: "failed", recording_error: reason.slice(0, 500) })
+    .eq("id", callId);
+}
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -76,10 +84,19 @@ Deno.serve(async (req) => {
   if (!row?.company_id) return json({ ok: false, error: "call not found" }, 404);
 
   const admin = createClient(SUPABASE_URL, SERVICE);
+
+  // Without the Google OAuth app credentials, the stored refresh token can't be
+  // exchanged for an access token — every upload would silently fail. Surface
+  // this clearly (it's a project-secret config gap, not a per-call problem).
+  if (!G_CLIENT_ID || !G_CLIENT_SECRET) {
+    await markFailed(admin, callId, "GOOGLE_CLIENT_ID/SECRET not set as Edge Function secrets — Drive auth impossible.");
+    return json({ ok: false, error: "Google Drive not configured on the server (missing GOOGLE_CLIENT_ID/SECRET)." });
+  }
+
   const { data: comp } = await admin.from("companies").select("name").eq("id", row.company_id).maybeSingle();
   const drive = await resolveDrive(admin, row.company_id, comp?.name ?? "");
   if (!drive) {
-    await admin.from("call_logs").update({ recording_status: "failed" }).eq("id", callId);
+    await markFailed(admin, callId, "No Google Drive connected (company or platform).");
     return json({ ok: false, error: "No Google Drive connected (company or platform)." });
   }
 
@@ -101,10 +118,11 @@ Deno.serve(async (req) => {
     });
     const ud2 = await up.json();
     if (!up.ok || !ud2.id) {
-      await admin.from("call_logs").update({ recording_status: "failed" }).eq("id", callId);
+      await markFailed(admin, callId, `Drive upload failed: ${JSON.stringify(ud2).slice(0, 300)}`);
       return json({ ok: false, error: `Drive upload failed: ${JSON.stringify(ud2)}` });
     }
-    await admin.from("call_logs").update({ recording_path: ud2.id, recording_status: "ready", recording_seconds: duration, recording_source: source }).eq("id", callId);
+    // Clear any prior error from a retried call.
+    await admin.from("call_logs").update({ recording_path: ud2.id, recording_status: "ready", recording_seconds: duration, recording_source: source, recording_error: null }).eq("id", callId);
 
     // Fire-and-forget AI summary so the admin gets it automatically. Reuses the
     // bytes already in memory (no second Drive download) and runs in the
@@ -116,7 +134,7 @@ Deno.serve(async (req) => {
     }
     return json({ ok: true, file_id: ud2.id });
   } catch (e) {
-    await admin.from("call_logs").update({ recording_status: "failed" }).eq("id", callId);
+    await markFailed(admin, callId, String(e));
     return json({ ok: false, error: String(e) });
   }
 });
