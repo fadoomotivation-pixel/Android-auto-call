@@ -72,7 +72,7 @@
         <service
             android:name=".sip.SipBackgroundService"
             android:exported="false"
-            android:foregroundServiceType="phoneCall" />
+            android:foregroundServiceType="phoneCall|microphone" />
 
         <!-- Full-screen ringing screen for incoming SIP calls (shows over lock screen) -->
         <activity

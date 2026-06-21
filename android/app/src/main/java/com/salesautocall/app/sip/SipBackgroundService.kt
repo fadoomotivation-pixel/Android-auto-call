@@ -8,9 +8,11 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import com.salesautocall.app.R
 import com.salesautocall.app.SalesAutoCallApp
 
@@ -20,7 +22,31 @@ class SipBackgroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        startForeground(NOTIF_ID, buildNotification())
+        startAsForeground()
+    }
+
+    /**
+     * Promote to a foreground service carrying the **microphone** + **phoneCall**
+     * types. The mic type is essential: on Android 14+ a SIP call answered while
+     * the app is backgrounded/over the lock screen captures audio through this
+     * service, and without an active microphone foreground type the OS silently
+     * mutes the mic — the rep is connected but nobody can hear anyone, and the call
+     * drops at ~30s on RTP timeout. Re-asserting it from the foreground
+     * IncomingCallActivity (see ACTION_START on answer) grants the while-in-use mic
+     * access the capture needs. If a typed start is refused (e.g. launched from the
+     * background on Android 14), fall back to a typeless start so we at least keep
+     * ringing for inbound calls.
+     */
+    private fun startAsForeground() {
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
+        } else 0
+        runCatching {
+            ServiceCompat.startForeground(this, NOTIF_ID, buildNotification(), type)
+        }.onFailure {
+            runCatching { startForeground(NOTIF_ID, buildNotification()) }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -30,7 +56,13 @@ class SipBackgroundService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        
+
+        // Re-assert the foreground (mic|phoneCall) state on every start. When this is
+        // delivered from the foreground IncomingCallActivity as a call is answered,
+        // it grants the service the while-in-use microphone access the SIP audio
+        // capture needs on Android 14+.
+        startAsForeground()
+
         // Ensure SIP is running and has context even if the UI was killed
         SipManager.appContext = applicationContext
         SipManager.registerFromPrefs(applicationContext)

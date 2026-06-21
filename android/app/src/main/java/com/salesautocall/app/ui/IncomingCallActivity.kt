@@ -116,6 +116,11 @@ class IncomingCallActivity : ComponentActivity() {
     }
 
     private fun doAccept() {
+        // Re-assert the foreground service (microphone|phoneCall) from this visible
+        // activity FIRST: on Android 14+ that's what grants the SIP audio capture
+        // while-in-use mic access. Without it the call connects but the mic is muted
+        // (no audio either way, drops at ~30s on RTP timeout).
+        runCatching { com.salesautocall.app.sip.SipBackgroundService.start(this) }
         runCatching { SipManager.acceptIncomingCall() }
         IncomingCallNotifier.cancel(this)
     }
