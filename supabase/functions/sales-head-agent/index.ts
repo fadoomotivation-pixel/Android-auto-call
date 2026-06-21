@@ -1,116 +1,142 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.42.0'
-import Anthropic from 'https://esm.sh/@anthropic-ai/sdk@0.20.1'
+
+// ============================================================================
+// SALES HEAD AGENT — 100% FREE / DETERMINISTIC (no LLM, no paid API)
+// ----------------------------------------------------------------------------
+// Reads today's ai_insights + raw data and generates prioritized ai_tasks via
+// rules: coaching tasks for under-target reps, follow-up tasks for stale leads.
+// Idempotent per day (clears its own pending tasks first). Cost per run = $0.
+// ============================================================================
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function istDateString(d = new Date()): string {
+  return new Date(d.getTime() + 5.5 * 3600 * 1000).toISOString().split('T')[0]
+}
+
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  )
+
+  const { agent_id, config } = await req.json().catch(() => ({ agent_id: null, config: {} }))
+  const cfg = config || {}
+  const targetConnectRate = Number(cfg.target_connect_rate ?? 40) // percent
+  const targetCalls = Number(cfg.target_calls_per_rep ?? 30)
+  const staleDays = Number(cfg.stale_days ?? 3)
+  const topN = Number(cfg.max_tasks_per_company ?? 10)
+  const closedStatuses: string[] = cfg.closed_statuses ?? [] // e.g. ['won','lost','dnc']
+
+  let runId: string | null = null
+  if (agent_id) {
+    const { data: run } = await supabase
+      .from('ai_agent_runs')
+      .insert({ agent_id, status: 'running', logs: 'Sales Head (deterministic) started' })
+      .select('id').single()
+    runId = run?.id ?? null
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    const { agent_id, config } = await req.json().catch(() => ({}))
-    const model = config?.model || 'claude-3-haiku-20240307' // Sales head uses the same or cheaper model for tasks
-    
-    let runId = null
-    if (agent_id) {
-      const { data: run } = await supabaseClient
-        .from('ai_agent_runs')
-        .insert({ agent_id, status: 'running', logs: 'Started Sales Head Agent' })
-        .select('id').single()
-      runId = run?.id
-    }
-
-    const anthropic = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') ?? '' })
-    const date = new Date().toISOString().split('T')[0]
-
-    // 1. Fetch companies
-    const { data: companies } = await supabaseClient.from('companies').select('id, name')
-    const results = []
+    const today = istDateString()
+    const staleCutoff = new Date(Date.now() - staleDays * 24 * 3600 * 1000).toISOString()
+    const { data: companies } = await supabase.from('companies').select('id, name')
+    let created = 0
 
     for (const company of companies || []) {
-      const { data: insights } = await supabaseClient.from('ai_insights').select('*').eq('company_id', company.id).eq('date', date).single()
-      const { data: reps } = await supabaseClient.from('profiles').select('id, full_name, role').eq('company_id', company.id)
-      
-      // Fetch some stalling leads to assign
-      const { data: leads } = await supabaseClient.from('contacts').select('id, name, status').eq('company_id', company.id).limit(10)
+      // Idempotency: clear this agent's still-pending tasks for the company so we
+      // don't pile up duplicates on every run.
+      if (agent_id) {
+        await supabase.from('ai_tasks')
+          .delete()
+          .eq('company_id', company.id)
+          .eq('agent_source', agent_id)
+          .eq('status', 'pending')
+      }
 
-      if (!insights || !reps) continue
+      const { data: insight } = await supabase
+        .from('ai_insights').select('metrics, anomalies')
+        .eq('company_id', company.id).eq('date', today).single()
+      const repStats = (insight?.metrics?.rep_stats ?? {}) as Record<string, { name?: string; calls?: number; connected?: number }>
 
-      const systemPrompt = `You are a Sales Head Agent for a Telecaller CRM. Read daily insights and create tasks for reps/managers.
-Output JSON:
-{
-  "tasks": [
-    {
-      "assignee_name": "Name from available list",
-      "title": "Short title",
-      "description": "Details",
-      "priority": "high", "medium", or "low",
-      "contact_name": "Optional name of lead to follow up with, if applicable"
-    }
-  ]
-}`
+      const tasks: {
+        company_id: string; assignee_id: string; contact_id: string | null;
+        agent_source: string | null; title: string; description: string; priority: string; status: string;
+      }[] = []
 
-      const userPrompt = `Insights: ${JSON.stringify(insights)}
-Reps: ${JSON.stringify(reps)}
-Sample Leads: ${JSON.stringify(leads)}
-Generate actionable tasks.`
-
-      const response = await anthropic.messages.create({
-        model: model,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }]
-      })
-
-      const content = response.content[0].type === 'text' ? response.content[0].text : ''
-      const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim()
-      let aiOutput = { tasks: [] }
-      try { aiOutput = JSON.parse(jsonStr) } catch(e) {}
-
-      if (aiOutput.tasks) {
-        for (const task of aiOutput.tasks) {
-          const assignee = reps.find(r => r.full_name && task.assignee_name && r.full_name.toLowerCase().includes(task.assignee_name.toLowerCase()))
-          if (!assignee) continue
-          
-          let contact_id = null
-          if (task.contact_name && leads) {
-            const lead = leads.find(l => l.name && l.name.toLowerCase().includes(task.contact_name.toLowerCase()))
-            if (lead) contact_id = lead.id
-          }
-
-          const { data: taskData } = await supabaseClient.from('ai_tasks').insert({
-            company_id: company.id,
-            assignee_id: assignee.id,
-            contact_id: contact_id,
-            agent_source: agent_id,
-            title: task.title,
-            description: task.description,
-            priority: task.priority || 'medium',
-            status: 'pending'
-          }).select().single()
-
-          if (taskData) results.push(taskData)
+      // ----- Coaching tasks: reps below target (rule-based) -----
+      for (const [repId, s] of Object.entries(repStats)) {
+        const calls = s.calls ?? 0
+        const connected = s.connected ?? 0
+        const rate = calls > 0 ? Math.round((connected / calls) * 1000) / 10 : 0
+        const belowVolume = calls < targetCalls
+        const belowRate = calls > 0 && rate < targetConnectRate
+        if (belowVolume || belowRate) {
+          const reasons: string[] = []
+          if (belowVolume) reasons.push(`only ${calls}/${targetCalls} calls`)
+          if (belowRate) reasons.push(`${rate}% connect rate (target ${targetConnectRate}%)`)
+          tasks.push({
+            company_id: company.id, assignee_id: repId, contact_id: null, agent_source: agent_id,
+            title: `Coaching: ${s.name ?? 'rep'} below target`,
+            description: `Today ${s.name ?? 'this rep'} had ${reasons.join(' and ')}. Review approach and push volume.`,
+            priority: connected === 0 ? 'high' : 'medium', status: 'pending',
+          })
         }
+      }
+
+      // ----- Follow-up tasks: stale leads (rule-based) -----
+      const { data: leads } = await supabase
+        .from('contacts')
+        .select('id, name, salesperson_id, status, updated_at')
+        .eq('company_id', company.id)
+        .not('salesperson_id', 'is', null)
+        .lt('updated_at', staleCutoff)
+        .order('updated_at', { ascending: true })
+        .limit(topN)
+      for (const lead of leads || []) {
+        if (lead.status && closedStatuses.includes(String(lead.status))) continue
+        tasks.push({
+          company_id: company.id, assignee_id: lead.salesperson_id, contact_id: lead.id, agent_source: agent_id,
+          title: `Follow up: ${lead.name ?? 'lead'} going cold`,
+          description: `No activity on this lead since ${String(lead.updated_at).split('T')[0]}. Re-engage before it's lost.`,
+          priority: 'medium', status: 'pending',
+        })
+      }
+
+      // Prioritize (high first) and cap at topN.
+      const order: Record<string, number> = { high: 0, medium: 1, low: 2 }
+      const capped = tasks.sort((a, b) => order[a.priority] - order[b.priority]).slice(0, topN)
+      if (capped.length) {
+        const { data: inserted } = await supabase.from('ai_tasks').insert(capped).select('id')
+        created += inserted?.length ?? 0
       }
     }
 
     if (runId) {
-      await supabaseClient.from('ai_agent_runs').update({ status: 'success', ended_at: new Date().toISOString(), logs: 'Created ' + results.length + ' tasks' }).eq('id', runId)
+      await supabase.from('ai_agent_runs').update({
+        status: 'success', ended_at: new Date().toISOString(),
+        tokens_used: 0, cost_usd: 0, logs: `Created ${created} tasks (deterministic, $0)`,
+      }).eq('id', runId)
     }
 
-    return new Response(JSON.stringify({ success: true, tasks_created: results.length }), { headers: corsHeaders, status: 200 })
-
+    return new Response(JSON.stringify({ success: true, tasks_created: created }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200,
+    })
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { headers: corsHeaders, status: 400 })
+    if (runId) {
+      await supabase.from('ai_agent_runs').update({
+        status: 'failed', ended_at: new Date().toISOString(),
+        tokens_used: 0, cost_usd: 0, logs: `Error: ${(error as Error).message}`,
+      }).eq('id', runId)
+    }
+    return new Response(JSON.stringify({ error: (error as Error).message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400,
+    })
   }
 })
