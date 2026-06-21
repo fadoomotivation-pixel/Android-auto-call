@@ -90,6 +90,14 @@ object SipManager {
 
     fun acceptIncomingCall() {
         val call = incomingCall ?: core?.currentCall ?: return
+        // Claim the voice-call audio session BEFORE accepting. linphone builds the
+        // call's audio graph as the media starts; if the device is still in
+        // MODE_NORMAL at that moment (the usual case for a call answered from the
+        // background / lock screen) the capture + earpiece path binds to the wrong
+        // state and stays silent even though RTP is flowing. Setting
+        // MODE_IN_COMMUNICATION + focus up front makes the graph initialise against
+        // the voice-call route. It's re-applied at StreamsRunning too (idempotent).
+        startAudioSession()
         val p = runCatching { core?.createCallParams(call) }.getOrNull()
         if (p != null && recordFile != null) runCatching { p.recordFile = recordFile }
         runCatching { if (p != null) call.acceptWithParams(p) else call.accept() }
