@@ -1,8 +1,10 @@
 package com.salesautocall.app.sip
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -33,6 +35,23 @@ class SipBackgroundService : Service() {
         SipManager.appContext = applicationContext
         SipManager.registerFromPrefs(applicationContext)
         return START_STICKY
+    }
+
+    /**
+     * The user swiped the app off Recents. Many OEMs kill our service along with
+     * the task; if the rep is listening for inbound calls, schedule an immediate
+     * restart so the phone keeps ringing for incoming calls.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (com.salesautocall.app.data.AppPrefs.getIncomingEnabled(applicationContext)) {
+            val restart = Intent(applicationContext, SipBackgroundService::class.java).setAction(ACTION_START)
+            val flags = PendingIntent.FLAG_ONE_SHOT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+            val pi = PendingIntent.getService(applicationContext, 1, restart, flags)
+            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            runCatching { am.set(AlarmManager.RTC, System.currentTimeMillis() + 1500, pi) }
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     private fun buildNotification(): Notification {

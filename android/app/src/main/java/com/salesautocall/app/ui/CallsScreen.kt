@@ -62,7 +62,7 @@ fun CallsScreen(vm: MainViewModel) {
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Calls", style = MaterialTheme.typography.headlineSmall)
-            IconButton(onClick = { vm.loadCalls() }) {
+            IconButton(onClick = { vm.loadCalls(force = true) }) {
                 Icon(Icons.Default.Refresh, contentDescription = "Refresh")
             }
         }

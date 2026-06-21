@@ -20,6 +20,10 @@ object AppPrefs {
     
     fun getIncomingEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_INCOMING, false)
     fun setIncomingEnabled(context: Context, v: Boolean) = prefs(context).edit().putBoolean(KEY_INCOMING, v).apply()
+
+    /** Whether we've already sent the rep to the OEM Autostart screen once. */
+    fun getAutostartPrompted(context: Context): Boolean = prefs(context).getBoolean("autostart_prompted", false)
+    fun setAutostartPrompted(context: Context, v: Boolean) = prefs(context).edit().putBoolean("autostart_prompted", v).apply()
     
     fun getAgentId(context: Context): String = prefs(context).getString(KEY_AGENT, "") ?: ""
     fun setAgentId(context: Context, v: String) = prefs(context).edit().putString(KEY_AGENT, v.trim()).apply()

@@ -25,5 +25,6 @@ class BootReceiver : BroadcastReceiver() {
         if (AppPrefs.getAgentId(context).isBlank() || AppPrefs.getSipPassword(context).isBlank()) return
 
         SipBackgroundService.start(context)
+        SipWatchdogWorker.schedule(context)
     }
 }

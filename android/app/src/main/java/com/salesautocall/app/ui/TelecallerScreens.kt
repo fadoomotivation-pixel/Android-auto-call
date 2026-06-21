@@ -701,7 +701,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             Box(
                                 Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface)
                                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                                    .clickable { vm.loadLeads() },
+                                    .clickable { vm.loadLeads(force = true) },
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
                         }
@@ -1275,7 +1275,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Text("Follow Ups", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("Never miss a follow-up", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { vm.loadFollowUps() }) {
+                IconButton(onClick = { vm.loadFollowUps(force = true) }) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                 }
                 TextButton(onClick = onBack) { Text("Back") }
