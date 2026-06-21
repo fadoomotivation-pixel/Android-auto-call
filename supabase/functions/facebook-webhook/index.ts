@@ -129,6 +129,22 @@ serve(async (req) => {
               // Clean phone (remove spaces, etc)
               const cleanPhone = phone.replace(/[^0-9+]/g, "");
 
+              // Returning buyer? A new ad response from a phone we already have is
+              // a re-engagement, not a fresh lead — reactivate the existing contact
+              // (wakes it if it had gone cold) instead of creating a duplicate.
+              const { data: dupe } = await supabaseAdmin
+                .from("contacts")
+                .select("id")
+                .eq("company_id", integration.company_id)
+                .eq("phone", cleanPhone)
+                .limit(1)
+                .maybeSingle();
+              if (dupe) {
+                await supabaseAdmin.rpc("reactivate_lead", { p_contact_id: dupe.id, p_signal: "facebook" });
+                console.log(`Lead ${leadgenId} matched existing contact ${dupe.id} — reactivated.`);
+                continue;
+              }
+
               const { error: insertError } = await supabaseAdmin
                 .from("contacts")
                 .insert({
