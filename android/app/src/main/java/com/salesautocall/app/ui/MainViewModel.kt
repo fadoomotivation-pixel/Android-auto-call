@@ -369,6 +369,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Route SIP engine state changes back into our status mapping.
         com.salesautocall.app.sip.SipManager.onState = { raw -> onSipState(raw) }
 
+        // Login watchdog: if we never get past SIP login (registered → bridged)
+        // within 15s, stop hanging on "Logging in…" and show an actionable error
+        // so the rep can retry instead of staring at a frozen screen.
+        val watchToken = cloudCallToken
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(15_000)
+            val st = _state.value
+            if (cloudCallToken == watchToken && st.cloudCallNumber != null && !st.cloudBridged) {
+                set { it.copy(cloudCallStatus = "Couldn't log in to the phone system — check your network and SIP details, then try again. (If your PBX is a private address, turn the VPN on.)") }
+                com.salesautocall.app.sip.SipManager.expectingOutbound = false
+                finishCloudCall(reload = false)
+            }
+        }
+
         viewModelScope.launch {
             val cfg = runCatching {
                 val body = Repository.getWebrtcConfig()

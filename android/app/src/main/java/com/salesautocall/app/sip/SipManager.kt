@@ -380,10 +380,17 @@ object SipManager {
                 nat.isIceEnabled = false
                 nat.isTurnEnabled = false
             } else {
-                // Public, well-known STUN server (reachable on the open internet).
+                // Public PBX behind carrier NAT. Use ICE (with a public STUN server)
+                // so reflexive candidates are gathered during the call's media
+                // negotiation (the INVITE), NOT during REGISTER. Enabling plain STUN
+                // alone made linphone resolve STUN at login time, which stalled
+                // registration on some carriers (calls stuck on "Logging in…"). ICE
+                // keeps the one-way-audio fix while letting login complete promptly;
+                // if the PBX ignores ICE it harmlessly falls back to the srflx
+                // candidate already in the SDP.
                 runCatching { nat.stunServer = "stun.l.google.com:19302" }
                 nat.isStunEnabled = true
-                nat.isIceEnabled = false
+                nat.isIceEnabled = true
                 nat.isTurnEnabled = false
             }
             c.natPolicy = nat
