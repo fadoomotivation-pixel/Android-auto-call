@@ -165,6 +165,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             AppPrefs.getSipPassword(app).isNotBlank()
         ) {
             runCatching { com.salesautocall.app.sip.SipBackgroundService.start(app) }
+            runCatching { com.salesautocall.app.sip.SipWatchdogWorker.schedule(app) }
         }
         refreshSession()
     }
@@ -179,6 +180,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun set(transform: (AppState) -> AppState) {
         _state.value = transform(_state.value)
     }
+
+    // ---- screen-load cache ----
+    // Bottom-nav uses a NavHost, which re-runs each screen's LaunchedEffect every
+    // time you switch to its tab. Without this guard, every Home/Leads/Calls switch
+    // fired fresh network calls → visible lag. We keep the already-loaded data in
+    // state (it survives navigation) and only re-fetch when it's actually stale, so
+    // switching tabs is instant. Manual refresh passes force = true to bypass it.
+    private val lastLoadedAt = HashMap<String, Long>()
+    private fun shouldLoad(key: String, force: Boolean, ttlMs: Long = 45_000L): Boolean {
+        if (force) { lastLoadedAt[key] = System.currentTimeMillis(); return true }
+        val now = System.currentTimeMillis()
+        if (now - (lastLoadedAt[key] ?: 0L) < ttlMs) return false
+        lastLoadedAt[key] = now
+        return true
+    }
+    private fun invalidateCaches() = lastLoadedAt.clear()
 
     // ---------- auth ----------
 
@@ -250,6 +267,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun signOut() {
         viewModelScope.launch {
             runCatching { Repository.signOut() }
+            invalidateCaches() // next user starts with fresh data, not cached TTLs
             set { AppState(breakSeconds = it.breakSeconds) }
         }
     }
@@ -282,12 +300,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setIncomingEnabled(v: Boolean) {
-        AppPrefs.setIncomingEnabled(getApplication(), v)
+        val app = getApplication<Application>()
+        AppPrefs.setIncomingEnabled(app, v)
         set { it.copy(cloudIncomingEnabled = v) }
         if (v) {
-            com.salesautocall.app.sip.SipBackgroundService.start(getApplication())
+            com.salesautocall.app.sip.SipBackgroundService.start(app)
+            // Periodic safety net that revives the service if an OEM kills it.
+            com.salesautocall.app.sip.SipWatchdogWorker.schedule(app)
+            // On phones that kill background apps, incoming calls only survive if
+            // the user also keeps "Autostart" on — guide them to that screen once.
+            runCatching { com.salesautocall.app.sip.OemAutostart.openIfNeeded(app) }
         } else {
-            com.salesautocall.app.sip.SipBackgroundService.stop(getApplication())
+            com.salesautocall.app.sip.SipBackgroundService.stop(app)
+            com.salesautocall.app.sip.SipWatchdogWorker.cancel(app)
         }
     }
 
@@ -565,11 +590,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // is uploaded asynchronously and only flips to "ready" (→ shows the Play
         // button) a few seconds later, so refresh again after the upload settles.
         if (reload) {
-            loadCalls()
+            loadCalls(force = true)
             val token = cloudCallToken
             viewModelScope.launch {
                 kotlinx.coroutines.delay(6000)
-                if (cloudCallToken == token) loadCalls()
+                if (cloudCallToken == token) loadCalls(force = true)
             }
         }
     }
@@ -585,7 +610,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun recordingAllowed(): Boolean = recordingEnabled()
 
-    fun loadToday() {
+    fun loadToday(force: Boolean = false) {
+        if (!shouldLoad("today", force)) return
         viewModelScope.launch {
             runCatching { Repository.fetchTodayCalls() }
                 .onSuccess { list ->
@@ -605,11 +631,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setCallFilter(f: CallFilter) {
         if (f == _state.value.callFilter) return
         set { it.copy(callFilter = f) }
-        loadCalls()
+        loadCalls(force = true) // filter changed → fetch the new range now
     }
 
-    fun loadCalls() {
+    fun loadCalls(force: Boolean = false) {
         val filter = _state.value.callFilter
+        // Key by filter so changing Today/Week/All always refetches, but returning
+        // to the Calls tab on the same filter uses the cached list instantly.
+        if (!shouldLoad("calls:${filter.name}", force)) return
         val since: String? = when (filter) {
             CallFilter.TODAY -> java.time.LocalDate.now()
                 .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toString()
@@ -818,7 +847,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- analytics ----------
 
-    fun loadCampaigns() {
+    fun loadCampaigns(force: Boolean = false) {
+        if (!shouldLoad("campaigns", force)) return
         viewModelScope.launch {
             runCatching { Repository.fetchCampaignStats() }
                 .onSuccess { c -> set { it.copy(campaigns = c) } }
@@ -897,11 +927,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- Home dashboard ----------
 
     /** Loads everything the Home tab needs in one go. */
-    fun loadHome() {
-        loadToday()
-        loadAttendance()
-        loadFollowUps()
-        loadLeaderboard(_state.value.leaderboardPeriod)
+    fun loadHome(force: Boolean = false) {
+        loadToday(force)
+        loadAttendance(force)
+        loadFollowUps(force)
+        loadLeaderboard(_state.value.leaderboardPeriod, force)
     }
 
     // ---------- lead pipeline ----------
@@ -915,7 +945,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun requestLeadSelect() = set { it.copy(leadsSelectRequested = true) }
     fun consumeLeadSelect() = set { it.copy(leadsSelectRequested = false) }
 
-    fun loadLeads() {
+    fun loadLeads(force: Boolean = false) {
+        if (!shouldLoad("leads", force)) return
         viewModelScope.launch {
             set { it.copy(leadsLoading = true) }
             runCatching { Repository.fetchLeads() }
@@ -942,7 +973,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- content sharing (trust layer) ----------
 
-    fun loadContentAssets() {
+    fun loadContentAssets(force: Boolean = false) {
+        if (!shouldLoad("content", force)) return
         viewModelScope.launch {
             runCatching { Repository.fetchContentAssets() }
                 .onSuccess { list -> set { it.copy(contentAssets = list) } }
@@ -1139,7 +1171,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- follow-up scheduler ----------
 
-    fun loadFollowUps() {
+    fun loadFollowUps(force: Boolean = false) {
+        if (!shouldLoad("followups", force)) return
         viewModelScope.launch {
             set { it.copy(followUpsLoading = true) }
             runCatching { Repository.fetchFollowUps() }
@@ -1194,7 +1227,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- attendance ----------
 
-    fun loadAttendance() {
+    fun loadAttendance(force: Boolean = false) {
+        if (!shouldLoad("attendance", force)) return
         viewModelScope.launch {
             runCatching { Repository.todayAttendance() }
                 .onSuccess { a -> set { it.copy(attendance = a) } }
@@ -1219,7 +1253,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Loads every follow-up (pending + completed) for the calendar view. */
-    fun loadCalendar() {
+    fun loadCalendar(force: Boolean = false) {
+        if (!shouldLoad("calendar", force)) return
         viewModelScope.launch {
             set { it.copy(calendarLoading = true) }
             runCatching { Repository.fetchFollowUps(includeDone = true) }
@@ -1245,7 +1280,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         loadLeaderboard(period)
     }
 
-    fun loadLeaderboard(period: String) {
+    fun loadLeaderboard(period: String, force: Boolean = false) {
+        if (!shouldLoad("leaderboard:$period", force)) return
         viewModelScope.launch {
             set { it.copy(leaderboardLoading = true) }
             runCatching { Repository.fetchLeaderboard(period) }

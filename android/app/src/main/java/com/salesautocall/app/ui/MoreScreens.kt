@@ -470,7 +470,7 @@ fun CalendarScreen(vm: MainViewModel, onBack: () -> Unit) {
     if (addOpen) {
         AddFollowUpDialog(onDismiss = { addOpen = false }, onAdd = { phone, name, millis, note ->
             vm.scheduleFollowUp(null, phone, name, millis, note)
-            vm.loadCalendar()
+            vm.loadCalendar(force = true)
             addOpen = false
         })
     }
