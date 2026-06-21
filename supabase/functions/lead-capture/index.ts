@@ -58,7 +58,12 @@ Deno.serve(async (req) => {
       .eq("company_id", cfg.company_id).eq("phone", phone).limit(1).maybeSingle();
     existing = data;
   }
-  if (existing) return json({ ok: true, contact_id: existing.id, deduped: true });
+  if (existing) {
+    // A returning buyer (re-submitting a form / coming back via a tracked link)
+    // is a re-engagement — wake the lead if it had gone cold.
+    await admin.rpc("reactivate_lead", { p_contact_id: existing.id, p_signal: "web" });
+    return json({ ok: true, contact_id: existing.id, deduped: true, reactivated: true });
+  }
 
   const { data: inserted, error } = await admin.from("contacts").insert({
     company_id: cfg.company_id,
