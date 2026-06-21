@@ -35,6 +35,13 @@ object SipManager {
     private var speakerOn: Boolean = false
     private var recordFile: String? = null
     private var recordingActive: Boolean = false
+    // For a public PBX we want plain STUN (no ICE) on the *media* so the call's SDP
+    // advertises the phone's public address (the Zoiper-style traversal that gives
+    // two-way audio behind carrier NAT). But enabling STUN *during* REGISTER stalls
+    // login on some carriers, so we hold the STUN server here and turn it on only
+    // after the account has registered. Null = private PBX (no STUN at all).
+    private var pendingMediaStun: String? = null
+    private var mediaStunApplied: Boolean = false
     
     var appContext: Context? = null
     var incomingCall: Call? = null
@@ -108,7 +115,26 @@ object SipManager {
         ) {
             when (state) {
                 RegistrationState.Progress -> onState?.invoke("registering")
-                RegistrationState.Ok -> onState?.invoke("registered")
+                RegistrationState.Ok -> {
+                    // Login is done — now turn on plain STUN (no ICE) for media so the
+                    // next call's SDP carries the phone's public address. Doing it here
+                    // (not during REGISTER) keeps login fast while restoring two-way
+                    // audio. ICE stays OFF because the PBX (UrOperator) ignores it and
+                    // then sends RTP to our private address → silence both ways.
+                    val stun = pendingMediaStun
+                    if (stun != null && !mediaStunApplied) {
+                        runCatching {
+                            val nat = core.natPolicy ?: core.createNatPolicy()
+                            nat.stunServer = stun
+                            nat.isStunEnabled = true
+                            nat.isIceEnabled = false
+                            nat.isTurnEnabled = false
+                            core.natPolicy = nat
+                            mediaStunApplied = true
+                        }
+                    }
+                    onState?.invoke("registered")
+                }
                 RegistrationState.Cleared -> onState?.invoke("unregistered")
                 RegistrationState.Failed -> onState?.invoke("regfailed:$message")
                 else -> { /* None / Refreshing — ignore */ }
@@ -364,36 +390,43 @@ object SipManager {
      * reached over mobile data the phone sits behind carrier-grade NAT, so the
      * SDP must advertise the phone's *public* address or the PBX sends the audio
      * into a black hole — that's the "connected but no voice either way" symptom.
-     * Enabling STUN makes linphone discover and advertise that public address
-     * (the same non-ICE traversal Zoiper uses, which has working audio here).
+     * Plain STUN makes linphone discover and advertise that public address (the
+     * same non-ICE traversal Zoiper uses, which has working audio here). But STUN
+     * is NOT turned on here: enabling it during REGISTER stalls login on some
+     * carriers ("Logging in…" forever). Instead we only record the STUN server in
+     * [pendingMediaStun] and flip STUN on after the account registers (see
+     * onAccountRegistrationStateChanged) — fast login *and* two-way audio.
      *
-     * ICE/TURN stay off, and on a **private** PBX reached over VPN (a 10.x/192.168
-     * address) STUN is left off too — a STUN server is unreachable inside the VPN
-     * and gathering candidates against it can make the PBX drop the call.
+     * ICE/TURN stay off (UrOperator ignores ICE and then sends RTP to our private
+     * address → silence). On a **private** PBX reached over VPN (a 10.x/192.168
+     * address) STUN is left off entirely — a STUN server is unreachable inside the
+     * VPN and gathering candidates against it can make the PBX drop the call.
      */
     private fun applyNatPolicy(c: Core, server: String) {
         runCatching {
             val nat = c.natPolicy ?: c.createNatPolicy()
             val private = isPrivateAddress(server)
-            if (private) {
-                nat.isStunEnabled = false
-                nat.isIceEnabled = false
-                nat.isTurnEnabled = false
-            } else {
-                // Public PBX behind carrier NAT. Use ICE (with a public STUN server)
-                // so reflexive candidates are gathered during the call's media
-                // negotiation (the INVITE), NOT during REGISTER. Enabling plain STUN
-                // alone made linphone resolve STUN at login time, which stalled
-                // registration on some carriers (calls stuck on "Logging in…"). ICE
-                // keeps the one-way-audio fix while letting login complete promptly;
-                // if the PBX ignores ICE it harmlessly falls back to the srflx
-                // candidate already in the SDP.
-                runCatching { nat.stunServer = "stun.l.google.com:19302" }
-                nat.isStunEnabled = true
-                nat.isIceEnabled = true
-                nat.isTurnEnabled = false
-            }
+            // Always REGISTER with NAT traversal OFF: enabling STUN during login
+            // stalled registration on some carriers (calls stuck on "Logging in…").
+            nat.isStunEnabled = false
+            nat.isIceEnabled = false
+            nat.isTurnEnabled = false
             c.natPolicy = nat
+            if (private) {
+                // Private PBX over VPN — no STUN ever; the VPN already gives a
+                // routable path for both signalling and media.
+                pendingMediaStun = null
+                mediaStunApplied = false
+            } else {
+                // Public PBX behind carrier NAT — defer plain STUN (no ICE) until
+                // after the account registers (see onAccountRegistrationStateChanged).
+                // Plain STUN rewrites the call SDP to the phone's public address so
+                // audio flows both ways; this is the non-ICE traversal Zoiper uses,
+                // which has working audio here. ICE is deliberately NOT used because
+                // UrOperator ignores it and then sends RTP to our private address.
+                pendingMediaStun = "stun.l.google.com:19302"
+                mediaStunApplied = false
+            }
         }
     }
 
