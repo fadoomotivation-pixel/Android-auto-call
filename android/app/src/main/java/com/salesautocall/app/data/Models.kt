@@ -169,3 +169,32 @@ data class CallLog(
     @SerialName("summary_status") val summaryStatus: String? = null,
     @SerialName("suggested_disposition") val suggestedDisposition: String? = null,
 )
+
+/** A shareable trust asset (brochure / video / review / testimonial) the rep can
+ *  send to a buyer as a tracked link. Curated by the admin in the web dashboard. */
+@Serializable
+data class ContentAsset(
+    val id: String,
+    @SerialName("company_id") val companyId: String? = null,
+    val kind: String = "link",
+    val title: String,
+    val url: String,
+    val description: String? = null,
+    val active: Boolean = true,
+)
+
+/** One project a buyer is interested in, with its own stage/budget/site-visit —
+ *  lets a single lead carry a non-linear journey across several projects. */
+@Serializable
+data class LeadProjectInterest(
+    val id: String? = null,
+    @SerialName("company_id") val companyId: String,
+    @SerialName("contact_id") val contactId: String,
+    val project: String,
+    val stage: String = "new",
+    val budget: String? = null,
+    val temperature: String? = null,
+    @SerialName("site_visit_at") val siteVisitAt: String? = null,
+    val notes: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+)

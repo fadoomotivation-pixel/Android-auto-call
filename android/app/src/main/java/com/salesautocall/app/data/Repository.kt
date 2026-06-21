@@ -400,6 +400,46 @@ object Repository {
         ) { filter { eq("id", callLogId) } }
     }
 
+    // ---------- content & reviews trust layer ----------
+
+    /** The company's active shareable content (brochures / videos / reviews). */
+    suspend fun fetchContentAssets(): List<ContentAsset> =
+        client.from("content_assets").select {
+            filter { eq("active", true) }
+            order("created_at", Order.DESCENDING)
+        }.decodeList()
+
+    /** Creates a tracked share row and returns the token to build the open link. */
+    suspend fun createContentShare(assetId: String, contactId: String?, channel: String = "whatsapp"): String? {
+        val token = client.postgrest.rpc(
+            "create_content_share",
+            buildJsonObject {
+                put("p_asset_id", assetId)
+                put("p_contact_id", contactId)
+                put("p_channel", channel)
+            },
+        ).decodeAs<String>()
+        return token.ifBlank { null }
+    }
+
+    /** The public, tracked open-link for a share token (opening it reactivates the lead). */
+    fun contentOpenUrl(token: String): String = "${getFunctionsUrl()}/content-open?t=$token"
+
+    // ---------- multi-project interest ----------
+
+    suspend fun fetchProjectInterests(contactId: String): List<LeadProjectInterest> =
+        client.from("lead_project_interests").select {
+            filter { eq("contact_id", contactId) }
+            order("created_at", Order.DESCENDING)
+        }.decodeList()
+
+    suspend fun addProjectInterest(interest: LeadProjectInterest): LeadProjectInterest? =
+        client.from("lead_project_interests").insert(interest) { select() }.decodeSingleOrNull()
+
+    suspend fun deleteProjectInterest(id: String) {
+        client.from("lead_project_interests").delete { filter { eq("id", id) } }
+    }
+
     /** Clears an AI disposition suggestion after the rep confirms or dismisses it. */
     suspend fun clearSuggestedDisposition(callLogId: String) {
         client.from("call_logs").update(mapOf("suggested_disposition" to null as String?)) {

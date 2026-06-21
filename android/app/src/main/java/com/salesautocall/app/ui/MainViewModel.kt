@@ -12,7 +12,9 @@ import com.salesautocall.app.data.CampaignStat
 import com.salesautocall.app.data.Company
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.ContactImport
+import com.salesautocall.app.data.ContentAsset
 import com.salesautocall.app.data.FollowUp
+import com.salesautocall.app.data.LeadProjectInterest
 import com.salesautocall.app.data.LeaderboardRow
 import com.salesautocall.app.data.ParseResult
 import com.salesautocall.app.data.Profile
@@ -90,6 +92,9 @@ data class AppState(
     val waLoading: Boolean = false,
     val waSending: Boolean = false,
     val waError: String? = null,
+    // shareable content library + a lead's per-project interests
+    val contentAssets: List<ContentAsset> = emptyList(),
+    val projectInterests: List<LeadProjectInterest> = emptyList(),
     // AI assistant chat
     val assistantMessages: List<ChatMsg> = emptyList(),
     val assistantThinking: Boolean = false,
@@ -932,6 +937,65 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onSuccess { list -> set { it.copy(leads = list, aiScoringLeads = false,
                     message = if (n > 0) "AI scored $n lead(s) ✨" else "Couldn't score leads right now") } }
                 .onFailure { set { it.copy(aiScoringLeads = false) } }
+        }
+    }
+
+    // ---------- content sharing (trust layer) ----------
+
+    fun loadContentAssets() {
+        viewModelScope.launch {
+            runCatching { Repository.fetchContentAssets() }
+                .onSuccess { list -> set { it.copy(contentAssets = list) } }
+        }
+    }
+
+    /**
+     * Creates a tracked share link for [asset] → [contact] and hands the ready-to-send
+     * message (title + link) back to the UI to fire off over WhatsApp. When the buyer
+     * opens the link, the backend logs the open and reactivates the lead.
+     */
+    fun shareContent(contact: Contact, asset: ContentAsset, onReady: (String) -> Unit) {
+        viewModelScope.launch {
+            val token = runCatching { Repository.createContentShare(asset.id, contact.id) }.getOrNull()
+            if (token == null) {
+                set { it.copy(error = "Couldn't create a share link. Try again.") }
+                return@launch
+            }
+            onReady("${asset.title}\n${Repository.contentOpenUrl(token)}")
+        }
+    }
+
+    // ---------- multi-project interest ----------
+
+    fun loadProjectInterests(contactId: String) {
+        viewModelScope.launch {
+            runCatching { Repository.fetchProjectInterests(contactId) }
+                .onSuccess { list -> set { it.copy(projectInterests = list) } }
+                .onFailure { set { it.copy(projectInterests = emptyList()) } }
+        }
+    }
+
+    fun addProjectInterest(contactId: String, project: String, stage: String, budget: String?, temperature: String?) {
+        val companyId = _state.value.profile?.companyId ?: return
+        if (project.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                Repository.addProjectInterest(
+                    LeadProjectInterest(
+                        companyId = companyId, contactId = contactId, project = project.trim(),
+                        stage = stage, budget = budget?.ifBlank { null }, temperature = temperature,
+                    ),
+                )
+            }.onSuccess { loadProjectInterests(contactId) }
+                .onFailure { e -> set { it.copy(error = e.message ?: "Couldn't add project") } }
+        }
+    }
+
+    fun deleteProjectInterest(id: String, contactId: String) {
+        viewModelScope.launch {
+            runCatching { Repository.deleteProjectInterest(id) }
+                .onSuccess { loadProjectInterests(contactId) }
+                .onFailure { e -> set { it.copy(error = e.message) } }
         }
     }
 
