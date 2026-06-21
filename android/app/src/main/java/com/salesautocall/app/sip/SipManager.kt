@@ -1,6 +1,10 @@
 package com.salesautocall.app.sip
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.os.Build
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +46,14 @@ object SipManager {
     // after the account has registered. Null = private PBX (no STUN at all).
     private var pendingMediaStun: String? = null
     private var mediaStunApplied: Boolean = false
+    // VoIP audio session. linphone 5.x leaves the Android AudioManager mode and
+    // audio focus to the app (that's why we route the device manually). Without
+    // MODE_IN_COMMUNICATION + voice-call focus the mic/earpiece never engage when a
+    // call is driven from a backgrounded/locked context — i.e. an answered INCOMING
+    // call → "connected but no audio either way". We hold the focus request so we
+    // can release it (and restore MODE_NORMAL) when the call ends.
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
     
     var appContext: Context? = null
     var incomingCall: Call? = null
@@ -177,6 +189,7 @@ object SipManager {
                 Call.State.Connected,
                 Call.State.StreamsRunning -> {
                     appContext?.let { runCatching { com.salesautocall.app.notify.IncomingCallNotifier.cancel(it) } }
+                    startAudioSession()
                     applyAudioRoute(core)
                     if (recordFile != null && !recordingActive) {
                         runCatching { call.startRecording() }.onSuccess { recordingActive = true }
@@ -200,6 +213,7 @@ object SipManager {
                 Call.State.Released,
                 Call.State.Error -> {
                     appContext?.let { runCatching { com.salesautocall.app.notify.IncomingCallNotifier.cancel(it) } }
+                    stopAudioSession()
                     if (recordingActive) {
                         runCatching { call.stopRecording() }
                         recordingActive = false
@@ -441,6 +455,51 @@ object SipManager {
             if (second != null && second in 16..31) return true
         }
         return false
+    }
+
+    /**
+     * Claim the voice-call audio session: request audio focus and switch the device
+     * into MODE_IN_COMMUNICATION so the mic captures and the earpiece/speaker plays.
+     * Required for an answered INCOMING call (launched from the background/lock
+     * screen) to have two-way audio; harmless to re-run for an outgoing call.
+     */
+    private fun startAudioSession() {
+        val ctx = appContext ?: return
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        audioManager = am
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(attrs)
+                    .build()
+                audioFocusRequest = req
+                am.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                am.requestAudioFocus(null, AudioManager.STREAM_VOICE_CALL, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            }
+            am.mode = AudioManager.MODE_IN_COMMUNICATION
+        }
+    }
+
+    /** Release the voice-call audio session when the call ends. */
+    private fun stopAudioSession() {
+        val am = audioManager ?: return
+        runCatching {
+            am.mode = AudioManager.MODE_NORMAL
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { am.abandonAudioFocusRequest(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                am.abandonAudioFocus(null)
+            }
+        }
+        audioFocusRequest = null
+        audioManager = null
     }
 
     private fun applyAudioRoute(c: Core) {
