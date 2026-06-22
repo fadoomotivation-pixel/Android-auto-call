@@ -34,8 +34,13 @@ export async function summarizeAndStore(
   if (!GROQ) return { ok: false, error: "GROQ_API_KEY is not configured." };
   await admin.from("call_logs").update({ summary_status: "processing" }).eq("id", callId);
   try {
-    const ext = source === "sim" ? "m4a" : "wav";
-    const mime = source === "sim" ? "audio/mp4" : "audio/wav";
+    // Whisper picks the decoder from the filename extension, so name the upload
+    // to match the source's real container.
+    const FMT: Record<string, [string, string]> = {
+      sim: ["m4a", "audio/mp4"],
+      callerdesk: ["mp3", "audio/mpeg"],
+    };
+    const [ext, mime] = FMT[source] ?? ["wav", "audio/wav"];
 
     const form = new FormData();
     form.append("model", "whisper-large-v3");
