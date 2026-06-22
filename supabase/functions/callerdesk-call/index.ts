@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
 
     // Correlate the eventual webhook: store whatever id-like field came back.
-    const providerCallId = pick(parsed, ["callid", "call_id", "ucid", "uuid", "id", "request_id", "txn_id"]);
+    const providerCallId = pick(parsed, ["campid", "camp_id", "callid", "call_id", "ucid", "uuid", "id", "request_id", "txn_id"]);
     if (callLogId && providerCallId) {
       await caller.admin.from("call_logs").update({ provider_call_id: providerCallId }).eq("id", callLogId);
     }
