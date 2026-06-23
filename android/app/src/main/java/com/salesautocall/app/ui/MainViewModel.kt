@@ -18,6 +18,7 @@ import com.salesautocall.app.data.LeadProjectInterest
 import com.salesautocall.app.data.LeaderboardRow
 import com.salesautocall.app.data.ParseResult
 import com.salesautocall.app.data.Profile
+import com.salesautocall.app.data.ProjectSite
 import com.salesautocall.app.data.Repository
 import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.notify.FollowUpReminder
@@ -88,6 +89,8 @@ data class AppState(
     val inCallNote: String = "",
     // lead pipeline (all my contacts across campaigns)
     val leads: List<Contact> = emptyList(),
+    /** Company project pins, for geo-fencing site-visit arrivals. */
+    val projectSites: List<ProjectSite> = emptyList(),
     val leadsLoading: Boolean = false,
     /** True while the AI lead-scoring call is running. */
     val aiScoringLeads: Boolean = false,
@@ -1046,7 +1049,91 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { Repository.fetchLeads() }
                 .onSuccess { list -> set { it.copy(leads = list, leadsLoading = false) } }
                 .onFailure { e -> set { it.copy(leadsLoading = false, error = e.message) } }
+            runCatching { Repository.fetchProjectSites() }
+                .onSuccess { sites -> set { it.copy(projectSites = sites) } }
         }
+    }
+
+    // ---------- site-visit geofencing ----------
+
+    /**
+     * "Arrived at Site": reads the rep's GPS and compares it to the project's
+     * pinned location. Within the radius → a verified on-site check-in. If the
+     * project isn't pinned yet, the first arrival drops the pin here (you're on
+     * site to do it) and counts as verified; later visits then verify against it.
+     */
+    fun arriveAtSite(contact: Contact) {
+        val contactId = contact.id ?: return
+        val project = contact.siteVisitProject?.trim().orEmpty()
+        viewModelScope.launch {
+            val loc = currentLocation()
+            if (loc == null) {
+                set { it.copy(message = "📍 Turn on location and try again — couldn't read your GPS.") }
+                return@launch
+            }
+            val companyId = _state.value.profile?.companyId
+            var pin = _state.value.projectSites.firstOrNull { it.name.equals(project, ignoreCase = true) }
+            // No pin yet for this project → set it from where the rep is standing.
+            if (pin == null && project.isNotBlank() && companyId != null) {
+                val created = Repository.upsertProjectSite(companyId, project, loc.latitude, loc.longitude)
+                if (created != null) {
+                    pin = created
+                    set { it.copy(projectSites = it.projectSites + created) }
+                }
+            }
+            val site = pin
+            if (site == null) {
+                // Still no site (no project name on the lead) → record an unverified arrival.
+                Repository.markSiteArrival(contactId, loc.latitude, loc.longitude, 0, false)
+                applyArrival(contactId, verified = false, distance = 0)
+                set { it.copy(message = "✓ Arrival logged. Tip: set a Site Visit Project to geo-verify next time.") }
+                return@launch
+            }
+            val out = FloatArray(1)
+            android.location.Location.distanceBetween(loc.latitude, loc.longitude, site.lat, site.lng, out)
+            val distance = out[0].toInt()
+            val verified = distance <= site.radiusM
+            Repository.markSiteArrival(contactId, loc.latitude, loc.longitude, distance, verified)
+            applyArrival(contactId, verified, distance)
+            set {
+                it.copy(message = if (verified)
+                    "✅ Verified on site at ${site.name} ($distance m from the pin)."
+                else
+                    "⚠️ You're ${formatMeters(distance)} from ${site.name} — not at the site.")
+            }
+        }
+    }
+
+    private fun applyArrival(contactId: String, verified: Boolean, distance: Int) {
+        val nowIso = java.time.Instant.now().toString()
+        set { st ->
+            st.copy(leads = st.leads.map { c ->
+                if (c.id == contactId) c.copy(
+                    siteVisitArrivedAt = nowIso, siteVisitVerified = verified, siteVisitDistanceM = distance,
+                ) else c
+            })
+        }
+    }
+
+    private fun formatMeters(m: Int): String = if (m >= 1000) "%.1f km".format(m / 1000.0) else "$m m"
+
+    /** Best last-known location across providers (mirrors the attendance punch-in read). */
+    private fun currentLocation(): android.location.Location? {
+        val ctx = getApplication<Application>()
+        val fine = android.content.pm.PackageManager.PERMISSION_GRANTED ==
+            androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = android.content.pm.PackageManager.PERMISSION_GRANTED ==
+            androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (!fine && !coarse) return null
+        return runCatching {
+            val lm = ctx.getSystemService(android.content.Context.LOCATION_SERVICE) as android.location.LocationManager
+            var best: android.location.Location? = null
+            for (p in lm.getProviders(true)) {
+                val l = runCatching { lm.getLastKnownLocation(p) }.getOrNull() ?: continue
+                if (best == null || l.accuracy < best!!.accuracy) best = l
+            }
+            best
+        }.getOrNull()
     }
 
     /**

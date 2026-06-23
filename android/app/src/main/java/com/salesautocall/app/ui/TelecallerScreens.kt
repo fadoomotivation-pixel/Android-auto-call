@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -859,6 +860,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             },
             onShareContent = { actionFor = null; contentFor = c },
             onProjects = { actionFor = null; projectsFor = c },
+            onArrived = { c.id?.let { vm.arriveAtSite(c) } },
         )
     }
     contentFor?.let { c ->
@@ -1080,6 +1082,7 @@ private fun LeadActionSheet(
     onApply: (String?, String?, String?, String?, String?, String?, String?) -> Unit,
     onShareContent: () -> Unit = {},
     onProjects: () -> Unit = {},
+    onArrived: () -> Unit = {},
 ) {
     var stage by remember(c.id) { mutableStateOf<String?>(null) }
     var temp by remember(c.id) { mutableStateOf<String?>(null) }
@@ -1149,6 +1152,22 @@ private fun LeadActionSheet(
                         ).show()
                     }, modifier = Modifier.fillMaxWidth()) {
                         Text(if (svAt.isBlank()) "📅 Pick Date & Time" else "📅 Scheduled: ${svAt.substring(0, 16).replace('T', ' ')}")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    // Geo-fenced arrival: verifies the rep is physically at the project.
+                    Button(
+                        onClick = onArrived,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Teal),
+                    ) { Text("📍 Arrived at Site (verify GPS)") }
+                    if (c.siteVisitArrivedAt != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            if (c.siteVisitVerified == true) "✅ Verified on site${c.siteVisitDistanceM?.let { " · ${it} m from pin" } ?: ""}"
+                            else "⚠️ Last check-in was off-site${c.siteVisitDistanceM?.let { " · ${it} m away" } ?: ""}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (c.siteVisitVerified == true) Green else Red,
+                        )
                     }
                     Spacer(Modifier.height(12.dp))
                 }
