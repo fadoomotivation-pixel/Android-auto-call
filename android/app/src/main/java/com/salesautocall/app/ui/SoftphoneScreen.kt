@@ -40,7 +40,17 @@ fun SoftphoneScreen(vm: MainViewModel) {
     var recording by remember { mutableStateOf(vm.recordingAllowed()) }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        if (number != null) {
+        if (number != null && app.callerdeskCalling) {
+            // CallerDesk: the call happens on the native dialer — show a simple
+            // "answer your phone" card, not the SIP in-call controls.
+            CallerdeskCallCard(
+                number = number,
+                status = app.cloudCallStatus.ifBlank { "Starting call…" },
+                note = app.inCallNote,
+                onNote = { vm.setInCallNote(it) },
+                onClose = { vm.endCloudCall() },
+            )
+        } else if (number != null) {
             Column(
                 Modifier.fillMaxSize().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -114,5 +124,47 @@ fun SoftphoneScreen(vm: MainViewModel) {
                 )
             }
         }
+    }
+}
+
+/** Simple status card for a CallerDesk cloud call: the actual conversation is on the
+ *  phone's native dialer (CallerDesk rings this agent's phone and bridges the
+ *  customer), so there are no in-app audio controls — just the status and notes. */
+@Composable
+private fun CallerdeskCallCard(
+    number: String,
+    status: String,
+    note: String,
+    onNote: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            "Cloud call", style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(number, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            status,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(28.dp))
+        OutlinedTextField(
+            value = note,
+            onValueChange = onNote,
+            label = { Text("Notes") },
+            placeholder = { Text("Jot down what was discussed…") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+        )
+        Spacer(Modifier.height(20.dp))
+        OutlinedButton(onClick = onClose) { Text("Close") }
     }
 }

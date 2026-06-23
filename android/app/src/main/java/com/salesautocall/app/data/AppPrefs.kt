@@ -39,6 +39,12 @@ object AppPrefs {
     fun getSipPort(context: Context): String = prefs(context).getString("cloud_sip_port", "") ?: ""
     fun setSipPort(context: Context, v: String) = prefs(context).edit().putString("cloud_sip_port", v.trim()).apply()
 
+    // CallerDesk one-tap cloud calling. When ON, a cloud call asks the backend to
+    // ring this agent's own phone and bridge the customer (click-to-call) — no SIP,
+    // no VPN. The call happens on the native dialer and is recorded server-side.
+    fun getCallerdeskCalling(context: Context): Boolean = prefs(context).getBoolean("callerdesk_calling", false)
+    fun setCallerdeskCalling(context: Context, v: Boolean) = prefs(context).edit().putBoolean("callerdesk_calling", v).apply()
+
     fun getDailyGoal(context: Context): Int =
         prefs(context).getInt(KEY_GOAL, 50)
 

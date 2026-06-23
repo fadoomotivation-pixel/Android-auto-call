@@ -427,6 +427,27 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                     }
                 }
 
+                // CallerDesk one-tap calling — no VPN, no SIP. The phone rings, then
+                // connects the customer; the call is recorded automatically.
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("CallerDesk calling (recommended)", style = MaterialTheme.typography.titleSmall)
+                            Text("Your phone rings, then connects the customer. No VPN or SIP needed — calls are recorded automatically.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = app.callerdeskCalling, onCheckedChange = { vm.setCallerdeskCalling(it) })
+                    }
+                }
+
                 OutlinedTextField(
                     app.cloudAgentId, { vm.setCloudAgentId(it) },
                     label = { Text("Your extension number (from your admin)") },
