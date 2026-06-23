@@ -67,15 +67,33 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
                 context, contactId?.hashCode() ?: 0, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
+
+            // Auto-Call Intent
+            val callIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                if (contactId != null) putExtra("auto_call_contact_id", contactId)
+            }
+            val callPi = PendingIntent.getActivity(
+                context, (contactId?.hashCode() ?: 0) + 1, callIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
             val n = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setSmallIcon(R.drawable.ic_hot_lead_push)
+                .setColor(0xFFEF4444.toInt()) // Red color
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setContentIntent(pi)
+                .addAction(
+                    android.R.drawable.ic_menu_call,
+                    "📞 Call Now",
+                    callPi
+                )
                 .build()
             context.getSystemService(NotificationManager::class.java)
                 .notify((contactId ?: title).hashCode(), n)

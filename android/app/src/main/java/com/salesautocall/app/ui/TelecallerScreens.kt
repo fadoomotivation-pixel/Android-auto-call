@@ -679,6 +679,17 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var selected by remember { mutableStateOf("all") }
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
+
+    LaunchedEffect(app.requestedContactId, app.leads) {
+        val reqId = app.requestedContactId
+        if (reqId != null && app.leads.isNotEmpty()) {
+            val contact = app.leads.find { it.id == reqId }
+            if (contact != null) {
+                actionFor = contact
+                vm.consumeOpenContact()
+            }
+        }
+    }
     var contentFor by remember { mutableStateOf<Contact?>(null) }
     var projectsFor by remember { mutableStateOf<Contact?>(null) }
     var selectMode by remember { mutableStateOf(false) }

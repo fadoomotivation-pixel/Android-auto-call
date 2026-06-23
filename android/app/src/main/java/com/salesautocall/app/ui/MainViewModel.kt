@@ -125,6 +125,9 @@ data class AppState(
     val leaderboardLoading: Boolean = false,
     val message: String? = null,
     val error: String? = null,
+    // Deep linking from push notifications
+    val requestedContactId: String? = null,
+    val autoCallContactId: String? = null,
 )
 
 enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
@@ -1059,6 +1062,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Ask the Leads tab to open directly in multi-select ("start campaign") mode. */
     fun requestLeadSelect() = set { it.copy(leadsSelectRequested = true) }
     fun consumeLeadSelect() = set { it.copy(leadsSelectRequested = false) }
+
+    fun requestOpenContact(id: String) = set { it.copy(requestedContactId = id) }
+    fun consumeOpenContact() = set { it.copy(requestedContactId = null) }
+
+    fun requestAutoCall(id: String) {
+        val contact = _state.value.leads.find { it.id == id }
+        if (contact != null) {
+            if (_state.value.cloudEnabled || !_state.value.profile?.sipAgentId.isNullOrBlank()) {
+                cloudCall(contact.phone, id, contact.campaignId)
+            } else {
+                dialManual(contact.phone)
+            }
+        }
+        set { it.copy(autoCallContactId = id, requestedContactId = id) } // Also open it
+    }
+    fun consumeAutoCall() = set { it.copy(autoCallContactId = null) }
 
     fun loadLeads(force: Boolean = false) {
         if (!shouldLoad("leads", force)) return
