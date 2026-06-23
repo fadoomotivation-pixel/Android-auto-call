@@ -75,18 +75,25 @@ class IncomingCallActivity : ComponentActivity() {
                 var inCall by remember { mutableStateOf(startInCall) }
                 var muted by remember { mutableStateOf(false) }
                 var speaker by remember { mutableStateOf(false) }
+                var connectedAt by remember { mutableStateOf(0L) }
 
                 LaunchedEffect(state) {
+                    if (state == "connected" && connectedAt == 0L) connectedAt = System.currentTimeMillis()
                     if (state == "ended" || state == "idle") finish()
                 }
 
                 Box(Modifier.fillMaxSize().background(callBackground()), contentAlignment = Alignment.Center) {
                     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Spacer(Modifier.height(96.dp))
-                        Text(if (inCall) "Cloud call · connected" else "Incoming cloud call",
+                        Spacer(Modifier.height(64.dp))
+                        Text(if (inCall) "Cloud call" else "Incoming cloud call",
                             color = Color.White.copy(alpha = 0.8f), fontSize = 16.sp)
-                        Spacer(Modifier.height(12.dp))
-                        Text(number, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(20.dp))
+                        CallAvatar(number)
+                        Spacer(Modifier.height(18.dp))
+                        Text(number, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        if (inCall) CallStatusLine(connectedAt, "Connected")
+                        else Text("Ringing…", color = Color.White.copy(alpha = 0.85f), fontSize = 16.sp)
                         Spacer(Modifier.weight(1f))
 
                         if (inCall) {

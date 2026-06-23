@@ -57,6 +57,8 @@ data class AppState(
     val cloudCallCampaignId: String? = null,
     val cloudCallStatus: String = "",
     val cloudBridged: Boolean = false,
+    // Wall-clock ms when the cloud call connected (>0 → drives the live call timer).
+    val callConnectedAt: Long = 0L,
     val cloudCallExt: String = "",
     val cloudCallPass: String = "",
     val cloudCallLogId: String? = null,
@@ -495,7 +497,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         set { it.copy(cloudCallStatus = pretty) }
 
-        if (raw == "connected") cloudConnectedAt = System.currentTimeMillis()
+        if (raw == "connected") {
+            cloudConnectedAt = System.currentTimeMillis()
+            set { it.copy(callConnectedAt = cloudConnectedAt) }
+        }
         if (raw == "ended" || raw.startsWith("callfailed")) {
             val failed = raw.startsWith("callfailed")
             finalizeCloudResult(failed = failed)
@@ -642,7 +647,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         set {
             it.copy(
                 cloudCallNumber = null, cloudCallStatus = "", cloudBridged = false,
-                cloudCallLogId = null, inCallNote = "",
+                callConnectedAt = 0L, cloudCallLogId = null, inCallNote = "",
             )
         }
         // Refresh the Calls list so the just-finished call shows up. The recording
