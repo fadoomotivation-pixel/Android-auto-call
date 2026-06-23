@@ -1220,8 +1220,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Applies any subset of lead edits (stage/temperature/budget/note) at once. */
-    fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null) {
+    fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null, tokenAmount: String? = null) {
         viewModelScope.launch {
+            // Only record the token amount when the lead is actually at the Token Paid
+            // stage — that's the money milestone we stamp with a paid-at timestamp.
+            val token = tokenAmount?.toDoubleOrNull()?.takeIf { it > 0 && (status ?: "") == "token_paid" }
             val patch = buildMap<String, String> {
                 if (status != null) put("status", status)
                 if (temperature != null) put("temperature", temperature)
@@ -1229,6 +1232,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (note != null) put("notes", note)
                 if (svProj != null) put("site_visit_project", svProj)
                 if (svAt != null) put("site_visit_at", svAt)
+                if (token != null) {
+                    put("token_amount", token.toString())
+                    put("token_paid_at", java.time.Instant.now().toString())
+                }
             }
             runCatching { Repository.updateContact(contactId, patch) }
                 .onSuccess {
@@ -1241,6 +1248,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 notes = note ?: c.notes,
                                 siteVisitProject = svProj ?: c.siteVisitProject,
                                 siteVisitAt = svAt ?: c.siteVisitAt,
+                                tokenAmount = token ?: c.tokenAmount,
                             ) else c
                         })
                     }

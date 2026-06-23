@@ -87,6 +87,9 @@ data class Contact(
     val territory: String? = null,
     @SerialName("site_visit_at") val siteVisitAt: String? = null,
     @SerialName("site_visit_project") val siteVisitProject: String? = null,
+    /** Booking/token amount collected when the lead reaches the "Token Paid" stage. */
+    @SerialName("token_amount") val tokenAmount: Double? = null,
+    @SerialName("token_paid_at") val tokenPaidAt: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
 )
 
