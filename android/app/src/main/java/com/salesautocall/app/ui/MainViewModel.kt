@@ -227,6 +227,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onFailure { set { it.copy(signedIn = true) } }
             runCatching { Repository.myCompany() }
                 .onSuccess { c -> set { it.copy(company = c) } }
+            registerPushToken()
+        }
+    }
+
+    /** Registers this device's FCM token so the backend can push hot-lead alerts.
+     *  Also re-sends any token captured before the rep signed in. */
+    fun registerPushToken() {
+        val ctx = getApplication<Application>()
+        val saved = AppPrefs.getPushToken(ctx)
+        if (saved.isNotBlank()) viewModelScope.launch { runCatching { Repository.registerDeviceToken(saved) } }
+        runCatching {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    if (!token.isNullOrBlank()) {
+                        AppPrefs.setPushToken(ctx, token)
+                        viewModelScope.launch { runCatching { Repository.registerDeviceToken(token) } }
+                    }
+                }
         }
     }
 

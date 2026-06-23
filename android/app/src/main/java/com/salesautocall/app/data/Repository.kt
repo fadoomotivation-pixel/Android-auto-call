@@ -635,6 +635,24 @@ object Repository {
         client.from("contacts").update(patch) { filter { eq("id", contactId) } }
     }
 
+    // ---------- push notifications ----------
+
+    /** Registers (or refreshes) this device's FCM token so notify-rep can target it. */
+    suspend fun registerDeviceToken(token: String) {
+        if (token.isBlank()) return
+        val uid = currentUserId() ?: return
+        val companyId = runCatching { myProfile()?.companyId }.getOrNull()
+        runCatching {
+            client.from("device_tokens").upsert(buildJsonObject {
+                put("token", token)
+                put("user_id", uid)
+                if (companyId != null) put("company_id", companyId)
+                put("platform", "android")
+                put("updated_at", java.time.Instant.now().toString())
+            }) { onConflict = "token" }
+        }
+    }
+
     // ---------- site-visit geofencing ----------
 
     /** All of the company's pinned project sites (RLS scopes to the company). */
