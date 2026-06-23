@@ -448,6 +448,39 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                     }
                 }
 
+                // Nested under CallerDesk: auto-answer the agent-leg ring so it's
+                // truly one-tap. Only relevant when CallerDesk calling is on.
+                if (app.callerdeskCalling) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (app.autoAnswer) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 12.dp)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (app.autoAnswer) "⚡ Auto-answer — one tap" else "✋ Manual answer",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    if (app.autoAnswer)
+                                        "Tap Call once and your phone picks up on its own — hands-free."
+                                    else
+                                        "Your phone rings and you tap answer. Use this if you share the SIM for personal calls.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(checked = app.autoAnswer, onCheckedChange = { vm.setAutoAnswer(it) })
+                        }
+                    }
+                }
+
                 OutlinedTextField(
                     app.cloudAgentId, { vm.setCloudAgentId(it) },
                     label = { Text("Your extension number (from your admin)") },

@@ -51,6 +51,9 @@ data class AppState(
     // CallerDesk one-tap calling: backend rings this agent's phone + bridges the
     // customer (no SIP / no VPN). When on, cloud calls use this instead of SIP.
     val callerdeskCalling: Boolean = false,
+    // Auto-pick-up the CallerDesk agent-leg callback so it's truly one-tap.
+    // Off → the rep answers the ring by hand (timer/auto-dismiss still work).
+    val autoAnswer: Boolean = true,
     // active in-app softphone call
     val cloudCallNumber: String? = null,
     val cloudCallContactId: String? = null,
@@ -156,6 +159,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             cloudSipServer = AppPrefs.getSipServer(app),
             cloudSipPort = AppPrefs.getSipPort(app),
             callerdeskCalling = AppPrefs.getCallerdeskCalling(app),
+            autoAnswer = AppPrefs.getAutoAnswer(app),
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -353,6 +357,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         set { it.copy(callerdeskCalling = v) }
     }
 
+    fun setAutoAnswer(v: Boolean) {
+        AppPrefs.setAutoAnswer(getApplication(), v)
+        set { it.copy(autoAnswer = v) }
+    }
+
     private fun agentId(): String = _state.value.profile?.sipAgentId?.ifBlank { null } ?: _state.value.cloudAgentId
     private fun callerId(): String = _state.value.profile?.callerId?.ifBlank { null } ?: _state.value.cloudCallerId
 
@@ -451,7 +460,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             com.salesautocall.app.dialer.CallerdeskAutoAnswer.onEnded = {
                 finishCloudCall(reload = true) // call ended on the phone → dismiss the card
             }
-            com.salesautocall.app.dialer.CallerdeskAutoAnswer.arm(getApplication())
+            com.salesautocall.app.dialer.CallerdeskAutoAnswer.arm(getApplication(), _state.value.autoAnswer)
         }
         set {
             it.copy(
@@ -460,10 +469,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 cloudCallContactId = contactId,
                 cloudCallCampaignId = campaignId,
                 cloudBridged = true, // no SIP login phase — skip the watchdog/“logging in” UI
-                cloudCallStatus = "Starting call… connecting you automatically.",
+                cloudCallStatus = if (_state.value.autoAnswer) "Starting call… connecting you automatically."
+                                  else "Starting call… your phone will ring in a moment.",
                 inCallNote = "",
             )
         }
+        val auto = _state.value.autoAnswer
         viewModelScope.launch {
             val body = runCatching { Repository.callerdeskCall(number, contactId, campaignId) }.getOrNull()
             if (body == null) {
@@ -471,7 +482,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             if (body.contains("\"ok\":true")) {
-                set { it.copy(cloudCallStatus = "📞 Connecting you to $number…\nYour phone answers automatically. The call is recorded.") }
+                set { it.copy(cloudCallStatus =
+                    if (auto) "📞 Connecting you to $number…\nYour phone answers automatically. The call is recorded."
+                    else "📞 Connecting you to $number…\nYour phone will ring — tap answer. The call is recorded.") }
             } else {
                 // Surface CallerDesk's own message (e.g. "Agent on break/Inactive").
                 val msg = Regex("\"(?:error|message)\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.getOrNull(1)
