@@ -481,48 +481,8 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                     }
                 }
 
-                OutlinedTextField(
-                    app.cloudAgentId, { vm.setCloudAgentId(it) },
-                    label = { Text("Your extension number (from your admin)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
-                )
-
-                // Advanced SIP settings — hidden by default
-                var showAdvanced by remember { mutableStateOf(false) }
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                    Text(if (showAdvanced) "▲ Hide advanced settings" else "▼ Advanced settings")
-                }
-                if (showAdvanced) {
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        app.cloudCallerId, { vm.setCloudCallerId(it) },
-                        label = { Text("Caller ID / DID (optional)") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        app.cloudSipPassword, { vm.setCloudSipPassword(it) },
-                        label = { Text("SIP password") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            app.cloudSipServer, { vm.setCloudSipServer(it) },
-                            label = { Text("SIP server") },
-                            singleLine = true, modifier = Modifier.weight(2f),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        OutlinedTextField(
-                            app.cloudSipPort, { vm.setCloudSipPort(it) },
-                            label = { Text("Port") },
-                            singleLine = true, modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Text("Leave SIP server blank to use the default. Only change if your admin gives you different settings.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                // CallerDesk handles dialling end-to-end (your phone rings, then the
+                // customer) — no SIP extension / caller-ID / server to configure.
             }
         }
     }

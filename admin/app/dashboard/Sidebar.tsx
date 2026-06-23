@@ -32,8 +32,6 @@ export function Sidebar({
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
         {profile?.role === "admin" && <NavLink href="/dashboard/attendance" label="📅 Attendance" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
-        {profile?.role === "admin" && <NavLink href="/dashboard/cloud-calling" label="☁️ Cloud calling" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/pbx" label="☎️ Cloud calling (PBX)" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/whatsapp" label="💬 WhatsApp" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/facebook" label="📱 Facebook Leads" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/capture" label="🪝 Lead Capture" />}
@@ -52,7 +50,6 @@ export function Sidebar({
             <NavLink href="/dashboard/platform" label="🏢 Companies" />
             <NavLink href="/dashboard/platform/telecallers" label="🎧 Telecallers" />
             <NavLink href="/dashboard/platform/contacts" label="📇 Contacts" />
-            <NavLink href="/dashboard/platform/integrations" label="☎️ Integrations" />
             <NavLink href="/dashboard/platform/storage" label="💾 Recording storage" />
           </>
         )}
