@@ -48,6 +48,9 @@ data class AppState(
     val cloudSipPassword: String = "",
     val cloudSipServer: String = "",
     val cloudSipPort: String = "",
+    // CallerDesk one-tap calling: backend rings this agent's phone + bridges the
+    // customer (no SIP / no VPN). When on, cloud calls use this instead of SIP.
+    val callerdeskCalling: Boolean = false,
     // active in-app softphone call
     val cloudCallNumber: String? = null,
     val cloudCallContactId: String? = null,
@@ -150,6 +153,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             cloudSipPassword = AppPrefs.getSipPassword(app),
             cloudSipServer = AppPrefs.getSipServer(app),
             cloudSipPort = AppPrefs.getSipPort(app),
+            callerdeskCalling = AppPrefs.getCallerdeskCalling(app),
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -342,6 +346,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         set { it.copy(cloudSipPort = v.trim()) }
     }
 
+    fun setCallerdeskCalling(v: Boolean) {
+        AppPrefs.setCallerdeskCalling(getApplication(), v)
+        set { it.copy(callerdeskCalling = v) }
+    }
+
     private fun agentId(): String = _state.value.profile?.sipAgentId?.ifBlank { null } ?: _state.value.cloudAgentId
     private fun callerId(): String = _state.value.profile?.callerId?.ifBlank { null } ?: _state.value.cloudCallerId
 
@@ -350,6 +359,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun cloudCall(phone: String, contactId: String?, campaignId: String?) {
         // Strip spaces/dashes so the SIP/URI and the API get clean digits.
         val clean = phone.filter { it.isDigit() || it == '+' }
+        // CallerDesk mode: no SIP/VPN — the backend rings this agent's phone and
+        // bridges the customer. Hand off and stop here.
+        if (_state.value.callerdeskCalling) { startCallerdeskCall(clean, contactId, campaignId); return }
         cloudResultLogged = false
         cloudCallToken++
         // Tell the SIP engine the next inbound INVITE is our own agent leg to
@@ -416,6 +428,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }.onFailure { e ->
                 set { it.copy(cloudCallStatus = "Couldn't start SIP: ${e.message}") }
+            }
+        }
+    }
+
+    /** CallerDesk one-tap cloud call. Asks the backend to ring this agent's own
+     *  phone and bridge the customer — no SIP, no VPN. The conversation happens on
+     *  the native dialer; the result + recording arrive later via the webhook. The
+     *  [SoftphoneScreen] shows a simple "answer your phone" card while this is on. */
+    private fun startCallerdeskCall(number: String, contactId: String?, campaignId: String?) {
+        cloudCallToken++
+        set {
+            it.copy(
+                error = null, message = null,
+                cloudCallNumber = number,
+                cloudCallContactId = contactId,
+                cloudCallCampaignId = campaignId,
+                cloudBridged = true, // no SIP login phase — skip the watchdog/“logging in” UI
+                cloudCallStatus = "Starting call… your phone will ring in a moment.",
+                inCallNote = "",
+            )
+        }
+        viewModelScope.launch {
+            val body = runCatching { Repository.callerdeskCall(number, contactId, campaignId) }.getOrNull()
+            if (body == null) {
+                set { it.copy(cloudCallStatus = "Couldn't reach the calling service. Check your connection and try again.") }
+                return@launch
+            }
+            if (body.contains("\"ok\":true")) {
+                set { it.copy(cloudCallStatus = "📞 Your phone is ringing — answer it to talk to $number.\nThe call is recorded automatically.") }
+            } else {
+                // Surface CallerDesk's own message (e.g. "Agent on break/Inactive").
+                val msg = Regex("\"(?:error|message)\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.getOrNull(1)
+                set { it.copy(cloudCallStatus = msg ?: "Couldn't start the call. Please try again.") }
             }
         }
     }

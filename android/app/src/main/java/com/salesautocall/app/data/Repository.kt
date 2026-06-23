@@ -588,6 +588,21 @@ object Repository {
         return resp.bodyAsText()
     }
 
+    /** Triggers a CallerDesk click-to-call: the backend asks CallerDesk to ring this
+     *  agent's own phone (from their profile) and bridge the customer, recording the
+     *  call server-side. No SIP / no VPN. Returns the raw JSON response. */
+    suspend fun callerdeskCall(customerPhone: String, contactId: String?, campaignId: String?): String {
+        val resp = client.functions.invoke(
+            function = "callerdesk-call",
+            body = buildJsonObject {
+                put("customer_phone", customerPhone)
+                if (contactId != null) put("contact_id", contactId)
+                if (campaignId != null) put("campaign_id", campaignId)
+            },
+        )
+        return resp.bodyAsText()
+    }
+
     suspend fun joinCompanyByCode(code: String) {
         client.postgrest.rpc(
             "join_company_by_code",
