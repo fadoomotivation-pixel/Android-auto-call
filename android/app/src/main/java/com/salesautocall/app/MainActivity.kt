@@ -61,12 +61,12 @@ class MainActivity : ComponentActivity() {
         val openId = intent?.getStringExtra("open_contact_id")
         if (openId != null) {
             vm.requestOpenContact(openId)
-            intent.removeExtra("open_contact_id")
+            intent?.removeExtra("open_contact_id")
         }
         val autoCallId = intent?.getStringExtra("auto_call_contact_id")
         if (autoCallId != null) {
             vm.requestAutoCall(autoCallId)
-            intent.removeExtra("auto_call_contact_id")
+            intent?.removeExtra("auto_call_contact_id")
         }
     }
 
