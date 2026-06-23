@@ -1,6 +1,8 @@
 // Streams a recording back to an authorised listener (RLS on call_logs:
-// telecaller = own, admin = company, super = all). Reads from the company's
-// Drive if it has one, else the platform (super-admin) Drive.
+// telecaller = own, admin = company, super = all). For cloud-telephony calls
+// (CallerDesk) the audio lives at an external recording_url, so we proxy those
+// bytes directly; otherwise we read from the company's Drive if it has one,
+// else the platform (super-admin) Drive.
 // Body: { call_log_id }  → audio bytes
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -47,9 +49,26 @@ Deno.serve(async (req) => {
   const { call_log_id } = await req.json().catch(() => ({}));
   if (!call_log_id) return err({ ok: false, error: "missing call_log_id" });
 
-  const { data: row } = await u.from("call_logs").select("company_id, recording_path, recording_status, recording_source").eq("id", call_log_id).maybeSingle();
-  if (!row || row.recording_status !== "ready" || !row.recording_path) return err({ ok: false, error: "not available" }, 404);
+  const { data: row } = await u.from("call_logs").select("company_id, recording_path, recording_url, recording_status, recording_source").eq("id", call_log_id).maybeSingle();
+  if (!row || row.recording_status !== "ready" || (!row.recording_path && !row.recording_url)) {
+    return err({ ok: false, error: "not available" }, 404);
+  }
   const contentType = row.recording_source === "sim" ? "audio/mp4" : "audio/wav";
+
+  // Cloud telephony (CallerDesk): no Drive file, just an external recording URL.
+  // Proxy its bytes so the client stays RLS-gated and never sees the raw URL.
+  if (!row.recording_path && row.recording_url) {
+    try {
+      const ext = await fetch(row.recording_url as string);
+      if (!ext.ok || !ext.body) return err({ ok: false, error: "recording fetch failed" }, 502);
+      return new Response(ext.body, {
+        status: 200,
+        headers: { ...cors, "Content-Type": ext.headers.get("Content-Type") ?? contentType, "Cache-Control": "private, max-age=300" },
+      });
+    } catch (e) {
+      return err({ ok: false, error: String(e) }, 502);
+    }
+  }
 
   const admin = createClient(SUPABASE_URL, SERVICE);
   const { data: ci } = await admin.from("storage_integrations").select("refresh_token").eq("company_id", row.company_id).maybeSingle();
