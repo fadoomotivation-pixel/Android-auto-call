@@ -15,6 +15,7 @@ class SalesAutoCallApp : Application() {
         installCrashHandler()
         createDialerChannel()
         createFollowUpChannel()
+        com.salesautocall.app.fcm.SalesFirebaseMessagingService.ensureChannel(this)
     }
 
     /** Saves the stack trace of any uncaught crash so it can be shown on next launch. */
