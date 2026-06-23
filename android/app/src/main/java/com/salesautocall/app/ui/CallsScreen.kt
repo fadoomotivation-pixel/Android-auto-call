@@ -222,8 +222,10 @@ private fun CallRow(
 private fun dispositionLabel(status: String): String = when (status) {
     "interested" -> "Interested"
     "site_visit" -> "Site Visit"
-    "proposal" -> "Proposal"
-    "booked" -> "Closed / Won"
+    "negotiation" -> "Negotiation"
+    "proposal" -> "Negotiation"
+    "token_paid" -> "Token Paid"
+    "booked" -> "Booked / Won"
     "callback" -> "Callback"
     "not_interested" -> "Not interested"
     "dnc" -> "Do Not Call"

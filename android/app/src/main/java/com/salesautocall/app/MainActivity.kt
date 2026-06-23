@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Surface
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.activity.viewModels
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.salesautocall.app.ui.AppRoot
 import com.salesautocall.app.ui.AppTheme
@@ -26,6 +27,8 @@ import com.salesautocall.app.data.CallLogSyncWorker
 
 class MainActivity : ComponentActivity() {
 
+    private val vm: MainViewModel by viewModels()
+
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { /* no-op */ }
 
@@ -41,10 +44,29 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppTheme {
                 Surface {
-                    val vm: MainViewModel = viewModel()
                     AppRoot(vm)
                 }
             }
+        }
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val openId = intent?.getStringExtra("open_contact_id")
+        if (openId != null) {
+            vm.requestOpenContact(openId)
+            intent?.removeExtra("open_contact_id")
+        }
+        val autoCallId = intent?.getStringExtra("auto_call_contact_id")
+        if (autoCallId != null) {
+            vm.requestAutoCall(autoCallId)
+            intent?.removeExtra("auto_call_contact_id")
         }
     }
 

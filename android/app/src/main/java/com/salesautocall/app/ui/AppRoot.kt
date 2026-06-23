@@ -302,6 +302,16 @@ private fun MainShell(vm: MainViewModel) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
+    LaunchedEffect(state.requestedContactId) {
+        if (state.requestedContactId != null) {
+            nav.navigate("leads") {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {

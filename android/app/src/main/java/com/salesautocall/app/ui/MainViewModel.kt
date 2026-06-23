@@ -18,6 +18,7 @@ import com.salesautocall.app.data.LeadProjectInterest
 import com.salesautocall.app.data.LeaderboardRow
 import com.salesautocall.app.data.ParseResult
 import com.salesautocall.app.data.Profile
+import com.salesautocall.app.data.ProjectSite
 import com.salesautocall.app.data.Repository
 import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.notify.FollowUpReminder
@@ -51,6 +52,9 @@ data class AppState(
     // CallerDesk one-tap calling: backend rings this agent's phone + bridges the
     // customer (no SIP / no VPN). When on, cloud calls use this instead of SIP.
     val callerdeskCalling: Boolean = false,
+    // Auto-pick-up the CallerDesk agent-leg callback so it's truly one-tap.
+    // Off → the rep answers the ring by hand (timer/auto-dismiss still work).
+    val autoAnswer: Boolean = true,
     // active in-app softphone call
     val cloudCallNumber: String? = null,
     val cloudCallContactId: String? = null,
@@ -85,6 +89,8 @@ data class AppState(
     val inCallNote: String = "",
     // lead pipeline (all my contacts across campaigns)
     val leads: List<Contact> = emptyList(),
+    /** Company project pins, for geo-fencing site-visit arrivals. */
+    val projectSites: List<ProjectSite> = emptyList(),
     val leadsLoading: Boolean = false,
     /** True while the AI lead-scoring call is running. */
     val aiScoringLeads: Boolean = false,
@@ -119,6 +125,9 @@ data class AppState(
     val leaderboardLoading: Boolean = false,
     val message: String? = null,
     val error: String? = null,
+    // Deep linking from push notifications
+    val requestedContactId: String? = null,
+    val autoCallContactId: String? = null,
 )
 
 enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
@@ -156,6 +165,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             cloudSipServer = AppPrefs.getSipServer(app),
             cloudSipPort = AppPrefs.getSipPort(app),
             callerdeskCalling = AppPrefs.getCallerdeskCalling(app),
+            autoAnswer = AppPrefs.getAutoAnswer(app),
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -220,6 +230,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onFailure { set { it.copy(signedIn = true) } }
             runCatching { Repository.myCompany() }
                 .onSuccess { c -> set { it.copy(company = c) } }
+            registerPushToken()
+        }
+    }
+
+    /** Registers this device's FCM token so the backend can push hot-lead alerts.
+     *  Also re-sends any token captured before the rep signed in. */
+    fun registerPushToken() {
+        val ctx = getApplication<Application>()
+        val saved = AppPrefs.getPushToken(ctx)
+        if (saved.isNotBlank()) viewModelScope.launch { runCatching { Repository.registerDeviceToken(saved) } }
+        runCatching {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    if (!token.isNullOrBlank()) {
+                        AppPrefs.setPushToken(ctx, token)
+                        viewModelScope.launch { runCatching { Repository.registerDeviceToken(token) } }
+                    }
+                }
         }
     }
 
@@ -353,6 +381,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         set { it.copy(callerdeskCalling = v) }
     }
 
+    fun setAutoAnswer(v: Boolean) {
+        AppPrefs.setAutoAnswer(getApplication(), v)
+        set { it.copy(autoAnswer = v) }
+    }
+
     private fun agentId(): String = _state.value.profile?.sipAgentId?.ifBlank { null } ?: _state.value.cloudAgentId
     private fun callerId(): String = _state.value.profile?.callerId?.ifBlank { null } ?: _state.value.cloudCallerId
 
@@ -451,7 +484,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             com.salesautocall.app.dialer.CallerdeskAutoAnswer.onEnded = {
                 finishCloudCall(reload = true) // call ended on the phone → dismiss the card
             }
-            com.salesautocall.app.dialer.CallerdeskAutoAnswer.arm(getApplication())
+            com.salesautocall.app.dialer.CallerdeskAutoAnswer.arm(getApplication(), _state.value.autoAnswer)
         }
         set {
             it.copy(
@@ -460,10 +493,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 cloudCallContactId = contactId,
                 cloudCallCampaignId = campaignId,
                 cloudBridged = true, // no SIP login phase — skip the watchdog/“logging in” UI
-                cloudCallStatus = "Starting call… connecting you automatically.",
+                cloudCallStatus = if (_state.value.autoAnswer) "Starting call… connecting you automatically."
+                                  else "Starting call… your phone will ring in a moment.",
                 inCallNote = "",
             )
         }
+        val auto = _state.value.autoAnswer
         viewModelScope.launch {
             val body = runCatching { Repository.callerdeskCall(number, contactId, campaignId) }.getOrNull()
             if (body == null) {
@@ -471,7 +506,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             if (body.contains("\"ok\":true")) {
-                set { it.copy(cloudCallStatus = "📞 Connecting you to $number…\nYour phone answers automatically. The call is recorded.") }
+                set { it.copy(cloudCallStatus =
+                    if (auto) "📞 Connecting you to $number…\nYour phone answers automatically. The call is recorded."
+                    else "📞 Connecting you to $number…\nYour phone will ring — tap answer. The call is recorded.") }
             } else {
                 // Surface CallerDesk's own message (e.g. "Agent on break/Inactive").
                 val msg = Regex("\"(?:error|message)\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.getOrNull(1)
@@ -1026,6 +1063,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun requestLeadSelect() = set { it.copy(leadsSelectRequested = true) }
     fun consumeLeadSelect() = set { it.copy(leadsSelectRequested = false) }
 
+    fun requestOpenContact(id: String) = set { it.copy(requestedContactId = id) }
+    fun consumeOpenContact() = set { it.copy(requestedContactId = null) }
+
+    fun requestAutoCall(id: String) {
+        val contact = _state.value.leads.find { it.id == id }
+        if (contact != null) {
+            if (_state.value.cloudEnabled || !_state.value.profile?.sipAgentId.isNullOrBlank()) {
+                cloudCall(contact.phone, id, contact.campaignId)
+            } else {
+                dialManual(contact.phone)
+            }
+        }
+        set { it.copy(autoCallContactId = id, requestedContactId = id) } // Also open it
+    }
+    fun consumeAutoCall() = set { it.copy(autoCallContactId = null) }
+
     fun loadLeads(force: Boolean = false) {
         if (!shouldLoad("leads", force)) return
         viewModelScope.launch {
@@ -1033,7 +1086,91 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { Repository.fetchLeads() }
                 .onSuccess { list -> set { it.copy(leads = list, leadsLoading = false) } }
                 .onFailure { e -> set { it.copy(leadsLoading = false, error = e.message) } }
+            runCatching { Repository.fetchProjectSites() }
+                .onSuccess { sites -> set { it.copy(projectSites = sites) } }
         }
+    }
+
+    // ---------- site-visit geofencing ----------
+
+    /**
+     * "Arrived at Site": reads the rep's GPS and compares it to the project's
+     * pinned location. Within the radius → a verified on-site check-in. If the
+     * project isn't pinned yet, the first arrival drops the pin here (you're on
+     * site to do it) and counts as verified; later visits then verify against it.
+     */
+    fun arriveAtSite(contact: Contact) {
+        val contactId = contact.id ?: return
+        val project = contact.siteVisitProject?.trim().orEmpty()
+        viewModelScope.launch {
+            val loc = currentLocation()
+            if (loc == null) {
+                set { it.copy(message = "📍 Turn on location and try again — couldn't read your GPS.") }
+                return@launch
+            }
+            val companyId = _state.value.profile?.companyId
+            var pin = _state.value.projectSites.firstOrNull { it.name.equals(project, ignoreCase = true) }
+            // No pin yet for this project → set it from where the rep is standing.
+            if (pin == null && project.isNotBlank() && companyId != null) {
+                val created = Repository.upsertProjectSite(companyId, project, loc.latitude, loc.longitude)
+                if (created != null) {
+                    pin = created
+                    set { it.copy(projectSites = it.projectSites + created) }
+                }
+            }
+            val site = pin
+            if (site == null) {
+                // Still no site (no project name on the lead) → record an unverified arrival.
+                Repository.markSiteArrival(contactId, loc.latitude, loc.longitude, 0, false)
+                applyArrival(contactId, verified = false, distance = 0)
+                set { it.copy(message = "✓ Arrival logged. Tip: set a Site Visit Project to geo-verify next time.") }
+                return@launch
+            }
+            val out = FloatArray(1)
+            android.location.Location.distanceBetween(loc.latitude, loc.longitude, site.lat, site.lng, out)
+            val distance = out[0].toInt()
+            val verified = distance <= site.radiusM
+            Repository.markSiteArrival(contactId, loc.latitude, loc.longitude, distance, verified)
+            applyArrival(contactId, verified, distance)
+            set {
+                it.copy(message = if (verified)
+                    "✅ Verified on site at ${site.name} ($distance m from the pin)."
+                else
+                    "⚠️ You're ${formatMeters(distance)} from ${site.name} — not at the site.")
+            }
+        }
+    }
+
+    private fun applyArrival(contactId: String, verified: Boolean, distance: Int) {
+        val nowIso = java.time.Instant.now().toString()
+        set { st ->
+            st.copy(leads = st.leads.map { c ->
+                if (c.id == contactId) c.copy(
+                    siteVisitArrivedAt = nowIso, siteVisitVerified = verified, siteVisitDistanceM = distance,
+                ) else c
+            })
+        }
+    }
+
+    private fun formatMeters(m: Int): String = if (m >= 1000) "%.1f km".format(m / 1000.0) else "$m m"
+
+    /** Best last-known location across providers (mirrors the attendance punch-in read). */
+    private fun currentLocation(): android.location.Location? {
+        val ctx = getApplication<Application>()
+        val fine = android.content.pm.PackageManager.PERMISSION_GRANTED ==
+            androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = android.content.pm.PackageManager.PERMISSION_GRANTED ==
+            androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (!fine && !coarse) return null
+        return runCatching {
+            val lm = ctx.getSystemService(android.content.Context.LOCATION_SERVICE) as android.location.LocationManager
+            var best: android.location.Location? = null
+            for (p in lm.getProviders(true)) {
+                val l = runCatching { lm.getLastKnownLocation(p) }.getOrNull() ?: continue
+                if (best == null || l.accuracy < best!!.accuracy) best = l
+            }
+            best
+        }.getOrNull()
     }
 
     /**
@@ -1207,8 +1344,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Applies any subset of lead edits (stage/temperature/budget/note) at once. */
-    fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null) {
+    fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null, tokenAmount: String? = null) {
         viewModelScope.launch {
+            // Only record the token amount when the lead is actually at the Token Paid
+            // stage — that's the money milestone we stamp with a paid-at timestamp.
+            val token = tokenAmount?.toDoubleOrNull()?.takeIf { it > 0 && (status ?: "") == "token_paid" }
             val patch = buildMap<String, String> {
                 if (status != null) put("status", status)
                 if (temperature != null) put("temperature", temperature)
@@ -1216,6 +1356,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (note != null) put("notes", note)
                 if (svProj != null) put("site_visit_project", svProj)
                 if (svAt != null) put("site_visit_at", svAt)
+                if (token != null) {
+                    put("token_amount", token.toString())
+                    put("token_paid_at", java.time.Instant.now().toString())
+                }
             }
             runCatching { Repository.updateContact(contactId, patch) }
                 .onSuccess {
@@ -1228,6 +1372,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 notes = note ?: c.notes,
                                 siteVisitProject = svProj ?: c.siteVisitProject,
                                 siteVisitAt = svAt ?: c.siteVisitAt,
+                                tokenAmount = token ?: c.tokenAmount,
                             ) else c
                         })
                     }

@@ -635,6 +635,65 @@ object Repository {
         client.from("contacts").update(patch) { filter { eq("id", contactId) } }
     }
 
+    // ---------- push notifications ----------
+
+    /** Registers (or refreshes) this device's FCM token so notify-rep can target it. */
+    suspend fun registerDeviceToken(token: String) {
+        if (token.isBlank()) return
+        val uid = currentUserId() ?: return
+        val companyId = runCatching { myProfile()?.companyId }.getOrNull()
+        runCatching {
+            client.from("device_tokens").upsert(buildJsonObject {
+                put("token", token)
+                put("user_id", uid)
+                if (companyId != null) put("company_id", companyId)
+                put("platform", "android")
+                put("updated_at", java.time.Instant.now().toString())
+            }) { onConflict = "token" }
+        }
+    }
+
+    // ---------- site-visit geofencing ----------
+
+    /** All of the company's pinned project sites (RLS scopes to the company). */
+    suspend fun fetchProjectSites(): List<ProjectSite> =
+        runCatching { client.from("project_sites").select().decodeList<ProjectSite>() }.getOrDefault(emptyList())
+
+    /** Pins (or re-pins) a project's location. Matches case-insensitively on name. */
+    suspend fun upsertProjectSite(companyId: String, name: String, lat: Double, lng: Double, radiusM: Int = 200): ProjectSite? {
+        val existing = runCatching {
+            client.from("project_sites").select {
+                filter { ilike("name", name.trim()) }
+                limit(1)
+            }.decodeList<ProjectSite>().firstOrNull()
+        }.getOrNull()
+        return runCatching {
+            if (existing?.id != null) {
+                client.from("project_sites").update(buildJsonObject {
+                    put("lat", lat); put("lng", lng); put("radius_m", radiusM)
+                    put("updated_at", java.time.Instant.now().toString())
+                }) { filter { eq("id", existing.id) }; select() }.decodeList<ProjectSite>().firstOrNull()
+            } else {
+                client.from("project_sites").insert(buildJsonObject {
+                    put("company_id", companyId); put("name", name.trim())
+                    put("lat", lat); put("lng", lng); put("radius_m", radiusM)
+                    put("created_by", currentUserId())
+                }) { select() }.decodeList<ProjectSite>().firstOrNull()
+            }
+        }.getOrNull()
+    }
+
+    /** Stamps a (verified or not) site-visit arrival on the lead. */
+    suspend fun markSiteArrival(contactId: String, lat: Double, lng: Double, distanceM: Int, verified: Boolean) {
+        client.from("contacts").update(buildJsonObject {
+            put("site_visit_arrived_at", java.time.Instant.now().toString())
+            put("site_visit_arrived_lat", lat)
+            put("site_visit_arrived_lng", lng)
+            put("site_visit_distance_m", distanceM)
+            put("site_visit_verified", verified)
+        }) { filter { eq("id", contactId) } }
+    }
+
     // ---------- follow-ups ----------
 
     /** Schedules a callback for a lead at [dueAtIso]. Returns the stored row (with id). */

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1093057293747",
+    "project_id": "callpro-b5aa1",
+    "storage_bucket": "callpro-b5aa1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1093057293747:android:1e738e521928993e276fc6",
+        "android_client_info": {
+          "package_name": "com.callpro.ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAvJR1eOyyzQEBRjUfL1BG5DgABfhjVJPI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

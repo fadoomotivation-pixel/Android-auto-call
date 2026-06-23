@@ -87,6 +87,26 @@ data class Contact(
     val territory: String? = null,
     @SerialName("site_visit_at") val siteVisitAt: String? = null,
     @SerialName("site_visit_project") val siteVisitProject: String? = null,
+    /** Booking/token amount collected when the lead reaches the "Token Paid" stage. */
+    @SerialName("token_amount") val tokenAmount: Double? = null,
+    @SerialName("token_paid_at") val tokenPaidAt: String? = null,
+    /** Geo-fenced site-visit arrival: when the rep tapped "Arrived", and whether
+     *  their GPS was within the project's radius (true = verified on site). */
+    @SerialName("site_visit_arrived_at") val siteVisitArrivedAt: String? = null,
+    @SerialName("site_visit_distance_m") val siteVisitDistanceM: Int? = null,
+    @SerialName("site_visit_verified") val siteVisitVerified: Boolean? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
+/** A company project's pinned location, used to geo-fence site-visit arrivals. */
+@Serializable
+data class ProjectSite(
+    val id: String? = null,
+    @SerialName("company_id") val companyId: String,
+    val name: String,
+    val lat: Double,
+    val lng: Double,
+    @SerialName("radius_m") val radiusM: Int = 200,
     @SerialName("created_at") val createdAt: String? = null,
 )
 

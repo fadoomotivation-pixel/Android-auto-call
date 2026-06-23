@@ -45,6 +45,15 @@ object AppPrefs {
     fun getCallerdeskCalling(context: Context): Boolean = prefs(context).getBoolean("callerdesk_calling", false)
     fun setCallerdeskCalling(context: Context, v: Boolean) = prefs(context).edit().putBoolean("callerdesk_calling", v).apply()
 
+    // Latest FCM device token (re-registered with the backend after login).
+    fun getPushToken(context: Context): String = prefs(context).getString("push_token", "") ?: ""
+    fun setPushToken(context: Context, v: String) = prefs(context).edit().putString("push_token", v).apply()
+
+    // Auto-answer the CallerDesk agent-leg callback so the rep taps once, not twice.
+    // On by default; reps who share their phone can switch it off and pick up by hand.
+    fun getAutoAnswer(context: Context): Boolean = prefs(context).getBoolean("callerdesk_autoanswer", true)
+    fun setAutoAnswer(context: Context, v: Boolean) = prefs(context).edit().putBoolean("callerdesk_autoanswer", v).apply()
+
     fun getDailyGoal(context: Context): Int =
         prefs(context).getInt(KEY_GOAL, 50)
 

@@ -23,6 +23,11 @@ import androidx.core.app.ActivityCompat
  * automatically (`TelecomManager.acceptRingingCall`, needs ANSWER_PHONE_CALLS).
  * The rep taps Call once and is connected, hands-free.
  *
+ * Auto-answer is a per-rep preference (`autoAnswer`): when it's off we still
+ * track the call so the in-app card shows a live timer and auto-dismisses on
+ * hang-up, but the rep taps the green button themselves. This avoids the app
+ * picking up a personal incoming call that lands inside the ~35s window.
+ *
  * Lightweight on purpose — no foreground service (Android 14 restricts the
  * `phoneCall` FGS type before a call exists). The app is in the foreground on the
  * call screen during the window, so the process stays alive. Degrades gracefully:
@@ -37,23 +42,30 @@ object CallerdeskAutoAnswer {
     private var callback: TelephonyCallback? = null
     private var legacy: PhoneStateListener? = null
     private var armedUntil = 0L
-    private var answered = false
+    private var autoAnswer = true
+    private var accepted = false
     private var wasOffhook = false
 
-    /** Fired (on the main thread) when the auto-answered call connects (off-hook). */
+    /** Fired (on the main thread) when the call connects (off-hook) — auto- or hand-answered. */
     @Volatile var onConnected: (() -> Unit)? = null
     /** Fired (on the main thread) when that call ends — used to auto-dismiss the in-app card. */
     @Volatile var onEnded: (() -> Unit)? = null
 
+    /**
+     * @param autoAnswer when true (and ANSWER_PHONE_CALLS is granted) the agent
+     *   leg is picked up automatically; when false the rep answers by hand and we
+     *   only drive the timer/auto-dismiss.
+     */
     @Synchronized
-    fun arm(context: Context) {
+    fun arm(context: Context, autoAnswer: Boolean = true) {
         val app = context.applicationContext
         if (ActivityCompat.checkSelfPermission(app, Manifest.permission.READ_PHONE_STATE)
             != PackageManager.PERMISSION_GRANTED
         ) return
 
         armedUntil = System.currentTimeMillis() + WINDOW_MS
-        answered = false
+        this.autoAnswer = autoAnswer
+        accepted = false
         wasOffhook = false
         if (callback != null || legacy != null) return // already listening — just extended the window
 
@@ -75,26 +87,30 @@ object CallerdeskAutoAnswer {
             runCatching { manager.listen(l, PhoneStateListener.LISTEN_CALL_STATE) }
         }
 
-        // Safety: always stop listening a little after the window closes.
-        Handler(Looper.getMainLooper()).postDelayed({ disarm() }, WINDOW_MS + 2_000)
+        // Safety: stop listening a little after the window closes — but only if the
+        // call never connected. Once it's live we keep the listener so the IDLE
+        // (hang-up) still drives the auto-dismiss, however long the call runs.
+        Handler(Looper.getMainLooper()).postDelayed({ if (!wasOffhook) disarm() }, WINDOW_MS + 2_000)
     }
 
     private fun onState(ctx: Context, state: Int) {
         when (state) {
             TelephonyManager.CALL_STATE_RINGING -> {
-                if (!answered && System.currentTimeMillis() < armedUntil) {
-                    answered = true
+                // Only auto-pick-up when enabled; otherwise the rep answers by hand.
+                if (autoAnswer && !accepted && System.currentTimeMillis() < armedUntil) {
+                    accepted = true
                     acceptRingingCall(ctx)
                 }
             }
             TelephonyManager.CALL_STATE_OFFHOOK -> {
-                if (answered && !wasOffhook) {
+                // Connected — whether we auto-answered or the rep tapped it themselves.
+                if (!wasOffhook && System.currentTimeMillis() < armedUntil) {
                     wasOffhook = true
                     runCatching { onConnected?.invoke() }
                 }
             }
             TelephonyManager.CALL_STATE_IDLE -> {
-                if (answered) {
+                if (wasOffhook) {
                     val ended = onEnded
                     disarm() // clears callbacks + flags
                     runCatching { ended?.invoke() }
@@ -127,7 +143,7 @@ object CallerdeskAutoAnswer {
         callback = null
         legacy = null
         armedUntil = 0L
-        answered = false
+        accepted = false
         wasOffhook = false
         onConnected = null
         onEnded = null

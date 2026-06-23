@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.google.services)
 }
 
 // Supabase config. Override in local.properties or CI; defaults to the
@@ -28,7 +29,9 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.salesautocall.app"
+        // Matches the Firebase-registered package (project callpro-b5aa1). The code
+        // namespace stays com.salesautocall.app, so no source moves.
+        applicationId = "com.callpro.ai"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -107,4 +110,8 @@ dependencies {
 
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
+
+    // Firebase Cloud Messaging — instant push for new hot leads.
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
+    implementation("com.google.firebase:firebase-messaging")
 }
