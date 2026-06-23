@@ -43,8 +43,14 @@ async function readPayload(req: Request, url: URL): Promise<Record<string, unkno
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return ok();
   const url = new URL(req.url);
-  const token = url.searchParams.get("token") ?? req.headers.get("x-webhook-token") ?? "";
+  // CallerDesk appends "?type=<event>" to the configured URL, which mangles the
+  // token query-param into "<token>?type=call_report". Keep only the real token,
+  // and recover the event type from the leftover.
+  const rawToken = url.searchParams.get("token") ?? req.headers.get("x-webhook-token") ?? "";
+  const token = rawToken.split("?")[0].trim();
   if (!token) return new Response("missing token", { status: 400 });
+  const eventType = (rawToken.match(/[?&]type=([a-z_]+)/i)?.[1] ??
+    pick({ t: url.searchParams.get("type") ?? "" }, ["t"]) ?? "").toLowerCase();
 
   const admin = adminClient();
   const { data: integ } = await admin
@@ -64,20 +70,26 @@ Deno.serve(async (req) => {
     .select("id")
     .maybeSingle();
 
-  // 2. Best-effort field extraction.
-  const providerCallId = pick(payload, ["campid", "camp_id", "callid", "call_id", "ucid", "uuid", "id", "request_id", "txn_id"]);
+  // 2. Best-effort field extraction. CallerDesk uses CamelCase: CallSid,
+  //    CallRecordingUrl, CallDuration/TalkDuration, SourceNumber, Status/callstatus.
+  const providerCallId = pick(payload, ["campid", "camp_id", "callsid", "call_sid", "uniqueid", "callid", "call_id", "ucid", "uuid", "id"]);
   const recordingUrl = pick(payload, [
-    "recording_url", "recordingurl", "recording", "recording_file", "recordingfile",
-    "voice_file", "voicefile", "file", "recording_path", "audio_url", "audiourl",
+    "callrecordingurl", "call_recording_url", "recording_url", "recordingurl",
+    "recording", "recording_file", "voice_file", "file", "audio_url", "audiourl",
   ]);
-  const durationStr = pick(payload, ["duration", "call_duration", "billsec", "duration_seconds", "talktime", "conversation_duration"]);
-  const status = pick(payload, ["status", "call_status", "callstatus", "dialstatus", "disposition", "call_report"]);
-  const customer = pick(payload, ["calling_party_b", "customer_number", "customer", "destination", "to", "called_number", "client_number"]);
-  const directionRaw = pick(payload, ["direction", "call_type", "calltype", "type"]);
+  // Prefer talk time (actual conversation) over total call time (incl. ringing).
+  const durationStr = pick(payload, ["talkduration", "talktime", "billsec", "callduration", "call_duration", "duration", "duration_seconds"]);
+  const status = pick(payload, ["callstatus", "status", "call_status", "dialstatus", "disposition"]);
+  const customer = pick(payload, ["calling_party_b", "sourcenumber", "customer_number", "customer", "destination", "to", "called_number", "client_number"]);
+  const directionRaw = pick(payload, ["direction", "call_type", "calltype"]);
   const duration = durationStr ? Math.max(0, parseInt(durationStr, 10) || 0) : null;
-  const direction = directionRaw
-    ? (/in/i.test(directionRaw) ? "incoming" : "outgoing")
-    : null;
+  // WEBOBD / outbound vs WEBIBD / inbound. Default to outgoing.
+  const direction = directionRaw ? (/(^in|inbound|incoming|ibd)/i.test(directionRaw) ? "incoming" : "outgoing") : null;
+  // "Answered" must NOT match " No Answer" / cancel / congestion.
+  const answered = /^answer(ed)?$/i.test((status ?? "").trim());
+  // Only the terminal "call report" carries the recording + final disposition;
+  // intermediate "live_call" events must not flip the status.
+  const isReport = eventType === "call_report" || recordingUrl != null;
 
   // 3. Find the call_log to update.
   let callLogId: string | null = null;
@@ -103,15 +115,24 @@ Deno.serve(async (req) => {
 
   if (callLogId) {
     const patch: Record<string, unknown> = { provider_call_id: providerCallId ?? undefined };
-    if (duration !== null) { patch.duration_seconds = duration; patch.recording_seconds = duration; }
+    if (duration !== null && duration > 0) { patch.duration_seconds = duration; patch.recording_seconds = duration; }
     if (direction) patch.direction = direction;
-    if (recordingUrl) { patch.recording_url = recordingUrl; patch.recording_status = "ready"; patch.recording_error = null; }
-    else if (status && /fail|no.?answer|busy|reject|miss/i.test(status)) { patch.recording_status = "failed"; patch.recording_error = `CallerDesk status: ${status}`; }
+    if (isReport) {
+      if (answered && recordingUrl) {
+        patch.recording_url = recordingUrl;
+        patch.recording_status = "ready";
+        patch.recording_error = null;
+      } else {
+        // Missed / cancelled / congestion — no usable recording.
+        patch.recording_status = "failed";
+        patch.recording_error = `CallerDesk: ${(status ?? "no answer").trim()}`;
+      }
+    }
     await admin.from("call_logs").update(patch).eq("id", callLogId);
     if (ev?.id) await admin.from("callerdesk_events").update({ call_log_id: callLogId }).eq("id", ev.id);
 
-    // 4. Pull the recording and summarise (background, so we ack the webhook fast).
-    if (recordingUrl && hasGroq()) {
+    // 4. Pull the recording and summarise (answered calls only; background ack).
+    if (isReport && answered && recordingUrl && hasGroq()) {
       const task = (async () => {
         try {
           const r = await fetch(recordingUrl);

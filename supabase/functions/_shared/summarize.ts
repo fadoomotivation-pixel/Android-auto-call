@@ -38,7 +38,7 @@ export async function summarizeAndStore(
     // to match the source's real container.
     const FMT: Record<string, [string, string]> = {
       sim: ["m4a", "audio/mp4"],
-      callerdesk: ["mp3", "audio/mpeg"],
+      callerdesk: ["wav", "audio/wav"], // CallerDesk recordings are .wav
     };
     const [ext, mime] = FMT[source] ?? ["wav", "audio/wav"];
 
