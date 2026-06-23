@@ -26,6 +26,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Required so the phoneCall foreground-service type is allowed on Android 14+ -->
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <!-- Auto-answer the CallerDesk agent-leg call so the telecaller taps once, not twice -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Ring a full-screen incoming-call screen even when the phone is locked -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />

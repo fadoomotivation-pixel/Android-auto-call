@@ -440,6 +440,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      *  [SoftphoneScreen] shows a simple "answer your phone" card while this is on. */
     private fun startCallerdeskCall(number: String, contactId: String?, campaignId: String?) {
         cloudCallToken++
+        // Arm the auto-answer FIRST so the listener is live before CallerDesk rings
+        // back — the rep taps once and the phone picks up on its own.
+        runCatching { com.salesautocall.app.dialer.CallerdeskAutoAnswer.arm(getApplication()) }
         set {
             it.copy(
                 error = null, message = null,
@@ -447,7 +450,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 cloudCallContactId = contactId,
                 cloudCallCampaignId = campaignId,
                 cloudBridged = true, // no SIP login phase — skip the watchdog/“logging in” UI
-                cloudCallStatus = "Starting call… your phone will ring in a moment.",
+                cloudCallStatus = "Starting call… connecting you automatically.",
                 inCallNote = "",
             )
         }
@@ -458,7 +461,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             if (body.contains("\"ok\":true")) {
-                set { it.copy(cloudCallStatus = "📞 Your phone is ringing — answer it to talk to $number.\nThe call is recorded automatically.") }
+                set { it.copy(cloudCallStatus = "📞 Connecting you to $number…\nYour phone answers automatically. The call is recorded.") }
             } else {
                 // Surface CallerDesk's own message (e.g. "Agent on break/Inactive").
                 val msg = Regex("\"(?:error|message)\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.getOrNull(1)
