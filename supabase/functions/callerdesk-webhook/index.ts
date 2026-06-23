@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   // 2. Best-effort field extraction.
-  const providerCallId = pick(payload, ["callid", "call_id", "ucid", "uuid", "id", "request_id", "txn_id"]);
+  const providerCallId = pick(payload, ["campid", "camp_id", "callid", "call_id", "ucid", "uuid", "id", "request_id", "txn_id"]);
   const recordingUrl = pick(payload, [
     "recording_url", "recordingurl", "recording", "recording_file", "recordingfile",
     "voice_file", "voicefile", "file", "recording_path", "audio_url", "audiourl",

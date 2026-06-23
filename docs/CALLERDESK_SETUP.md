@@ -43,11 +43,14 @@ App → callerdesk-call (edge fn) → CallerDesk click_to_call_v2
      where company_id = '<COMPANY_UUID>';
    ```
 3. **Agent mobiles** — every telecaller needs their 10-digit mobile on their profile
-   (this is `calling_party_a`); also whitelist those numbers inside CallerDesk if your
-   plan requires it:
+   (this is `calling_party_a`):
    ```sql
    update profiles set phone = '<10_DIGIT_MOBILE>' where id = '<AGENT_UUID>';
    ```
+   **Required (not optional):** each agent number must also be added as an **Active
+   member** in CallerDesk Dashboard → **User Management → Members** (Login + Active
+   status = ON). A number that isn't an active member is rejected at call time with
+   `{"type":"error","message":"Agent on break/Inactive. Call not allowed"}`.
 4. **Webhook** — in CallerDesk Dashboard → **API & Integration → Webhooks**, set the
    "call report" event URL to (company-scoped by its token):
    ```
@@ -74,6 +77,19 @@ select payload from callerdesk_events order by created_at desc limit 1;
 Check that the extractor caught the call id, recording URL, duration and status. If a
 field uses a name we didn't anticipate, add it to the `pick([...])` lists in
 `callerdesk-webhook` and redeploy. (Nothing is ever lost — the raw payload is retained.)
+
+## Verified against the live demo account (2026-06-22, acct 120986)
+
+- `click_to_call_v2` success response is:
+  ```json
+  {"type":"success","message":"Call to Customer Initiate Successfully..","campid":45717408,"callerid":"00918062987377"}
+  ```
+  → the correlation id is **`campid`** (not `callid`). Both `callerdesk-call` and
+  `callerdesk-webhook` extract `campid` first when linking the call to its log.
+- An invalid key returns `{"type":"error","message":"Invalid Auth Code!"}`; an inactive
+  agent returns `{"type":"error","message":"Agent on break/Inactive. Call not allowed"}`.
+- **Coins:** CallerDesk's **"Voice Broadcast / OBD"** coins ARE the click-to-call (OBD)
+  credits — that line, not the separate "Click to call" label, is what funds outbound.
 
 ## Verify the pipeline
 
