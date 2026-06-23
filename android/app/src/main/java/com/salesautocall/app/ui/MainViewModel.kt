@@ -441,8 +441,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun startCallerdeskCall(number: String, contactId: String?, campaignId: String?) {
         cloudCallToken++
         // Arm the auto-answer FIRST so the listener is live before CallerDesk rings
-        // back — the rep taps once and the phone picks up on its own.
-        runCatching { com.salesautocall.app.dialer.CallerdeskAutoAnswer.arm(getApplication()) }
+        // back — the rep taps once and the phone picks up on its own. Its lifecycle
+        // callbacks drive the in-app card: live timer on connect, auto-close on hang-up.
+        runCatching {
+            com.salesautocall.app.dialer.CallerdeskAutoAnswer.onConnected = {
+                cloudConnectedAt = System.currentTimeMillis()
+                set { it.copy(callConnectedAt = cloudConnectedAt, cloudCallStatus = "🔊 Connected — you're live") }
+            }
+            com.salesautocall.app.dialer.CallerdeskAutoAnswer.onEnded = {
+                finishCloudCall(reload = true) // call ended on the phone → dismiss the card
+            }
+            com.salesautocall.app.dialer.CallerdeskAutoAnswer.arm(getApplication())
+        }
         set {
             it.copy(
                 error = null, message = null,
@@ -636,6 +646,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun finishCloudCall(reload: Boolean = false) {
         if (_state.value.cloudCallNumber == null) return // already torn down
         cloudCallToken++ // cancel any pending auto-dismiss for this call
+        // Detach the CallerDesk auto-answer callbacks so a later state change can't
+        // re-trigger teardown for an already-finished call.
+        com.salesautocall.app.dialer.CallerdeskAutoAnswer.onConnected = null
+        com.salesautocall.app.dialer.CallerdeskAutoAnswer.onEnded = null
         if (_state.value.inCallNote.isNotBlank()) saveInCallNote()
         finalizeCloudResult(failed = false)
         uploadCloudRecording()
