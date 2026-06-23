@@ -38,6 +38,12 @@ object CallerdeskAutoAnswer {
     private var legacy: PhoneStateListener? = null
     private var armedUntil = 0L
     private var answered = false
+    private var wasOffhook = false
+
+    /** Fired (on the main thread) when the auto-answered call connects (off-hook). */
+    @Volatile var onConnected: (() -> Unit)? = null
+    /** Fired (on the main thread) when that call ends — used to auto-dismiss the in-app card. */
+    @Volatile var onEnded: (() -> Unit)? = null
 
     @Synchronized
     fun arm(context: Context) {
@@ -48,6 +54,7 @@ object CallerdeskAutoAnswer {
 
         armedUntil = System.currentTimeMillis() + WINDOW_MS
         answered = false
+        wasOffhook = false
         if (callback != null || legacy != null) return // already listening — just extended the window
 
         val manager = app.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
@@ -80,7 +87,19 @@ object CallerdeskAutoAnswer {
                     acceptRingingCall(ctx)
                 }
             }
-            TelephonyManager.CALL_STATE_IDLE -> if (answered) disarm()
+            TelephonyManager.CALL_STATE_OFFHOOK -> {
+                if (answered && !wasOffhook) {
+                    wasOffhook = true
+                    runCatching { onConnected?.invoke() }
+                }
+            }
+            TelephonyManager.CALL_STATE_IDLE -> {
+                if (answered) {
+                    val ended = onEnded
+                    disarm() // clears callbacks + flags
+                    runCatching { ended?.invoke() }
+                }
+            }
         }
     }
 
@@ -108,5 +127,9 @@ object CallerdeskAutoAnswer {
         callback = null
         legacy = null
         armedUntil = 0L
+        answered = false
+        wasOffhook = false
+        onConnected = null
+        onEnded = null
     }
 }

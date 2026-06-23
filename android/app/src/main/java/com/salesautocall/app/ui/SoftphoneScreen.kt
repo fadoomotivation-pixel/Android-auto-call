@@ -52,10 +52,12 @@ fun SoftphoneScreen(vm: MainViewModel) {
     val number = app.cloudCallNumber
 
     if (number != null && app.callerdeskCalling) {
-        // CallerDesk: the call is on the native dialer — just an "answer your phone" card.
+        // CallerDesk: the call is on the native dialer — show an "answer your phone"
+        // card that turns into a live timer once connected and closes on hang-up.
         CallerdeskCallCard(
             number = number,
             status = app.cloudCallStatus.ifBlank { "Starting call…" },
+            connectedAt = app.callConnectedAt,
             note = app.inCallNote,
             onNote = { vm.setInCallNote(it) },
             onClose = { vm.endCloudCall() },
@@ -136,6 +138,7 @@ fun SoftphoneScreen(vm: MainViewModel) {
 private fun CallerdeskCallCard(
     number: String,
     status: String,
+    connectedAt: Long,
     note: String,
     onNote: (String) -> Unit,
     onClose: () -> Unit,
@@ -150,7 +153,8 @@ private fun CallerdeskCallCard(
             Spacer(Modifier.height(20.dp))
             Text(number, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
-            Text(status, color = Color.White.copy(alpha = 0.9f), fontSize = 16.sp)
+            // Once connected this becomes a live MM:SS timer; before that, the status line.
+            CallStatusLine(connectedAt, status)
             Spacer(Modifier.height(28.dp))
             OutlinedTextField(
                 value = note,
