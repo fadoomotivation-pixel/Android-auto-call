@@ -76,7 +76,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -100,14 +102,18 @@ private val Slate = Color(0xFF64748B)
 
 private data class Stage(val key: String, val label: String, val statuses: Set<String>, val color: Color)
 
-/** Real-estate pipeline, in order. */
+private val Teal = Color(0xFF0D9488)
+
+/** Real-estate pipeline, in order. "Negotiation" folds in the older "proposal"
+ *  status; "Token Paid" is the booking-token money milestone before a full booking. */
 private val STAGES = listOf(
     Stage("new", "New", setOf("new", "queued"), Color(0xFF3B82F6)),
     Stage("contacted", "Contacted", setOf("called", "no_answer", "busy", "callback", "follow_up"), Indigo),
     Stage("interested", "Interested", setOf("interested"), Amber),
     Stage("site_visit", "Site Visit", setOf("site_visit"), Purple),
-    Stage("proposal", "Proposal", setOf("proposal"), Cyan),
-    Stage("closed", "Closed", setOf("booked"), Green),
+    Stage("negotiation", "Negotiation", setOf("negotiation", "proposal"), Cyan),
+    Stage("token", "Token Paid", setOf("token_paid"), Teal),
+    Stage("closed", "Booked", setOf("booked"), Green),
 )
 
 private fun stageOf(status: String): Stage =
@@ -122,8 +128,9 @@ private fun stageOf(status: String): Stage =
 private val SETTABLE_STAGES = listOf(
     "interested" to "Interested",
     "site_visit" to "Site Visit",
-    "proposal" to "Proposal",
-    "booked" to "Closed / Won",
+    "negotiation" to "Negotiation",
+    "token_paid" to "Token Paid 💰",
+    "booked" to "Booked / Won",
     "callback" to "Callback",
     "not_interested" to "Not interested",
     "lost" to "Lost",
@@ -475,6 +482,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     val newLeads = app.leads.count { it.status in setOf("new", "queued") }
     val stageCounts = STAGES.map { st -> st to app.leads.count { it.status in st.statuses } }
     val pipelineValue = app.leads.filter { it.status !in setOf("lost", "not_interested", "dnc") }.sumOf { parseBudgetRupees(it.budget) }
+    val tokenCollected = app.leads.sumOf { it.tokenAmount ?: 0.0 }
     val hotUncontacted = app.leads.count { it.temperature == "hot" && it.status in setOf("new", "queued") }
 
     LazyColumn(
@@ -496,6 +504,15 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile("✨", newLeads.toString(), "New leads", Amber, Modifier.weight(1f))
                 StatTile("💰", formatRupees(pipelineValue), "Pipeline value", Green, Modifier.weight(1f))
+            }
+        }
+        // Token / booking money actually collected — the bottom of the funnel.
+        if (tokenCollected > 0) {
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatTile("🧾", formatRupees(tokenCollected), "Token collected", Teal, Modifier.weight(1f))
+                    StatTile("🏆", app.leads.count { it.status == "booked" }.toString(), "Booked", Green, Modifier.weight(1f))
+                }
             }
         }
 
@@ -836,8 +853,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         LeadActionSheet(
             c = c,
             onDismiss = { actionFor = null },
-            onApply = { status, temp, budget, note, svProj, svAt ->
-                c.id?.let { vm.applyLead(it, status, temp, budget, note, svProj, svAt) }
+            onApply = { status, temp, budget, note, svProj, svAt, token ->
+                c.id?.let { vm.applyLead(it, status, temp, budget, note, svProj, svAt, token) }
                 actionFor = null
             },
             onShareContent = { actionFor = null; contentFor = c },
@@ -1060,7 +1077,7 @@ private fun LeadCard(
 private fun LeadActionSheet(
     c: Contact,
     onDismiss: () -> Unit,
-    onApply: (String?, String?, String?, String?, String?, String?) -> Unit,
+    onApply: (String?, String?, String?, String?, String?, String?, String?) -> Unit,
     onShareContent: () -> Unit = {},
     onProjects: () -> Unit = {},
 ) {
@@ -1070,6 +1087,7 @@ private fun LeadActionSheet(
     var note by remember(c.id) { mutableStateOf(c.notes ?: "") }
     var svProject by remember(c.id) { mutableStateOf(c.siteVisitProject ?: "") }
     var svAt by remember(c.id) { mutableStateOf(c.siteVisitAt ?: "") }
+    var token by remember(c.id) { mutableStateOf(c.tokenAmount?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: "") }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     AlertDialog(
@@ -1134,6 +1152,17 @@ private fun LeadActionSheet(
                     }
                     Spacer(Modifier.height(12.dp))
                 }
+                if ((stage ?: c.status) == "token_paid") {
+                    OutlinedTextField(
+                        token, { token = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("Token / booking amount (₹)") },
+                        leadingIcon = { Text("₹", style = MaterialTheme.typography.titleMedium) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
                 OutlinedTextField(budget, { budget = it }, label = { Text("Budget (e.g. ₹45L)") },
                     singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
@@ -1155,6 +1184,7 @@ private fun LeadActionSheet(
                     note.trim().ifBlank { null }.takeIf { it != c.notes },
                     svProject.trim().ifBlank { null }.takeIf { it != c.siteVisitProject },
                     svAt.trim().ifBlank { null }.takeIf { it != c.siteVisitAt },
+                    token.trim().ifBlank { null },
                 )
             }) { Text("Save") }
         },
