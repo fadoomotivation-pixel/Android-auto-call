@@ -481,8 +481,25 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                     }
                 }
 
-                // CallerDesk handles dialling end-to-end (your phone rings, then the
-                // customer) — no SIP extension / caller-ID / server to configure.
+                // The one thing each rep sets: the mobile CallerDesk rings, then
+                // bridges to the customer. No SIP extension / server to configure.
+                Spacer(Modifier.height(4.dp))
+                var myPhone by remember(app.profile?.phone) { mutableStateOf(app.profile?.phone ?: "") }
+                OutlinedTextField(
+                    myPhone, { v -> myPhone = v.filter { it.isDigit() || it == '+' } },
+                    label = { Text("📱 Your mobile number") },
+                    supportingText = { Text("CallerDesk rings this phone, then connects the customer.") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                val phoneDirty = myPhone.trim() != (app.profile?.phone ?: "").trim()
+                Button(
+                    onClick = { vm.setMyPhone(myPhone) },
+                    enabled = phoneDirty && myPhone.trim().length >= 8,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (phoneDirty) "Save mobile number" else "✓ Saved") }
             }
         }
     }
