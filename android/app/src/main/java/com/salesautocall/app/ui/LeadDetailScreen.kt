@@ -1,12 +1,16 @@
 package com.salesautocall.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +43,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -133,7 +139,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 Column(Modifier.padding(16.dp)) {
                     OutlinedTextField(budget, { budget = it }, label = { Text("Budget") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(note, { note = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth())
+                    IntelligentNotes(note) { note = it }
                     Spacer(Modifier.height(8.dp))
                     DetailAction(Icons.Default.CalendarMonth, "Save details", MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth()) {
                         contact.id?.let {
@@ -202,6 +208,94 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
 private fun SectionLabel(text: String) {
     Text(text, style = MaterialTheme.typography.labelLarge,
         modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 4.dp))
+}
+
+/** Common after-call notes a real-estate telecaller jots, in the Hinglish they
+ *  actually speak. One tap appends — far faster than typing on a phone. */
+private val QUICK_NOTES = listOf(
+    "Phone nahi uthaya",
+    "Baad me call karna",
+    "Site visit fix",
+    "Budget kam hai",
+    "Loan chahiye",
+    "Family se discuss karega",
+    "Location pasand aayi",
+    "Price zyada lagi",
+    "Ready to book",
+    "Abhi interested nahi",
+    "WhatsApp pe details bheji",
+    "Dobara mat call karna",
+)
+
+/** Smart notes: Hindi/English voice dictation + one-tap Hinglish quick chips,
+ *  on top of the free-text field. Built for reps who type slowly in Hindi. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun IntelligentNotes(note: String, onNote: (String) -> Unit) {
+    val context = LocalContext.current
+    // rememberUpdatedState so the voice-result callback always sees the latest note.
+    val latest by rememberUpdatedState(note)
+
+    fun append(text: String) {
+        onNote(if (latest.isBlank()) text else "$latest, $text")
+    }
+
+    val voiceLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spoken.isNullOrBlank()) onNote(if (latest.isBlank()) spoken else "$latest $spoken")
+        }
+    }
+
+    fun startVoice() {
+        val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            // Hindi first, but it transcribes the Hinglish/English reps mix in too.
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Bolkar note likhein…")
+        }
+        runCatching { voiceLauncher.launch(intent) }
+            .onFailure {
+                android.widget.Toast.makeText(context, "Voice typing not available on this phone", android.widget.Toast.LENGTH_SHORT).show()
+            }
+    }
+
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Notes", style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.weight(1f))
+            Row(
+                Modifier.clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                    .clickable { startVoice() }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Mic, contentDescription = "Voice note", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Bolkar likhein", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            QUICK_NOTES.forEach { q ->
+                Box(
+                    Modifier.clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { append(q) }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                ) {
+                    Text("+ $q", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(note, onNote, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth())
+    }
 }
 
 @Composable

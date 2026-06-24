@@ -30,6 +30,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -890,6 +891,41 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
 
         Spacer(Modifier.height(16.dp))
         CloudCallingCard(vm, app)
+
+        Spacer(Modifier.height(16.dp))
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("App version & updates", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "You're on v${com.salesautocall.app.BuildConfig.VERSION_NAME} (build ${com.salesautocall.app.BuildConfig.VERSION_CODE})",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(4.dp))
+                app.update?.let { rel ->
+                    Text("Update available: v${rel.versionName} 🎉", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(12.dp))
+                if (app.update != null) {
+                    Button(onClick = { vm.installUpdate() }, modifier = Modifier.fillMaxWidth()) {
+                        Text("⬇ Download & install v${app.update!!.versionName}")
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { vm.checkForUpdate(manual = true) },
+                        enabled = !app.checkingUpdate,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (app.checkingUpdate) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp)); Text("Checking…")
+                        } else {
+                            Text("Check for updates")
+                        }
+                    }
+                }
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
         Card(Modifier.fillMaxWidth()) {
