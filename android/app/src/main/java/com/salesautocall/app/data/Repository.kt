@@ -378,6 +378,15 @@ object Repository {
         }.decodeList<CallLog>()
     }
 
+    /** Full call history for one lead — newest first — for the lead detail page. */
+    suspend fun fetchCallsForContact(contactId: String, limit: Int = 50): List<CallLog> {
+        return client.from("call_logs").select {
+            filter { eq("contact_id", contactId) }
+            order("started_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<CallLog>()
+    }
+
     /** Saves a free-text note onto a call log (used by the in-call Notes field). */
     suspend fun setCallNote(callLogId: String, note: String) {
         client.from("call_logs").update(mapOf("notes" to note)) { filter { eq("id", callLogId) } }
