@@ -34,6 +34,7 @@ export function ImportLeads({
   const [assignTo, setAssignTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   async function onFile(file: File) {
     setError(null);
@@ -144,11 +145,23 @@ export function ImportLeads({
 
         {mode === "file" ? (
           <div
-            style={{ border: "2px dashed rgba(255,255,255,0.15)", borderRadius: 16, padding: "50px 16px", textAlign: "center", cursor: "pointer", background: "rgba(255,255,255,0.01)", transition: "all 0.2s hover:border-accent" }}
+            role="button"
+            tabIndex={0}
+            onClick={() => fileRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileRef.current?.click(); } }}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={(e) => { e.preventDefault(); setDragging(false); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) void onFile(f);
+            }}
+            style={{ border: `2px dashed ${dragging ? "var(--accent)" : "rgba(255,255,255,0.15)"}`, borderRadius: 16, padding: "50px 16px", textAlign: "center", cursor: "pointer", background: dragging ? "rgba(99,102,241,0.08)" : "rgba(255,255,255,0.01)", transition: "all 0.2s" }}
           >
             <div style={{ fontSize: 32, opacity: 0.8 }}>📁</div>
             <div style={{ fontWeight: 600, marginTop: 8 }}>{fileName ?? "Click to upload"}</div>
-            <div className="subtitle" style={{ marginTop: 4 }}>Supports .csv, .xlsx, .xls</div>
+            <div className="subtitle" style={{ marginTop: 4 }}>Drag &amp; drop or click · .csv, .xlsx, .xls</div>
             <input
               ref={fileRef}
               type="file"
