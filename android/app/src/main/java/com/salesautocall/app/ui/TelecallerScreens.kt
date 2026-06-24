@@ -684,6 +684,7 @@ private fun UpcomingRow(f: FollowUp, onCall: () -> Unit, onSnooze: () -> Unit, o
 // ════════════════════════════════════════════════════════════
 //  LEADS
 // ════════════════════════════════════════════════════════════
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val app by vm.state.collectAsState()
@@ -800,9 +801,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            // stat filter tabs
+            // stat filter tabs — wrap onto multiple rows so EVERY stage is visible
+            // at a glance (no horizontal scroll hiding the later funnel stages).
             item {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     FilterTab("All", app.leads.size, selected == "all", MaterialTheme.colorScheme.primary) { selected = "all" }
                     STAGES.forEach { st ->
                         val n = app.leads.count { it.status in st.statuses }

@@ -1,5 +1,6 @@
 package com.salesautocall.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -63,6 +64,9 @@ fun LeadDetailScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
     val contact = app.leads.find { it.id == app.leadDetailId } ?: run { vm.closeLeadDetail(); return }
     val context = LocalContext.current
+
+    // System back / back-gesture returns to the lead list instead of exiting the app.
+    BackHandler { vm.closeLeadDetail() }
 
     var note by remember(contact.id) { mutableStateOf(contact.notes ?: "") }
     var budget by remember(contact.id) { mutableStateOf(contact.budget ?: "") }
