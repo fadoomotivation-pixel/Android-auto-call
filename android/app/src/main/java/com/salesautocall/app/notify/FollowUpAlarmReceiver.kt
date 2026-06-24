@@ -47,6 +47,7 @@ class FollowUpAlarmReceiver : BroadcastReceiver() {
                 },
             ))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL) // sound + vibrate (pre-O devices)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openPi)

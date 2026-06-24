@@ -38,12 +38,15 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
         val data = message.data
         val title = message.notification?.title ?: data["title"] ?: "New lead"
         val body = message.notification?.body ?: data["body"] ?: "Tap to open and call."
-        notify(this, title, body, data["contact_id"])
+        notify(this, title, body, data["contact_id"], data["channel"] ?: CHANNEL_ID)
     }
 
     companion object {
         const val CHANNEL_ID = "hot_leads"
+        const val ASSIGN_CHANNEL_ID = "lead_assignments"
 
+        /** Creates every high-importance push channel (so background system
+         *  notifications can ring on the channel the server names). */
         fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val nm = context.getSystemService(NotificationManager::class.java)
@@ -54,11 +57,20 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
                         }
                     )
                 }
+                if (nm.getNotificationChannel(ASSIGN_CHANNEL_ID) == null) {
+                    nm.createNotificationChannel(
+                        NotificationChannel(ASSIGN_CHANNEL_ID, "Lead assignments", NotificationManager.IMPORTANCE_HIGH).apply {
+                            description = "When new leads are assigned to you"
+                        }
+                    )
+                }
             }
         }
 
-        fun notify(context: Context, title: String, body: String, contactId: String?) {
+        fun notify(context: Context, title: String, body: String, contactId: String?, channelId: String = CHANNEL_ID) {
             ensureChannel(context)
+            // Only ring on a known channel; fall back to hot_leads otherwise.
+            val ch = if (channelId == ASSIGN_CHANNEL_ID) ASSIGN_CHANNEL_ID else CHANNEL_ID
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 if (contactId != null) putExtra("open_contact_id", contactId)
@@ -78,7 +90,7 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-            val n = NotificationCompat.Builder(context, CHANNEL_ID)
+            val builder = NotificationCompat.Builder(context, ch)
                 .setSmallIcon(R.drawable.ic_hot_lead_push)
                 .setColor(0xFFEF4444.toInt()) // Red color
                 .setContentTitle(title)
@@ -89,14 +101,12 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
                 .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setContentIntent(pi)
-                .addAction(
-                    android.R.drawable.ic_menu_call,
-                    "📞 Call Now",
-                    callPi
-                )
-                .build()
+            // A direct "Call Now" only makes sense for a single-lead push.
+            if (contactId != null) {
+                builder.addAction(android.R.drawable.ic_menu_call, "📞 Call Now", callPi)
+            }
             context.getSystemService(NotificationManager::class.java)
-                .notify((contactId ?: title).hashCode(), n)
+                .notify((contactId ?: title).hashCode(), builder.build())
         }
     }
 }

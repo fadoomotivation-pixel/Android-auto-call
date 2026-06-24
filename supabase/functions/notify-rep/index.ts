@@ -72,8 +72,10 @@ Deno.serve(async (req) => {
   const isServer = bearer === SERVICE;
 
   const body = await req.json().catch(() => ({}));
-  const { user_ids, company_id, contact_id, title, body: text, data } = body ?? {};
+  const { user_ids, company_id, contact_id, title, body: text, data, channel } = body ?? {};
   if (!title || !text) return json({ ok: false, error: "title and body required" }, 400);
+  // Which Android notification channel to ring on (must exist on device).
+  const channelId = typeof channel === "string" && channel ? channel : "hot_leads";
 
   // Resolve who we're allowed to target.
   let targetUserIds: string[] | null = Array.isArray(user_ids) ? user_ids : null;
@@ -105,6 +107,7 @@ Deno.serve(async (req) => {
   const url = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
   const payloadData: Record<string, string> = { ...(data ?? {}) };
   if (contact_id) payloadData.contact_id = String(contact_id);
+  payloadData.channel = channelId; // so foreground handler picks the same channel
 
   let sent = 0;
   const dead: string[] = [];
@@ -117,7 +120,7 @@ Deno.serve(async (req) => {
           token,
           notification: { title, body: text },
           data: payloadData,
-          android: { priority: "high", notification: { channel_id: "hot_leads" } },
+          android: { priority: "high", notification: { channel_id: channelId } },
         },
       }),
     });
