@@ -313,6 +313,26 @@ private fun MainShell(vm: MainViewModel) {
         }
     }
 
+    // A newer build was published → offer a one-tap in-app update.
+    state.update?.let { rel ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissUpdate() },
+            title = { Text("🚀 Update available") },
+            text = {
+                Column {
+                    Text("Version ${rel.versionName} is ready to install.")
+                    if (rel.notes.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(rel.notes, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.installUpdate(); vm.dismissUpdate() }) { Text("Update now") } },
+            dismissButton = { TextButton(onClick = { vm.dismissUpdate() }) { Text("Later") } },
+        )
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {

@@ -14,6 +14,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Monotonic version so the in-app updater can tell builds apart.
+    env:
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 1.0.${{ github.run_number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,15 +52,30 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: ignore
 
-      - name: Publish APK to "android-latest" release
+      - name: Generate version manifest
+        if: success() && github.ref == 'refs/heads/main'
+        run: |
+          NOTES=$(git log -1 --pretty=%s)
+          jq -n \
+            --argjson vc ${{ github.run_number }} \
+            --arg vn "1.0.${{ github.run_number }}" \
+            --arg url "https://github.com/${{ github.repository }}/releases/download/android-latest/app-debug.apk" \
+            --arg notes "$NOTES" \
+            '{versionCode: $vc, versionName: $vn, apkUrl: $url, notes: $notes}' > version.json
+          cat version.json
+
+      - name: Publish APK + manifest to "android-latest" release
         if: success() && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest
-          name: SalesAutoCall Android (latest debug build)
+          name: Call Pro AI (latest build)
           body: |
-            Latest debug build of the SalesAutoCall salesperson app.
-            Download `app-debug.apk` below and install it on an Android phone
-            (enable "Install unknown apps" for your browser/file manager first).
+            Latest build of the Call Pro AI salesperson app (v1.0.${{ github.run_number }}).
+            The app updates itself in-app — reps only install manually once.
+            First-time install: download `app-debug.apk` and open it
+            (enable "Install unknown apps" if prompted).
           prerelease: true
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            version.json
