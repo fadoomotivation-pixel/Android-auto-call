@@ -110,6 +110,11 @@ fun AppRoot(vm: MainViewModel) {
         SoftphoneScreen(vm)
     }
 
+    // Post-call disposition overlay.
+    if (state.signedIn && state.postCallContactId != null) {
+        PostCallDispositionSheet(vm)
+    }
+
     crash?.let { text ->
         AlertDialog(
             onDismissRequest = { AppPrefs.clearLastCrash(context); crash = null },

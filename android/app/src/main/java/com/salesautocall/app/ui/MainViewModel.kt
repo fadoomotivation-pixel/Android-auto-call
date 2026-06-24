@@ -128,6 +128,12 @@ data class AppState(
     // Deep linking from push notifications
     val requestedContactId: String? = null,
     val autoCallContactId: String? = null,
+    // Post-call disposition: captured from finishCloudCall before clearing the overlay.
+    val postCallContactId: String? = null,
+    val postCallPhone: String? = null,
+    val postCallName: String? = null,
+    val postCallCampaignId: String? = null,
+    val postCallConnected: Boolean = false,
 )
 
 enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
@@ -697,11 +703,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             runCatching { com.salesautocall.app.sip.SipManager.stop() }
         }
+        // Capture the contact info for the post-call disposition sheet BEFORE
+        // clearing the overlay state. This lets the rep log what happened.
+        val s = _state.value
+        val wasConnected = cloudConnectedAt > 0L
+        val postContactId = s.cloudCallContactId
+        val postPhone = s.cloudCallNumber
+        val postCampaignId = s.cloudCallCampaignId
+        // Try to find the contact name from leads.
+        val postName = postPhone?.let { ph ->
+            s.leads.find { it.phone == ph || it.id == postContactId }?.name
+        }
         cloudConnectedAt = 0L
         set {
             it.copy(
                 cloudCallNumber = null, cloudCallStatus = "", cloudBridged = false,
                 callConnectedAt = 0L, cloudCallLogId = null, inCallNote = "",
+                // Arm the post-call disposition popup (only if we know who was called).
+                postCallContactId = postContactId,
+                postCallPhone = postPhone,
+                postCallName = postName,
+                postCallCampaignId = postCampaignId,
+                postCallConnected = wasConnected,
             )
         }
         // Refresh the Calls list so the just-finished call shows up. The recording
@@ -1443,6 +1466,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
+    }
+
+    /** Snooze a follow-up: complete the old one and create a new one +[hours] from now. */
+    fun snoozeFollowUp(id: String, hours: Int = 1) {
+        val f = _state.value.followUpList.find { it.id == id } ?: return
+        viewModelScope.launch {
+            runCatching { Repository.completeFollowUp(id) }
+            val newDue = System.currentTimeMillis() + hours * 3600_000L
+            scheduleFollowUp(f.contactId, f.phone, f.name, newDue, f.note)
+        }
+    }
+
+    // ---------- post-call disposition ----------
+
+    /** Quick 1-tap disposition from the post-call popup. */
+    fun postCallDispose(status: String) {
+        val contactId = _state.value.postCallContactId ?: return
+        viewModelScope.launch {
+            runCatching { Repository.setDisposition(contactId, status, null) }
+                .onSuccess {
+                    set { st ->
+                        st.copy(
+                            leads = st.leads.map { c -> if (c.id == contactId) c.copy(status = status) else c },
+                        )
+                    }
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+        dismissPostCall()
+    }
+
+    /** Dismiss the post-call popup without logging any disposition. */
+    fun dismissPostCall() = set {
+        it.copy(
+            postCallContactId = null, postCallPhone = null,
+            postCallName = null, postCallCampaignId = null,
+            postCallConnected = false,
+        )
+    }
+
+    /** Schedule a follow-up from the post-call popup, then dismiss it. */
+    fun postCallScheduleFollowUp(dueAtMillis: Long, note: String?) {
+        val s = _state.value
+        val contactId = s.postCallContactId
+        val phone = s.postCallPhone ?: return
+        val name = s.postCallName
+        scheduleFollowUp(contactId, phone, name, dueAtMillis, note)
+        postCallDispose("callback")
     }
 
     /** Count of follow-ups due now or overdue — the red badge on Home. */
