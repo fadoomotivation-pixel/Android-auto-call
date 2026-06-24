@@ -41,6 +41,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -584,7 +586,12 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                     } else {
                         list.forEachIndexed { i, f ->
                             if (i > 0) Spacer(Modifier.height(10.dp))
-                            UpcomingRow(f, onCall = { vm.dialManual(f.phone) })
+                            UpcomingRow(
+                                f,
+                                onCall = { vm.dialManual(f.phone) },
+                                onSnooze = { f.id?.let { vm.snoozeFollowUp(it, 1) } },
+                                onDone = { f.id?.let { vm.completeFollowUp(it) } }
+                            )
                         }
                     }
                 }
@@ -653,7 +660,7 @@ private fun QuickAction(label: String, icon: androidx.compose.ui.graphics.vector
 }
 
 @Composable
-private fun UpcomingRow(f: FollowUp, onCall: () -> Unit) {
+private fun UpcomingRow(f: FollowUp, onCall: () -> Unit, onSnooze: () -> Unit, onDone: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Avatar(f.name ?: f.phone, size = 38)
         Spacer(Modifier.width(12.dp))
@@ -662,7 +669,15 @@ private fun UpcomingRow(f: FollowUp, onCall: () -> Unit) {
             Text("${dayLabel(f.dueAt)}, ${timeOnly(f.dueAt)}", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        ActionButton(Icons.Default.Call, "Call", Green, onClick = onCall)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            IconButton(onClick = onSnooze, modifier = Modifier.size(36.dp).clip(CircleShape).background(Amber.copy(alpha = 0.12f))) {
+                Icon(Icons.Default.Schedule, contentDescription = "Snooze 1h", tint = Amber, modifier = Modifier.size(18.dp))
+            }
+            IconButton(onClick = onDone, modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))) {
+                Icon(Icons.Default.Check, contentDescription = "Done", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            }
+            ActionButton(Icons.Default.Call, "Call", Green, onClick = onCall)
+        }
     }
 }
 
@@ -677,6 +692,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
 
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf("all") }
+    var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
+    var sortBy by remember { mutableStateOf("default") }          // "default" | "score" | "recent"
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
 
@@ -704,8 +721,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         "all" -> app.leads
         else -> app.leads.filter { stageOf(it.status).key == selected || it.status in (STAGES.firstOrNull { s -> s.key == selected }?.statuses ?: emptySet()) }
     }
-    val filtered = if (query.isBlank()) base else base.filter {
+    val tempFiltered = if (tempFilter == null) base else base.filter { it.temperature == tempFilter }
+    val searched = if (query.isBlank()) tempFiltered else tempFiltered.filter {
         (it.name ?: "").contains(query, ignoreCase = true) || it.phone.contains(query)
+    }
+    val filtered = when (sortBy) {
+        "score" -> searched.sortedByDescending { leadScore(it) }
+        "recent" -> searched.sortedByDescending { it.createdAt ?: "" }
+        else -> searched
     }
     val filteredIds = filtered.mapNotNull { it.id }.toSet()
     val allSelected = filteredIds.isNotEmpty() && selectedIds.containsAll(filteredIds)
@@ -784,6 +807,47 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     STAGES.forEach { st ->
                         val n = app.leads.count { it.status in st.statuses }
                         FilterTab(st.label, n, selected == st.key, st.color) { selected = st.key }
+                    }
+                }
+            }
+            // Temperature filter + sort
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val temps = listOf(null to "All", "hot" to "🔥 Hot", "warm" to "🌤 Warm", "cold" to "❄️ Cold")
+                        temps.forEach { (key, label) ->
+                            val on = tempFilter == key
+                            Box(
+                                Modifier.clip(RoundedCornerShape(50))
+                                    .background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { tempFilter = key }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                            ) {
+                                Text(label, style = MaterialTheme.typography.labelMedium,
+                                    color = if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                    // Sort toggle
+                    var showSort by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { showSort = true }) {
+                            Icon(Icons.Default.Sort, contentDescription = "Sort", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showSort,
+                            onDismissRequest = { showSort = false },
+                        ) {
+                            listOf("default" to "Default", "score" to "AI Score ↓", "recent" to "Newest first").forEach { (key, label) ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = {
+                                        Text(label, fontWeight = if (sortBy == key) FontWeight.Bold else FontWeight.Normal)
+                                    },
+                                    onClick = { sortBy = key; showSort = false },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -954,6 +1018,27 @@ private fun WhatsAppChatDialog(
                     TextButton(onClick = onOpenPhoneApp) { Text("Open in WhatsApp app instead") }
                 }
                 Spacer(Modifier.height(10.dp))
+                // Quick template chips — 1 tap fills the draft.
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf(
+                        "👋 Hello" to "Hi $who, this is calling from our team. How can I help you today?",
+                        "📄 Brochure" to "Hi $who, I'm sharing our project brochure with you. Please check and let me know if you have any questions.",
+                        "📅 Meeting" to "Hi $who, shall we schedule a site visit? Please let me know a convenient date and time.",
+                    ).forEach { (label, template) ->
+                        Box(
+                            Modifier.clip(RoundedCornerShape(50))
+                                .background(Color(0xFF25D366).copy(alpha = 0.12f))
+                                .clickable { draft = template }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelMedium, color = Color(0xFF25D366), fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     draft, { draft = it },
                     placeholder = { Text("Type a message…") },
@@ -1299,6 +1384,135 @@ private fun ScheduleFollowUpDialog(who: String, onDismiss: () -> Unit, onPick: (
 }
 
 // ════════════════════════════════════════════════════════════
+//  POST-CALL DISPOSITION (appears after every cloud call)
+// ════════════════════════════════════════════════════════════
+@Composable
+fun PostCallDispositionSheet(vm: MainViewModel) {
+    val app by vm.state.collectAsState()
+    val who = app.postCallName ?: app.postCallPhone ?: return
+    val connected = app.postCallConnected
+    var showSchedule by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { vm.dismissPostCall() },
+        title = {
+            Column {
+                Text("Call ended", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(who, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        text = {
+            if (!showSchedule) {
+                Column {
+                    Text(
+                        if (connected) "How did the call go?" else "What happened?",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    // Row 1: primary dispositions
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DispoButton("No Answer", Red.copy(alpha = 0.12f), Red, Modifier.weight(1f)) {
+                            vm.postCallDispose("no_answer")
+                        }
+                        DispoButton("Busy", Amber.copy(alpha = 0.12f), Amber, Modifier.weight(1f)) {
+                            vm.postCallDispose("busy")
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    // Row 2
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DispoButton("Callback ↻", Indigo.copy(alpha = 0.12f), Indigo, Modifier.weight(1f)) {
+                            showSchedule = true
+                        }
+                        DispoButton("Interested ⭐", Green.copy(alpha = 0.12f), Green, Modifier.weight(1f)) {
+                            vm.postCallDispose("interested")
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    // Row 3
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DispoButton("Not Interested", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) {
+                            vm.postCallDispose("not_interested")
+                        }
+                        DispoButton("Booked ✓", Teal.copy(alpha = 0.12f), Teal, Modifier.weight(1f)) {
+                            vm.postCallDispose("booked")
+                        }
+                    }
+                }
+            } else {
+                // Inline quick-snooze for Callback
+                QuickScheduleChips(
+                    who = who,
+                    onPick = { millis, note -> vm.postCallScheduleFollowUp(millis, note) },
+                    onBack = { showSchedule = false },
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            if (!showSchedule) {
+                TextButton(onClick = { vm.dismissPostCall() }) { Text("Skip") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun DispoButton(label: String, bg: Color, fg: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .height(52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(bg)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = fg, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** Reusable quick-schedule chips used in both PostCallDisposition and ScheduleFollowUpDialog. */
+@Composable
+private fun QuickScheduleChips(
+    who: String,
+    onPick: (Long, String?) -> Unit,
+    onBack: (() -> Unit)? = null,
+) {
+    val now = java.time.ZonedDateTime.now()
+    fun at(days: Long, hour: Int) = now.plusDays(days).withHour(hour).withMinute(0).withSecond(0).toInstant().toEpochMilli()
+    val currentHour = now.hour
+
+    Column {
+        Text("When should we remind you?", style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.height(8.dp))
+        // Smart presets — hide options that are already in the past.
+        OutlinedButton(onClick = { onPick(now.plusMinutes(30).toInstant().toEpochMilli(), null) },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("In 30 minutes") }
+        OutlinedButton(onClick = { onPick(now.plusHours(1).toInstant().toEpochMilli(), null) },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("In 1 hour") }
+        OutlinedButton(onClick = { onPick(now.plusHours(3).toInstant().toEpochMilli(), null) },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("In 3 hours") }
+        if (currentHour < 10) {
+            OutlinedButton(onClick = { onPick(at(0, 10), null) },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Today 10 AM") }
+        }
+        if (currentHour < 16) {
+            OutlinedButton(onClick = { onPick(at(0, 16), null) },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Today 4 PM") }
+        }
+        OutlinedButton(onClick = { onPick(at(1, 10), null) },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Tomorrow 10 AM") }
+        OutlinedButton(onClick = { onPick(at(1, 16), null) },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Tomorrow 4 PM") }
+        if (onBack != null) {
+            Spacer(Modifier.height(6.dp))
+            TextButton(onClick = onBack) { Text("← Back to disposition") }
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════
 //  FOLLOW-UPS
 // ════════════════════════════════════════════════════════════
 @Composable
@@ -1313,6 +1527,14 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val all = app.followUpList
     val due = all.filter { (instantMillis(it.dueAt) ?: Long.MAX_VALUE) <= now }
     val todayList = all.filter { dayLabel(it.dueAt) == "Today" }
+    val morningList = todayList.filter { f ->
+        val ms = instantMillis(f.dueAt) ?: return@filter false
+        java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).hour < 13
+    }
+    val afternoonList = todayList.filter { f ->
+        val ms = instantMillis(f.dueAt) ?: return@filter false
+        java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).hour >= 13
+    }
     val overdueStrict = all.filter {
         val ms = instantMillis(it.dueAt) ?: Long.MAX_VALUE
         ms < now && dayLabel(it.dueAt) != "Today"
@@ -1320,6 +1542,8 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
 
     val shown = when (filter) {
         "today" -> todayList
+        "morning" -> morningList
+        "afternoon" -> afternoonList
         "overdue" -> overdueStrict
         else -> all
     }
@@ -1354,6 +1578,8 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterTab("All", all.size, filter == "all", MaterialTheme.colorScheme.primary) { filter = "all" }
                 FilterTab("Today", todayList.size, filter == "today", MaterialTheme.colorScheme.primary) { filter = "today" }
+                FilterTab("Morning", morningList.size, filter == "morning", Amber) { filter = "morning" }
+                FilterTab("Afternoon", afternoonList.size, filter == "afternoon", Indigo) { filter = "afternoon" }
                 FilterTab("Overdue", overdueStrict.size, filter == "overdue", Red) { filter = "overdue" }
             }
         }
@@ -1401,6 +1627,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     f = f,
                     onCall = { vm.dialManual(f.phone) },
                     onWhatsApp = { openWhatsApp(context, f.phone) },
+                    onSnooze = { f.id?.let { vm.snoozeFollowUp(it, 1) } },
                     onReschedule = { rescheduleFor = f },
                     onDone = { f.id?.let { vm.completeFollowUp(it) } },
                 )
@@ -1422,7 +1649,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onReschedule: () -> Unit, onDone: () -> Unit) {
+private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onSnooze: () -> Unit, onReschedule: () -> Unit, onDone: () -> Unit) {
     val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= System.currentTimeMillis()
     Card(
         modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
@@ -1459,7 +1686,8 @@ private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit
             }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(Icons.Default.AccessTime, "Reschedule", Amber, Modifier.weight(1f), onClick = onReschedule)
+                ActionButton(Icons.Default.Schedule, "Snooze", Amber, Modifier.weight(1f), onClick = onSnooze)
+                ActionButton(Icons.Default.CalendarMonth, "Pick Time", Slate, Modifier.weight(1f), onClick = onReschedule)
                 ActionButton(Icons.Default.CheckCircle, "Done", MaterialTheme.colorScheme.primary, Modifier.weight(1f), onClick = onDone)
             }
         }
