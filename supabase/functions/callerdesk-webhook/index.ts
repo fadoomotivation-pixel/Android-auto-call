@@ -111,11 +111,43 @@ Deno.serve(async (req) => {
       .gte("created_at", since).order("created_at", { ascending: false }).limit(20);
     callLogId = (data ?? []).find((r) => tenDigit(r.phone as string) === cust)?.id ?? null;
   }
-  // If still unmatched (e.g. a true inbound call, or a webhook that beat the
-  // call row), we do NOT fabricate a row: call_logs.salesperson_id is NOT NULL
-  // and the app deserialises it as non-null, so an unattributed row would break
-  // call-list loading. The raw event is already persisted in callerdesk_events
-  // for later reconciliation / inbound routing.
+  // Inbound call: the customer dialed your CallerDesk deskphone and CallerDesk
+  // routed it to an agent's mobile (DialWhomNumber). There's no app-created row
+  // to match, so attribute it to that agent (by their profile phone) and create
+  // the log here — that's how incoming calls land in the CRM with their recording.
+  if (!callLogId && isReport && direction === "incoming") {
+    const agentNum = pick(payload, ["dialwhomnumber", "dial_whom_number", "calling_party_a", "destinationnumber"]);
+    const agent10 = tenDigit(agentNum ?? "");
+    if (agent10.length === 10) {
+      const { data: members } = await admin.from("profiles").select("id, phone").eq("company_id", companyId);
+      const agent = (members ?? []).find((m) => tenDigit(m.phone as string) === agent10);
+      if (agent) {
+        // Link to an existing lead with the customer's number, if any.
+        let contactId: string | null = null;
+        if (customer) {
+          const cust10 = tenDigit(customer);
+          const { data: contacts } = await admin.from("contacts").select("id, phone")
+            .eq("company_id", companyId).limit(200);
+          contactId = (contacts ?? []).find((c) => tenDigit(c.phone as string) === cust10)?.id ?? null;
+        }
+        const { data: created } = await admin.from("call_logs").insert({
+          company_id: companyId,
+          salesperson_id: agent.id,
+          contact_id: contactId,
+          phone: customer ?? agentNum,
+          direction: "incoming",
+          notes: "callerdesk-inbound",
+          started_at: new Date().toISOString(),
+          recording_source: "callerdesk",
+          recording_status: "none",
+        }).select("id").maybeSingle();
+        callLogId = created?.id ?? null;
+      }
+    }
+  }
+  // If still unmatched (e.g. an inbound call to an unknown agent, or a webhook
+  // that beat the call row), we do NOT fabricate a row — the raw event is kept in
+  // callerdesk_events for later reconciliation.
 
   if (callLogId) {
     const patch: Record<string, unknown> = { provider_call_id: providerCallId ?? undefined };
