@@ -98,18 +98,37 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     Spacer(Modifier.height(10.dp))
                     Text(contact.name ?: contact.phone, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(contact.phone, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        contact.temperature?.let { t -> Pill(TEMPS.firstOrNull { it.first == t }?.second ?: t, Color(0xFFEF4444)) }
-                        Pill(SETTABLE.firstOrNull { it.first == contact.status }?.second ?: contact.status, MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(8.dp))
+                    // One quiet status line: a temperature dot + muted stage text — no pills.
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        contact.temperature?.takeIf { it.isNotBlank() }?.let { t ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val dot = when (t) { "hot" -> Color(0xFFEF4444); "warm" -> Color(0xFFF59E0B); else -> Color(0xFF2563EB) }
+                                Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
+                                Spacer(Modifier.width(6.dp))
+                                Text(t.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Text(SETTABLE.firstOrNull { it.first == contact.status }?.second ?: contact.status,
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DetailAction(Icons.Default.Call, "Call", Color(0xFF22C55E), Modifier.weight(1f)) {
-                            val id = contact.id
-                            if (app.callerdeskCalling) vm.cloudCall(contact.phone, id, contact.campaignId) else vm.dialManual(contact.phone)
+                        // Primary action: Call (solid). WhatsApp is a quiet secondary.
+                        Row(
+                            Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary)
+                                .clickable {
+                                    val id = contact.id
+                                    if (app.callerdeskCalling) vm.cloudCall(contact.phone, id, contact.campaignId) else vm.dialManual(contact.phone)
+                                }.padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                         }
-                        DetailAction(Icons.Default.Chat, "WhatsApp", Color(0xFF25D366), Modifier.weight(1f)) {
+                        DetailAction(Icons.Default.Chat, "WhatsApp", MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f)) {
                             openWhatsAppLocal(context, contact.phone)
                         }
                     }
@@ -311,13 +330,6 @@ private fun ChipRow(options: List<Pair<String?, String>>, selected: String, onPi
                     style = MaterialTheme.typography.labelMedium)
             }
         }
-    }
-}
-
-@Composable
-private fun Pill(text: String, color: Color) {
-    Box(Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.15f)).padding(horizontal = 12.dp, vertical = 5.dp)) {
-        Text(text, color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 

@@ -234,17 +234,17 @@ private fun Avatar(name: String, size: Int = 44) {
 
 @Composable
 private fun StatTile(emoji: String, value: String, label: String, accent: Color, modifier: Modifier = Modifier) {
+    // Flat, borderless tile: a quiet glyph, a bold value, a muted label. No
+    // coloured tile, no heavy shadow — consistent with the lead cards.
     Card(
-        modifier = modifier.border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
-        Column(Modifier.padding(14.dp)) {
-            Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(accent.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center) {
-                Text(emoji, fontSize = 16.sp)
-            }
-            Spacer(Modifier.height(10.dp))
+        Column(Modifier.padding(16.dp)) {
+            Text(emoji, fontSize = 18.sp)
+            Spacer(Modifier.height(8.dp))
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -441,8 +441,10 @@ private fun PerfBar(label: String, value: Int, target: Int, color: Color) {
 @Composable
 private fun PerformanceCard(app: AppState) {
     Card(
-        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.padding(16.dp)) {
             SectionHeader("Today's Performance")
@@ -462,26 +464,25 @@ private fun PerformanceCard(app: AppState) {
 
 @Composable
 private fun AiInsightCard(onOpenLeads: () -> Unit, hotUncontacted: Int) {
+    // Subtle primary-tinted card with dark text + a text link — not a loud gradient.
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF7C3AED), Color(0xFF2563EB)))).padding(18.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
-            }
+            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text("AI Insight", style = MaterialTheme.typography.titleSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                Text("AI Insight", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(2.dp))
                 Text(
                     if (hotUncontacted > 0) "You have $hotUncontacted hot leads not contacted yet — call them to lift conversions."
                     else "You're on top of your hot leads. Keep the follow-ups flowing!",
-                    style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
-                Box(Modifier.clip(RoundedCornerShape(50)).background(Color.White).clickable { onOpenLeads() }.padding(horizontal = 14.dp, vertical = 7.dp)) {
-                    Text("View your leads", color = Color(0xFF2563EB), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                }
+                Text("View your leads →", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium, modifier = Modifier.clickable { onOpenLeads() })
             }
         }
     }
@@ -537,8 +538,10 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // Lead pipeline
         item {
             Card(
-                modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
             ) {
                 Column(Modifier.padding(16.dp)) {
                     SectionHeader("Lead Pipeline", "View all", onOpenLeads)
@@ -549,7 +552,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
                             ) {
-                                Text(n.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = stage.color)
+                                Text(n.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                 Text(
                                     stage.label,
                                     style = MaterialTheme.typography.labelSmall,
@@ -574,10 +577,11 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 SectionHeader("Quick Actions")
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    QuickAction("Add Lead", Icons.Default.PersonAdd, MaterialTheme.colorScheme.primary, Modifier.weight(1f), onOpenLeads)
-                    QuickAction("Calendar", Icons.Default.CalendarMonth, Purple, Modifier.weight(1f)) { onNavigate("calendar") }
-                    QuickAction("AI Coach", Icons.Default.AutoAwesome, Cyan, Modifier.weight(1f)) { onNavigate("ai") }
-                    QuickAction("Attendance", Icons.Default.AccessTime, Amber, Modifier.weight(1f)) { onNavigate("attendance") }
+                    val accent = MaterialTheme.colorScheme.primary
+                    QuickAction("Add Lead", Icons.Default.PersonAdd, accent, Modifier.weight(1f), onOpenLeads)
+                    QuickAction("Calendar", Icons.Default.CalendarMonth, accent, Modifier.weight(1f)) { onNavigate("calendar") }
+                    QuickAction("AI Coach", Icons.Default.AutoAwesome, accent, Modifier.weight(1f)) { onNavigate("ai") }
+                    QuickAction("Attendance", Icons.Default.AccessTime, accent, Modifier.weight(1f)) { onNavigate("attendance") }
                 }
             }
         }
@@ -585,8 +589,10 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // Upcoming follow-ups
         item {
             Card(
-                modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
             ) {
                 Column(Modifier.padding(16.dp)) {
                     SectionHeader(if (due > 0) "Follow-ups · $due due now" else "Upcoming Follow-ups", "View all", onOpenFollowUps)
@@ -871,9 +877,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             if (selectMode) {
                 item {
                     Card(
-                        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                        modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             Text("${selectedIds.size} selected", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -1595,9 +1601,9 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // auto-queue
         item {
             Card(
-                modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
+                modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
@@ -1661,8 +1667,8 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
 private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onSnooze: () -> Unit, onReschedule: () -> Unit, onDone: () -> Unit) {
     val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= System.currentTimeMillis()
     Card(
-        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1730,8 +1736,8 @@ fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit, onCallHistory: () -> 
 @Composable
 private fun LeaderboardCard(vm: MainViewModel, app: AppState, compact: Boolean) {
     Card(
-        modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.05f), MaterialTheme.shapes.medium),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
