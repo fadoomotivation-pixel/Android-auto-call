@@ -251,6 +251,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Saves the rep's own mobile number (the phone CallerDesk rings) and reflects it locally. */
+    fun setMyPhone(phone: String) {
+        val clean = phone.trim()
+        viewModelScope.launch {
+            runCatching { Repository.updateMyPhone(clean) }
+                .onSuccess {
+                    set { it.copy(profile = it.profile?.copy(phone = clean), message = "Mobile number saved ✓") }
+                }
+                .onFailure { e -> set { it.copy(error = e.message ?: "Couldn't save your number") } }
+        }
+    }
+
     fun signIn(email: String, password: String) = auth { Repository.signIn(email, password) }
 
     fun signUp(
