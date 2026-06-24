@@ -79,19 +79,6 @@ export interface CompanyIntegration {
   api_base_url: string;
 }
 
-/** An agent extension returned by UrOperator's registration-info endpoint. */
-export interface UroAgent {
-  username: string;
-  name: string | null;
-}
-
-/** A DID / caller-ID returned by UrOperator. */
-export interface UroCallerId {
-  did: string;
-  name?: string | null;
-  status?: string | null;
-}
-
 export interface CompanyOverview {
   company_id: string;
   name: string;

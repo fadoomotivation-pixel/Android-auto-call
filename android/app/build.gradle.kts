@@ -34,14 +34,25 @@ android {
         applicationId = "com.callpro.ai"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        // Version is monotonic from CI (the workflow passes the run number) so the
+        // in-app updater can tell newer builds apart; local builds default to 1.
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
 
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     signingConfigs {
+        // Fixed debug keystore (debug creds are non-secret by design) so every CI
+        // build shares one signature — required for in-app updates to install over
+        // the previous version without an uninstall.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (hasReleaseSigning) {
             create("release") {
                 storeFile = file(keystoreProps.getProperty("storeFile"))

@@ -75,6 +75,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -315,6 +316,26 @@ private fun MainShell(vm: MainViewModel) {
                 restoreState = true
             }
         }
+    }
+
+    // A newer build was published → offer a one-tap in-app update.
+    state.update?.let { rel ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissUpdate() },
+            title = { Text("🚀 Update available") },
+            text = {
+                Column {
+                    Text("Version ${rel.versionName} is ready to install.")
+                    if (rel.notes.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(rel.notes, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.installUpdate(); vm.dismissUpdate() }) { Text("Update now") } },
+            dismissButton = { TextButton(onClick = { vm.dismissUpdate() }) { Text("Later") } },
+        )
     }
 
     ModalNavigationDrawer(

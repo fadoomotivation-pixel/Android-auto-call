@@ -610,6 +610,14 @@ object Repository {
         )
     }
 
+    /** Updates the rep's own mobile number — the phone CallerDesk rings and bridges. */
+    suspend fun updateMyPhone(phone: String) {
+        val uid = currentUserId() ?: return
+        client.from("profiles").update(buildJsonObject { put("phone", phone.trim()) }) {
+            filter { eq("id", uid) }
+        }
+    }
+
     // ---------- lead pipeline ----------
 
     /** Every contact this salesperson owns, newest activity first — the pipeline. */

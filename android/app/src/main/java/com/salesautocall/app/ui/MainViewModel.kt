@@ -22,6 +22,7 @@ import com.salesautocall.app.data.ProjectSite
 import com.salesautocall.app.data.Repository
 import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.notify.FollowUpReminder
+import com.salesautocall.app.update.AppUpdater
 import com.salesautocall.app.dialer.AutoDialerService
 import com.salesautocall.app.dialer.DialerConfig
 import com.salesautocall.app.dialer.DialerController
@@ -134,6 +135,9 @@ data class AppState(
     val postCallName: String? = null,
     val postCallCampaignId: String? = null,
     val postCallConnected: Boolean = false,
+    // In-app update: set when a newer build is published; drives the update prompt.
+    val update: AppUpdater.Release? = null,
+    val checkingUpdate: Boolean = false,
 )
 
 enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
@@ -237,8 +241,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { Repository.myCompany() }
                 .onSuccess { c -> set { it.copy(company = c) } }
             registerPushToken()
+            checkForUpdate()
         }
     }
+
+    /** Checks the public GitHub release for a newer build; surfaces an update prompt. */
+    fun checkForUpdate(manual: Boolean = false) {
+        viewModelScope.launch {
+            if (manual) set { it.copy(checkingUpdate = true) }
+            val rel = runCatching { AppUpdater.checkForUpdate() }.getOrNull()
+            set {
+                it.copy(
+                    update = rel,
+                    checkingUpdate = false,
+                    message = if (manual && rel == null) "You're on the latest version ✓" else it.message,
+                )
+            }
+        }
+    }
+
+    /** Downloads the newer APK and hands it to the system installer. */
+    fun installUpdate() {
+        val rel = _state.value.update ?: return
+        AppUpdater.downloadAndInstall(getApplication(), rel)
+        set { it.copy(message = "Downloading update… you'll be asked to install when it's ready.") }
+    }
+
+    fun dismissUpdate() = set { it.copy(update = null) }
 
     /** Registers this device's FCM token so the backend can push hot-lead alerts.
      *  Also re-sends any token captured before the rep signed in. */
@@ -254,6 +283,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         viewModelScope.launch { runCatching { Repository.registerDeviceToken(token) } }
                     }
                 }
+        }
+    }
+
+    /** Saves the rep's own mobile number (the phone CallerDesk rings) and reflects it locally. */
+    fun setMyPhone(phone: String) {
+        val clean = phone.trim()
+        viewModelScope.launch {
+            runCatching { Repository.updateMyPhone(clean) }
+                .onSuccess {
+                    set { it.copy(profile = it.profile?.copy(phone = clean), message = "Mobile number saved ✓") }
+                }
+                .onFailure { e -> set { it.copy(error = e.message ?: "Couldn't save your number") } }
         }
     }
 

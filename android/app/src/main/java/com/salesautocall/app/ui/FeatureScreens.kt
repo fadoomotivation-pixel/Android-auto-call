@@ -481,48 +481,25 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                     }
                 }
 
+                // The one thing each rep sets: the mobile CallerDesk rings, then
+                // bridges to the customer. No SIP extension / server to configure.
+                Spacer(Modifier.height(4.dp))
+                var myPhone by remember(app.profile?.phone) { mutableStateOf(app.profile?.phone ?: "") }
                 OutlinedTextField(
-                    app.cloudAgentId, { vm.setCloudAgentId(it) },
-                    label = { Text("Your extension number (from your admin)") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    myPhone, { v -> myPhone = v.filter { it.isDigit() || it == '+' } },
+                    label = { Text("📱 Your mobile number") },
+                    supportingText = { Text("CallerDesk rings this phone, then connects the customer.") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth(),
                 )
-
-                // Advanced SIP settings — hidden by default
-                var showAdvanced by remember { mutableStateOf(false) }
                 Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                    Text(if (showAdvanced) "▲ Hide advanced settings" else "▼ Advanced settings")
-                }
-                if (showAdvanced) {
-                    Spacer(Modifier.height(4.dp))
-                    OutlinedTextField(
-                        app.cloudCallerId, { vm.setCloudCallerId(it) },
-                        label = { Text("Caller ID / DID (optional)") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        app.cloudSipPassword, { vm.setCloudSipPassword(it) },
-                        label = { Text("SIP password") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            app.cloudSipServer, { vm.setCloudSipServer(it) },
-                            label = { Text("SIP server") },
-                            singleLine = true, modifier = Modifier.weight(2f),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        OutlinedTextField(
-                            app.cloudSipPort, { vm.setCloudSipPort(it) },
-                            label = { Text("Port") },
-                            singleLine = true, modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Text("Leave SIP server blank to use the default. Only change if your admin gives you different settings.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                val phoneDirty = myPhone.trim() != (app.profile?.phone ?: "").trim()
+                Button(
+                    onClick = { vm.setMyPhone(myPhone) },
+                    enabled = phoneDirty && myPhone.trim().length >= 8,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (phoneDirty) "Save mobile number" else "✓ Saved") }
             }
         }
     }
