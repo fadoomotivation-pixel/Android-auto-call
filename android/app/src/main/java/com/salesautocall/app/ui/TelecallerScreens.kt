@@ -894,6 +894,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         onWhatsApp = { vm.openWaChat(c) },
                         onSchedule = { scheduleFor = c },
                         onMore = { actionFor = c },
+                        onOpen = { c.id?.let { vm.openLeadDetail(it) } },
                     )
                 }
             }
@@ -1068,10 +1069,11 @@ private fun LeadCard(
     onWhatsApp: () -> Unit,
     onSchedule: () -> Unit,
     onMore: () -> Unit,
+    onOpen: () -> Unit = {},
 ) {
     val cardMod = Modifier.fillMaxWidth()
         .then(if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier)
-        .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier)
+        .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
     Card(
         modifier = cardMod,
         shape = RoundedCornerShape(18.dp),

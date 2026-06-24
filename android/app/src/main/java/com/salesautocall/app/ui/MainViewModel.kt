@@ -138,6 +138,10 @@ data class AppState(
     // In-app update: set when a newer build is published; drives the update prompt.
     val update: AppUpdater.Release? = null,
     val checkingUpdate: Boolean = false,
+    // Lead detail page (full-screen overlay): which lead is open + its call history.
+    val leadDetailId: String? = null,
+    val leadDetailCalls: List<CallLog> = emptyList(),
+    val leadDetailLoading: Boolean = false,
 )
 
 enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
@@ -1651,6 +1655,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun stopRecording() {
         if (_state.value.playingCallId != null) set { it.copy(playingCallId = null) }
     }
+
+    // ---------- lead detail page ----------
+
+    /** Opens the full-screen lead detail overlay and loads that lead's call history. */
+    fun openLeadDetail(contactId: String) {
+        set { it.copy(leadDetailId = contactId, leadDetailCalls = emptyList(), leadDetailLoading = true) }
+        viewModelScope.launch {
+            val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
+            set { if (it.leadDetailId == contactId) it.copy(leadDetailCalls = calls, leadDetailLoading = false) else it }
+        }
+    }
+
+    fun refreshLeadDetail() { _state.value.leadDetailId?.let { openLeadDetail(it) } }
+
+    fun closeLeadDetail() = set { it.copy(leadDetailId = null, leadDetailCalls = emptyList(), playingCallId = null) }
 
     private fun parseInstant(iso: String): Long =
         runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)

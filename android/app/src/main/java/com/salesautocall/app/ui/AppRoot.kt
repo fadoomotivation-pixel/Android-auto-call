@@ -116,6 +116,11 @@ fun AppRoot(vm: MainViewModel) {
         PostCallDispositionSheet(vm)
     }
 
+    // Full-screen lead detail overlay.
+    if (state.signedIn && state.leadDetailId != null) {
+        LeadDetailScreen(vm)
+    }
+
     crash?.let { text ->
         AlertDialog(
             onDismissRequest = { AppPrefs.clearLastCrash(context); crash = null },
