@@ -80,11 +80,15 @@ Deno.serve(async (req) => {
   // Prefer talk time (actual conversation) over total call time (incl. ringing).
   const durationStr = pick(payload, ["talkduration", "talktime", "billsec", "callduration", "call_duration", "duration", "duration_seconds"]);
   const status = pick(payload, ["callstatus", "status", "call_status", "dialstatus", "disposition"]);
-  const customer = pick(payload, ["calling_party_b", "sourcenumber", "customer_number", "customer", "destination", "to", "called_number", "client_number"]);
   const directionRaw = pick(payload, ["direction", "call_type", "calltype"]);
+  // CallerDesk: WEBOBD = outbound, IVR = inbound. Default to outgoing.
+  const direction = directionRaw ? (/(^in|inbound|incoming|ibd|ivr)/i.test(directionRaw) ? "incoming" : "outgoing") : null;
+  // The customer's number sits on a different leg per direction: an outbound
+  // call rings DialWhomNumber; an inbound call comes FROM SourceNumber.
+  const customer = direction === "incoming"
+    ? pick(payload, ["sourcenumber", "calling_party_a", "from", "caller", "customer_number"])
+    : pick(payload, ["dialwhomnumber", "dial_whom_number", "calling_party_b", "destination", "to", "called_number", "customer_number", "client_number"]);
   const duration = durationStr ? Math.max(0, parseInt(durationStr, 10) || 0) : null;
-  // WEBOBD / outbound vs WEBIBD / inbound. Default to outgoing.
-  const direction = directionRaw ? (/(^in|inbound|incoming|ibd)/i.test(directionRaw) ? "incoming" : "outgoing") : null;
   // "Answered" must NOT match " No Answer" / cancel / congestion.
   const answered = /^answer(ed)?$/i.test((status ?? "").trim());
   // Only the terminal "call report" carries the recording + final disposition;
