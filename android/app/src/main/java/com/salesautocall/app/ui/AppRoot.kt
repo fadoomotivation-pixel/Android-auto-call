@@ -90,6 +90,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.salesautocall.app.data.Contact
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -312,6 +314,7 @@ private fun MainShell(vm: MainViewModel) {
     val tabs = listOf(Tab.Home, Tab.Leads, Tab.Dialer, Tab.Campaign, Tab.Team)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val currentRoute = nav.currentBackStackEntryAsState().value?.destination?.route
 
     LaunchedEffect(state.requestedContactId) {
         if (state.requestedContactId != null) {
@@ -350,6 +353,10 @@ private fun MainShell(vm: MainViewModel) {
                 userName = state.profile?.fullName ?: "Your account",
                 role = state.profile?.role ?: "salesperson",
                 companyName = state.company?.name,
+                currentRoute = currentRoute,
+                followUps = state.followUpList.size,
+                siteVisits = state.leads.count { it.status == "site_visit" },
+                pipelineValue = pipelineValue(state.leads),
                 onNavigate = { route ->
                     vm.clearMessage()
                     scope.launch { drawerState.close() }
@@ -520,44 +527,81 @@ private fun MainShell(vm: MainViewModel) {
     }
 }
 
-private data class MenuItem(
-    val label: String,
-    val desc: String,
-    val icon: ImageVector,
-    val route: String?,        // null = "coming soon" / handled by onClick
-    val color: Color,
-    val badge: String? = null,
-)
+private data class NavRow(val label: String, val desc: String, val icon: ImageVector, val route: String?, val badge: String? = null)
+private data class QuickAction(val label: String, val icon: ImageVector, val route: String?)
 
-// Premium dark menu palette.
+// Premium dark menu palette — one accent, everything else neutral.
 private val MenuBg = Color(0xFF0C1426)
+private val MenuCard = Color(0xFF13203A)
 private val MenuText = Color(0xFFE8EDF7)
 private val MenuMuted = Color(0xFF8A97AE)
 private val MenuDivider = Color(0xFF1B2740)
+private val MenuAccent = Color(0xFF3B82F6)
 private val Gold = Color(0xFFF5B23E)
+
+/** Rough INR value of the open pipeline (excludes won/dead), for the menu card. */
+private fun pipelineValue(leads: List<Contact>): String {
+    val open = leads.filter { it.status !in setOf("booked", "lost", "not_interested", "dnc") }
+    val total = open.sumOf { menuBudgetRupees(it.budget) }
+    return menuFormatRupees(total)
+}
+
+private fun menuBudgetRupees(s: String?): Double {
+    if (s.isNullOrBlank()) return 0.0
+    val t = s.lowercase().replace(",", "").trim()
+    val num = Regex("[0-9]+(\\.[0-9]+)?").find(t)?.value?.toDoubleOrNull() ?: return 0.0
+    return when {
+        "cr" in t || "crore" in t -> num * 10_000_000
+        "lakh" in t || "lac" in t || t.endsWith("l") -> num * 100_000
+        t.endsWith("k") -> num * 1_000
+        else -> num
+    }
+}
+
+private fun menuFormatRupees(v: Double): String = when {
+    v >= 10_000_000 -> "₹%.1f Cr".format(v / 10_000_000)
+    v >= 100_000 -> "₹%.0f L".format(v / 100_000)
+    v >= 1_000 -> "₹%.0f K".format(v / 1_000)
+    else -> "₹0"
+}
 
 @Composable
 private fun AppDrawer(
     userName: String,
     role: String,
     companyName: String?,
+    currentRoute: String?,
+    followUps: Int,
+    siteVisits: Int,
+    pipelineValue: String,
     onNavigate: (String) -> Unit,
     onSettings: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     val context = LocalContext.current
-    val items = listOf(
-        MenuItem("Dashboard", "Calls, leads & team performance", Icons.Default.Dashboard, "home", Color(0xFF3B82F6)),
-        MenuItem("Leads", "Manage and follow up your leads", Icons.Default.People, "leads", Color(0xFF22C55E)),
-        MenuItem("AI Assistant", "Insights & next-best actions", Icons.Default.AutoAwesome, "ai", Color(0xFF8B5CF6), "NEW"),
-        MenuItem("Follow-up Calendar", "Day & week callback planner", Icons.Default.CalendarMonth, "calendar", Color(0xFFF59E0B)),
-        MenuItem("Follow Ups", "Your due-now worklist", Icons.Default.AccessTime, "followups", Color(0xFF14B8A6)),
-        MenuItem("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance", Color(0xFF10B981)),
-        MenuItem("Calls", "Call history and recordings", Icons.Default.Call, "calls", Color(0xFFEC4899)),
-        MenuItem("Call Lists", "Import lists & auto-dial", Icons.Default.Campaign, "campaign", Color(0xFFEF4444)),
-        MenuItem("Reports & Team", "Leaderboard, talk-time, conversions", Icons.Default.Leaderboard, "team", Color(0xFFA855F7)),
-        MenuItem("Investor Videos", "AI-generated property videos", Icons.Default.Videocam, null, Color(0xFFF43F5E), "Soon"),
-        MenuItem("Brochures", "Smart brochures in one tap", Icons.Default.Description, null, Color(0xFF06B6D4), "Soon"),
+    fun open(route: String?, label: String) {
+        if (route != null) onNavigate(route)
+        else android.widget.Toast.makeText(context, "$label — coming soon", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    val main = listOf(
+        NavRow("Dashboard", "Overview, performance & revenue", Icons.Default.Dashboard, "home"),
+        NavRow("Leads", "Manage, auto-dial & activity", Icons.Default.People, "leads"),
+        NavRow("Calling", "Dialer & call workflow", Icons.Default.Dialpad, "dialer"),
+        NavRow("AI Sales Coach", "Insights, next actions & coach", Icons.Default.AutoAwesome, "ai", "NEW"),
+        NavRow("Reports", "Team performance & analytics", Icons.Default.Leaderboard, "team"),
+    )
+    val quick = listOf(
+        QuickAction("Start Calling", Icons.Default.Call, "dialer"),
+        QuickAction("Add Lead", Icons.Default.People, "leads"),
+        QuickAction("Schedule Follow-up", Icons.Default.CalendarMonth, "calendar"),
+        QuickAction("Import Call List", Icons.Default.Campaign, "campaign"),
+    )
+    val more = listOf(
+        NavRow("Follow Ups", "Your due-now worklist", Icons.Default.AccessTime, "followups"),
+        NavRow("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance"),
+        NavRow("Calls & Recordings", "History and recordings", Icons.Default.Call, "calls"),
+        NavRow("Projects", "Manage projects & inventory", Icons.Default.Description, null),
     )
 
     ModalDrawerSheet(
@@ -566,49 +610,62 @@ private fun AppDrawer(
         drawerContentColor = MenuText,
     ) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            // Brand header — gradient band with a Premium chip.
-            Column(
+            // Brand header.
+            Row(
                 Modifier.fillMaxWidth()
                     .background(Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF0C1426))))
                     .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF2563EB)),
-                        contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = Color.White, modifier = Modifier.size(24.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
-                    }
-                    Box(Modifier.clip(RoundedCornerShape(50)).background(Gold.copy(alpha = 0.2f)).padding(horizontal = 9.dp, vertical = 3.dp)) {
-                        Text("Premium", style = MaterialTheme.typography.labelSmall, color = Gold, fontWeight = FontWeight.Bold)
-                    }
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(MenuAccent),
+                    contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = Color.White, modifier = Modifier.size(24.dp))
                 }
-                Spacer(Modifier.height(14.dp))
-                Text("Everything you need. One app.", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f))
-            }
-
-            Spacer(Modifier.height(10.dp))
-            items.forEach { item ->
-                DrawerRow(item) {
-                    if (item.route != null) onNavigate(item.route)
-                    else android.widget.Toast.makeText(context, "${item.label} — coming soon", android.widget.Toast.LENGTH_SHORT).show()
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
+                }
+                Box(Modifier.clip(RoundedCornerShape(50)).background(Gold.copy(alpha = 0.2f)).padding(horizontal = 9.dp, vertical = 3.dp)) {
+                    Text("Premium", style = MaterialTheme.typography.labelSmall, color = Gold, fontWeight = FontWeight.Bold)
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(MenuDivider))
-            Spacer(Modifier.height(8.dp))
-            DrawerRow(MenuItem("Settings", "Calling, goals & cloud setup", Icons.Default.Settings, null, Color(0xFF64748B))) { onSettings() }
-            DrawerRow(MenuItem("Help & Support", "Get help using the app", Icons.AutoMirrored.Filled.HelpOutline, null, Color(0xFF0EA5E9))) {
-                android.widget.Toast.makeText(context, "Help & Support — coming soon", android.widget.Toast.LENGTH_SHORT).show()
+            // Today's Opportunities — a single calm card, three quiet stats.
+            Column(Modifier.padding(16.dp)) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MenuCard).padding(16.dp)) {
+                    Text("TODAY'S OPPORTUNITIES", style = MaterialTheme.typography.labelSmall, color = MenuMuted, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Row(Modifier.fillMaxWidth()) {
+                        OppStat(followUps.toString(), "Follow-ups", Modifier.weight(1f))
+                        OppStat(siteVisits.toString(), "Site visits", Modifier.weight(1f))
+                        OppStat(pipelineValue, "Pipeline", Modifier.weight(1f))
+                    }
+                }
             }
+
+            DrawerSection("MAIN")
+            main.forEach { row -> DrawerNavRow(row, selected = row.route == currentRoute) { open(row.route, row.label) } }
+
+            Spacer(Modifier.height(16.dp))
+            DrawerSection("QUICK ACTIONS")
+            Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                quick.chunked(2).forEach { pair ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        pair.forEach { q -> QuickTile(q, Modifier.weight(1f)) { open(q.route, q.label) } }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            DrawerSection("MORE")
+            more.forEach { row -> DrawerMoreRow(row.icon, row.label, selected = row.route == currentRoute) { open(row.route, row.label) } }
+            DrawerMoreRow(Icons.Default.Settings, "Settings", selected = currentRoute == "settings") { onSettings() }
 
             Spacer(Modifier.height(8.dp))
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(MenuDivider))
-            // Profile footer
+            // Profile footer.
             Row(
                 Modifier.fillMaxWidth().clickable { onSignOut() }.padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -634,29 +691,80 @@ private fun AppDrawer(
 }
 
 @Composable
-private fun DrawerRow(item: MenuItem, onClick: () -> Unit) {
+private fun OppStat(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(value, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MenuMuted)
+    }
+}
+
+@Composable
+private fun DrawerSection(text: String) {
+    Text(
+        text, style = MaterialTheme.typography.labelSmall, color = MenuMuted,
+        fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
+        modifier = Modifier.padding(start = 20.dp, top = 6.dp, bottom = 6.dp),
+    )
+}
+
+/** Prominent MAIN nav row: monochrome icon, label + description, accent highlight when active. */
+@Composable
+private fun DrawerNavRow(item: NavRow, selected: Boolean, onClick: () -> Unit) {
+    val tint = if (selected) MenuAccent else MenuMuted
     Row(
-        Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 9.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) MenuAccent.copy(alpha = 0.14f) else Color.Transparent)
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(item.color.copy(alpha = 0.18f)),
-            contentAlignment = Alignment.Center) {
-            Icon(item.icon, contentDescription = item.label, tint = item.color, modifier = Modifier.size(21.dp))
-        }
+        Icon(item.icon, contentDescription = item.label, tint = tint, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(item.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MenuText)
+                Text(item.label, style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold, color = if (selected) Color.White else MenuText)
                 item.badge?.let {
                     Spacer(Modifier.width(8.dp))
-                    val badgeColor = if (it == "Soon") MenuMuted else item.color
-                    Box(Modifier.clip(RoundedCornerShape(50)).background(badgeColor.copy(alpha = 0.2f)).padding(horizontal = 7.dp, vertical = 1.dp)) {
-                        Text(it, style = MaterialTheme.typography.labelSmall, color = badgeColor, fontWeight = FontWeight.Bold)
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(MenuAccent.copy(alpha = 0.22f)).padding(horizontal = 7.dp, vertical = 1.dp)) {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MenuAccent, fontWeight = FontWeight.Bold)
                     }
                 }
             }
             Text(item.desc, style = MaterialTheme.typography.bodySmall, color = MenuMuted, maxLines = 1)
         }
-        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MenuMuted, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** Compact MORE row — just an icon and a label, no description, no colour. */
+@Composable
+private fun DrawerMoreRow(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) MenuAccent.copy(alpha = 0.14f) else Color.Transparent)
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = label, tint = if (selected) MenuAccent else MenuMuted, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(14.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (selected) Color.White else MenuText)
+    }
+}
+
+/** Quick-action tile — a small square button in the 2×2 grid. */
+@Composable
+private fun QuickTile(item: QuickAction, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.height(80.dp).clip(RoundedCornerShape(14.dp)).background(MenuCard).clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(item.icon, contentDescription = item.label, tint = MenuAccent, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(7.dp))
+        Text(item.label, style = MaterialTheme.typography.labelMedium, color = MenuText, maxLines = 1)
     }
 }
