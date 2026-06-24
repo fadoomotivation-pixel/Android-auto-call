@@ -140,15 +140,6 @@ private val SETTABLE_STAGES = listOf(
     "dnc" to "Do Not Call",
 )
 
-private data class TempMeta(val label: String, val fg: Color, val bg: Color)
-
-private fun tempMeta(t: String?): TempMeta? = when (t) {
-    "hot" -> TempMeta("Hot", Red, Color(0xFFFEE2E2))
-    "warm" -> TempMeta("Warm", Amber, Color(0xFFFEF3C7))
-    "cold" -> TempMeta("Cold", Color(0xFF2563EB), Color(0xFFDBEAFE))
-    else -> null
-}
-
 private val TEMPERATURES = listOf("hot" to "🔥 Hot", "warm" to "🌤 Warm", "cold" to "❄️ Cold")
 
 private fun leadScore(c: Contact): Int {
@@ -279,39 +270,21 @@ private fun Pill(text: String, fg: Color, bg: Color) {
 }
 
 @Composable
-private fun StageChip(status: String) {
-    val s = stageOf(status)
-    Pill(s.label, s.color, s.color.copy(alpha = 0.12f))
-}
-
-@Composable
-private fun ScoreChip(score: Int) {
-    val c = when { score >= 75 -> Green; score >= 50 -> Amber; else -> Slate }
-    Pill("Score $score%", c, c.copy(alpha = 0.12f))
-}
-
-@Composable
 private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Color, onClick: () -> Unit) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-    Box(
-        Modifier.clip(RoundedCornerShape(50))
-            .background(bg)
-            .border(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
-            .clickable { onClick() }
+    // One accent only: selected = filled primary, unselected = quiet neutral. No
+    // borders, no per-stage colours — the count rides inline in muted text.
+    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier.clip(RoundedCornerShape(50)).background(bg).clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, color = fg, style = MaterialTheme.typography.labelLarge)
+        Text(label, color = fg, style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        if (count > 0) {
             Spacer(Modifier.width(6.dp))
-            Box(
-                Modifier.clip(RoundedCornerShape(50))
-                    .background(if (selected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.22f) else accent.copy(alpha = 0.14f))
-                    .padding(horizontal = 6.dp, vertical = 1.dp),
-            ) {
-                Text("$count", color = if (selected) MaterialTheme.colorScheme.onPrimary else accent,
-                    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-            }
+            Text("$count", color = fg.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -329,6 +302,45 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
         Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(19.dp))
         Spacer(Modifier.width(6.dp))
         Text(label, style = MaterialTheme.typography.labelLarge, color = tint, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** A small temperature dot — the only colour on a lead card. Quiet, not a pill. */
+@Composable
+private fun TempDot(t: String?) {
+    val color = when (t) {
+        "hot" -> Red
+        "warm" -> Amber
+        "cold" -> Color(0xFF2563EB)
+        else -> return
+    }
+    Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+}
+
+/** The single filled primary action on a card. Everything else is secondary. */
+@Composable
+private fun PrimaryCallButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary)
+            .clickable { onClick() }.padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(7.dp))
+        Text(label, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** A quiet, neutral icon button — secondary action, no fill colour competing for attention. */
+@Composable
+private fun GhostIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -758,34 +770,33 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
                         }
-                        // Two big, premium actions — clear tap targets for any telecaller.
+                        // One primary action (Select & Call); AI Score is a quiet secondary.
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Box(
                                 Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(14.dp))
-                                    .border(1.5.dp, Indigo.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-                                    .background(Indigo.copy(alpha = 0.08f))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                                     .clickable(enabled = !app.aiScoringLeads) { vm.scoreLeads() },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (app.aiScoringLeads) {
-                                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Indigo)
-                                        Spacer(Modifier.width(7.dp)); Text("Scoring…", color = Indigo, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Spacer(Modifier.width(7.dp)); Text("Scoring…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                                     } else {
-                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Indigo, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(7.dp)); Text("AI Score", color = Indigo, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                                        Spacer(Modifier.width(7.dp)); Text("AI Score", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
                             Box(
                                 Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(14.dp))
-                                    .background(Brush.horizontalGradient(listOf(Color(0xFF2563EB), Color(0xFF4F46E5))))
+                                    .background(MaterialTheme.colorScheme.primary)
                                     .clickable { selectMode = true },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Checklist, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(7.dp)); Text("Select & Call", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Icon(Icons.Default.Checklist, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(7.dp)); Text("Select & Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -1077,14 +1088,14 @@ private fun LeadCard(
     onMore: () -> Unit,
     onOpen: () -> Unit = {},
 ) {
+    val container = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
     val cardMod = Modifier.fillMaxWidth()
-        .then(if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier)
         .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
     Card(
         modifier = cardMod,
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = container),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1093,9 +1104,9 @@ private fun LeadCard(
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                        tempMeta(c.temperature)?.let {
+                        if (!c.temperature.isNullOrBlank()) {
                             Spacer(Modifier.width(8.dp))
-                            Pill(it.label, it.fg, it.bg)
+                            TempDot(c.temperature)
                         }
                     }
                     Spacer(Modifier.height(3.dp))
@@ -1122,29 +1133,22 @@ private fun LeadCard(
                 }
             }
 
-            // Project + budget (no source / owner)
-            if (!c.companyName.isNullOrBlank() || !c.budget.isNullOrBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (!c.companyName.isNullOrBlank()) {
-                        Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(c.companyName!!, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                    }
-                    if (!c.budget.isNullOrBlank()) {
-                        Spacer(Modifier.width(14.dp))
-                        Text("💰 ${c.budget}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                StageChip(c.status)
-                ScoreChip(leadScore(c))
-                Spacer(Modifier.weight(1f))
-                c.notes?.takeIf { it.isNotBlank() }?.let {
-                    Text("📝", style = MaterialTheme.typography.bodySmall)
+            // One quiet meta line: stage · project · budget. No pills, no rainbow,
+            // no emoji — the stage reads as plain muted text.
+            run {
+                val parts = listOfNotNull(
+                    stageOf(c.status).label,
+                    c.companyName?.takeIf { it.isNotBlank() },
+                    c.budget?.takeIf { it.isNotBlank() },
+                )
+                if (parts.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        parts.joinToString("   ·   "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
                 }
             }
 
@@ -1163,15 +1167,12 @@ private fun LeadCard(
             }
 
             if (!selectMode) {
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ActionButton(Icons.Default.Call, "Call", Green, Modifier.weight(1f), onClick = onCall)
-                    ActionButton(Icons.Default.Chat, "WhatsApp", Color(0xFF25D366), Modifier.weight(1f), onClick = onWhatsApp)
-                    ActionButton(Icons.Default.CalendarMonth, "Schedule", MaterialTheme.colorScheme.primary, Modifier.weight(1f), onClick = onSchedule)
-                }
-                if (cloudOn) {
-                    Spacer(Modifier.height(8.dp))
-                    ActionButton(Icons.Default.Call, "☁ Cloud call", MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth(), onClick = onCloudCall)
+                Spacer(Modifier.height(14.dp))
+                // One primary action (Call); WhatsApp + Schedule are quiet secondaries.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    PrimaryCallButton("Call", Modifier.weight(1f)) { if (cloudOn) onCloudCall() else onCall() }
+                    GhostIconButton(Icons.Default.Chat, "WhatsApp") { onWhatsApp() }
+                    GhostIconButton(Icons.Default.CalendarMonth, "Schedule") { onSchedule() }
                 }
             }
         }
