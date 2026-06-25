@@ -136,7 +136,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
             }
 
             item { SectionLabel("Stage") }
-            item { ChipRow(SETTABLE, contact.status) { key -> contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, token.ifBlank { null }) } } }
+            item { ChipRow(SETTABLE, contact.status) { key -> contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, if (key == "token_paid") token.ifBlank { null } else null) } } }
 
             if (contact.status == "token_paid") {
                 item {
@@ -164,7 +164,10 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         contact.id?.let {
                             vm.applyLead(it, null, null,
                                 budget.trim().ifBlank { null }.takeIf { b -> b != contact.budget },
-                                note.trim().ifBlank { null }.takeIf { n -> n != contact.notes })
+                                note.trim().ifBlank { null }.takeIf { n -> n != contact.notes },
+                                // Persist the booking token too when the lead is at Token Paid,
+                                // so typing it and tapping Save no longer loses the amount.
+                                tokenAmount = if (contact.status == "token_paid") token.ifBlank { null } else null)
                         }
                     }
                 }

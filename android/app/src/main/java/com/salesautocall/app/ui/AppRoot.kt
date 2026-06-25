@@ -2,6 +2,7 @@
 
 package com.salesautocall.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
@@ -123,6 +124,11 @@ fun AppRoot(vm: MainViewModel) {
         LeadDetailScreen(vm)
     }
 
+    // Quick "add a lead" sheet.
+    if (state.signedIn && state.showAddLead) {
+        AddLeadSheet(vm)
+    }
+
     crash?.let { text ->
         AlertDialog(
             onDismissRequest = { AppPrefs.clearLastCrash(context); crash = null },
@@ -135,6 +141,53 @@ fun AppRoot(vm: MainViewModel) {
                 TextButton(onClick = { AppPrefs.clearLastCrash(context); crash = null }) { Text("OK") }
             },
         )
+    }
+}
+
+/** A quick single-lead create sheet — the missing "Add Lead" action. */
+@Composable
+private fun AddLeadSheet(vm: MainViewModel) {
+    val app by vm.state.collectAsState()
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var project by remember { mutableStateOf("") }
+    var budget by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+
+    BackHandler { vm.closeAddLead() }
+
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Card(Modifier.fillMaxWidth(0.92f)) {
+            Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {
+                Text("Add lead", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(14.dp))
+                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    phone, { phone = it }, label = { Text("Phone *") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(project, { project = it }, label = { Text("Project / location") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(budget, { budget = it }, label = { Text("Budget (e.g. 45 lakh)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(note, { note = it }, label = { Text("Note") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { vm.closeAddLead() }) { Text("Cancel") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = { vm.addLead(name, phone, project, budget, note) },
+                        enabled = !app.addingLead && phone.count { it.isDigit() } >= 7,
+                    ) { Text(if (app.addingLead) "Adding…" else "Add lead") }
+                }
+            }
+        }
     }
 }
 
@@ -360,7 +413,8 @@ private fun MainShell(vm: MainViewModel) {
                 onNavigate = { route ->
                     vm.clearMessage()
                     scope.launch { drawerState.close() }
-                    nav.navigate(route) {
+                    if (route == "add_lead") vm.openAddLead()
+                    else nav.navigate(route) {
                         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                         launchSingleTop = true
                         restoreState = true
@@ -467,7 +521,10 @@ private fun MainShell(vm: MainViewModel) {
                                     restoreState = true
                                 }
                             },
-                            onNavigate = { route -> nav.navigate(route) { launchSingleTop = true } },
+                            onNavigate = { route ->
+                                if (route == "add_lead") vm.openAddLead()
+                                else nav.navigate(route) { launchSingleTop = true }
+                            },
                         )
                     }
                     composable(Tab.Leads.route) {
@@ -554,6 +611,7 @@ private fun menuBudgetRupees(s: String?): Double {
         "cr" in t || "crore" in t -> num * 10_000_000
         "lakh" in t || "lac" in t || t.endsWith("l") -> num * 100_000
         t.endsWith("k") -> num * 1_000
+        num < 1000 -> num * 100_000 // bare small number → lakhs (real-estate budgets)
         else -> num
     }
 }
@@ -593,7 +651,7 @@ private fun AppDrawer(
     )
     val quick = listOf(
         QuickAction("Start Calling", Icons.Default.Call, "dialer"),
-        QuickAction("Add Lead", Icons.Default.People, "leads"),
+        QuickAction("Add Lead", Icons.Default.People, "add_lead"),
         QuickAction("Schedule Follow-up", Icons.Default.CalendarMonth, "calendar"),
         QuickAction("Import Call List", Icons.Default.Campaign, "campaign"),
     )

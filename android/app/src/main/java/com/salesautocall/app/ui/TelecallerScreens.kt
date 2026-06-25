@@ -387,6 +387,9 @@ private fun parseBudgetRupees(s: String?): Double {
         "cr" in t || "crore" in t -> num * 10_000_000
         "lakh" in t || "lac" in t || Regex("[0-9]\\s*l\\b").containsMatchIn(t) || t.endsWith("l") -> num * 100_000
         t.endsWith("k") -> num * 1_000
+        // No unit on a small number ("12", "50") almost always means lakhs in
+        // real estate — treat <1000 as lakhs so the pipeline ₹ isn't ~₹12.
+        num < 1000 -> num * 100_000
         else -> num
     }
 }
@@ -578,7 +581,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     val accent = MaterialTheme.colorScheme.primary
-                    QuickAction("Add Lead", Icons.Default.PersonAdd, accent, Modifier.weight(1f), onOpenLeads)
+                    QuickAction("Add Lead", Icons.Default.PersonAdd, accent, Modifier.weight(1f)) { onNavigate("add_lead") }
                     QuickAction("Calendar", Icons.Default.CalendarMonth, accent, Modifier.weight(1f)) { onNavigate("calendar") }
                     QuickAction("AI Coach", Icons.Default.AutoAwesome, accent, Modifier.weight(1f)) { onNavigate("ai") }
                     QuickAction("Attendance", Icons.Default.AccessTime, accent, Modifier.weight(1f)) { onNavigate("attendance") }

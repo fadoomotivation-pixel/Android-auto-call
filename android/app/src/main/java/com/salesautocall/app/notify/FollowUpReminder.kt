@@ -38,15 +38,12 @@ object FollowUpReminder {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
+        // setAlarmClock fires at the exact time even in Doze AND needs no
+        // SCHEDULE_EXACT_ALARM permission (Android 12+), so the callback nudge is
+        // reliably on time. Fall back to an inexact wake-up only if it fails.
         runCatching {
-            if (canExact) {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, dueAtMillis, pi)
-            } else {
-                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, dueAtMillis, pi)
-            }
+            am.setAlarmClock(AlarmManager.AlarmClockInfo(dueAtMillis, pi), pi)
         }.onFailure {
-            // Exact alarm denied at runtime — degrade to an inexact wake-up.
             runCatching { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, dueAtMillis, pi) }
         }
     }
