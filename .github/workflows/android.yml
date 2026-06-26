@@ -55,7 +55,9 @@ jobs:
       - name: Generate version manifest
         if: success() && github.ref == 'refs/heads/main'
         run: |
-          NOTES=$(git log -1 --pretty=%s)
+          # Generic, user-facing note only — never the commit/PR/branch text,
+          # so the in-app "Update available" dialog can't leak repo internals.
+          NOTES="New features, speed improvements and bug fixes."
           jq -n \
             --argjson vc ${{ github.run_number }} \
             --arg vn "1.0.${{ github.run_number }}" \
