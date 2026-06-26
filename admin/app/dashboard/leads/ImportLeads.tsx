@@ -77,7 +77,24 @@ export function ImportLeads({
     if (parsed.length === 0) return;
     setBusy(true);
     setError(null);
-    const rows = parsed.map((l) => ({
+
+    // Skip leads whose phone already exists for this company, so re-importing
+    // an overlapping CSV (common with weekly ad-lead exports) never creates
+    // duplicate contacts. Match on the last 10 digits to ignore +91 prefixes.
+    const norm = (p: string) => (p || "").replace(/\D/g, "").slice(-10);
+    const { data: existing } = await supabase
+      .from("contacts")
+      .select("phone")
+      .eq("company_id", companyId);
+    const have = new Set((existing ?? []).map((r) => norm(r.phone as string)));
+    const fresh = parsed.filter((l) => !have.has(norm(l.phone)));
+    if (fresh.length === 0) {
+      setBusy(false);
+      setError(`All ${parsed.length} lead(s) already exist for this company — nothing to import.`);
+      return;
+    }
+
+    const rows = fresh.map((l) => ({
       company_id: companyId,
       salesperson_id: assignTo || null,
       name: l.name,

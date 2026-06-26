@@ -514,21 +514,17 @@ object Repository {
             Campaign(companyId = companyId, salespersonId = uid, name = label, gapSeconds = gapSeconds),
         ) { select() }.decodeSingle<Campaign>()
 
-        val clones = pending.map {
-            Contact(
-                companyId = companyId,
-                salespersonId = uid,
-                campaignId = campaign.id,
-                name = it.name,
-                phone = it.phone,
-                email = it.email,
-                companyName = it.companyName,
-                notes = it.notes,
-                status = "new",
-            )
+        // Re-queue the SAME contacts into the follow-up campaign instead of
+        // cloning new rows — cloning duplicated leads (and inflated counts /
+        // pipeline value) every time a follow-up campaign was created.
+        val ids = pending.mapNotNull { it.id }
+        if (ids.isEmpty()) return 0
+        client.from("contacts").update(
+            mapOf("campaign_id" to campaign.id, "status" to "new"),
+        ) {
+            filter { isIn("id", ids) }
         }
-        client.from("contacts").insert(clones)
-        return clones.size
+        return ids.size
     }
 
     suspend fun fetchCampaignStats(): List<CampaignStat> {
@@ -650,6 +646,23 @@ object Repository {
     suspend fun updateContact(contactId: String, patch: Map<String, String>) {
         if (patch.isEmpty()) return
         client.from("contacts").update(patch) { filter { eq("id", contactId) } }
+    }
+
+    /** Creates one lead, owned by the current rep's company. Returns the new row. */
+    suspend fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?): Contact {
+        val profile = myProfile() ?: error("No profile yet. Ask your admin to add you to a company.")
+        val companyId = profile.companyId ?: error("You are not linked to a company yet.")
+        val contact = Contact(
+            companyId = companyId,
+            salespersonId = profile.id,
+            name = name.trim().ifBlank { null },
+            phone = phone.trim(),
+            companyName = project?.trim()?.ifBlank { null },
+            budget = budget?.trim()?.ifBlank { null },
+            notes = note?.trim()?.ifBlank { null },
+            status = "new",
+        )
+        return client.from("contacts").insert(contact) { select() }.decodeSingle<Contact>()
     }
 
     // ---------- push notifications ----------

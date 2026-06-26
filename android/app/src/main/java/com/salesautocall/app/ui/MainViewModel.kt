@@ -98,6 +98,9 @@ data class AppState(
     val leadFilter: String = "open",
     /** Set when another screen (e.g. Campaign tab) asks Leads to open in select mode. */
     val leadsSelectRequested: Boolean = false,
+    /** Drives the quick "Add lead" sheet + its in-flight saving state. */
+    val showAddLead: Boolean = false,
+    val addingLead: Boolean = false,
     // in-app WhatsApp chat (tracked via the company number)
     val waChatContact: Contact? = null,
     val waThread: List<WhatsAppMessage> = emptyList(),
@@ -448,74 +451,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // CallerDesk mode: no SIP/VPN — the backend rings this agent's phone and
         // bridges the customer. Hand off and stop here.
         if (_state.value.callerdeskCalling) { startCallerdeskCall(clean, contactId, campaignId); return }
-        cloudResultLogged = false
-        cloudCallToken++
-        // Tell the SIP engine the next inbound INVITE is our own agent leg to
-        // auto-answer — not a genuine inbound call to ring.
-        com.salesautocall.app.sip.SipManager.expectingOutbound = true
-        set {
-            it.copy(
-                error = null, message = null,
-                cloudCallNumber = clean,
-                cloudCallContactId = contactId,
-                cloudCallCampaignId = campaignId,
-                cloudCallStatus = "Fetching SIP config…",
-                cloudBridged = false,
-                cloudCallExt = "", cloudCallPass = "",
-            )
-        }
-        // Route SIP engine state changes back into our status mapping.
-        com.salesautocall.app.sip.SipManager.onState = { raw -> onSipState(raw) }
-
-        // Login watchdog: if we never get past SIP login (registered → bridged)
-        // within 15s, stop hanging on "Logging in…" and show an actionable error
-        // so the rep can retry instead of staring at a frozen screen.
-        val watchToken = cloudCallToken
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(15_000)
-            val st = _state.value
-            if (cloudCallToken == watchToken && st.cloudCallNumber != null && !st.cloudBridged) {
-                set { it.copy(cloudCallStatus = "Couldn't log in to the phone system — check your network and SIP details, then try again. (If your PBX is a private address, turn the VPN on.)") }
-                com.salesautocall.app.sip.SipManager.expectingOutbound = false
-                finishCloudCall(reload = false)
-            }
-        }
-
-        viewModelScope.launch {
-            val cfg = runCatching {
-                val body = Repository.getWebrtcConfig()
-                lenientJson.decodeFromString(com.salesautocall.app.data.WebrtcConfig.serializer(), body)
-            }.getOrNull()
-
-            // Manually-entered credentials WIN over the auto-fetched ones: a private
-            // PBX (e.g. 10.10.10.3) can have a different password for the same
-            // extension than uroperator's public API returns. Auto-fetch is only a
-            // fallback for when the user hasn't filled Settings.
-            val ext = _state.value.cloudAgentId.ifBlank { null }
-                ?: _state.value.profile?.sipAgentId?.ifBlank { null }
-                ?: cfg?.ext?.ifBlank { null } ?: ""
-            val pass = _state.value.cloudSipPassword.ifBlank { null }
-                ?: cfg?.password?.ifBlank { null } ?: ""
-            // Server/port: manual override (e.g. private IP) > uroperator-provided > public default.
-            val server = _state.value.cloudSipServer.ifBlank { null }
-                ?: cfg?.sipServer?.ifBlank { null } ?: "sip.uroperator.com"
-            val port = _state.value.cloudSipPort.toIntOrNull()
-                ?: cfg?.sipPort?.takeIf { it > 0 } ?: 6060
-            val transport = cfg?.transport?.ifBlank { null } ?: "udp"
-
-            if (ext.isBlank() || pass.isBlank()) {
-                set { it.copy(cloudCallStatus = "Couldn't get SIP login from uroperator. Set your agent ID + SIP password in Settings, or ask your admin.") }
-                return@launch
-            }
-            set { it.copy(cloudCallExt = ext, cloudCallPass = pass, cloudCallStatus = "Connecting to phone system…") }
-            runCatching {
-                com.salesautocall.app.sip.SipManager.register(
-                    getApplication(), ext, pass, server, port, transport,
-                )
-            }.onFailure { e ->
-                set { it.copy(cloudCallStatus = "Couldn't start SIP: ${e.message}") }
-            }
-        }
+        // CallerDesk is off → just dial through the SIM. The legacy SIP/uroperator
+        // path (and its VPN/login errors) was retired; turn Cloud Calling on in
+        // Settings for bridged calls + recordings.
+        dialManual(clean)
     }
 
     /** CallerDesk one-tap cloud call. Asks the backend to ring this agent's own
@@ -1153,7 +1092,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             set { it.copy(leadsLoading = true) }
             runCatching { Repository.fetchLeads() }
                 .onSuccess { list -> set { it.copy(leads = list, leadsLoading = false) } }
-                .onFailure { e -> set { it.copy(leadsLoading = false, error = e.message) } }
+                // Keep whatever leads are already on screen on a network failure
+                // (don't blank the list) and show a friendly, non-technical message.
+                .onFailure { set { it.copy(leadsLoading = false, error = "Couldn't refresh leads — check your connection and try again.") } }
             runCatching { Repository.fetchProjectSites() }
                 .onSuccess { sites -> set { it.copy(projectSites = sites) } }
         }
@@ -1412,11 +1353,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Applies any subset of lead edits (stage/temperature/budget/note) at once. */
+    // ---------- quick add lead ----------
+    fun openAddLead() = set { it.copy(showAddLead = true) }
+    fun closeAddLead() = set { it.copy(showAddLead = false) }
+
+    /** Creates one lead from the quick-add sheet, then refreshes the list. */
+    fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?) {
+        val cleanPhone = phone.filter { it.isDigit() || it == '+' }
+        if (cleanPhone.length < 7) { set { it.copy(error = "Enter a valid phone number.") }; return }
+        viewModelScope.launch {
+            set { it.copy(addingLead = true) }
+            runCatching { Repository.addLead(name, cleanPhone, project, budget, note) }
+                .onSuccess { c ->
+                    set { st -> st.copy(leads = listOf(c) + st.leads, addingLead = false, showAddLead = false, message = "Lead added ✓") }
+                }
+                .onFailure { e -> set { it.copy(addingLead = false, error = e.message ?: "Couldn't add the lead.") } }
+        }
+    }
+
     fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null, tokenAmount: String? = null) {
         viewModelScope.launch {
-            // Only record the token amount when the lead is actually at the Token Paid
-            // stage — that's the money milestone we stamp with a paid-at timestamp.
-            val token = tokenAmount?.toDoubleOrNull()?.takeIf { it > 0 && (status ?: "") == "token_paid" }
+            // Persist a positive token amount whenever it's supplied (callers only
+            // pass it for token-paid leads). Stamp paid-at on the stage transition.
+            val token = tokenAmount?.toDoubleOrNull()?.takeIf { it > 0 }
             val patch = buildMap<String, String> {
                 if (status != null) put("status", status)
                 if (temperature != null) put("temperature", temperature)
@@ -1426,7 +1385,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (svAt != null) put("site_visit_at", svAt)
                 if (token != null) {
                     put("token_amount", token.toString())
-                    put("token_paid_at", java.time.Instant.now().toString())
+                    if (status == "token_paid") put("token_paid_at", java.time.Instant.now().toString())
                 }
             }
             runCatching { Repository.updateContact(contactId, patch) }
