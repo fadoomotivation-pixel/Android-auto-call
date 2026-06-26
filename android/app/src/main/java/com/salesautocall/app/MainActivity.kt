@@ -17,12 +17,15 @@ import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.work.Constraints
+import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.ExistingWorkPolicy
 import java.util.concurrent.TimeUnit
+import com.salesautocall.app.data.AppPrefs
 import com.salesautocall.app.data.CallLogSyncWorker
 
 class MainActivity : ComponentActivity() {
@@ -37,8 +40,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         requestRuntimePermissions()
 
+        // Hourly call-log sync, but only on a network and not when the battery is
+        // low — so it never wakes the phone to fail or drain a dying battery.
         val workManager = WorkManager.getInstance(this)
-        val periodicWork = PeriodicWorkRequestBuilder<CallLogSyncWorker>(1, TimeUnit.HOURS).build()
+        val syncConstraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
+            .build()
+        val periodicWork = PeriodicWorkRequestBuilder<CallLogSyncWorker>(1, TimeUnit.HOURS)
+            .setConstraints(syncConstraints)
+            .build()
         workManager.enqueueUniquePeriodicWork("CallLogSync", ExistingPeriodicWorkPolicy.KEEP, periodicWork)
 
         setContent {
@@ -73,15 +84,28 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkBatteryOptimization()
-        // Trigger a one-off sync when app opens
+        // Trigger a one-off sync when the app opens (deduped by REPLACE), gated on a
+        // network so it doesn't spin without connectivity.
         WorkManager.getInstance(this).enqueueUniqueWork(
             "CallLogSyncOneOff",
             ExistingWorkPolicy.REPLACE,
-            OneTimeWorkRequestBuilder<CallLogSyncWorker>().build()
+            OneTimeWorkRequestBuilder<CallLogSyncWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
         )
     }
 
     private fun checkBatteryOptimization() {
+        // Only ask to bypass Doze when the app genuinely needs to stay alive in the
+        // background — i.e. the in-app SIP inbound listener is on. CallerDesk users
+        // get inbound via the SIM + FCM (high-priority pushes wake the app even in
+        // Doze), so leaving Doze ON for them saves a lot of battery and avoids the
+        // repeated whitelist prompt.
+        val needsBackgroundLiveness = AppPrefs.getIncomingEnabled(this) &&
+            AppPrefs.getAgentId(this).isNotBlank() &&
+            AppPrefs.getSipPassword(this).isNotBlank()
+        if (!needsBackgroundLiveness) return
+
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         if (!pm.isIgnoringBatteryOptimizations(packageName)) {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
