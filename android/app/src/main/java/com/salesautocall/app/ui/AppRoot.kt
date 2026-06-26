@@ -387,11 +387,12 @@ private fun MainShell(vm: MainViewModel) {
             text = {
                 Column {
                     Text("Version ${rel.versionName} is ready to install.")
-                    if (rel.notes.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(rel.notes, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Spacer(Modifier.height(8.dp))
+                    // Always a generic, customer-safe line — never raw release
+                    // notes, which could carry repo/branch/PR internals.
+                    Text("Includes the latest features, speed improvements and fixes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = { TextButton(onClick = { vm.installUpdate(); vm.dismissUpdate() }) { Text("Update now") } },
