@@ -129,7 +129,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             Text("Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                         }
                         DetailAction(Icons.Default.Chat, "WhatsApp", MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f)) {
-                            openWhatsAppLocal(context, contact.phone)
+                            openWhatsAppLocal(context, contact.phone, waTemplateLocal(contact.name, contact.companyName, app.profile?.fullName, app.company?.name))
                         }
                     }
                 }
@@ -366,10 +366,22 @@ private fun DetailAction(
     }
 }
 
-private fun openWhatsAppLocal(context: android.content.Context, phone: String) {
+private fun openWhatsAppLocal(context: android.content.Context, phone: String, message: String? = null) {
     val num = phone.filter { it.isDigit() }.let { if (it.length == 10) "91$it" else it }
+    val base = "https://wa.me/$num"
+    val url = if (message.isNullOrBlank()) base else "$base?text=${android.net.Uri.encode(message)}"
     val intent = android.content.Intent(
-        android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://wa.me/$num"),
+        android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url),
     ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }
+}
+
+/** Ready-to-send Hinglish opener (kept local; the TelecallerScreens copy is private). */
+private fun waTemplateLocal(name: String?, project: String?, agent: String?, company: String?): String {
+    val hi = name?.trim()?.takeIf { it.isNotBlank() }?.let { "Namaste $it ji," } ?: "Namaste,"
+    val who = agent?.trim()?.ifBlank { null } ?: "aapka property advisor"
+    val co = company?.trim()?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
+    val ref = project?.trim()?.takeIf { it.isNotBlank() }?.let { " Aapne $it ke liye enquiry ki thi." }
+        ?: " Aapki property enquiry ke regarding."
+    return "$hi main $who$co se baat kar raha hoon.$ref Property ki details aur best offer share karna chahta hoon — kya abhi baat kar sakte hain?"
 }
