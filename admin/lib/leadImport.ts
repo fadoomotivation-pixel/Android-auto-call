@@ -26,7 +26,12 @@ const BUDGET_KEYS = ["budget", "amount", "value", "price", "investment", "बज
 const TERRITORY_KEYS = ["territory", "city", "location", "area", "region", "zone"];
 const NOTE_KEYS = ["note", "notes", "remark", "remarks", "comment", "requirement", "message", "source"];
 
-const IGNORE_KEYS = ["ad_name", "adset_name", "campaign_name", "form_name", "ad name", "campaign name"];
+// Facebook lead-ad export metadata — never map these to a lead field (e.g.
+// "campaign_id" must not become the project, "created_time" not a note).
+const IGNORE_KEYS = [
+  "ad_name", "adset_name", "campaign_name", "form_name", "ad name", "campaign name",
+  "ad_id", "adset_id", "campaign_id", "form_id", "created_time", "is_organic", "platform", "lead_id",
+];
 
 function digitsLen(s: string): number {
   return (s.match(/\d/g) ?? []).length;
@@ -173,6 +178,24 @@ export function parseRows(rows: string[][]): ParseResult {
     });
   }
   return { leads, skipped, total: dataRows.length };
+}
+
+/**
+ * Decode a raw file buffer to text, honouring the byte-order mark. Facebook
+ * lead-ad CSV exports are **UTF-16LE** (and tab-delimited) — reading them as
+ * UTF-8 turns every row into garbage, so detect the encoding first.
+ */
+export function decodeText(buf: ArrayBuffer): string {
+  const b = new Uint8Array(buf);
+  if (b.length >= 2 && b[0] === 0xff && b[1] === 0xfe) return new TextDecoder("utf-16le").decode(buf);
+  if (b.length >= 2 && b[0] === 0xfe && b[1] === 0xff) return new TextDecoder("utf-16be").decode(buf);
+  if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) return new TextDecoder("utf-8").decode(buf);
+  // No BOM: if a sample is full of NUL bytes it's UTF-16LE without a mark.
+  const n = Math.min(b.length, 2000);
+  let nul = 0;
+  for (let i = 0; i < n; i++) if (b[i] === 0) nul++;
+  if (n > 0 && nul / n > 0.2) return new TextDecoder("utf-16le").decode(buf);
+  return new TextDecoder("utf-8").decode(buf);
 }
 
 export function parseCSV(text: string): string[][] {
