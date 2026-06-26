@@ -1,6 +1,8 @@
 package com.salesautocall.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,8 +28,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -68,14 +73,27 @@ fun CallsScreen(vm: MainViewModel) {
         }
         Spacer(Modifier.height(12.dp))
 
-        // ---- date filter ----
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CallFilter.entries.forEach { f ->
-                FilterChip(
-                    selected = app.callFilter == f,
-                    onClick = { vm.setCallFilter(f) },
-                    label = { Text(f.label) },
-                )
+        // ---- date filter (compact dropdown instead of three pills) ----
+        var periodMenu by remember { mutableStateOf(false) }
+        Box {
+            Row(
+                Modifier.clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .clickable { periodMenu = true }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(app.callFilter.label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.size(6.dp))
+                Icon(Icons.Default.ArrowDropDown, contentDescription = "Change period", modifier = Modifier.size(20.dp))
+            }
+            DropdownMenu(expanded = periodMenu, onDismissRequest = { periodMenu = false }) {
+                CallFilter.entries.forEach { f ->
+                    DropdownMenuItem(
+                        text = { Text(f.label) },
+                        onClick = { vm.setCallFilter(f); periodMenu = false },
+                    )
+                }
             }
         }
         Spacer(Modifier.height(12.dp))
