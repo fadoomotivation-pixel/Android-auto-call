@@ -949,6 +949,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         AutoDialerService.start(getApplication())
     }
 
+    /** Power-dial an arbitrary list of leads back-to-back (e.g. the current
+     *  Leads filter, or today's due follow-ups) — reuses the auto-dialer engine
+     *  so each call auto-advances to the next with the post-call sheet between. */
+    fun callList(contacts: List<Contact>, label: String) {
+        val callable = contacts.filter { it.phone.isNotBlank() }
+        if (callable.isEmpty()) { set { it.copy(error = "No leads to call here.") }; return }
+        val s = _state.value
+        DialerController.prepare(
+            callable,
+            DialerConfig(gapSeconds = s.breakSeconds, reviewAfterEachCall = true),
+            label,
+            callable.firstOrNull()?.campaignId ?: "",
+        )
+        AutoDialerService.start(getApplication())
+        set { it.copy(message = "📞 Calling ${callable.size} lead${if (callable.size == 1) "" else "s"} back-to-back") }
+    }
+
     /** Bundles the just-finished campaign's unanswered numbers into a follow-up campaign. */
     fun createFollowUp() {
         if (_state.value.followUpDone) return
@@ -1462,6 +1479,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Bulk-moves the given follow-ups to [dueAtMillis] and re-arms their reminders. */
+    fun rescheduleFollowUps(items: List<FollowUp>, dueAtMillis: Long) {
+        if (items.isEmpty()) return
+        val iso = java.time.Instant.ofEpochMilli(dueAtMillis).toString()
+        viewModelScope.launch {
+            items.forEach { f ->
+                val id = f.id ?: return@forEach
+                runCatching { Repository.rescheduleFollowUp(id, iso) }
+                FollowUpReminder.schedule(getApplication(), id, f.name, f.phone, f.note, dueAtMillis)
+            }
+            set { it.copy(message = "Moved ${items.size} follow-up${if (items.size == 1) "" else "s"} to tomorrow 10 AM") }
+            loadFollowUps(force = true)
+        }
+    }
+
     fun completeFollowUp(id: String) {
         viewModelScope.launch {
             runCatching { Repository.completeFollowUp(id) }
@@ -1484,19 +1516,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- post-call disposition ----------
 
-    /** Quick 1-tap disposition from the post-call popup. */
-    fun postCallDispose(status: String) {
+    /** 1-tap disposition from the post-call popup. Optionally stamps the lead's
+     *  temperature and a quick note in the same step, and auto-schedules a retry
+     *  when the call didn't connect — so "No answer"/"Busy" never gets forgotten. */
+    fun postCallDispose(status: String, temperature: String? = null, note: String? = null) {
         val contactId = _state.value.postCallContactId ?: return
+        val phone = _state.value.postCallPhone
+        val name = _state.value.postCallName
+        val cleanNote = note?.trim()?.ifBlank { null }
         viewModelScope.launch {
-            runCatching { Repository.setDisposition(contactId, status, null) }
+            runCatching { Repository.setDisposition(contactId, status, cleanNote) }
                 .onSuccess {
+                    if (temperature != null) runCatching { Repository.setTemperature(contactId, temperature) }
                     set { st ->
                         st.copy(
-                            leads = st.leads.map { c -> if (c.id == contactId) c.copy(status = status) else c },
+                            leads = st.leads.map { c ->
+                                if (c.id == contactId) c.copy(status = status, temperature = temperature ?: c.temperature, notes = cleanNote ?: c.notes) else c
+                            },
                         )
                     }
                 }
                 .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+        // Auto-retry: a number that didn't connect bounces back in 2 hours.
+        if (status in setOf("no_answer", "busy") && !phone.isNullOrBlank()) {
+            val due = System.currentTimeMillis() + 2 * 3600_000L
+            scheduleFollowUp(contactId, phone, name, due, if (status == "busy") "Auto-retry — line was busy" else "Auto-retry — no answer")
         }
         dismissPostCall()
     }
@@ -1510,14 +1555,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** Schedule a follow-up from the post-call popup, then dismiss it. */
-    fun postCallScheduleFollowUp(dueAtMillis: Long, note: String?) {
+    /** Schedule a follow-up from the post-call popup, carrying any temperature /
+     *  note captured on the sheet, then dismiss it. */
+    fun postCallScheduleFollowUp(dueAtMillis: Long, note: String?, temperature: String? = null) {
         val s = _state.value
         val contactId = s.postCallContactId
         val phone = s.postCallPhone ?: return
         val name = s.postCallName
         scheduleFollowUp(contactId, phone, name, dueAtMillis, note)
-        postCallDispose("callback")
+        postCallDispose("callback", temperature, note)
     }
 
     /** Count of follow-ups due now or overdue — the red badge on Home. */

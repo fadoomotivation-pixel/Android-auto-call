@@ -770,6 +770,11 @@ object Repository {
         ) { filter { eq("id", id) } }
     }
 
+    /** Moves a pending follow-up to a new due time (stays pending). */
+    suspend fun rescheduleFollowUp(id: String, dueAtIso: String) {
+        client.from("follow_ups").update(mapOf("due_at" to dueAtIso)) { filter { eq("id", id) } }
+    }
+
     // ---------- attendance ----------
 
     /** Today's attendance row for this salesperson, or null if not punched in yet. */

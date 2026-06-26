@@ -171,6 +171,16 @@ private fun fmtSec(seconds: Int): String {
 private fun instantMillis(iso: String?): Long? =
     iso?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
 
+/** True if an ISO timestamp falls on today's local date (for the "Added today"
+ *  filter). Handles both "…Z" and Postgres "…+00:00" offsets. */
+private fun isToday(iso: String?): Boolean {
+    if (iso.isNullOrBlank()) return false
+    val date = runCatching { java.time.OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalDate() }
+        .recoverCatching { java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
+        .getOrNull() ?: return false
+    return date == java.time.LocalDate.now()
+}
+
 private fun timeOnly(iso: String?): String {
     val ms = instantMillis(iso) ?: return "—"
     return java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), java.time.ZoneId.systemDefault())
@@ -212,13 +222,24 @@ private val avatarColors = listOf(
 
 private fun colorFor(seed: String): Color = avatarColors[abs(seed.hashCode()) % avatarColors.size]
 
-private fun openWhatsApp(context: android.content.Context, phone: String) {
-    val digits = phone.filter { it.isDigit() }
+private fun openWhatsApp(context: android.content.Context, phone: String, message: String? = null) {
+    val digits = phone.filter { it.isDigit() }.let { if (it.length == 10) "91$it" else it }
+    val base = "https://wa.me/$digits"
+    val url = if (message.isNullOrBlank()) base else "$base?text=${android.net.Uri.encode(message)}"
     val intent = android.content.Intent(
-        android.content.Intent.ACTION_VIEW,
-        android.net.Uri.parse("https://wa.me/$digits"),
+        android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url),
     ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }
+}
+
+/** A ready-to-send Hinglish opener so the rep doesn't retype the same intro 100×/day. */
+private fun waTemplate(name: String?, project: String?, agent: String?, company: String?): String {
+    val hi = name?.trim()?.takeIf { it.isNotBlank() }?.let { "Namaste $it ji," } ?: "Namaste,"
+    val who = agent?.trim()?.ifBlank { null } ?: "aapka property advisor"
+    val co = company?.trim()?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
+    val ref = project?.trim()?.takeIf { it.isNotBlank() }?.let { " Aapne $it ke liye enquiry ki thi." }
+        ?: " Aapki property enquiry ke regarding."
+    return "$hi main $who$co se baat kar raha hoon.$ref Property ki details aur best offer share karna chahta hoon — kya abhi baat kar sakte hain?"
 }
 
 @Composable
@@ -741,6 +762,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
 
     val base = when (selected) {
         "all" -> app.leads
+        // Quick views a rep reaches for hourly.
+        "uncontacted" -> app.leads.filter { it.status in setOf("new", "queued") }
+        "today" -> app.leads.filter { isToday(it.createdAt) }
+        "retry" -> app.leads.filter { it.status in setOf("no_answer", "busy", "callback", "follow_up") }
         else -> app.leads.filter { stageOf(it.status).key == selected || it.status in (STAGES.firstOrNull { s -> s.key == selected }?.statuses ?: emptySet()) }
     }
     val tempFiltered = if (tempFilter == null) base else base.filter { it.temperature == tempFilter }
@@ -830,9 +855,31 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     FilterTab("All", app.leads.size, selected == "all", MaterialTheme.colorScheme.primary) { selected = "all" }
+                    FilterTab("Uncontacted", app.leads.count { it.status in setOf("new", "queued") }, selected == "uncontacted", MaterialTheme.colorScheme.primary) { selected = "uncontacted" }
+                    FilterTab("Added today", app.leads.count { isToday(it.createdAt) }, selected == "today", MaterialTheme.colorScheme.primary) { selected = "today" }
+                    FilterTab("Retry", app.leads.count { it.status in setOf("no_answer", "busy", "callback", "follow_up") }, selected == "retry", MaterialTheme.colorScheme.primary) { selected = "retry" }
                     STAGES.forEach { st ->
                         val n = app.leads.count { it.status in st.statuses }
                         FilterTab(st.label, n, selected == st.key, st.color) { selected = st.key }
+                    }
+                }
+            }
+            // Power-dial the whole filtered list, back-to-back, with the post-call
+            // sheet between each — the single biggest time-saver for a busy rep.
+            if (!selectMode && filtered.isNotEmpty()) {
+                item {
+                    Box(
+                        Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable { vm.callList(filtered, "Leads") },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(7.dp))
+                            Text("Call all ${filtered.size} back-to-back", color = MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
@@ -1410,6 +1457,11 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
     val who = app.postCallName ?: app.postCallPhone ?: return
     val connected = app.postCallConnected
     var showSchedule by remember { mutableStateOf(false) }
+    // Optional temperature + note captured in the SAME step as the outcome, so a
+    // good call ("Interested, hot, wants corner plot") is one screen, not five.
+    var temp by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf("") }
+    fun dispose(status: String) = vm.postCallDispose(status, temp, note)
 
     AlertDialog(
         onDismissRequest = { vm.dismissPostCall() },
@@ -1422,47 +1474,56 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
         },
         text = {
             if (!showSchedule) {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    // Temperature (optional, one tap) — call hot leads back first.
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TEMPERATURES.forEach { (key, label) ->
+                            val on = temp == key
+                            Box(
+                                Modifier.weight(1f).clip(RoundedCornerShape(50))
+                                    .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { temp = if (on) null else key }.padding(vertical = 7.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(label, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(note, { note = it }, label = { Text("Quick note (optional)") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(12.dp))
                     Text(
                         if (connected) "How did the call go?" else "What happened?",
                         style = MaterialTheme.typography.labelLarge,
                     )
-                    Spacer(Modifier.height(12.dp))
-                    // Row 1: primary dispositions
+                    Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DispoButton("No Answer", Red.copy(alpha = 0.12f), Red, Modifier.weight(1f)) {
-                            vm.postCallDispose("no_answer")
-                        }
-                        DispoButton("Busy", Amber.copy(alpha = 0.12f), Amber, Modifier.weight(1f)) {
-                            vm.postCallDispose("busy")
-                        }
+                        DispoButton("No Answer", Red.copy(alpha = 0.12f), Red, Modifier.weight(1f)) { dispose("no_answer") }
+                        DispoButton("Busy", Amber.copy(alpha = 0.12f), Amber, Modifier.weight(1f)) { dispose("busy") }
                     }
                     Spacer(Modifier.height(8.dp))
-                    // Row 2
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DispoButton("Callback ↻", Indigo.copy(alpha = 0.12f), Indigo, Modifier.weight(1f)) {
-                            showSchedule = true
-                        }
-                        DispoButton("Interested ⭐", Green.copy(alpha = 0.12f), Green, Modifier.weight(1f)) {
-                            vm.postCallDispose("interested")
-                        }
+                        DispoButton("Switched off", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { dispose("no_answer") }
+                        DispoButton("Wrong number", Red.copy(alpha = 0.12f), Red, Modifier.weight(1f)) { dispose("dnc") }
                     }
                     Spacer(Modifier.height(8.dp))
-                    // Row 3
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DispoButton("Not Interested", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) {
-                            vm.postCallDispose("not_interested")
-                        }
-                        DispoButton("Booked ✓", Teal.copy(alpha = 0.12f), Teal, Modifier.weight(1f)) {
-                            vm.postCallDispose("booked")
-                        }
+                        DispoButton("Callback ↻", Indigo.copy(alpha = 0.12f), Indigo, Modifier.weight(1f)) { showSchedule = true }
+                        DispoButton("Interested ⭐", Green.copy(alpha = 0.12f), Green, Modifier.weight(1f)) { dispose("interested") }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DispoButton("Not Interested", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { dispose("not_interested") }
+                        DispoButton("Booked ✓", Teal.copy(alpha = 0.12f), Teal, Modifier.weight(1f)) { dispose("booked") }
                     }
                 }
             } else {
-                // Inline quick-snooze for Callback
+                // Inline quick-snooze for Callback — carries the temp + note too.
                 QuickScheduleChips(
                     who = who,
-                    onPick = { millis, note -> vm.postCallScheduleFollowUp(millis, note) },
+                    onPick = { millis, n -> vm.postCallScheduleFollowUp(millis, n ?: note.ifBlank { null }, temp) },
                     onBack = { showSchedule = false },
                 )
             }
@@ -1537,13 +1598,15 @@ private fun QuickScheduleChips(
 fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val app by vm.state.collectAsState()
     val context = LocalContext.current
-    LaunchedEffect(Unit) { vm.loadFollowUps() }
+    LaunchedEffect(Unit) { vm.loadFollowUps(); vm.loadLeads() }
 
     var filter by remember { mutableStateOf("today") }
     var rescheduleFor by remember { mutableStateOf<FollowUp?>(null) }
     val now = System.currentTimeMillis()
     val all = app.followUpList
     val due = all.filter { (instantMillis(it.dueAt) ?: Long.MAX_VALUE) <= now }
+    // Map due follow-ups to their lead rows so we can power-dial them back-to-back.
+    val dueContacts = due.mapNotNull { f -> app.leads.find { it.id == f.contactId } }
     val todayList = all.filter { dayLabel(it.dueAt) == "Today" }
     val morningList = todayList.filter { f ->
         val ms = instantMillis(f.dueAt) ?: return@filter false
@@ -1558,10 +1621,15 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         ms < now && dayLabel(it.dueAt) != "Today"
     }
 
+    val weekList = all.filter {
+        val ms = instantMillis(it.dueAt) ?: return@filter false
+        ms <= now + 7L * 24 * 3600_000L
+    }
     val shown = when (filter) {
         "today" -> todayList
         "morning" -> morningList
         "afternoon" -> afternoonList
+        "week" -> weekList
         "overdue" -> overdueStrict
         else -> all
     }
@@ -1596,9 +1664,28 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterTab("All", all.size, filter == "all", MaterialTheme.colorScheme.primary) { filter = "all" }
                 FilterTab("Today", todayList.size, filter == "today", MaterialTheme.colorScheme.primary) { filter = "today" }
+                FilterTab("This week", weekList.size, filter == "week", MaterialTheme.colorScheme.primary) { filter = "week" }
                 FilterTab("Morning", morningList.size, filter == "morning", Amber) { filter = "morning" }
                 FilterTab("Afternoon", afternoonList.size, filter == "afternoon", Indigo) { filter = "afternoon" }
                 FilterTab("Overdue", overdueStrict.size, filter == "overdue", Red) { filter = "overdue" }
+            }
+        }
+        // Bulk reschedule: clear an overdue pile-up in one tap.
+        if (overdueStrict.isNotEmpty()) {
+            item {
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .background(Red.copy(alpha = 0.10f))
+                        .clickable {
+                            val tomorrow10 = java.time.ZonedDateTime.now().plusDays(1)
+                                .withHour(10).withMinute(0).withSecond(0).toInstant().toEpochMilli()
+                            vm.rescheduleFollowUps(overdueStrict, tomorrow10)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                ) {
+                    Text("⚠️ ${overdueStrict.size} overdue · tap to push all to tomorrow 10 AM",
+                        style = MaterialTheme.typography.labelLarge, color = Red, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
         // auto-queue
@@ -1619,15 +1706,21 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     val next = due.firstOrNull() ?: all.firstOrNull()
+                    val canQueue = dueContacts.isNotEmpty()
                     Box(
                         Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
-                            .clickable(enabled = next != null) { next?.let { vm.dialManual(it.phone) } }
+                            .clickable(enabled = next != null) {
+                                // Power-dial all due follow-ups back-to-back when we can
+                                // map them to leads; otherwise just dial the next one.
+                                if (canQueue) vm.callList(dueContacts, "Due follow-ups")
+                                else next?.let { vm.dialManual(it.phone) }
+                            }
                             .padding(horizontal = 14.dp, vertical = 9.dp),
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Call next", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Start", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Call next", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                            Text(if (canQueue) "Call ${dueContacts.size} due" else "Call next", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
@@ -1644,7 +1737,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 FollowUpCard(
                     f = f,
                     onCall = { vm.dialManual(f.phone) },
-                    onWhatsApp = { openWhatsApp(context, f.phone) },
+                    onWhatsApp = { openWhatsApp(context, f.phone, waTemplate(f.name, null, app.profile?.fullName, app.company?.name)) },
                     onSnooze = { f.id?.let { vm.snoozeFollowUp(it, 1) } },
                     onReschedule = { rescheduleFor = f },
                     onDone = { f.id?.let { vm.completeFollowUp(it) } },
