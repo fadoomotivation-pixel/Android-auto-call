@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
-import { parseRows, parsePasted, parseCSV, type ParsedLead } from "@/lib/leadImport";
+import { parseRows, parsePasted, parseCSV, decodeText, type ParsedLead } from "@/lib/leadImport";
 
 type Sp = { id: string; full_name: string | null };
 
@@ -42,9 +42,11 @@ export function ImportLeads({
     try {
       let rows: string[][];
 
-      if (file.name.toLowerCase().endsWith(".csv")) {
-        const text = await file.text();
-        rows = parseCSV(text);
+      const lower = file.name.toLowerCase();
+      if (lower.endsWith(".csv") || lower.endsWith(".tsv") || lower.endsWith(".txt")) {
+        // Decode honouring the BOM (Facebook lead exports are UTF-16 + tab).
+        const buf = await file.arrayBuffer();
+        rows = parseCSV(decodeText(buf));
       } else {
         const xlsxModule = await import("xlsx");
         const readFn = xlsxModule.read || (xlsxModule as any).default?.read;
@@ -182,7 +184,7 @@ export function ImportLeads({
             <input
               ref={fileRef}
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept=".csv,.tsv,.txt,.xlsx,.xls"
               style={{ display: "none" }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); }}
             />
