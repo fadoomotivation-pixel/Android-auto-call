@@ -78,7 +78,7 @@ data class AppState(
     val selectedCampaignName: String = "",
     val campaignContacts: List<Contact> = emptyList(),
     // telecaller "Calls" tab: history, follow-ups and the summary card
-    val callFilter: CallFilter = CallFilter.TODAY,
+    val callFilter: CallFilter = CallFilter.ALL,
     val callList: List<CallLog> = emptyList(),
     val callsLoading: Boolean = false,
     val callSummary: CallSummary = CallSummary(),

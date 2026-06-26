@@ -2,6 +2,7 @@ package com.salesautocall.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -61,8 +63,17 @@ private val WhatsAppGreen = Color(0xFF25D366)
 @Composable
 fun CallsScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
-    LaunchedEffect(Unit) { vm.loadCalls() }
+    LaunchedEffect(Unit) { vm.loadCalls(); vm.loadLeads() }
     var sub by remember { mutableIntStateOf(0) } // 0 = All, 1 = Missed, 2 = Follow-up
+
+    // Resolve the lead's name for a call (by contact id, else last-10-digit match)
+    // so rows read like a CRM ("Vikram") instead of a bare number.
+    fun nameFor(c: CallLog): String? {
+        val byId = c.contactId?.let { id -> app.leads.find { it.id == id }?.name }
+        if (!byId.isNullOrBlank()) return byId
+        val tail = c.phone.filter { it.isDigit() }.takeLast(10)
+        return app.leads.find { it.phone.filter { ch -> ch.isDigit() }.takeLast(10) == tail }?.name?.ifBlank { null }
+    }
 
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -130,7 +141,7 @@ fun CallsScreen(vm: MainViewModel) {
             )
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(rows, key = { it.id ?: "${it.phone}-${it.startedAt}" }) {
-                    CallRow(it, playing = it.id != null && it.id == app.playingCallId,
+                    CallRow(it, name = nameFor(it), playing = it.id != null && it.id == app.playingCallId,
                         summarizing = it.id != null && it.id == app.summarizingCallId,
                         onPlay = { it.id?.let { id -> vm.playRecording(id) } }, onStop = { vm.stopRecording() },
                         onSummarize = { it.id?.let { id -> vm.generateSummary(id) } },
@@ -145,9 +156,28 @@ fun CallsScreen(vm: MainViewModel) {
     }
 }
 
+/** Avatar circle for a call row — initial + a subtle tint by call direction. */
+@Composable
+private fun CallAvatar(label: String, c: CallLog) {
+    val initial = label.firstOrNull { it.isLetter() }?.uppercaseChar()?.toString()
+        ?: label.firstOrNull { it.isDigit() }?.toString() ?: "#"
+    val tint = if (c.direction == "incoming") Color(0xFF16A34A) else MaterialTheme.colorScheme.primary
+    Box(
+        Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.12f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(initial, color = tint, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
 @Composable
 private fun SummaryCard(s: CallSummary) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 SummaryStat("Total", s.total.toString())
@@ -175,6 +205,7 @@ private fun SummaryStat(label: String, value: String, color: Color = Color.Unspe
 @Composable
 private fun CallRow(
     c: CallLog,
+    name: String?,
     playing: Boolean,
     summarizing: Boolean,
     onPlay: () -> Unit,
@@ -185,16 +216,28 @@ private fun CallRow(
 ) {
     val context = LocalContext.current
     var expanded by remember(c.id) { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth()) {
+    val title = name?.takeIf { it.isNotBlank() } ?: c.phone
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
         Column {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                DirectionIcon(c)
+                CallAvatar(title, c)
                 Spacer(Modifier.size(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(c.phone, style = MaterialTheme.typography.titleMedium)
+                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    // Show the number under the name only when we actually have a name.
+                    if (!name.isNullOrBlank()) {
+                        Text(c.phone, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    }
+                    Spacer(Modifier.size(2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutcomeBadge(c.outcome)
                         Spacer(Modifier.size(8.dp))
