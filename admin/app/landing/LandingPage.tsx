@@ -67,14 +67,17 @@ const METRICS = [
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [show3D, setShow3D] = useState(false);
+  const [mobile3D, setMobile3D] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Decide whether to mount the 3D scene: skip on small screens and when the
-  // visitor prefers reduced motion (battery / accessibility / low-end devices).
+  // Mount the interactive 3D hero on every device — it's the signature moment.
+  // We only fall back to the static hero when the visitor explicitly prefers
+  // reduced motion. On phones we render a lighter version (fewer nodes, no MSAA).
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const small = window.matchMedia("(max-width: 768px)").matches;
-    setShow3D(!reduce && !small);
+    setMobile3D(small);
+    setShow3D(!reduce);
   }, []);
 
   // Sticky-nav background on scroll.
@@ -164,7 +167,7 @@ export default function LandingPage() {
 
       {/* HERO */}
       <header className="cp-hero" id="top">
-        {show3D && <Hero3D />}
+        {show3D && <Hero3D mobile={mobile3D} />}
         <div className="cp-shell cp-hero-inner">
           <span className="cp-eyebrow">
             <span className="dot" /> AI calling CRM for real estate
@@ -379,7 +382,7 @@ export default function LandingPage() {
             <div className="cp-cta-row">
               <a
                 className="cp-btn cp-btn-primary"
-                href="https://wa.me/919999999999?text=I%20want%20a%20Call%20Pro%20AI%20demo"
+                href="https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20demo"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -414,6 +417,13 @@ export default function LandingPage() {
               </div>
               <div className="cp-footer-col">
                 <h4>Company</h4>
+                <a
+                  href="https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20demo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  WhatsApp us
+                </a>
                 <a href="mailto:hello@callproai.in">Contact</a>
                 <a href="/privacy">Privacy</a>
                 <a href="/login">Sign in</a>
