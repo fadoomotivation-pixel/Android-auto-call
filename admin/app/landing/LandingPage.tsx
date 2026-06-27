@@ -1,86 +1,80 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import dynamic from "next/dynamic";
 import "./landing.css";
+import {
+  PhoneFrame,
+  ScreenLeads,
+  ScreenAlert,
+  ScreenCall,
+  ScreenPipeline,
+  ScreenDashboard,
+} from "./AppMockups";
 
-// 3D hero is client-only and heavy → load it lazily, never on the server.
-const Hero3D = dynamic(() => import("./Hero3D"), {
-  ssr: false,
-  loading: () => null,
-});
+const STORY = [
+  {
+    kick: "Lead aata hai",
+    title: "Every lead lands in the app — automatically",
+    body: "Facebook ads, portals, walk-ins — every enquiry flows into Call Pro AI the moment it arrives. No copy-paste into Excel, nothing forgotten in a WhatsApp group.",
+    tags: ["Facebook leads", "Auto-capture", "CSV import"],
+    Screen: ScreenLeads,
+  },
+  {
+    kick: "10 second me call",
+    title: "The right salesperson's phone rings in seconds",
+    body: "The instant a hot lead comes in, it's assigned and the caller is alerted to ring back immediately. Speed-to-lead is what wins the deal — and it happens on its own.",
+    tags: ["Instant alerts", "Smart routing", "Hot-lead first"],
+    Screen: ScreenAlert,
+  },
+  {
+    kick: "Auto-dialer + recording",
+    title: "One tap dials your whole list — every call recorded",
+    body: "The auto-dialer rings leads back-to-back with no dead time. Every call is recorded and logged, so quality and coaching are never guesswork.",
+    tags: ["Auto-dialer", "Call recording", "Call history"],
+    Screen: ScreenCall,
+  },
+  {
+    kick: "Follow-up + funnel",
+    title: "No lead slips — track every plot to booking",
+    body: "Missed or busy? The next follow-up is scheduled for you. Move each enquiry through site visit, token and booking — you always know what's live and what it's worth.",
+    tags: ["Auto follow-ups", "Pipeline", "₹ value tracking"],
+    Screen: ScreenPipeline,
+  },
+  {
+    kick: "Owner control",
+    title: "The owner sees everything, live",
+    body: "Calls made, leads worked, site visits and bookings — per caller, in real time. The full picture of your sales team without asking anyone for a report.",
+    tags: ["Live dashboard", "Per-caller stats", "Daily bookings"],
+    Screen: ScreenDashboard,
+  },
+];
+
+const STORY_SCREENS = [ScreenLeads, ScreenAlert, ScreenCall, ScreenPipeline, ScreenDashboard];
 
 const FEATURES = [
-  {
-    icon: "📞",
-    title: "AI auto-dialer",
-    body: "Tap once and it calls your entire lead list back-to-back. No misdials, no dead time between calls.",
-  },
-  {
-    icon: "⚡",
-    title: "10-second hot-lead alerts",
-    body: "The moment a Facebook lead comes in, the right caller's phone rings. Speed-to-lead wins the deal.",
-  },
-  {
-    icon: "🎙️",
-    title: "Every call recorded",
-    body: "Automatic recording and call history on every number — for coaching, disputes and quality.",
-  },
-  {
-    icon: "🔁",
-    title: "Smart follow-ups",
-    body: "Missed, busy or no-answer? It auto-schedules the next attempt so no lead slips through.",
-  },
-  {
-    icon: "📊",
-    title: "Funnel to booking",
-    body: "Track each plot from enquiry → interested → site visit → token → booked. Always know what's live.",
-  },
-  {
-    icon: "🛡️",
-    title: "Owner dashboard",
-    body: "Calls made, leads worked, bookings closed — per caller, in real time. The full picture, no asking.",
-  },
-];
-
-const STEPS = [
-  { n: "01", t: "Capture", d: "Facebook & portal leads flow in automatically — or import a CSV in one click." },
-  { n: "02", t: "Call", d: "The auto-dialer rings leads instantly and back-to-back. Hot leads jump the queue." },
-  { n: "03", t: "Follow up", d: "Every outcome is logged; the next attempt is scheduled for you, with a reminder." },
-  { n: "04", t: "Close", d: "Move leads down the funnel to site visit, token and booking — all tracked." },
-];
-
-const USES = [
-  { e: "🏞️", t: "Plotting & layouts", d: "High-volume enquiry calling done fast." },
-  { e: "🏢", t: "Apartments", d: "Qualify, schedule visits, follow up." },
-  { e: "🏡", t: "Villas & farmhouses", d: "Long-cycle leads, never forgotten." },
-  { e: "🤝", t: "Channel-partner teams", d: "One dashboard across every caller." },
+  { icon: "⚡", title: "10-second hot-lead alerts", body: "New lead in? The right phone rings instantly. Win the buyer before the competition calls." },
+  { icon: "📞", title: "AI auto-dialer", body: "Tap once, it calls your entire list back-to-back. No misdials, no time wasted between calls." },
+  { icon: "🎙️", title: "Every call recorded", body: "Automatic recording and history on every number — for coaching, quality and disputes." },
+  { icon: "🔁", title: "Smart follow-ups", body: "Missed, busy or no-answer? The next attempt is scheduled automatically. Nothing forgotten." },
+  { icon: "📊", title: "Funnel to booking", body: "Enquiry → site visit → token → booked. Always know your live pipeline and its value." },
+  { icon: "🛡️", title: "Owner dashboard", body: "Calls, leads and bookings per caller, in real time. Full visibility, zero chasing." },
 ];
 
 const METRICS = [
   { num: "10s", lbl: "to first call on a hot lead" },
-  { num: "3×", lbl: "more calls per caller, per day" },
+  { num: "3×", lbl: "more calls per caller, daily" },
   { num: "100%", lbl: "of calls recorded & tracked" },
   { num: "0", lbl: "leads lost in spreadsheets" },
 ];
 
+const WA = "https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20demo";
+
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
-  const [show3D, setShow3D] = useState(false);
-  const [mobile3D, setMobile3D] = useState(false);
+  const [active, setActive] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Mount the interactive 3D hero on every device — it's the signature moment.
-  // We only fall back to the static hero when the visitor explicitly prefers
-  // reduced motion. On phones we render a lighter version (fewer nodes, no MSAA).
-  useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const small = window.matchMedia("(max-width: 768px)").matches;
-    setMobile3D(small);
-    setShow3D(!reduce);
-  }, []);
-
-  // Sticky-nav background on scroll.
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
@@ -88,14 +82,28 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // GSAP scroll-storytelling: hero line reveal + scroll-triggered section reveals.
+  // Which business-model step is centred → drives the sticky phone's screen.
   useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            const i = Number((e.target as HTMLElement).dataset.index);
+            if (!Number.isNaN(i)) setActive(i);
+          }
+        });
+      },
+      { rootMargin: "-45% 0px -45% 0px", threshold: 0 },
+    );
+    stepRefs.current.forEach((el) => el && obs.observe(el));
+    return () => obs.disconnect();
+  }, []);
 
+  // GSAP scroll reveals (skipped under reduced motion).
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let ctx: { revert: () => void } | undefined;
     let cancelled = false;
-
     (async () => {
       const gsapMod = await import("gsap");
       const stMod = await import("gsap/ScrollTrigger");
@@ -103,48 +111,29 @@ export default function LandingPage() {
       const gsap = gsapMod.gsap ?? gsapMod.default;
       const ScrollTrigger = stMod.ScrollTrigger ?? stMod.default;
       gsap.registerPlugin(ScrollTrigger);
-
       ctx = gsap.context(() => {
-        // Hero headline lines rise in, staggered.
-        gsap.from(".cp-hero h1 .line > span", {
-          yPercent: 110,
-          duration: 1,
-          ease: "power4.out",
-          stagger: 0.12,
-          delay: 0.15,
-        });
-        gsap.from(".cp-hero-sub, .cp-hero-cta, .cp-hero-trust, .cp-eyebrow", {
-          opacity: 0,
-          y: 22,
-          duration: 0.9,
-          ease: "power3.out",
-          stagger: 0.1,
-          delay: 0.5,
-        });
-
-        // Generic scroll reveals.
         gsap.utils.toArray<HTMLElement>(".cp-reveal").forEach((el) => {
           gsap.to(el, {
             opacity: 1,
             y: 0,
-            duration: 0.9,
+            duration: 0.85,
             ease: "power3.out",
-            scrollTrigger: { trigger: el, start: "top 85%" },
+            scrollTrigger: { trigger: el, start: "top 88%" },
           });
         });
       }, rootRef);
     })();
-
     return () => {
       cancelled = true;
       ctx?.revert();
     };
   }, []);
 
+  const stickyTilt = `rotateY(${-16 + active * 6}deg) rotateX(6deg)`;
+
   return (
     <div className="cp" ref={rootRef}>
       <div className="cp-bg" />
-      <div className="cp-grid" />
 
       {/* NAV */}
       <nav className={`cp-nav ${scrolled ? "scrolled" : ""}`}>
@@ -154,11 +143,10 @@ export default function LandingPage() {
             Call&nbsp;Pro&nbsp;AI
           </a>
           <div className="cp-nav-links">
-            <a href="#features">Features</a>
             <a href="#how">How it works</a>
-            <a href="#uses">Use cases</a>
-            <a href="#pricing">Pricing</a>
-            <a className="cp-btn cp-btn-primary" href="#pricing">
+            <a href="#features">Features</a>
+            <a href="#proof">Results</a>
+            <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
               Book a demo
             </a>
           </div>
@@ -167,122 +155,125 @@ export default function LandingPage() {
 
       {/* HERO */}
       <header className="cp-hero" id="top">
-        {show3D && <Hero3D mobile={mobile3D} />}
-        <div className="cp-shell cp-hero-inner">
-          <span className="cp-eyebrow">
-            <span className="dot" /> AI calling CRM for real estate
-          </span>
-          <h1>
-            <span className="line">
-              <span>Turn every lead</span>
-            </span>
-            <span className="line">
-              <span className="cp-grad">into a booking.</span>
-            </span>
-          </h1>
-          <p className="cp-hero-sub">
-            Call Pro AI auto-dials your leads, records every call, and alerts the right
-            salesperson the second a hot lead lands — so plots sell faster.
-          </p>
-          <div className="cp-hero-cta">
-            <a className="cp-btn cp-btn-primary" href="#pricing">
-              Book a free demo →
-            </a>
-            <a className="cp-btn cp-btn-ghost" href="#how">
-              See how it works
-            </a>
+        <div className="cp-shell cp-hero-grid">
+          <div>
+            <span className="cp-eyebrow">AI calling CRM for real estate</span>
+            <h1>
+              Turn every lead into a <span className="cp-grad">booking.</span>
+            </h1>
+            <p className="cp-hero-sub">
+              Call Pro AI auto-dials your leads, records every call, and rings the right
+              salesperson the second a hot buyer arrives — so plots and flats sell faster.
+            </p>
+            <div className="cp-hero-cta">
+              <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
+                Book a free demo →
+              </a>
+              <a className="cp-btn cp-btn-ghost" href="#how">
+                See how it works
+              </a>
+            </div>
+            <div className="cp-hero-trust">
+              <span><b>Built for</b> Indian real-estate teams</span>
+              <span><b>Android app</b> + web dashboard</span>
+            </div>
           </div>
-          <div className="cp-hero-trust">
-            <span>
-              <b>Built for</b> Indian real-estate teams
-            </span>
-            <span>
-              <b>Cloud telephony</b> · no SIM hassle
-            </span>
-            <span>
-              <b>Android app</b> + web dashboard
-            </span>
+
+          <div className="cp-hero-visual">
+            <div className="cp-stage3d">
+              <PhoneFrame className="cp-hero-phone">
+                <ScreenLeads />
+              </PhoneFrame>
+            </div>
+            <div className="cp-float cp-float-a">
+              <span className="ic" style={{ background: "rgba(240,71,106,0.12)" }}>🔥</span>
+              <span>
+                New hot lead<small>Facebook · ₹45L</small>
+              </span>
+            </div>
+            <div className="cp-float cp-float-b">
+              <span className="ic" style={{ background: "rgba(16,185,129,0.12)" }}>✅</span>
+              <span>
+                Booking confirmed<small>Plot · ₹2,00,000 token</small>
+              </span>
+            </div>
+            <div className="cp-float cp-float-c">
+              <span className="ic" style={{ background: "rgba(79,70,229,0.12)" }}>📞</span>
+              <span>
+                118 calls today<small>across your team</small>
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="cp-scrollcue">
-          Scroll
-          <span className="bar" />
         </div>
       </header>
 
-      {/* MARQUEE */}
-      <div className="cp-marquee">
-        <div className="cp-marquee-track">
-          <span>Auto-dialer</span>
-          <span>Hot-lead alerts</span>
-          <span>Call recording</span>
-          <span>Smart follow-ups</span>
-          <span>Funnel to booking</span>
-          <span>Owner dashboard</span>
-          <span>Auto-dialer</span>
-          <span>Hot-lead alerts</span>
-          <span>Call recording</span>
-          <span>Smart follow-ups</span>
-          <span>Funnel to booking</span>
-          <span>Owner dashboard</span>
+      {/* TRUST STRIP */}
+      <div className="cp-logos">
+        <div className="cp-shell cp-logos-inner">
+          <span className="lead">Made for builders selling</span>
+          <span>Plots &amp; layouts</span>
+          <span>Apartments</span>
+          <span>Villas</span>
+          <span>Channel-partner teams</span>
         </div>
       </div>
 
-      {/* PROBLEM → SOLUTION */}
-      <section className="cp-section" id="why">
+      {/* STORY — business model walkthrough */}
+      <section className="cp-section cp-story" id="how">
         <div className="cp-shell">
           <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">The problem</span>
-            <h2>Leads don&apos;t die from bad ads. They die from slow calls.</h2>
-            <p>
-              You pay for every Facebook lead. Then it sits in a spreadsheet for hours —
-              and by the time someone calls, the buyer has already picked up a competitor.
-            </p>
+            <span className="cp-eyebrow">How it works</span>
+            <h2>From a Facebook lead to a booking — without dropping a single call.</h2>
+            <p>Scroll through exactly how Call Pro AI runs your sales floor.</p>
           </div>
-          <div className="cp-split cp-reveal">
-            <div className="cp-split-card cp-split-bad">
-              <h3>Without Call Pro AI</h3>
-              <ul className="cp-list">
-                <li>
-                  <span className="cp-tick no">✕</span>
-                  <span>Leads sit in WhatsApp groups and Excel for hours.</span>
-                </li>
-                <li>
-                  <span className="cp-tick no">✕</span>
-                  <span>No one knows who called whom, or what was said.</span>
-                </li>
-                <li>
-                  <span className="cp-tick no">✕</span>
-                  <span>Follow-ups forgotten. Hot buyers go cold.</span>
-                </li>
-                <li>
-                  <span className="cp-tick no">✕</span>
-                  <span>The owner has zero visibility into the team.</span>
-                </li>
-              </ul>
+
+          <div className="cp-story-grid">
+            {/* sticky 3D phone (desktop) */}
+            <div className="cp-story-visual">
+              <div className="cp-story-phone-wrap">
+                <div className="cp-phone" style={{ transform: stickyTilt }}>
+                  <div className="cp-phone-notch" />
+                  <div className="cp-screen">
+                    {STORY_SCREENS.map((Screen, i) => (
+                      <div className={`cp-story-screen ${i === active ? "active" : ""}`} key={i}>
+                        <Screen />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="cp-split-card cp-split-good">
-              <h3>With Call Pro AI</h3>
-              <ul className="cp-list">
-                <li>
-                  <span className="cp-tick ok">✓</span>
-                  <span>
-                    <b>New lead rings a caller in 10 seconds</b> — automatically.
+
+            {/* steps */}
+            <div className="cp-story-steps">
+              {STORY.map((s, i) => (
+                <div
+                  className={`cp-step-block ${i === active ? "active" : ""}`}
+                  key={s.title}
+                  data-index={i}
+                  ref={(el) => {
+                    stepRefs.current[i] = el;
+                  }}
+                >
+                  <span className="cp-step-kick">
+                    <span className="num">{i + 1}</span>
+                    {s.kick}
                   </span>
-                </li>
-                <li>
-                  <span className="cp-tick ok">✓</span>
-                  <span>Every call recorded, logged and attributed.</span>
-                </li>
-                <li>
-                  <span className="cp-tick ok">✓</span>
-                  <span>The next follow-up is scheduled for you.</span>
-                </li>
-                <li>
-                  <span className="cp-tick ok">✓</span>
-                  <span>The owner sees calls, leads and bookings live.</span>
-                </li>
-              </ul>
+                  <h3>{s.title}</h3>
+                  <p>{s.body}</p>
+                  <div className="cp-step-tags">
+                    {s.tags.map((t) => (
+                      <span key={t}>{t}</span>
+                    ))}
+                  </div>
+                  {/* phone shown inline on mobile */}
+                  <div className="cp-step-phone">
+                    <PhoneFrame>
+                      <s.Screen />
+                    </PhoneFrame>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -294,7 +285,7 @@ export default function LandingPage() {
           <div className="cp-section-head cp-reveal">
             <span className="cp-eyebrow">What it does</span>
             <h2>A calling engine, not just a CRM.</h2>
-            <p>Everything your sales team needs to call more leads and close more plots — in one app.</p>
+            <p>Everything your team needs to call more leads and close more plots — in one app.</p>
           </div>
           <div className="cp-features-grid">
             {FEATURES.map((f) => (
@@ -302,45 +293,6 @@ export default function LandingPage() {
                 <div className="cp-card-ico">{f.icon}</div>
                 <h3>{f.title}</h3>
                 <p>{f.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* HOW IT WORKS */}
-      <section className="cp-section" id="how">
-        <div className="cp-shell">
-          <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">How it works</span>
-            <h2>From enquiry to booking, in four moves.</h2>
-            <p>No setup headaches. Leads come in, the dialer does the work, the funnel keeps score.</p>
-          </div>
-          <div className="cp-steps">
-            {STEPS.map((s) => (
-              <div className="cp-step cp-reveal" key={s.n}>
-                <div className="cp-step-num">{s.n}</div>
-                <h3>{s.t}</h3>
-                <p>{s.d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* USE CASES */}
-      <section className="cp-section" id="uses">
-        <div className="cp-shell">
-          <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">Who it&apos;s for</span>
-            <h2>Built for the way you actually sell.</h2>
-          </div>
-          <div className="cp-uses">
-            {USES.map((u) => (
-              <div className="cp-use cp-reveal" key={u.t}>
-                <div className="emoji">{u.e}</div>
-                <h3>{u.t}</h3>
-                <p>{u.d}</p>
               </div>
             ))}
           </div>
@@ -361,31 +313,24 @@ export default function LandingPage() {
           <div className="cp-quote cp-reveal">
             <p>
               &ldquo;Our callers used to lose half the day deciding who to ring. Now the app
-              just calls — and the owner finally sees every booking as it happens.&rdquo;
+              just calls — and I finally see every booking the moment it happens.&rdquo;
             </p>
             <div className="who">— Sales head, plotting project · Hyderabad</div>
           </div>
         </div>
       </section>
 
-      {/* PRICING / CTA */}
-      <section className="cp-section" id="pricing">
+      {/* CTA */}
+      <section className="cp-section" id="demo">
         <div className="cp-shell">
           <div className="cp-cta cp-reveal">
-            <h2>
-              Stop losing leads to <span className="cp-grad">slow follow-ups.</span>
-            </h2>
+            <h2>See it run on your own leads.</h2>
             <p>
-              Get a live demo on your own leads. We&apos;ll set up your team and show you the
-              first calls going out in minutes.
+              Book a 15-minute demo. We&apos;ll set up your team and show the first calls going
+              out — live, on WhatsApp.
             </p>
             <div className="cp-cta-row">
-              <a
-                className="cp-btn cp-btn-primary"
-                href="https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20demo"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
                 Book a demo on WhatsApp
               </a>
               <a className="cp-btn cp-btn-ghost" href="mailto:hello@callproai.in">
@@ -410,20 +355,13 @@ export default function LandingPage() {
             <div className="cp-footer-cols">
               <div className="cp-footer-col">
                 <h4>Product</h4>
-                <a href="#features">Features</a>
                 <a href="#how">How it works</a>
-                <a href="#uses">Use cases</a>
-                <a href="#pricing">Pricing</a>
+                <a href="#features">Features</a>
+                <a href="#proof">Results</a>
               </div>
               <div className="cp-footer-col">
                 <h4>Company</h4>
-                <a
-                  href="https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20demo"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  WhatsApp us
-                </a>
+                <a href={WA} target="_blank" rel="noopener noreferrer">WhatsApp us</a>
                 <a href="mailto:hello@callproai.in">Contact</a>
                 <a href="/privacy">Privacy</a>
                 <a href="/login">Sign in</a>
