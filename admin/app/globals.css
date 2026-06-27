@@ -1,5 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
+/* Tailwind utilities for the marketing landing only. Preflight is disabled in
+   tailwind.config.ts so this never resets the dashboard's hand-rolled styles. */
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --bg: #020617;
   --panel: rgba(15, 23, 42, 0.6);
