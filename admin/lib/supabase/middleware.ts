@@ -31,8 +31,9 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isAuthRoute = path.startsWith("/login");
-  // Publicly reachable without signing in (e.g. the Play-required privacy policy).
-  const isPublicRoute = path.startsWith("/privacy");
+  // Publicly reachable without signing in: the marketing landing page (root) and
+  // the Play-required privacy policy.
+  const isPublicRoute = path === "/" || path.startsWith("/privacy");
 
   if (!user && !isAuthRoute && !isPublicRoute) {
     const url = request.nextUrl.clone();
