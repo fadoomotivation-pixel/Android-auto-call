@@ -215,11 +215,14 @@ function Mark({ v }: { v: string }) {
   return <span className="cmp-txt">{v}</span>;
 }
 
-const METRICS = [
-  { num: "10s", lbl: "to first call on a hot lead" },
-  { num: "3×", lbl: "more calls per caller, daily" },
-  { num: "100%", lbl: "of calls recorded & tracked" },
-  { num: "0", lbl: "leads lost in spreadsheets" },
+// The "one-stop selling engine" — everything Call Pro AI sets up, not just the app.
+const ENGINE = [
+  { ic: "📱", t: "The calling app", b: "Auto-dialer, recordings, live funnel and an owner dashboard — the software at the core." },
+  { ic: "👥", t: "Right-size your callers", b: "We work out how many telecallers your sales actually need — no guessing." },
+  { ic: "📣", t: "Ad lead generation", b: "We plan and run your Facebook & Google ad spend so quality leads keep coming." },
+  { ic: "🌐", t: "A lead-capturing website", b: "No website yet? We build one that feeds every enquiry straight into the app." },
+  { ic: "🎬", t: "AI sales videos", b: "Personalised project videos to send buyers and warm them up before the call." },
+  { ic: "📄", t: "Brochures & PDFs", b: "Premium project brochures and price sheets that help your team close." },
 ];
 
 const WA = "https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20demo";
@@ -306,9 +309,9 @@ export default function LandingPage() {
             Call&nbsp;Pro&nbsp;AI
           </a>
           <div className="cp-nav-links">
-            <a href="#why">Why us</a>
             <a href="#how">How it works</a>
-            <a href="#features">Features</a>
+            <a href="#compare">Why us</a>
+            <a href="#pricing">Pricing</a>
             <a href="#faq">FAQ</a>
             <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
               Book a demo
@@ -512,7 +515,6 @@ export default function LandingPage() {
           </div>
           <div className="cp-cmp-wrap cp-reveal">
             <div className="cp-cmp">
-              <span className="cp-cmp-spot" aria-hidden />
               <div className="cp-cmp-head">
                 <span className="cp-cmp-feat" />
                 <span className="cp-cmp-col cp-cmp-us">
@@ -537,34 +539,41 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* PAYOFF — the transformation, told through one customer's words */}
-      <section className="cp-section cp-payoff" id="proof">
+      {/* ONE-STOP ENGINE + PRICING — the business model, made memorable */}
+      <section className="cp-section" id="pricing">
         <div className="cp-shell">
-          <div className="cp-payoff-head cp-reveal">
-            <span className="cp-eyebrow">The payoff</span>
+          <div className="cp-section-head cp-reveal">
+            <span className="cp-eyebrow">One-stop solution</span>
             <h2>
-              Your team stops chasing. <br />
-              Your plots <span className="cp-grad">start selling.</span>
+              We don&apos;t just give you an app. <br />
+              We build your <span className="cp-grad">selling machine.</span>
             </h2>
+            <p>
+              Leads, calls, follow-ups, content — Call Pro AI sets up everything you need to sell
+              plots, and runs it with you.
+            </p>
           </div>
-          <blockquote className="cp-bigquote cp-reveal">
-            &ldquo;Our callers used to lose half the day deciding who to ring. Now the app just
-            calls — and I see every booking the moment it happens.&rdquo;
-            <cite>
-              <span className="cp-bq-av">RK</span>
-              <span>
-                <b>Rohit Kulkarni</b>
-                Sales head · plotting project, Hyderabad
-              </span>
-            </cite>
-          </blockquote>
-          <div className="cp-payoff-stats cp-reveal">
-            {METRICS.map((m) => (
-              <div className="cp-pstat" key={m.lbl}>
-                <span className="num cp-grad">{m.num}</span>
-                <span className="lbl">{m.lbl}</span>
+          <div className="cp-engine">
+            {ENGINE.map((e) => (
+              <div className="cp-eng-card cp-reveal" key={e.t}>
+                <span className="cp-eng-ic">{e.ic}</span>
+                <h3>{e.t}</h3>
+                <p>{e.b}</p>
               </div>
             ))}
+          </div>
+          <div className="cp-price cp-reveal">
+            <div className="cp-price-txt">
+              <span className="cp-price-tag">Custom pricing</span>
+              <h3>One plan, built around your business.</h3>
+              <p>
+                No fixed package. We size it to your team and your ad budget, then put together a
+                clear plan in your demo — software, callers, ads, website and content included.
+              </p>
+            </div>
+            <a className="cp-btn cp-btn-primary cp-price-btn" href={WA} target="_blank" rel="noopener noreferrer">
+              Get your custom plan →
+            </a>
           </div>
         </div>
       </section>

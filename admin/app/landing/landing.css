@@ -106,13 +106,15 @@
   border: 1px solid transparent;
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
-.cp-btn-primary {
+/* `.cp .cp-btn-*` (0,2,0) beats `.cp a { color: inherit }` (0,1,1) so the button
+   text colour wins over the link-inherit rule. */
+.cp .cp-btn-primary {
   color: #fff;
   background: linear-gradient(100deg, #4f46e5, #7c3aed);
   box-shadow: 0 12px 26px -10px rgba(79, 70, 229, 0.7);
 }
 .cp-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 18px 34px -12px rgba(79, 70, 229, 0.8); }
-.cp-btn-ghost {
+.cp .cp-btn-ghost {
   color: var(--ink);
   background: #fff;
   border-color: var(--line);
@@ -566,19 +568,12 @@
   background: var(--bg-2);
   box-shadow: var(--shadow-sm);
 }
-/* the elevated, glowing winner column behind the Call Pro AI cells */
-.cp-cmp-spot {
-  position: absolute;
-  top: -4px; bottom: -4px;
-  left: 28.57%; width: 17.86%;
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(124, 58, 237, 0.09), rgba(79, 70, 229, 0.04));
-  box-shadow: 0 18px 44px -18px rgba(99, 70, 229, 0.55);
-  border: 1.5px solid rgba(124, 58, 237, 0.35);
-  z-index: 0;
-}
 .cp-cmp-head,
-.cp-cmp-row { position: relative; z-index: 1; display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr; align-items: center; }
+.cp-cmp-row { position: relative; display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr; align-items: center; }
+/* highlighted winning column — drawn on the cells (no clipped shadows) */
+.cp-cmp-us { box-shadow: inset 1px 0 0 rgba(124, 58, 237, 0.28), inset -1px 0 0 rgba(124, 58, 237, 0.28); }
+.cp-cmp-row .cp-cmp-us { background: rgba(124, 58, 237, 0.05); }
+.cp-cmp-row:last-child .cp-cmp-us { border-radius: 0 0 13px 13px; box-shadow: inset 1px 0 0 rgba(124, 58, 237, 0.28), inset -1px 0 0 rgba(124, 58, 237, 0.28), inset 0 -1px 0 rgba(124, 58, 237, 0.28); }
 .cp-cmp-head { border-bottom: 1px solid var(--line); }
 .cp-cmp-head .cp-cmp-col {
   padding: 12px 4px; text-align: center;
@@ -606,38 +601,52 @@
 .cmp-txt { font-size: 11px; font-weight: 600; color: var(--muted); line-height: 1.2; }
 .cp-cmp-us .cmp-txt { color: var(--accent-2); font-weight: 700; }
 
-/* ---- PAYOFF (light, quote-led) -------------------------------------------- */
-.cp-payoff-head { text-align: center; max-width: 760px; margin: 0 auto 44px; }
-.cp-payoff-head h2 { font-size: clamp(30px, 5vw, 50px); margin-top: 16px; }
-.cp-bigquote {
-  max-width: 800px; margin: 0 auto; text-align: center;
-  font-family: var(--font-display), sans-serif;
-  font-size: clamp(22px, 3.4vw, 33px); font-weight: 500; line-height: 1.35;
-  letter-spacing: -0.01em; color: var(--ink);
+/* ---- ONE-STOP ENGINE + PRICING -------------------------------------------- */
+.cp-engine { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 26px; }
+@media (max-width: 900px) { .cp-engine { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .cp-engine { grid-template-columns: 1fr; } }
+.cp-eng-card {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
-.cp-bigquote cite {
-  display: flex; align-items: center; justify-content: center; gap: 12px;
-  margin-top: 28px; font-style: normal;
+.cp-eng-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+.cp-eng-ic {
+  display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 12px; font-size: 21px; margin-bottom: 14px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(124, 58, 237, 0.08));
+  border: 1px solid rgba(99, 102, 241, 0.16);
 }
-.cp-bq-av {
-  width: 44px; height: 44px; border-radius: 13px; flex: none;
-  display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 15px;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
-  box-shadow: 0 8px 18px -6px rgba(79, 70, 229, 0.6);
+.cp-eng-card h3 { font-size: 17.5px; margin-bottom: 7px; }
+.cp-eng-card p { color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+
+/* pricing band */
+.cp-price {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 36px;
+  border-radius: 22px;
+  background:
+    radial-gradient(600px 240px at 88% 0%, rgba(124, 58, 237, 0.12), transparent 70%),
+    linear-gradient(180deg, rgba(79, 70, 229, 0.06), var(--bg-2));
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-md);
 }
-.cp-bigquote cite > span:last-child {
-  text-align: left; font-family: var(--font-body), sans-serif;
-  font-size: 14px; color: var(--muted); line-height: 1.35;
+.cp-price-txt { max-width: 560px; }
+.cp-price-tag {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--accent);
+  background: rgba(79, 70, 229, 0.1); border: 1px solid rgba(79, 70, 229, 0.18);
+  border-radius: 999px; padding: 5px 12px; margin-bottom: 12px;
 }
-.cp-bigquote cite b { display: block; font-size: 15px; color: var(--ink); }
-.cp-payoff-stats {
-  display: flex; justify-content: center; flex-wrap: wrap; gap: 18px 40px;
-  margin-top: 52px; padding-top: 40px; border-top: 1px solid var(--line);
-  max-width: 800px; margin-left: auto; margin-right: auto;
-}
-.cp-pstat { text-align: center; }
-.cp-pstat .num { font-family: var(--font-display), sans-serif; font-size: clamp(28px, 4.4vw, 40px); font-weight: 700; display: block; }
-.cp-pstat .lbl { color: var(--muted); font-size: 13px; margin-top: 4px; display: block; }
+.cp-price-txt h3 { font-size: clamp(21px, 3vw, 27px); margin-bottom: 9px; }
+.cp-price-txt p { color: var(--muted); font-size: 15px; line-height: 1.55; }
+.cp-price-btn { flex: none; }
+@media (max-width: 620px) { .cp-price { padding: 28px 22px; } .cp-price-btn { width: 100%; justify-content: center; } }
 
 /* ---- CTA ------------------------------------------------------------------ */
 .cp-cta {
