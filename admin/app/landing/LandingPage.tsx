@@ -255,10 +255,7 @@ export default function LandingPage() {
                   data-story-step
                   data-index={i}
                 >
-                  <span className="cp-step-kick">
-                    <span className="num">{i + 1}</span>
-                    {s.kick}
-                  </span>
+                  <span className="cp-step-kick">{s.kick}</span>
                   <h3>{s.title}</h3>
                   <p>{s.body}</p>
                   <div className="cp-step-tags">
@@ -290,10 +287,7 @@ export default function LandingPage() {
                 </div>
               </div>
               <div className="cp-mcap">
-                <span className="cp-step-kick">
-                  <span className="num">{active + 1}</span>
-                  {STORY[active].kick}
-                </span>
+                <span className="cp-step-kick">{STORY[active].kick}</span>
                 <h3>{STORY[active].title}</h3>
                 <div className="cp-mdots">
                   {STORY.map((_, i) => (
