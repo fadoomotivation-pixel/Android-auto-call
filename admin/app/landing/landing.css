@@ -593,60 +593,97 @@
 .cp-cmp-row { border-top: 1px solid var(--line-2); }
 .cp-cmp-row:nth-child(even) .cp-cmp-feat,
 .cp-cmp-row:nth-child(even) .cp-cmp-col:not(.cp-cmp-us) { background: rgba(16, 24, 64, 0.022); }
-.cp-cmp-row .cp-cmp-col { text-align: center; padding: 12px 4px; font-size: 15px; }
-.cp-cmp-row .cp-cmp-us .cmp-yes { font-size: 17px; }
-.cmp-yes { color: var(--ok); font-weight: 800; }
-.cmp-part { color: var(--warm); font-weight: 800; }
-.cmp-no { color: #ccd1dd; font-weight: 700; }
-.cmp-txt { font-size: 11px; font-weight: 600; color: var(--muted); line-height: 1.2; }
+.cp-cmp-row .cp-cmp-col { text-align: center; padding: 11px 4px; }
+/* feature label with a small icon tile */
+.cp-cmp-feat { display: flex; align-items: center; gap: 10px; }
+.cp-cmp-fic {
+  flex: none; width: 30px; height: 30px; border-radius: 9px;
+  display: grid; place-items: center; font-size: 15px;
+  background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.14);
+}
+.cp-cmp-head .cp-cmp-feat { font-size: 13px; font-weight: 700; color: var(--ink); }
+/* competitor header: monogram tile + name */
+.cp-cmp-head .cp-cmp-col:not(.cp-cmp-us) { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.cp-cmp-logo {
+  width: 26px; height: 26px; border-radius: 8px;
+  display: grid; place-items: center; font-size: 12px; font-weight: 800;
+  color: var(--muted); background: #eef0f6; border: 1px solid var(--line);
+}
+/* circled marks */
+.cmp-yes, .cmp-part, .cmp-no {
+  display: inline-grid; place-items: center;
+  width: 27px; height: 27px; border-radius: 50%;
+  font-size: 13px; font-weight: 800; line-height: 1;
+}
+.cmp-yes { color: var(--ok); background: rgba(16, 185, 129, 0.14); }
+.cmp-part { color: var(--warm); background: rgba(245, 158, 11, 0.16); }
+.cmp-no { color: #9aa3b6; background: rgba(16, 24, 64, 0.05); }
+.cp-cmp-row .cp-cmp-us .cmp-yes { width: 30px; height: 30px; font-size: 15px; }
+.cmp-txt { font-size: 11.5px; font-weight: 600; color: var(--muted); line-height: 1.2; }
 .cp-cmp-us .cmp-txt { color: var(--accent-2); font-weight: 700; }
+/* legend */
+.cp-cmp-legend {
+  display: flex; justify-content: center; flex-wrap: wrap; gap: 12px 28px;
+  margin-top: 22px; font-size: 13.5px; color: var(--muted); font-weight: 500;
+}
+.cp-cmp-legend span { display: inline-flex; align-items: center; gap: 8px; }
+.cp-cmp-legend i { width: 22px; height: 22px; font-size: 11px; }
 
-/* ---- ONE-STOP ENGINE + PRICING -------------------------------------------- */
-.cp-engine { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 26px; }
-@media (max-width: 900px) { .cp-engine { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 560px) { .cp-engine { grid-template-columns: 1fr; } }
-.cp-eng-card {
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 22px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+/* ---- PRICING (custom plan + what's included + sales engine) ---------------- */
+.cp-plan {
+  display: grid; grid-template-columns: 0.92fr 1.08fr; gap: 0;
+  border: 1px solid var(--line); border-radius: 26px; overflow: hidden;
+  background: var(--bg-2); box-shadow: var(--shadow-md);
 }
-.cp-eng-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
-.cp-eng-ic {
-  display: grid; place-items: center;
-  width: 44px; height: 44px; border-radius: 12px; font-size: 21px; margin-bottom: 14px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(124, 58, 237, 0.08));
-  border: 1px solid rgba(99, 102, 241, 0.16);
+@media (max-width: 860px) { .cp-plan { grid-template-columns: 1fr; } }
+.cp-plan-left { padding: 40px 36px; }
+.cp-plan-right { padding: 32px 30px; border-left: 1px solid var(--line); }
+@media (max-width: 860px) { .cp-plan-right { border-left: none; border-top: 1px solid var(--line); } }
+.cp-plan-kick {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
 }
-.cp-eng-card h3 { font-size: 17.5px; margin-bottom: 7px; }
-.cp-eng-card p { color: var(--muted); font-size: 14.5px; line-height: 1.5; }
-
-/* pricing band */
-.cp-price {
-  display: flex; align-items: center; justify-content: space-between; gap: 24px;
-  flex-wrap: wrap;
-  margin-top: 12px;
-  padding: 36px;
-  border-radius: 22px;
-  background:
-    radial-gradient(600px 240px at 88% 0%, rgba(124, 58, 237, 0.12), transparent 70%),
-    linear-gradient(180deg, rgba(79, 70, 229, 0.06), var(--bg-2));
-  border: 1px solid var(--line-strong);
-  box-shadow: var(--shadow-md);
-}
-.cp-price-txt { max-width: 560px; }
-.cp-price-tag {
-  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--accent);
+.cp-plan-kick i {
+  font-style: normal; display: grid; place-items: center;
+  width: 30px; height: 30px; border-radius: 9px; font-size: 14px;
   background: rgba(79, 70, 229, 0.1); border: 1px solid rgba(79, 70, 229, 0.18);
-  border-radius: 999px; padding: 5px 12px; margin-bottom: 12px;
 }
-.cp-price-txt h3 { font-size: clamp(21px, 3vw, 27px); margin-bottom: 9px; }
-.cp-price-txt p { color: var(--muted); font-size: 15px; line-height: 1.55; }
-.cp-price-btn { flex: none; }
-@media (max-width: 620px) { .cp-price { padding: 28px 22px; } .cp-price-btn { width: 100%; justify-content: center; } }
+.cp-plan-left h3 { font-size: clamp(30px, 4.6vw, 42px); margin: 22px 0 0; line-height: 1.05; }
+.cp-plan-rule { display: block; width: 46px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #4f46e5, #7c3aed); margin: 18px 0 20px; }
+.cp-plan-left > p { color: var(--muted); font-size: 15.5px; line-height: 1.6; max-width: 420px; }
+.cp-plan-shield {
+  display: flex; align-items: center; gap: 12px; margin: 24px 0;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px;
+}
+.cp-plan-shield .ic { font-size: 20px; }
+.cp-plan-shield b { font-weight: 700; }
+.cp-plan-shield span:last-child { font-size: 13.5px; color: var(--muted); line-height: 1.4; }
+.cp-plan-shield b { color: var(--ink); }
+.cp-plan-btn { width: 100%; justify-content: center; font-size: 16px; padding: 15px 22px; }
+.cp-plan-resp { display: flex; align-items: center; gap: 9px; margin-top: 14px; font-size: 13.5px; color: var(--muted); }
+.cp-plan-resp .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14); }
+.cp-plan-inc-h { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; padding: 0 4px; }
+.cp-inc { display: flex; align-items: center; gap: 12px; padding: 13px 4px; border-bottom: 1px solid var(--line-2); }
+.cp-inc:last-child { border-bottom: none; }
+.cp-inc-chk { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--accent); background: rgba(79, 70, 229, 0.1); }
+.cp-inc-ic { flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; background: rgba(99, 102, 241, 0.07); border: 1px solid rgba(99, 102, 241, 0.12); }
+.cp-inc-txt b { display: block; font-size: 14.5px; color: var(--ink); }
+.cp-inc-txt small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+
+/* sales engine flow */
+.cp-ef { margin-top: 44px; text-align: center; }
+.cp-ef-title { font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 26px; }
+.cp-ef-row { display: flex; align-items: flex-start; justify-content: center; gap: 6px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
+.cp-ef-step { flex: 1 1 0; min-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 9px; position: relative; }
+.cp-ef-step:not(:last-child)::after {
+  content: "→"; position: absolute; top: 14px; right: -10px; color: var(--faint); font-size: 16px;
+}
+.cp-ef-num {
+  width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center;
+  font-family: var(--font-display), sans-serif; font-weight: 700; font-size: 16px; color: #fff;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed); box-shadow: 0 8px 18px -7px rgba(79, 70, 229, 0.6);
+}
+.cp-ef-label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); line-height: 1.25; max-width: 90px; }
 
 /* ---- CTA ------------------------------------------------------------------ */
 .cp-cta {
