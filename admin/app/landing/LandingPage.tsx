@@ -238,7 +238,9 @@ export default function LandingPage() {
                   <div className="cp-screen">
                     {STORY_SCREENS.map((Screen, i) => (
                       <div className={`cp-story-screen ${i === active ? "active" : ""}`} key={i}>
-                        <Screen />
+                        <div className="cp-fit">
+                          <Screen />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -280,7 +282,9 @@ export default function LandingPage() {
                   <div className="cp-screen">
                     {STORY_SCREENS.map((Screen, i) => (
                       <div className={`cp-story-screen ${i === active ? "active" : ""}`} key={i}>
-                        <Screen />
+                        <div className="cp-fit">
+                          <Screen />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -288,12 +292,6 @@ export default function LandingPage() {
               </div>
               <div className="cp-mcap">
                 <span className="cp-step-kick">{STORY[active].kick}</span>
-                <h3>{STORY[active].title}</h3>
-                <div className="cp-mdots">
-                  {STORY.map((_, i) => (
-                    <span key={i} className={i === active ? "on" : ""} />
-                  ))}
-                </div>
               </div>
             </div>
             {/* invisible scroll track — each marker swaps the pinned phone */}

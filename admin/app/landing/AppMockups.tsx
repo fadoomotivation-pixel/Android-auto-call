@@ -16,7 +16,11 @@ export function PhoneFrame({
   return (
     <div className={`cp-phone ${className}`}>
       <div className="cp-phone-notch" />
-      <div className="cp-screen">{children}</div>
+      <div className="cp-screen">
+        {/* fixed design size, scaled to the frame → identical premium layout
+            at every phone size, no text wrapping / aspect issues */}
+        <div className="cp-fit">{children}</div>
+      </div>
     </div>
   );
 }

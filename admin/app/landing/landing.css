@@ -184,13 +184,26 @@
 .cp-phone {
   position: relative;
   width: 300px;
-  height: 624px;
+  height: 613px;
+  --cp-scale: 0.978; /* 274px inner ÷ 280px design canvas */
   border-radius: 46px;
   background: linear-gradient(160deg, #181b29, #0a0c16);
   padding: 13px;
   box-shadow: var(--shadow-xl);
   transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
   transform-style: preserve-3d;
+}
+/* The app UI is authored at a fixed 280×600 canvas and scaled to fit whatever
+   phone holds it, so every screen keeps its exact premium layout — no text
+   wrapping, no aspect-ratio drift — at any device size. */
+.cp-fit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 280px;
+  height: 600px;
+  transform-origin: top left;
+  transform: scale(var(--cp-scale));
 }
 .cp-phone::after {
   content: "";
@@ -330,7 +343,8 @@
 .cp-mphone-wrap { perspective: 1500px; }
 .cp-mphone {
   width: 196px;
-  height: 408px;
+  height: 399px;
+  --cp-scale: 0.6357; /* 178px inner ÷ 280px design canvas */
   border-radius: 34px;
   padding: 9px;
   /* promote to its own layer → smoother scroll, no repaint jank */
