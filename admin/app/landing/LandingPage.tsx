@@ -97,48 +97,68 @@ const FEATURES = [
   { type: "dashboard", title: "Owner dashboard", body: "Calls, leads and bookings per caller, in real time. Full visibility, zero chasing." },
 ] as const;
 
-// Small animated CSS-art icons (no emoji) — each one moves to convey the feature.
-function FeatureIcon({ type }: { type: string }) {
+// A small animated mini-UI banner for each feature card — a "live widget" that
+// shows the feature in action, not just a flat icon.
+function FeatureViz({ type }: { type: string }) {
   switch (type) {
     case "alert":
       return (
-        <span className="fi fi-ping">
-          <span className="ping-ring" />
-          <span className="ping-ring" />
-          <span className="ping-core" />
-        </span>
+        <div className="cv cv-alert">
+          <div className="cv-chip">
+            <span className="cv-ping" />
+            <span className="cv-lines"><i /><i /></span>
+            <span className="cv-10s">10s</span>
+          </div>
+          <span className="cv-count" />
+        </div>
       );
     case "dialer":
       return (
-        <span className="fi fi-dial">
-          <i /><i /><i /><i />
-        </span>
+        <div className="cv cv-dial">
+          <span className="cv-beam" />
+          <div className="cv-row"><span className="av" /><span className="ln" /></div>
+          <div className="cv-row"><span className="av" /><span className="ln" /></div>
+          <div className="cv-row"><span className="av" /><span className="ln" /></div>
+        </div>
       );
     case "record":
       return (
-        <span className="fi fi-wave">
-          <i /><i /><i /><i /><i />
-          <span className="rec-dot" />
-        </span>
+        <div className="cv cv-rec">
+          <span className="cv-recdot" />
+          <div className="cv-bars">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <i
+                key={i}
+                style={{
+                  height: `${24 + Math.abs(Math.sin(i * 0.8)) * 64}%`,
+                  animationDelay: `${(i % 9) * 0.07}s`,
+                }}
+              />
+            ))}
+          </div>
+          <span className="cv-time">00:14</span>
+        </div>
       );
     case "followup":
       return (
-        <span className="fi fi-loop">
-          <span className="loop-ring" />
-        </span>
+        <div className="cv cv-follow">
+          <span className="cv-clock"><b /></span>
+          <div className="cv-sched"><i /><i /></div>
+          <span className="cv-check" />
+        </div>
       );
     case "funnel":
       return (
-        <span className="fi fi-bars">
-          <i /><i /><i />
-        </span>
+        <div className="cv cv-funnel">
+          <span /><span /><span /><span />
+        </div>
       );
     case "dashboard":
       return (
-        <span className="fi fi-dash">
-          <i /><i /><i />
-          <span className="live" />
-        </span>
+        <div className="cv cv-chart">
+          <i /><i /><i /><i /><i /><i />
+          <span className="cv-live" />
+        </div>
       );
     default:
       return null;
@@ -411,7 +431,7 @@ export default function LandingPage() {
           <div className="cp-features-grid">
             {FEATURES.map((f) => (
               <div className="cp-card cp-reveal" key={f.title}>
-                <div className="cp-card-ico"><FeatureIcon type={f.type} /></div>
+                <div className="cp-card-visual"><FeatureViz type={f.type} /></div>
                 <h3>{f.title}</h3>
                 <p>{f.body}</p>
               </div>
