@@ -193,6 +193,25 @@ function FeatureViz({ type }: { type: string }) {
   }
 }
 
+// Comparison: y = has it, p = partial/limited, n = doesn't. Ordered so Call Pro
+// AI is the only column that's all-green.
+const COMPARE = [
+  { f: "Built for real estate (site visit → token → booking)", us: "y", tele: "n", sell: "y", cally: "n" },
+  { f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
+  { f: "10-second hot-lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
+  { f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
+  { f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
+  { f: "Runs itself — no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
+  { f: "Live in a day, not a quarter", us: "y", tele: "y", sell: "n", cally: "y" },
+  { f: "Made for small builders", us: "y", tele: "y", sell: "n", cally: "y" },
+];
+
+function Mark({ v }: { v: string }) {
+  if (v === "y") return <span className="cmp-yes" aria-label="Yes">✓</span>;
+  if (v === "p") return <span className="cmp-part" aria-label="Limited">~</span>;
+  return <span className="cmp-no" aria-label="No">✕</span>;
+}
+
 const METRICS = [
   { num: "10s", lbl: "to first call on a hot lead" },
   { num: "3×", lbl: "more calls per caller, daily" },
@@ -473,6 +492,40 @@ export default function LandingPage() {
                 <p>{f.body}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* COMPARISON — Call Pro AI vs the alternatives */}
+      <section className="cp-section" id="compare">
+        <div className="cp-shell">
+          <div className="cp-section-head cp-reveal">
+            <span className="cp-eyebrow">How we compare</span>
+            <h2>The only one built to close plots.</h2>
+            <p>
+              Dialers just make calls. Enterprise CRMs are built for big developers with a setup
+              team. Call Pro AI is the effortless selling system made for small real-estate teams.
+            </p>
+          </div>
+          <div className="cp-cmp-wrap cp-reveal">
+            <div className="cp-cmp">
+              <div className="cp-cmp-head">
+                <span className="cp-cmp-feat" />
+                <span className="cp-cmp-col cp-cmp-us">Call&nbsp;Pro&nbsp;AI</span>
+                <span className="cp-cmp-col">TeleCRM</span>
+                <span className="cp-cmp-col">Sell.Do</span>
+                <span className="cp-cmp-col">Callyzer</span>
+              </div>
+              {COMPARE.map((r) => (
+                <div className="cp-cmp-row" key={r.f}>
+                  <span className="cp-cmp-feat">{r.f}</span>
+                  <span className="cp-cmp-col cp-cmp-us"><Mark v={r.us} /></span>
+                  <span className="cp-cmp-col"><Mark v={r.tele} /></span>
+                  <span className="cp-cmp-col"><Mark v={r.sell} /></span>
+                  <span className="cp-cmp-col"><Mark v={r.cally} /></span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
