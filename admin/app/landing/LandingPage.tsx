@@ -11,6 +11,34 @@ import {
   ScreenDashboard,
 } from "./AppMockups";
 
+// Clean monochrome line icons (feather-style) — no emoji, B2B-professional.
+function Icon({ name }: { name: string }) {
+  const paths: Record<string, React.ReactNode> = {
+    phone: <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" />,
+    cloud: <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10Z" />,
+    sparkle: <><path d="M12 3l1.7 4.8L18.5 9.5 13.7 11 12 16l-1.7-5L5.5 9.5 10.3 7.8 12 3Z" /><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14Z" /></>,
+    chart: <path d="M12 20V10M18 20V4M6 20v-5" />,
+    shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />,
+    megaphone: <><path d="M3 11v2a1 1 0 0 0 1 1h3l7 4V6L7 10H4a1 1 0 0 0-1 1Z" /><path d="M16 8a5 5 0 0 1 0 8" /></>,
+    video: <><rect x="2" y="6" width="13" height="12" rx="2" /><path d="M22 8l-7 4 7 4V8Z" /></>,
+    doc: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" /><path d="M14 2v6h6M8 13h8M8 17h8" /></>,
+    cap: <><path d="M22 10 12 5 2 10l10 5 10-5Z" /><path d="M6 12v5c0 1 2.7 2 6 2s6-1 6-2v-5" /></>,
+    users: <><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9.5" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
+    inbox: <><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.9A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.1Z" /></>,
+    chat: <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z" />,
+    pin: <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z" /><circle cx="12" cy="10" r="3" /></>,
+    trophy: <><path d="M8 4h8v5a4 4 0 0 1-8 0V4Z" /><path d="M8 5H5v1.5A3 3 0 0 0 8 9.5M16 5h3v1.5a3 3 0 0 1-3 3" /><path d="M12 13v4M8.5 21h7l-1-4h-5l-1 4Z" /></>,
+    calendar: <><rect x="3" y="4.5" width="18" height="17" rx="2" /><path d="M16 2.5v4M8 2.5v4M3 10h18" /></>,
+    crown: <path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8Z" />,
+    check: <path d="M5 13l4 4L19 7" />,
+  };
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {paths[name]}
+    </svg>
+  );
+}
+
 const STORY = [
   {
     kick: "Capture",
@@ -186,16 +214,16 @@ function FeatureViz({ type }: { type: string }) {
 // Comparison: y = has it, p = partial/limited, n = doesn't. Ordered so Call Pro
 // AI is the only column that's all-green.
 const COMPARE = [
-  { ic: "🎯", f: "Made for", us: "Real estate", tele: "Generic", sell: "Enterprise", cally: "Tracking" },
-  { ic: "🏗️", f: "Built for the sale (site visit → token → booking)", us: "y", tele: "n", sell: "y", cally: "n" },
-  { ic: "☁️", f: "Cloud calling — no SIM hassle", us: "y", tele: "y", sell: "p", cally: "n" },
-  { ic: "🤖", f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
-  { ic: "🔔", f: "10-second hot-lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
-  { ic: "📝", f: "AI call summary & next step", us: "y", tele: "n", sell: "n", cally: "n" },
-  { ic: "🔁", f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
-  { ic: "📊", f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
-  { ic: "⚙️", f: "Runs itself — no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
-  { ic: "⏱️", f: "Setup time", us: "Same day", tele: "Days", sell: "Weeks", cally: "Days" },
+  { f: "Made for", us: "Real estate", tele: "Generic", sell: "Enterprise", cally: "Tracking" },
+  { f: "Built for the property sale", us: "y", tele: "n", sell: "y", cally: "n" },
+  { f: "Cloud calling, no SIM", us: "y", tele: "y", sell: "p", cally: "n" },
+  { f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
+  { f: "10-second lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
+  { f: "AI call summary", us: "y", tele: "n", sell: "n", cally: "n" },
+  { f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
+  { f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
+  { f: "Runs itself, no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
+  { f: "Setup time", us: "Same day", tele: "Days", sell: "Weeks", cally: "Days" },
 ];
 
 const COMP_COLS = [
@@ -213,26 +241,26 @@ function Mark({ v }: { v: string }) {
 
 // "What's included" in the custom plan — the full done-for-you selling system.
 const INCLUDED = [
-  { ic: "📞", t: "AI Calling CRM", b: "Auto-dialer, smart follow-ups, call recordings" },
-  { ic: "☁️", t: "Cloud Telephony", b: "No SIM hassle. 100% virtual & scalable" },
-  { ic: "🤖", t: "AI Voice Agent", b: "Never miss a lead. 24/7 AI calling assistant" },
-  { ic: "📊", t: "Lead & Sales Dashboard", b: "Real-time insights. Track every opportunity" },
-  { ic: "🛡️", t: "Owner Dashboard", b: "Full visibility. Zero manual updates" },
-  { ic: "📣", t: "Lead Generation", b: "Facebook Ads, Google Ads & campaign setup" },
-  { ic: "🎬", t: "AI Sales Videos", b: "Personalised videos that warm up your leads" },
-  { ic: "📄", t: "Brochures & PDFs", b: "High-converting project brochures" },
-  { ic: "🎓", t: "Team Training & Support", b: "Onboarding, training & ongoing support" },
-  { ic: "🤝", t: "Dedicated Success Manager", b: "Your growth partner, not just a support rep" },
+  { ic: "phone", t: "AI Calling CRM", b: "Auto-dialer, smart follow-ups, call recordings" },
+  { ic: "cloud", t: "Cloud Telephony", b: "No SIM hassle. 100% virtual & scalable" },
+  { ic: "sparkle", t: "AI Voice Agent", b: "Never miss a lead. 24/7 AI calling assistant" },
+  { ic: "chart", t: "Lead & Sales Dashboard", b: "Real-time insights. Track every opportunity" },
+  { ic: "shield", t: "Owner Dashboard", b: "Full visibility. Zero manual updates" },
+  { ic: "megaphone", t: "Lead Generation", b: "Facebook Ads, Google Ads & campaign setup" },
+  { ic: "video", t: "AI Sales Videos", b: "Personalised videos that warm up your leads" },
+  { ic: "doc", t: "Brochures & PDFs", b: "High-converting project brochures" },
+  { ic: "cap", t: "Team Training & Support", b: "Onboarding, training & ongoing support" },
+  { ic: "users", t: "Dedicated Success Manager", b: "Your growth partner, not just a support rep" },
 ];
 
 // The end-to-end flow shown as "your complete sales engine".
 const SALES_ENGINE = [
-  { ic: "📣", l: "Lead Generation" },
-  { ic: "📥", l: "Lead Capture" },
-  { ic: "📞", l: "AI Calling" },
-  { ic: "💬", l: "Follow-ups" },
-  { ic: "📍", l: "Site Visit" },
-  { ic: "🏆", l: "Booking" },
+  { ic: "megaphone", l: "Lead Generation" },
+  { ic: "inbox", l: "Lead Capture" },
+  { ic: "phone", l: "AI Calling" },
+  { ic: "chat", l: "Follow-ups" },
+  { ic: "pin", l: "Site Visit" },
+  { ic: "trophy", l: "Booking" },
 ];
 
 const WA = "https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20demo";
@@ -539,10 +567,7 @@ export default function LandingPage() {
               </div>
               {COMPARE.map((r) => (
                 <div className="cp-cmp-row" key={r.f}>
-                  <span className="cp-cmp-feat">
-                    <span className="cp-cmp-fic">{r.ic}</span>
-                    <span>{r.f}</span>
-                  </span>
+                  <span className="cp-cmp-feat">{r.f}</span>
                   <span className="cp-cmp-col cp-cmp-us"><Mark v={r.us} /></span>
                   {COMP_COLS.map((c) => (
                     <span className="cp-cmp-col" key={c.key}><Mark v={r[c.key]} /></span>
@@ -551,46 +576,30 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
-          <div className="cp-cmp-legend cp-reveal">
-            <span><i className="cmp-yes">✓</i> Yes, fully supported</span>
-            <span><i className="cmp-part">~</i> Partial / Limited</span>
-            <span><i className="cmp-no">✕</i> Not supported</span>
-          </div>
         </div>
       </section>
 
       {/* PRICING — custom plan card + what's included + the sales engine flow */}
       <section className="cp-section" id="pricing">
         <div className="cp-shell">
-          <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">Custom investment plan</span>
-            <h2>
-              Built around your business. <span className="cp-grad">Designed to multiply results.</span>
-            </h2>
-            <p>
-              Every business is different — that&apos;s why we don&apos;t have a fixed price. We
-              design a complete sales system that fits your goals, team and growth stage.
-            </p>
-          </div>
-
           <div className="cp-plan cp-reveal">
             <div className="cp-plan-left">
-              <span className="cp-plan-kick"><i>♛</i> Custom investment plan</span>
+              <span className="cp-plan-kick"><Icon name="crown" /> Custom investment plan</span>
               <h3>
                 One plan.<br />
                 <span className="cp-grad">100% built for you.</span>
               </h3>
               <span className="cp-plan-rule" />
               <p>
-                Instead of one-size-fits-all pricing, we create a powerful sales system that aligns
-                with your business model, team size, lead volume and goals.
+                No fixed package. We design a complete sales system around your business model,
+                team size, lead volume and goals.
               </p>
               <div className="cp-plan-shield">
-                <span className="ic">🛡️</span>
+                <span className="ic"><Icon name="shield" /></span>
                 <span><b>No hidden charges</b><br />No setup surprises</span>
               </div>
               <a className="cp-btn cp-btn-primary cp-plan-btn" href={WA} target="_blank" rel="noopener noreferrer">
-                📅 Book a Strategy Call →
+                <Icon name="calendar" /> Book a Strategy Call
               </a>
               <div className="cp-plan-resp"><span className="dot" /> Average response within 10 minutes</div>
             </div>
@@ -600,12 +609,12 @@ export default function LandingPage() {
               <div className="cp-plan-list">
                 {INCLUDED.map((it) => (
                   <div className="cp-inc" key={it.t}>
-                    <span className="cp-inc-chk">✓</span>
-                    <span className="cp-inc-ic">{it.ic}</span>
+                    <span className="cp-inc-ic"><Icon name={it.ic} /></span>
                     <span className="cp-inc-txt">
                       <b>{it.t}</b>
                       <small>{it.b}</small>
                     </span>
+                    <span className="cp-inc-chk"><Icon name="check" /></span>
                   </div>
                 ))}
               </div>
@@ -617,7 +626,7 @@ export default function LandingPage() {
             <div className="cp-ef-row">
               {SALES_ENGINE.map((s) => (
                 <div className="cp-ef-step" key={s.l}>
-                  <span className="cp-ef-ic">{s.ic}</span>
+                  <span className="cp-ef-ic"><Icon name={s.ic} /></span>
                   <span className="cp-ef-label">{s.l}</span>
                 </div>
               ))}
