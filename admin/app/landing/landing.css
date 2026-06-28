@@ -253,7 +253,11 @@
 /* ---- STORY (sticky scrollytelling) --------------------------------------- */
 .cp-story { position: relative; z-index: 2; padding: 60px 0 40px; }
 .cp-story-grid { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 50px; align-items: start; }
-@media (max-width: 940px) { .cp-story-grid { grid-template-columns: 1fr; gap: 0; } }
+.cp-story-mobile { display: none; }
+@media (max-width: 940px) {
+  .cp-story-grid { display: none; }
+  .cp-story-mobile { display: block; }
+}
 
 .cp-story-visual {
   position: sticky;
@@ -304,13 +308,40 @@
   background: #fff; border: 1px solid var(--line);
   border-radius: 999px; padding: 5px 11px;
 }
-/* On mobile, show a phone inside each step block instead of one sticky phone */
-.cp-step-phone { display: none; margin: 22px 0 4px; }
-@media (max-width: 940px) {
-  .cp-story-visual { display: none; }
-  .cp-step-phone { display: grid; place-items: center; perspective: 1400px; }
-  .cp-step-phone .cp-phone { transform: rotateY(-8deg) rotateX(4deg) scale(0.9); }
+/* ---- MOBILE pinned-phone scrollytelling ----------------------------------
+   One phone stays pinned full-screen; an invisible scroll track underneath
+   swaps the phone's screen (and rotates it slightly) + crossfades the caption
+   as you scroll — the "screen changes by itself" experience. */
+.cp-mstage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  perspective: 1500px;
 }
+.cp-mphone-wrap { perspective: 1500px; }
+.cp-mphone {
+  width: 232px;
+  height: 482px;
+  border-radius: 38px;
+  padding: 11px;
+}
+.cp-mphone .cp-phone-notch { top: 11px; width: 96px; height: 22px; }
+.cp-mphone .cp-screen { border-radius: 28px; }
+.cp-mcap { text-align: center; max-width: 340px; padding: 0 22px; }
+.cp-mcap .cp-step-kick { justify-content: center; }
+.cp-mcap h3 { font-size: 21px; margin-top: 11px; line-height: 1.25; }
+.cp-mdots { display: flex; gap: 7px; justify-content: center; margin-top: 16px; }
+.cp-mdots span { width: 7px; height: 7px; border-radius: 50%; background: #d5d8e3; transition: all 0.3s ease; }
+.cp-mdots span.on { width: 22px; border-radius: 999px; background: linear-gradient(90deg, #4f46e5, #7c3aed); }
+.cp-mtrack { position: relative; }
+.cp-mstep { height: 88vh; height: 88svh; }
+/* the active screen crossfade inside the pinned phone reuses .cp-story-screen */
 
 /* ---- FEATURES ------------------------------------------------------------- */
 .cp-features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
