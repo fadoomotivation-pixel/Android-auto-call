@@ -271,7 +271,8 @@
   position: absolute;
   inset: 0;
   opacity: 0;
-  transition: opacity 0.55s ease;
+  transition: opacity 0.4s ease;
+  will-change: opacity;
 }
 .cp-story-screen.active { opacity: 1; }
 
@@ -321,26 +322,33 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 22px;
+  gap: 16px;
+  /* clear the fixed nav so the phone never tucks under it */
+  padding: 78px 0 26px;
   perspective: 1500px;
 }
 .cp-mphone-wrap { perspective: 1500px; }
 .cp-mphone {
-  width: 232px;
-  height: 482px;
-  border-radius: 38px;
-  padding: 11px;
+  width: 196px;
+  height: 408px;
+  border-radius: 34px;
+  padding: 9px;
+  /* promote to its own layer → smoother scroll, no repaint jank */
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
-.cp-mphone .cp-phone-notch { top: 11px; width: 96px; height: 22px; }
-.cp-mphone .cp-screen { border-radius: 28px; }
+.cp-mphone .cp-phone-notch { top: 9px; width: 80px; height: 18px; }
+.cp-mphone .cp-screen { border-radius: 26px; }
 .cp-mcap { text-align: center; max-width: 340px; padding: 0 22px; }
 .cp-mcap .cp-step-kick { justify-content: center; }
-.cp-mcap h3 { font-size: 21px; margin-top: 11px; line-height: 1.25; }
-.cp-mdots { display: flex; gap: 7px; justify-content: center; margin-top: 16px; }
-.cp-mdots span { width: 7px; height: 7px; border-radius: 50%; background: #d5d8e3; transition: all 0.3s ease; }
+.cp-mcap h3 { font-size: 20px; margin-top: 9px; line-height: 1.25; }
+.cp-mdots { display: flex; gap: 7px; justify-content: center; margin-top: 14px; }
+.cp-mdots span { width: 7px; height: 7px; border-radius: 50%; background: #d5d8e3; transition: width 0.3s ease, background 0.3s ease; }
 .cp-mdots span.on { width: 22px; border-radius: 999px; background: linear-gradient(90deg, #4f46e5, #7c3aed); }
 .cp-mtrack { position: relative; }
-.cp-mstep { height: 88vh; height: 88svh; }
+/* shorter track per step → screen changes feel responsive, not "stuck" */
+.cp-mstep { height: 56vh; height: 56svh; }
 /* the active screen crossfade inside the pinned phone reuses .cp-story-screen */
 
 /* ---- FEATURES ------------------------------------------------------------- */
