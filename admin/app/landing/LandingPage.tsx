@@ -51,16 +51,6 @@ const STORY = [
 
 const STORY_SCREENS = [ScreenLeads, ScreenAlert, ScreenCall, ScreenPipeline, ScreenDashboard];
 
-// Founder pain points → how Call Pro AI fixes each one. Short and sharp.
-const PAINS = [
-  { p: "Leads called hours too late", f: "Auto-assigned and dialled within seconds." },
-  { p: "Leads scattered across WhatsApp & Excel", f: "Every lead in one organised place." },
-  { p: "No idea who's working", f: "Each caller's calls and leads, live." },
-  { p: "Hot buyers go cold", f: "Follow-ups auto-scheduled with reminders." },
-  { p: "Callers leave with your data", f: "Leads and recordings stay with you." },
-  { p: "No real view of the pipeline", f: "Live funnel from enquiry to booking." },
-];
-
 const FAQS = [
   {
     q: "Do my telecallers need training?",
@@ -196,17 +186,23 @@ function FeatureViz({ type }: { type: string }) {
 // Comparison: y = has it, p = partial/limited, n = doesn't. Ordered so Call Pro
 // AI is the only column that's all-green.
 const COMPARE = [
-  { f: "Made for", us: "Real estate", tele: "Generic", sell: "Enterprise", cally: "Tracking" },
-  { f: "Built for the sale (site visit → token → booking)", us: "y", tele: "n", sell: "y", cally: "n" },
-  { f: "Cloud calling — no SIM hassle", us: "y", tele: "y", sell: "p", cally: "n" },
-  { f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
-  { f: "10-second hot-lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
-  { f: "AI call summary & next step", us: "y", tele: "n", sell: "n", cally: "n" },
-  { f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
-  { f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
-  { f: "Runs itself — no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
-  { f: "Setup time", us: "Same day", tele: "Days", sell: "Weeks", cally: "Days" },
+  { ic: "🎯", f: "Made for", us: "Real estate", tele: "Generic", sell: "Enterprise", cally: "Tracking" },
+  { ic: "🏗️", f: "Built for the sale (site visit → token → booking)", us: "y", tele: "n", sell: "y", cally: "n" },
+  { ic: "☁️", f: "Cloud calling — no SIM hassle", us: "y", tele: "y", sell: "p", cally: "n" },
+  { ic: "🤖", f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
+  { ic: "🔔", f: "10-second hot-lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
+  { ic: "📝", f: "AI call summary & next step", us: "y", tele: "n", sell: "n", cally: "n" },
+  { ic: "🔁", f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
+  { ic: "📊", f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
+  { ic: "⚙️", f: "Runs itself — no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
+  { ic: "⏱️", f: "Setup time", us: "Same day", tele: "Days", sell: "Weeks", cally: "Days" },
 ];
+
+const COMP_COLS = [
+  { key: "tele", name: "TeleCRM", mono: "T" },
+  { key: "sell", name: "Sell.Do", mono: "S" },
+  { key: "cally", name: "Callyzer", mono: "C" },
+] as const;
 
 function Mark({ v }: { v: string }) {
   if (v === "y") return <span className="cmp-yes" aria-label="Yes">✓</span>;
@@ -215,15 +211,22 @@ function Mark({ v }: { v: string }) {
   return <span className="cmp-txt">{v}</span>;
 }
 
-// The "one-stop selling engine" — everything Call Pro AI sets up, not just the app.
-const ENGINE = [
-  { ic: "📱", t: "The calling app", b: "Auto-dialer, recordings, live funnel and an owner dashboard — the software at the core." },
-  { ic: "👥", t: "Right-size your callers", b: "We work out how many telecallers your sales actually need — no guessing." },
-  { ic: "📣", t: "Ad lead generation", b: "We plan and run your Facebook & Google ad spend so quality leads keep coming." },
-  { ic: "🌐", t: "A lead-capturing website", b: "No website yet? We build one that feeds every enquiry straight into the app." },
-  { ic: "🎬", t: "AI sales videos", b: "Personalised project videos to send buyers and warm them up before the call." },
-  { ic: "📄", t: "Brochures & PDFs", b: "Premium project brochures and price sheets that help your team close." },
+// "What's included" in the custom plan — the full done-for-you selling system.
+const INCLUDED = [
+  { ic: "📞", t: "AI Calling CRM", b: "Auto-dialer, smart follow-ups, call recordings" },
+  { ic: "☁️", t: "Cloud Telephony", b: "No SIM hassle. 100% virtual & scalable" },
+  { ic: "🤖", t: "AI Voice Agent", b: "Never miss a lead. 24/7 AI calling assistant" },
+  { ic: "📊", t: "Lead & Sales Dashboard", b: "Real-time insights. Track every opportunity" },
+  { ic: "🛡️", t: "Owner Dashboard", b: "Full visibility. Zero manual updates" },
+  { ic: "📣", t: "Lead Generation", b: "Facebook Ads, Google Ads & campaign setup" },
+  { ic: "🎬", t: "AI Sales Videos", b: "Personalised videos that warm up your leads" },
+  { ic: "📄", t: "Brochures & PDFs", b: "High-converting project brochures" },
+  { ic: "🎓", t: "Team Training & Support", b: "Onboarding, training & ongoing support" },
+  { ic: "🤝", t: "Dedicated Success Manager", b: "Your growth partner, not just a support rep" },
 ];
+
+// The end-to-end flow shown as "your complete sales engine".
+const SALES_ENGINE = ["Lead Generation", "Lead Capture", "AI Calling", "Follow-ups", "Site Visit", "Booking"];
 
 const WA = "https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20demo";
 
@@ -507,73 +510,111 @@ export default function LandingPage() {
         <div className="cp-shell">
           <div className="cp-section-head cp-reveal">
             <span className="cp-eyebrow">Why Call Pro AI</span>
-            <h2>Trackers track. CRMs store. We close.</h2>
-            <p>
-              Call trackers just log what happened. Big CRMs make you feed them data. Call Pro AI
-              is the only one built to turn your real-estate leads into bookings.
-            </p>
+            <h2>
+              See why Call Pro AI is <span className="cp-grad">built for real estate.</span>
+            </h2>
+            <p>Compare the features and see how we help you get more calls, more visits and more bookings.</p>
           </div>
           <div className="cp-cmp-wrap cp-reveal">
             <div className="cp-cmp">
               <div className="cp-cmp-head">
-                <span className="cp-cmp-feat" />
+                <span className="cp-cmp-feat">Features</span>
                 <span className="cp-cmp-col cp-cmp-us">
                   <b>Call&nbsp;Pro&nbsp;AI</b>
                   <em>★ Best for real estate</em>
                 </span>
-                <span className="cp-cmp-col">TeleCRM</span>
-                <span className="cp-cmp-col">Sell.Do</span>
-                <span className="cp-cmp-col">Callyzer</span>
+                {COMP_COLS.map((c) => (
+                  <span className="cp-cmp-col" key={c.key}>
+                    <span className="cp-cmp-logo">{c.mono}</span>
+                    {c.name}
+                  </span>
+                ))}
               </div>
               {COMPARE.map((r) => (
                 <div className="cp-cmp-row" key={r.f}>
-                  <span className="cp-cmp-feat">{r.f}</span>
+                  <span className="cp-cmp-feat">
+                    <span className="cp-cmp-fic">{r.ic}</span>
+                    <span>{r.f}</span>
+                  </span>
                   <span className="cp-cmp-col cp-cmp-us"><Mark v={r.us} /></span>
-                  <span className="cp-cmp-col"><Mark v={r.tele} /></span>
-                  <span className="cp-cmp-col"><Mark v={r.sell} /></span>
-                  <span className="cp-cmp-col"><Mark v={r.cally} /></span>
+                  {COMP_COLS.map((c) => (
+                    <span className="cp-cmp-col" key={c.key}><Mark v={r[c.key]} /></span>
+                  ))}
                 </div>
               ))}
             </div>
           </div>
+          <div className="cp-cmp-legend cp-reveal">
+            <span><i className="cmp-yes">✓</i> Yes, fully supported</span>
+            <span><i className="cmp-part">~</i> Partial / Limited</span>
+            <span><i className="cmp-no">✕</i> Not supported</span>
+          </div>
         </div>
       </section>
 
-      {/* ONE-STOP ENGINE + PRICING — the business model, made memorable */}
+      {/* PRICING — custom plan card + what's included + the sales engine flow */}
       <section className="cp-section" id="pricing">
         <div className="cp-shell">
           <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">One-stop solution</span>
+            <span className="cp-eyebrow">Custom investment plan</span>
             <h2>
-              We don&apos;t just give you an app. <br />
-              We build your <span className="cp-grad">selling machine.</span>
+              Built around your business. <span className="cp-grad">Designed to multiply results.</span>
             </h2>
             <p>
-              Leads, calls, follow-ups, content — Call Pro AI sets up everything you need to sell
-              plots, and runs it with you.
+              Every business is different — that&apos;s why we don&apos;t have a fixed price. We
+              design a complete sales system that fits your goals, team and growth stage.
             </p>
           </div>
-          <div className="cp-engine">
-            {ENGINE.map((e) => (
-              <div className="cp-eng-card cp-reveal" key={e.t}>
-                <span className="cp-eng-ic">{e.ic}</span>
-                <h3>{e.t}</h3>
-                <p>{e.b}</p>
-              </div>
-            ))}
-          </div>
-          <div className="cp-price cp-reveal">
-            <div className="cp-price-txt">
-              <span className="cp-price-tag">Custom pricing</span>
-              <h3>One plan, built around your business.</h3>
+
+          <div className="cp-plan cp-reveal">
+            <div className="cp-plan-left">
+              <span className="cp-plan-kick"><i>♛</i> Custom investment plan</span>
+              <h3>
+                One plan.<br />
+                <span className="cp-grad">100% built for you.</span>
+              </h3>
+              <span className="cp-plan-rule" />
               <p>
-                No fixed package. We size it to your team and your ad budget, then put together a
-                clear plan in your demo — software, callers, ads, website and content included.
+                Instead of one-size-fits-all pricing, we create a powerful sales system that aligns
+                with your business model, team size, lead volume and goals.
               </p>
+              <div className="cp-plan-shield">
+                <span className="ic">🛡️</span>
+                <span><b>No hidden charges</b><br />No setup surprises</span>
+              </div>
+              <a className="cp-btn cp-btn-primary cp-plan-btn" href={WA} target="_blank" rel="noopener noreferrer">
+                📅 Book a Strategy Call →
+              </a>
+              <div className="cp-plan-resp"><span className="dot" /> Average response within 10 minutes</div>
             </div>
-            <a className="cp-btn cp-btn-primary cp-price-btn" href={WA} target="_blank" rel="noopener noreferrer">
-              Get your custom plan →
-            </a>
+
+            <div className="cp-plan-right">
+              <div className="cp-plan-inc-h">What&apos;s included</div>
+              <div className="cp-plan-list">
+                {INCLUDED.map((it) => (
+                  <div className="cp-inc" key={it.t}>
+                    <span className="cp-inc-chk">✓</span>
+                    <span className="cp-inc-ic">{it.ic}</span>
+                    <span className="cp-inc-txt">
+                      <b>{it.t}</b>
+                      <small>{it.b}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="cp-ef cp-reveal">
+            <div className="cp-ef-title">Your complete sales engine</div>
+            <div className="cp-ef-row">
+              {SALES_ENGINE.map((s, i) => (
+                <div className="cp-ef-step" key={s}>
+                  <span className="cp-ef-num">{i + 1}</span>
+                  <span className="cp-ef-label">{s}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -613,25 +654,6 @@ export default function LandingPage() {
                 Email us
               </a>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* PAIN → SOLUTION (for the founder) — final reinforcement above footer */}
-      <section className="cp-section" id="why">
-        <div className="cp-shell">
-          <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">Sound familiar?</span>
-            <h2>You&apos;re not losing deals to bad ads. You&apos;re losing them after the lead comes in.</h2>
-            <p>Small teams don&apos;t have a lead problem. They have a follow-up problem.</p>
-          </div>
-          <div className="cp-pains">
-            {PAINS.map((x) => (
-              <div className="cp-pain cp-reveal" key={x.p}>
-                <h3 className="cp-pain-p">{x.p}</h3>
-                <p className="cp-pain-f">{x.f}</p>
-              </div>
-            ))}
           </div>
         </div>
       </section>
