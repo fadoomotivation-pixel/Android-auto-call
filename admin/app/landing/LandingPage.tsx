@@ -51,38 +51,14 @@ const STORY = [
 
 const STORY_SCREENS = [ScreenLeads, ScreenAlert, ScreenCall, ScreenPipeline, ScreenDashboard];
 
-// Founder pain points → how Call Pro AI fixes each one.
+// Founder pain points → how Call Pro AI fixes each one. Short and sharp.
 const PAINS = [
-  {
-    icon: "💸",
-    p: "“I spend lakhs on ads, but my team takes hours to call the leads.”",
-    f: "Leads are auto-assigned and called within seconds — your ad money stops leaking.",
-  },
-  {
-    icon: "🗂️",
-    p: "“Leads are scattered across WhatsApp, Excel and diaries.”",
-    f: "Every lead lives in one app — organised, searchable, never lost.",
-  },
-  {
-    icon: "👀",
-    p: "“I can't tell who's actually working and who's sitting idle.”",
-    f: "See calls made and leads worked per caller, live, from anywhere.",
-  },
-  {
-    icon: "❄️",
-    p: "“Hot buyers go cold because nobody follows up.”",
-    f: "Follow-ups are scheduled automatically with reminders — every lead is worked.",
-  },
-  {
-    icon: "🔒",
-    p: "“When a telecaller leaves, my leads and data go with them.”",
-    f: "All leads, numbers and recordings stay with you, the owner. Always.",
-  },
-  {
-    icon: "📊",
-    p: "“I have no idea how many bookings are really in my pipeline.”",
-    f: "A live funnel shows enquiry → site visit → token → booking, with value.",
-  },
+  { p: "Leads called hours too late", f: "Auto-assigned and dialled within seconds." },
+  { p: "Leads scattered across WhatsApp & Excel", f: "Every lead in one organised place." },
+  { p: "No idea who's working", f: "Each caller's calls and leads, live." },
+  { p: "Hot buyers go cold", f: "Follow-ups auto-scheduled with reminders." },
+  { p: "Callers leave with your data", f: "Leads and recordings stay with you." },
+  { p: "No real view of the pipeline", f: "Live funnel from enquiry to booking." },
 ];
 
 const FAQS = [
@@ -335,14 +311,11 @@ export default function LandingPage() {
           <div className="cp-pains" data-stagger data-skew>
             {PAINS.map((x) => (
               <div className="cp-pain cp-reveal" key={x.p}>
-                <div className="cp-pain-top">
-                  <span className="cp-pain-ic">{x.icon}</span>
-                  <p className="cp-pain-q">{x.p}</p>
-                </div>
-                <div className="cp-pain-f">
+                <h3 className="cp-pain-p">{x.p}</h3>
+                <p className="cp-pain-f">
                   <span className="ck">✓</span>
                   <span>{x.f}</span>
-                </div>
+                </p>
               </div>
             ))}
           </div>

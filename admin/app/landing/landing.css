@@ -284,12 +284,14 @@
   position: absolute;
   inset: 0;
   opacity: 0;
-  transform: translateY(18px) scale(0.97);
-  transition: opacity 0.5s ease, transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
+  /* full-bleed crossfade only — no scale/translate on the screen layer, so the
+     phone's background never peeks at the edges during a change. The "app is
+     changing" motion lives in the inner content stagger below. */
+  transition: opacity 0.45s ease;
+  will-change: opacity;
   pointer-events: none;
 }
-.cp-story-screen.active { opacity: 1; transform: none; }
+.cp-story-screen.active { opacity: 1; }
 
 /* The app's own content springs in when its screen becomes active — rows, cards,
    bars rise and settle one after another so the phone feels like a live app. */
@@ -406,51 +408,45 @@
 /* the active screen crossfade inside the pinned phone reuses .cp-story-screen */
 
 /* ---- PAIN → SOLUTION ------------------------------------------------------ */
-.cp-pains { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-@media (max-width: 760px) { .cp-pains { grid-template-columns: 1fr; } }
+.cp-pains { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 860px) { .cp-pains { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .cp-pains { grid-template-columns: 1fr; } }
 .cp-pain {
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 20px;
+  border-radius: 16px;
+  padding: 24px 22px;
   box-shadow: var(--shadow-sm);
   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
-.cp-pain:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: #dcdfea; }
-.cp-pain-top { display: flex; gap: 13px; align-items: flex-start; }
-.cp-pain-ic {
-  flex: none;
-  width: 40px; height: 40px;
-  border-radius: 11px;
-  display: grid; place-items: center;
-  font-size: 19px;
-  background: linear-gradient(135deg, rgba(240, 71, 106, 0.12), rgba(245, 158, 11, 0.1));
-  border: 1px solid rgba(240, 71, 106, 0.14);
-}
-.cp-pain-q {
-  /* body font + lighter size reads premium, not heavy/aggressive */
-  font-size: 15.5px;
+.cp-pain:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: #dcdfea; }
+.cp-pain-p {
+  font-size: 16px;
   font-weight: 600;
   color: var(--ink);
-  line-height: 1.42;
-  padding-top: 2px;
+  line-height: 1.35;
+  position: relative;
+  padding-left: 18px;
+}
+.cp-pain-p::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 7px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--hot);
+  box-shadow: 0 0 0 4px rgba(240, 71, 106, 0.12);
 }
 .cp-pain-f {
   margin-top: 14px;
-  display: flex; gap: 9px; align-items: flex-start;
-  background: rgba(16, 185, 129, 0.07);
-  border: 1px solid rgba(16, 185, 129, 0.16);
-  border-radius: 12px;
-  padding: 11px 12px;
-  color: var(--ink-soft);
+  padding-top: 14px;
+  border-top: 1px solid var(--line-2);
+  display: flex; gap: 8px; align-items: flex-start;
+  color: var(--muted);
   font-size: 14px;
   line-height: 1.5;
 }
-.cp-pain-f .ck {
-  flex: none; width: 18px; height: 18px; border-radius: 6px; margin-top: 1px;
-  display: grid; place-items: center; font-size: 11px;
-  background: var(--ok); color: #fff;
-}
+.cp-pain-f .ck { flex: none; color: var(--ok); font-weight: 700; font-size: 13px; margin-top: 1px; }
 
 /* ---- ROI ------------------------------------------------------------------ */
 .cp-roi {
