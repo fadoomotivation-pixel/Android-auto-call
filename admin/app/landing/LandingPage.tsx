@@ -13,43 +13,98 @@ import {
 
 const STORY = [
   {
-    kick: "Lead aata hai",
-    title: "Every lead lands in the app — automatically",
-    body: "Facebook ads, portals, walk-ins — every enquiry flows into Call Pro AI the moment it arrives. No copy-paste into Excel, nothing forgotten in a WhatsApp group.",
-    tags: ["Facebook leads", "Auto-capture", "CSV import"],
+    kick: "Capture",
+    title: "Every lead lands in one place — automatically",
+    body: "Facebook & Google ad leads, portal enquiries and walk-ins flow into Call Pro AI the moment they arrive. No copy-paste into Excel, nothing lost in a WhatsApp group.",
+    tags: ["Facebook & Google", "Auto-capture", "CSV import"],
     Screen: ScreenLeads,
   },
   {
-    kick: "10 second me call",
-    title: "The right salesperson's phone rings in seconds",
-    body: "The instant a hot lead comes in, it's assigned and the caller is alerted to ring back immediately. Speed-to-lead is what wins the deal — and it happens on its own.",
-    tags: ["Instant alerts", "Smart routing", "Hot-lead first"],
+    kick: "Respond",
+    title: "The right salesperson calls within 10 seconds",
+    body: "A new lead is assigned and the caller is alerted instantly. Speed-to-lead is what wins the deal — and it happens on its own, even when you're not in the office.",
+    tags: ["Instant assignment", "Hot-lead first", "Push alerts"],
     Screen: ScreenAlert,
   },
   {
-    kick: "Auto-dialer + recording",
-    title: "One tap dials your whole list — every call recorded",
-    body: "The auto-dialer rings leads back-to-back with no dead time. Every call is recorded and logged, so quality and coaching are never guesswork.",
-    tags: ["Auto-dialer", "Call recording", "Call history"],
+    kick: "Call",
+    title: "Auto-dial the whole list — every call recorded",
+    body: "One tap dials leads back-to-back with no dead time. Every call is recorded and logged, so you can verify what was said and coach your team.",
+    tags: ["Auto-dialer", "Call recording", "Full history"],
     Screen: ScreenCall,
   },
   {
-    kick: "Follow-up + funnel",
-    title: "No lead slips — track every plot to booking",
-    body: "Missed or busy? The next follow-up is scheduled for you. Move each enquiry through site visit, token and booking — you always know what's live and what it's worth.",
-    tags: ["Auto follow-ups", "Pipeline", "₹ value tracking"],
+    kick: "Follow up",
+    title: "No lead goes cold — track every plot to booking",
+    body: "Missed or busy calls schedule their own follow-up with reminders. Move each enquiry through site visit, token and booking — you always know what's live and what it's worth.",
+    tags: ["Auto follow-ups", "Pipeline", "Value tracking"],
     Screen: ScreenPipeline,
   },
   {
-    kick: "Owner control",
-    title: "The owner sees everything, live",
-    body: "Calls made, leads worked, site visits and bookings — per caller, in real time. The full picture of your sales team without asking anyone for a report.",
+    kick: "Control",
+    title: "See your entire sales floor, live",
+    body: "Calls made, leads worked, site visits and bookings — per caller, in real time. Run your team from your phone, without chasing anyone for an update.",
     tags: ["Live dashboard", "Per-caller stats", "Daily bookings"],
     Screen: ScreenDashboard,
   },
 ];
 
 const STORY_SCREENS = [ScreenLeads, ScreenAlert, ScreenCall, ScreenPipeline, ScreenDashboard];
+
+// Founder pain points → how Call Pro AI fixes each one.
+const PAINS = [
+  {
+    p: "“I spend lakhs on ads, but my team takes hours to call the leads.”",
+    f: "Leads are auto-assigned and called within seconds — your ad money stops leaking.",
+  },
+  {
+    p: "“Leads are scattered across WhatsApp, Excel and diaries.”",
+    f: "Every lead lives in one app — organised, searchable, never lost.",
+  },
+  {
+    p: "“I can't tell who's actually working and who's sitting idle.”",
+    f: "See calls made and leads worked per caller, live, from anywhere.",
+  },
+  {
+    p: "“Hot buyers go cold because nobody follows up.”",
+    f: "Follow-ups are scheduled automatically with reminders — every lead is worked.",
+  },
+  {
+    p: "“When a telecaller leaves, my leads and data go with them.”",
+    f: "All leads, numbers and recordings stay with you, the owner. Always.",
+  },
+  {
+    p: "“I have no idea how many bookings are really in my pipeline.”",
+    f: "A live funnel shows enquiry → site visit → token → booking, with value.",
+  },
+];
+
+const FAQS = [
+  {
+    q: "Do my telecallers need training?",
+    a: "No. It's simpler than WhatsApp — one screen, one tap to call. Most teams are calling within an hour of setup.",
+  },
+  {
+    q: "Does it work with our existing phones and numbers?",
+    a: "Yes. It runs on any Android phone using cloud calling — no special SIM, no hardware to buy.",
+  },
+  {
+    q: "What happens to my data if a caller leaves?",
+    a: "Everything — leads, phone numbers and call recordings — stays with you, the owner. Callers can't export or take your data with them.",
+  },
+  {
+    q: "Where do the leads come from?",
+    a: "Facebook & Google ad leads flow in automatically, and you can import your existing leads from a CSV in one click.",
+  },
+  {
+    q: "Can I use it if I'm not in the office?",
+    a: "That's exactly the point. The owner dashboard shows calls, leads and bookings live from your phone, wherever you are.",
+  },
+  {
+    q: "How soon can we start?",
+    a: "Same day. Add your team, import your leads, and start calling. Book a demo and we'll set it up with you.",
+  },
+];
 
 const FEATURES = [
   { icon: "⚡", title: "10-second hot-lead alerts", body: "New lead in? The right phone rings instantly. Win the buyer before the competition calls." },
@@ -145,9 +200,10 @@ export default function LandingPage() {
             Call&nbsp;Pro&nbsp;AI
           </a>
           <div className="cp-nav-links">
+            <a href="#why">Why us</a>
             <a href="#how">How it works</a>
             <a href="#features">Features</a>
-            <a href="#proof">Results</a>
+            <a href="#faq">FAQ</a>
             <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
               Book a demo
             </a>
@@ -219,6 +275,31 @@ export default function LandingPage() {
           <span>Channel-partner teams</span>
         </div>
       </div>
+
+      {/* PAIN → SOLUTION (for the founder) */}
+      <section className="cp-section" id="why">
+        <div className="cp-shell">
+          <div className="cp-section-head cp-reveal">
+            <span className="cp-eyebrow">Sound familiar?</span>
+            <h2>You&apos;re not losing deals to bad ads. You&apos;re losing them after the lead comes in.</h2>
+            <p>
+              Most small real-estate teams don&apos;t have a lead problem — they have a
+              follow-up problem. Here&apos;s what that looks like, and how Call Pro AI fixes it.
+            </p>
+          </div>
+          <div className="cp-pains">
+            {PAINS.map((x) => (
+              <div className="cp-pain cp-reveal" key={x.p}>
+                <p className="cp-pain-q">{x.p}</p>
+                <div className="cp-pain-f">
+                  <span className="ck">✓</span>
+                  <span>{x.f}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* STORY — business model walkthrough */}
       <section className="cp-section cp-story" id="how">
@@ -324,6 +405,26 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ROI */}
+      <section className="cp-section" id="roi">
+        <div className="cp-shell">
+          <div className="cp-roi cp-reveal">
+            <span className="cp-eyebrow">Why it pays for itself</span>
+            <h2>One extra booking covers Call Pro AI for a long time.</h2>
+            <p>
+              It costs a fraction of what you already spend on ads each month. Close even one
+              more deal — or stop wasting a single batch of leads — and it has more than paid
+              for itself.
+            </p>
+            <div className="cp-roi-points">
+              <span className="cp-roi-point"><span className="ck">✓</span> Less than your monthly ad spend</span>
+              <span className="cp-roi-point"><span className="ck">✓</span> More calls, faster, every day</span>
+              <span className="cp-roi-point"><span className="ck">✓</span> Zero leads wasted</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* PROOF */}
       <section className="cp-section" id="proof">
         <div className="cp-shell">
@@ -341,6 +442,24 @@ export default function LandingPage() {
               just calls — and I finally see every booking the moment it happens.&rdquo;
             </p>
             <div className="who">— Sales head, plotting project · Hyderabad</div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="cp-section" id="faq">
+        <div className="cp-shell">
+          <div className="cp-section-head cp-reveal">
+            <span className="cp-eyebrow">Questions, answered</span>
+            <h2>Everything a founder asks before saying yes.</h2>
+          </div>
+          <div className="cp-faq cp-reveal">
+            {FAQS.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}</summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>
