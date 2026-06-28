@@ -452,9 +452,18 @@ export default function LandingPage() {
       <section className="cp-section" id="features">
         <div className="cp-shell">
           <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">What it does</span>
-            <h2>A calling engine, not just a CRM.</h2>
-            <p>Everything your team needs to call more leads and close more plots — in one app.</p>
+            <span className="cp-eyebrow">The selling system</span>
+            <h2>An effortless selling system — not another CRM to manage.</h2>
+            <p>
+              Generic dialers only make calls. Big-builder CRMs need a setup team. Call Pro AI
+              runs the whole sale for a small real-estate team — capture, call, follow up and
+              close — right out of the box.
+            </p>
+          </div>
+          <div className="cp-sys-line cp-reveal">
+            <span>Built only for real estate</span>
+            <span>Runs itself — no data entry</span>
+            <span>Live in a day, not a quarter</span>
           </div>
           <div className="cp-features-grid">
             {FEATURES.map((f) => (
