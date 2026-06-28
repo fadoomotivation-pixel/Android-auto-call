@@ -609,8 +609,59 @@
 .cmp-part { color: var(--warm); background: rgba(245, 158, 11, 0.16); }
 .cmp-no { color: #9aa3b6; background: rgba(16, 24, 64, 0.05); }
 .cp-cmp-row .cp-cmp-us .cmp-yes { width: 29px; height: 29px; font-size: 14px; }
-.cmp-txt { font-size: 11px; font-weight: 600; color: var(--muted); line-height: 1.15; }
-.cp-cmp-us .cmp-txt { color: var(--accent-2); font-weight: 700; }
+.cmp-txt { font-size: 12px; font-weight: 600; color: var(--muted); line-height: 1.15; }
+.cp-vs-us .cmp-txt { color: var(--accent-2); font-weight: 700; }
+.cmp-yes svg { width: 13px; height: 13px; }
+
+/* ---- COMPARISON: segmented control + 1-vs-1 (premium, mobile-first) -------- */
+.cp-seg {
+  display: flex; width: max-content; max-width: 100%; margin: 0 auto;
+  gap: 4px; padding: 5px; border-radius: 14px; background: #edeef4;
+}
+.cp-seg-btn {
+  appearance: none; border: none; cursor: pointer; font: inherit;
+  font-size: 13.5px; font-weight: 600; color: var(--muted);
+  padding: 9px 16px; border-radius: 10px; white-space: nowrap;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.cp-seg-btn.on { background: #fff; color: var(--ink); box-shadow: 0 2px 6px rgba(16, 24, 64, 0.1); }
+@media (max-width: 440px) { .cp-seg-btn { padding: 9px 12px; font-size: 12.5px; } }
+
+.cp-vs {
+  max-width: 640px; margin: 26px auto 0;
+  border: 1px solid var(--line); border-radius: 24px; overflow: hidden;
+  background: #fff; box-shadow: var(--shadow-md);
+}
+.cp-vs-row { display: grid; grid-template-columns: 1.55fr 1fr 1fr; align-items: center; min-height: 56px; }
+.cp-vs-row:not(.cp-vs-head):nth-child(even) { background: rgba(16, 24, 64, 0.018); }
+.cp-vs-feat { display: flex; align-items: center; gap: 11px; padding: 9px 16px; font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+.cp-vs-fic {
+  flex: none; width: 32px; height: 32px; border-radius: 9px;
+  display: grid; place-items: center; color: var(--accent-2);
+  background: rgba(124, 58, 237, 0.07); border: 1px solid rgba(124, 58, 237, 0.12);
+}
+.cp-vs-fic svg { width: 17px; height: 17px; }
+.cp-vs-c { display: grid; place-items: center; padding: 8px 6px; text-align: center; }
+/* the elevated, highlighted Call Pro AI column */
+.cp-vs-us { background: rgba(124, 58, 237, 0.05); }
+.cp-vs-head { border-bottom: 1px solid var(--line); min-height: 78px; }
+.cp-vs-head .cp-vs-us {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff;
+  align-content: center;
+}
+.cp-vs-badge { display: block; font-size: 8.5px; font-weight: 700; letter-spacing: 0.04em; opacity: 0.92; margin-bottom: 4px; }
+.cp-vs-name { font-size: 14px; font-weight: 700; }
+.cp-vs-rival { font-size: 14.5px; font-weight: 700; color: var(--ink); }
+.cp-vs-row:last-child .cp-vs-us { border-radius: 0 0 18px 18px; }
+.cp-vs-us .cmp-yes { width: 30px; height: 30px; }
+.cp-vs-us .cmp-yes svg { width: 15px; height: 15px; }
+/* legend */
+.cp-vs-legend {
+  display: flex; justify-content: center; flex-wrap: wrap; gap: 10px 26px;
+  margin-top: 22px; font-size: 13px; color: var(--muted); font-weight: 500;
+}
+.cp-vs-legend span { display: inline-flex; align-items: center; gap: 8px; }
+.cp-vs-legend i { width: 21px; height: 21px; font-size: 10px; }
 
 /* ---- PRICING (custom plan + what's included + sales engine) ---------------- */
 .cp-plan {
