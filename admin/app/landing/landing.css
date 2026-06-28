@@ -407,23 +407,56 @@
 }
 .cp-mphone .cp-phone-notch { top: 9px; width: 80px; height: 18px; }
 .cp-mphone .cp-screen { border-radius: 26px; }
-/* step label sits vertically along the LEFT side of the phone, and changes as
-   you scroll (Capture → Respond → Call → Follow up → Control). */
+/* step label sits vertically along the LEFT side and CLIMBS from the bottom
+   (Capture) up to the top (Control) as you scroll, with a springy motion. */
 .cp-mcap {
   position: absolute;
-  left: 34px;
+  left: 42px;
   top: 50%;
   transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
   white-space: nowrap;
   pointer-events: none;
+  transition: top 0.75s cubic-bezier(0.34, 1.4, 0.5, 1);
 }
 .cp-mcap .cp-step-kick {
   font-family: var(--font-display), sans-serif;
-  font-size: 21px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
   letter-spacing: 0.04em;
-  color: var(--accent);
   text-transform: none;
+  background: linear-gradient(180deg, #6366f1 0%, #7c3aed 55%, #2563eb 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 6px 14px rgba(99, 70, 229, 0.28));
+}
+/* vertical progress rail behind the climbing label */
+.cp-mrail {
+  position: absolute;
+  left: 20px;
+  top: 30%;
+  height: 48%;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(124, 58, 247, 0.05), rgba(99, 102, 241, 0.28), rgba(124, 58, 247, 0.05));
+  pointer-events: none;
+}
+.cp-mrail-dot {
+  position: absolute;
+  left: 20px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #7c3aed);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.12), 0 4px 12px rgba(124, 58, 247, 0.5);
+  transition: top 0.75s cubic-bezier(0.34, 1.4, 0.5, 1);
+  animation: cpdotpulse 1.8s ease-in-out infinite;
+}
+@keyframes cpdotpulse {
+  0%, 100% { box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.12), 0 4px 12px rgba(124, 58, 247, 0.5); }
+  50% { box-shadow: 0 0 0 9px rgba(99, 102, 241, 0), 0 4px 14px rgba(124, 58, 247, 0.7); }
 }
 .cp-mdots { display: flex; gap: 7px; justify-content: center; margin-top: 14px; }
 .cp-mdots span { width: 7px; height: 7px; border-radius: 50%; background: #d5d8e3; transition: width 0.3s ease, background 0.3s ease; }

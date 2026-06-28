@@ -334,7 +334,11 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
-              <div className="cp-mcap">
+              {/* vertical progress rail + glowing dot that climbs with the step */}
+              <div className="cp-mrail" aria-hidden />
+              <span className="cp-mrail-dot" aria-hidden style={{ top: `${78 - active * 12}%` }} />
+              {/* the step label climbs from bottom (Capture) up to top (Control) */}
+              <div className="cp-mcap" style={{ top: `${78 - active * 12}%` }}>
                 <span className="cp-step-kick">{STORY[active].kick}</span>
               </div>
             </div>
