@@ -190,8 +190,19 @@
   background: linear-gradient(160deg, #181b29, #0a0c16);
   padding: 13px;
   box-shadow: var(--shadow-xl);
-  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  /* springy overshoot → the phone swings into each new angle, then settles */
+  transition: transform 0.9s cubic-bezier(0.34, 1.46, 0.44, 1);
   transform-style: preserve-3d;
+}
+/* gentle continuous float on the phone's wrapper (kept separate from the tilt
+   transform so they never fight) — adds living, breathing depth. */
+.cp-story-phone-wrap,
+.cp-mphone-wrap {
+  animation: cpphonefloat 6.5s ease-in-out infinite;
+}
+@keyframes cpphonefloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
 }
 /* The app UI is authored at a fixed 280×600 canvas and scaled to fit whatever
    phone holds it, so every screen keeps its exact premium layout — no text

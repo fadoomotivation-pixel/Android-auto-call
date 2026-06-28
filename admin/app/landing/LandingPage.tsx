@@ -151,54 +151,20 @@ export default function LandingPage() {
       const ScrollTrigger = stMod.ScrollTrigger ?? stMod.default;
       gsap.registerPlugin(ScrollTrigger);
       ctx = gsap.context(() => {
-        // Grids reveal as a springy stagger — cards rise + settle one after another.
-        gsap.utils.toArray<HTMLElement>("[data-stagger]").forEach((group) => {
-          const items = group.querySelectorAll<HTMLElement>(":scope > .cp-reveal");
-          gsap.fromTo(
-            items,
-            { opacity: 0, y: 48, scale: 0.96 },
-            {
-              opacity: 1,
-              y: 0,
-              scale: 1,
-              duration: 0.8,
-              ease: "back.out(1.4)",
-              stagger: 0.09,
-              scrollTrigger: { trigger: group, start: "top 80%" },
-            },
-          );
-        });
-
-        // Standalone reveals (section heads, quote, ROI, FAQ).
+        // Calm, simple fade-in for page content — no movement/skew/bounce.
+        // All the real "life & physics" lives on the phone (see CSS .cp-phone).
         gsap.utils.toArray<HTMLElement>(".cp-reveal").forEach((el) => {
-          if (el.closest("[data-stagger]")) return;
           gsap.fromTo(
             el,
-            { opacity: 0, y: 42 },
+            { opacity: 0 },
             {
               opacity: 1,
-              y: 0,
-              duration: 0.9,
-              ease: "power3.out",
-              scrollTrigger: { trigger: el, start: "top 86%" },
+              duration: 0.6,
+              ease: "power1.out",
+              scrollTrigger: { trigger: el, start: "top 90%" },
             },
           );
         });
-
-        // Premium "physics": card groups skew slightly with scroll velocity, then
-        // spring back — the subtle inertia that reads as expensive.
-        const skewEls = gsap.utils.toArray<HTMLElement>("[data-skew]");
-        if (skewEls.length) {
-          const setters = skewEls.map((el) =>
-            gsap.quickTo(el, "skewY", { duration: 0.5, ease: "power3" }),
-          );
-          ScrollTrigger.create({
-            onUpdate: (self) => {
-              const v = gsap.utils.clamp(-4, 4, self.getVelocity() / -560);
-              setters.forEach((s) => s(v));
-            },
-          });
-        }
       }, rootRef);
     })();
     return () => {
@@ -207,7 +173,8 @@ export default function LandingPage() {
     };
   }, []);
 
-  const stickyTilt = `rotateY(${-16 + active * 6}deg) rotateX(6deg)`;
+  // Bigger, more dramatic 3D swing as you move through the steps.
+  const stickyTilt = `rotateY(${-22 + active * 10}deg) rotateX(${9 - active * 2.4}deg)`;
 
   return (
     <div className="cp" ref={rootRef}>
@@ -297,31 +264,6 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* PAIN → SOLUTION (for the founder) */}
-      <section className="cp-section" id="why">
-        <div className="cp-shell">
-          <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">Sound familiar?</span>
-            <h2>You&apos;re not losing deals to bad ads. You&apos;re losing them after the lead comes in.</h2>
-            <p>
-              Most small real-estate teams don&apos;t have a lead problem — they have a
-              follow-up problem. Here&apos;s what that looks like, and how Call Pro AI fixes it.
-            </p>
-          </div>
-          <div className="cp-pains" data-stagger data-skew>
-            {PAINS.map((x) => (
-              <div className="cp-pain cp-reveal" key={x.p}>
-                <h3 className="cp-pain-p">{x.p}</h3>
-                <p className="cp-pain-f">
-                  <span className="ck">✓</span>
-                  <span>{x.f}</span>
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* STORY — business model walkthrough */}
       <section className="cp-section cp-story" id="how">
         <div className="cp-shell">
@@ -378,7 +320,7 @@ export default function LandingPage() {
               <div className="cp-mphone-wrap">
                 <div
                   className="cp-phone cp-mphone"
-                  style={{ transform: `rotateY(${-10 + active * 5}deg) rotateX(4deg)` }}
+                  style={{ transform: `rotateY(${-15 + active * 7.5}deg) rotateX(${6 - active * 1.6}deg)` }}
                 >
                   <div className="cp-phone-notch" />
                   <div className="cp-screen">
@@ -414,7 +356,7 @@ export default function LandingPage() {
             <h2>A calling engine, not just a CRM.</h2>
             <p>Everything your team needs to call more leads and close more plots — in one app.</p>
           </div>
-          <div className="cp-features-grid" data-stagger data-skew>
+          <div className="cp-features-grid">
             {FEATURES.map((f) => (
               <div className="cp-card cp-reveal" key={f.title}>
                 <div className="cp-card-ico">{f.icon}</div>
@@ -449,7 +391,7 @@ export default function LandingPage() {
       {/* PROOF */}
       <section className="cp-section" id="proof">
         <div className="cp-shell">
-          <div className="cp-metrics" data-stagger data-skew>
+          <div className="cp-metrics">
             {METRICS.map((m) => (
               <div className="cp-metric cp-reveal" key={m.lbl}>
                 <div className="num cp-grad">{m.num}</div>
@@ -502,6 +444,31 @@ export default function LandingPage() {
                 Email us
               </a>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PAIN → SOLUTION (for the founder) — final reinforcement above footer */}
+      <section className="cp-section" id="why">
+        <div className="cp-shell">
+          <div className="cp-section-head cp-reveal">
+            <span className="cp-eyebrow">Sound familiar?</span>
+            <h2>You&apos;re not losing deals to bad ads. You&apos;re losing them after the lead comes in.</h2>
+            <p>
+              Most small real-estate teams don&apos;t have a lead problem — they have a
+              follow-up problem. Here&apos;s what that looks like, and how Call Pro AI fixes it.
+            </p>
+          </div>
+          <div className="cp-pains">
+            {PAINS.map((x) => (
+              <div className="cp-pain cp-reveal" key={x.p}>
+                <h3 className="cp-pain-p">{x.p}</h3>
+                <p className="cp-pain-f">
+                  <span className="ck">✓</span>
+                  <span>{x.f}</span>
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
