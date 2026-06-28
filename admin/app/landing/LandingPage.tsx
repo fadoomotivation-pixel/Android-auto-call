@@ -104,10 +104,9 @@ function FeatureViz({ type }: { type: string }) {
     case "alert":
       return (
         <div className="cv cv-alert">
-          <div className="cv-chip">
+          <div className="cv-toast">
             <span className="cv-ping" />
-            <span className="cv-lines"><i /><i /></span>
-            <span className="cv-10s">10s</span>
+            <span className="cv-toast-txt">New buyer enquired about your plot</span>
           </div>
           <span className="cv-count" />
         </div>
@@ -116,9 +115,17 @@ function FeatureViz({ type }: { type: string }) {
       return (
         <div className="cv cv-dial">
           <span className="cv-beam" />
-          <div className="cv-row"><span className="av" /><span className="ln" /></div>
-          <div className="cv-row"><span className="av" /><span className="ln" /></div>
-          <div className="cv-row"><span className="av" /><span className="ln" /></div>
+          {[
+            { i: "RS", n: "Rahul Sharma", c: "Call 1", t: "hot" },
+            { i: "PM", n: "Priya Mehta", c: "Call 2", t: "warm" },
+            { i: "AV", n: "Anil Verma", c: "Call 3", t: "hot" },
+          ].map((r) => (
+            <div className="cv-row" key={r.c}>
+              <span className={`av t-${r.t}`}>{r.i}</span>
+              <span className="nm">{r.n}</span>
+              <span className="cl">{r.c}</span>
+            </div>
+          ))}
         </div>
       );
     case "record":
@@ -141,22 +148,43 @@ function FeatureViz({ type }: { type: string }) {
       );
     case "followup":
       return (
-        <div className="cv cv-follow">
-          <span className="cv-clock"><b /></span>
-          <div className="cv-sched"><i /><i /></div>
-          <span className="cv-check" />
+        <div className="cv cv-ai">
+          <span className="cv-ai-badge">AI summary</span>
+          <div className="cv-ai-lines">
+            <i /><i /><i />
+            <span className="cv-ai-cursor" />
+          </div>
         </div>
       );
     case "funnel":
       return (
         <div className="cv cv-funnel">
-          <span /><span /><span /><span />
+          {[
+            { l: "Contacted", n: "86", w: 100, t: "warm" },
+            { l: "Site visit", n: "41", w: 62, t: "hot" },
+            { l: "Booking", n: "9", w: 28, t: "ok" },
+          ].map((s) => (
+            <div className="cv-fn" key={s.l}>
+              <span className="cv-fn-l">{s.l}</span>
+              <span className="cv-fn-track">
+                <b className={`t-${s.t}`} style={{ width: `${s.w}%` }} />
+              </span>
+              <span className="cv-fn-n">{s.n}</span>
+            </div>
+          ))}
         </div>
       );
     case "dashboard":
       return (
-        <div className="cv cv-chart">
-          <i /><i /><i /><i /><i /><i />
+        <div className="cv cv-stats">
+          <div className="cv-stat cv-stat-1">
+            <b>18</b>
+            <span>Token paid</span>
+          </div>
+          <div className="cv-stat cv-stat-2">
+            <b>9</b>
+            <span>Bookings</span>
+          </div>
           <span className="cv-live" />
         </div>
       );
