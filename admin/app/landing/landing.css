@@ -154,10 +154,14 @@
 @media (max-width: 860px) { .cp-nav-links a:not(.cp-btn) { display: none; } }
 
 /* sections */
-.cp-section { position: relative; z-index: 2; padding: 110px 0; }
-.cp-section-head { max-width: 700px; margin: 0 auto 56px; text-align: center; }
+.cp-section { position: relative; z-index: 2; padding: 72px 0; }
+.cp-section-head { max-width: 700px; margin: 0 auto 44px; text-align: center; }
 .cp-section-head h2 { font-size: clamp(28px, 4.6vw, 46px); margin: 16px 0 14px; }
 .cp-section-head p { color: var(--muted); font-size: 17px; }
+@media (max-width: 620px) {
+  .cp-section { padding: 48px 0; }
+  .cp-section-head { margin: 0 auto 32px; }
+}
 
 /* ---- HERO ----------------------------------------------------------------- */
 .cp-hero { position: relative; padding: 150px 0 80px; }

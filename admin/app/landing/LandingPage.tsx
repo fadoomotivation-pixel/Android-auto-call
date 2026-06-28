@@ -595,12 +595,6 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-
-          <div className="cp-vs-legend cp-reveal">
-            <span><i className="cmp-yes"><Icon name="check" /></i> Included</span>
-            <span><i className="cmp-part">~</i> Limited</span>
-            <span><i className="cmp-no">✕</i> Not available</span>
-          </div>
         </div>
       </section>
 
