@@ -768,6 +768,104 @@
 .cp-story-screen:not(.active) *,
 .cp-story-screen:not(.active) *::after { animation-play-state: paused !important; }
 
+/* ===========================================================================
+   ANIMATED FEATURE VISUALS — a small live mini-UI banner on each feature card.
+   =========================================================================== */
+.cp-card-visual {
+  position: relative;
+  width: 100%;
+  height: 76px;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 18px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(124, 58, 237, 0.04));
+  border: 1px solid var(--line-2);
+}
+.cv { position: absolute; inset: 0; display: flex; align-items: center; gap: 10px; padding: 0 14px; }
+.cv i { box-sizing: border-box; }
+
+/* alert: a "new hot lead" notification chip + a 10-second countdown bar */
+.cv-chip {
+  flex: 1; display: flex; align-items: center; gap: 9px;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 11px; box-shadow: var(--shadow-sm);
+}
+.cv-ping { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--hot); animation: cvPing 1.4s ease-out infinite; }
+@keyframes cvPing { 0% { box-shadow: 0 0 0 0 rgba(240, 71, 106, 0.5); } 100% { box-shadow: 0 0 0 8px rgba(240, 71, 106, 0); } }
+.cv-lines { display: flex; flex-direction: column; gap: 4px; }
+.cv-lines i { display: block; height: 5px; border-radius: 3px; background: #dfe2ee; }
+.cv-lines i:nth-child(1) { width: 78px; }
+.cv-lines i:nth-child(2) { width: 50px; }
+.cv-10s { margin-left: auto; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #6366f1, #7c3aed); border-radius: 7px; padding: 3px 7px; animation: cvBeat 1.4s ease-in-out infinite; }
+@keyframes cvBeat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+.cv-count { position: absolute; left: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, #6366f1, #7c3aed); animation: cvCount 3s linear infinite; }
+@keyframes cvCount { 0% { width: 100%; } 100% { width: 0%; } }
+
+/* dialer: a "calling" beam sweeps down a list of leads */
+.cv-dial { flex-direction: column; gap: 6px; justify-content: center; }
+.cv-row { display: flex; align-items: center; gap: 8px; width: 100%; position: relative; z-index: 1; }
+.cv-row .av { flex: none; width: 15px; height: 15px; border-radius: 5px; }
+.cv-row:nth-child(2) .av { background: linear-gradient(135deg, #f0476a, #f97316); }
+.cv-row:nth-child(3) .av { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+.cv-row:nth-child(4) .av { background: linear-gradient(135deg, #6366f1, #7c3aed); }
+.cv-row .ln { flex: 1; height: 6px; border-radius: 3px; background: #dfe2ee; }
+.cv-beam {
+  position: absolute; left: 8px; right: 8px; height: 23px; border-radius: 8px; z-index: 2;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.18), rgba(124, 58, 237, 0.05));
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  pointer-events: none;
+  animation: cvBeam 2.7s ease-in-out infinite;
+}
+@keyframes cvBeam {
+  0%, 6% { transform: translateY(0); }
+  31%, 39% { transform: translateY(21px); }
+  64%, 72% { transform: translateY(42px); }
+  100% { transform: translateY(0); }
+}
+
+/* record: full waveform + blinking REC + timer */
+.cv-rec { gap: 9px; }
+.cv-recdot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--hot); box-shadow: 0 0 8px rgba(240, 71, 106, 0.7); animation: cvBlink 1s steps(1, end) infinite; }
+@keyframes cvBlink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.3; } }
+.cv-bars { flex: 1; display: flex; align-items: center; gap: 2.5px; height: 38px; }
+.cv-bars i { flex: 1; border-radius: 3px; background: linear-gradient(180deg, #7c3aed, #22d3ee); transform-origin: center; animation: cvWave 0.85s ease-in-out infinite; }
+@keyframes cvWave { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+.cv-time { flex: none; font-size: 12px; font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+/* follow-up: a clock ticks + a scheduled item with a green check */
+.cv-follow { gap: 11px; }
+.cv-clock { position: relative; flex: none; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--accent); }
+.cv-clock b { position: absolute; left: 50%; top: 50%; width: 2px; height: 8px; background: var(--accent); border-radius: 2px; transform-origin: bottom center; transform: translate(-50%, -100%); animation: cvClock 2s linear infinite; }
+@keyframes cvClock { from { transform: translate(-50%, -100%) rotate(0deg); } to { transform: translate(-50%, -100%) rotate(360deg); } }
+.cv-sched { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.cv-sched i { display: block; height: 6px; border-radius: 3px; background: #dfe2ee; }
+.cv-sched i:nth-child(1) { width: 80%; }
+.cv-sched i:nth-child(2) { width: 52%; }
+.cv-check { position: relative; flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--ok); animation: cvBeat 1.6s ease-in-out infinite; }
+.cv-check::after { content: ""; position: absolute; left: 8px; top: 5px; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+
+/* funnel: stacked bars fill from the left, decreasing */
+.cv-funnel { flex-direction: column; gap: 7px; justify-content: center; padding: 0 16px; }
+.cv-funnel span { display: block; height: 9px; border-radius: 5px; transform-origin: left; animation: cvFunnel 2.8s ease-in-out infinite; }
+.cv-funnel span:nth-child(1) { width: 100%; background: linear-gradient(90deg, #fbbf24, #f59e0b); animation-delay: 0s; }
+.cv-funnel span:nth-child(2) { width: 74%; background: linear-gradient(90deg, #f59e0b, #f97316); animation-delay: 0.15s; }
+.cv-funnel span:nth-child(3) { width: 48%; background: linear-gradient(90deg, #f97316, #f0476a); animation-delay: 0.3s; }
+.cv-funnel span:nth-child(4) { width: 28%; background: linear-gradient(90deg, #34d399, #10b981); animation-delay: 0.45s; }
+@keyframes cvFunnel { 0% { transform: scaleX(0); } 55%, 100% { transform: scaleX(1); } }
+
+/* dashboard: a mini bar chart breathing + a live dot */
+.cv-chart { align-items: flex-end; gap: 5px; padding: 14px; }
+.cv-chart i { flex: 1; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #7c3aed, #4f46e5); transform-origin: bottom; animation: cvBar 2s ease-in-out infinite; }
+.cv-chart i:nth-child(1) { height: 44%; animation-delay: 0s; }
+.cv-chart i:nth-child(2) { height: 66%; animation-delay: 0.12s; }
+.cv-chart i:nth-child(3) { height: 52%; animation-delay: 0.24s; }
+.cv-chart i:nth-child(4) { height: 82%; animation-delay: 0.36s; }
+.cv-chart i:nth-child(5) { height: 60%; animation-delay: 0.48s; }
+.cv-chart i:nth-child(6) { height: 92%; animation-delay: 0.6s; }
+@keyframes cvBar { 0%, 100% { transform: scaleY(0.7); } 50% { transform: scaleY(1); } }
+.cv-live { position: absolute; top: 9px; right: 11px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: cvLive 1.5s ease-out infinite; }
+@keyframes cvLive { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); } 100% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } }
+
 @media (prefers-reduced-motion: reduce) {
   .cp *, .cp *::before, .cp *::after {
     animation-duration: 0.001ms !important;

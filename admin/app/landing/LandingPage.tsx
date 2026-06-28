@@ -89,13 +89,81 @@ const FAQS = [
 ];
 
 const FEATURES = [
-  { icon: "⚡", title: "10-second hot-lead alerts", body: "New lead in? The right phone rings instantly. Win the buyer before the competition calls." },
-  { icon: "📞", title: "AI auto-dialer", body: "Tap once, it calls your entire list back-to-back. No misdials, no time wasted between calls." },
-  { icon: "🎙️", title: "Every call recorded", body: "Automatic recording and history on every number — for coaching, quality and disputes." },
-  { icon: "🔁", title: "Smart follow-ups", body: "Missed, busy or no-answer? The next attempt is scheduled automatically. Nothing forgotten." },
-  { icon: "📊", title: "Funnel to booking", body: "Enquiry → site visit → token → booked. Always know your live pipeline and its value." },
-  { icon: "🛡️", title: "Owner dashboard", body: "Calls, leads and bookings per caller, in real time. Full visibility, zero chasing." },
-];
+  { type: "alert", title: "10-second hot-lead alerts", body: "New lead in? The right phone rings instantly. Win the buyer before the competition calls." },
+  { type: "dialer", title: "AI auto-dialer", body: "Tap once, it calls your entire list back-to-back. No misdials, no time wasted between calls." },
+  { type: "record", title: "Every call recorded", body: "Automatic recording and history on every number — for coaching, quality and disputes." },
+  { type: "followup", title: "Smart follow-ups", body: "Missed, busy or no-answer? The next attempt is scheduled automatically. Nothing forgotten." },
+  { type: "funnel", title: "Funnel to booking", body: "Enquiry → site visit → token → booked. Always know your live pipeline and its value." },
+  { type: "dashboard", title: "Owner dashboard", body: "Calls, leads and bookings per caller, in real time. Full visibility, zero chasing." },
+] as const;
+
+// A small animated mini-UI banner for each feature card — a "live widget" that
+// shows the feature in action, not just a flat icon.
+function FeatureViz({ type }: { type: string }) {
+  switch (type) {
+    case "alert":
+      return (
+        <div className="cv cv-alert">
+          <div className="cv-chip">
+            <span className="cv-ping" />
+            <span className="cv-lines"><i /><i /></span>
+            <span className="cv-10s">10s</span>
+          </div>
+          <span className="cv-count" />
+        </div>
+      );
+    case "dialer":
+      return (
+        <div className="cv cv-dial">
+          <span className="cv-beam" />
+          <div className="cv-row"><span className="av" /><span className="ln" /></div>
+          <div className="cv-row"><span className="av" /><span className="ln" /></div>
+          <div className="cv-row"><span className="av" /><span className="ln" /></div>
+        </div>
+      );
+    case "record":
+      return (
+        <div className="cv cv-rec">
+          <span className="cv-recdot" />
+          <div className="cv-bars">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <i
+                key={i}
+                style={{
+                  height: `${24 + Math.abs(Math.sin(i * 0.8)) * 64}%`,
+                  animationDelay: `${(i % 9) * 0.07}s`,
+                }}
+              />
+            ))}
+          </div>
+          <span className="cv-time">00:14</span>
+        </div>
+      );
+    case "followup":
+      return (
+        <div className="cv cv-follow">
+          <span className="cv-clock"><b /></span>
+          <div className="cv-sched"><i /><i /></div>
+          <span className="cv-check" />
+        </div>
+      );
+    case "funnel":
+      return (
+        <div className="cv cv-funnel">
+          <span /><span /><span /><span />
+        </div>
+      );
+    case "dashboard":
+      return (
+        <div className="cv cv-chart">
+          <i /><i /><i /><i /><i /><i />
+          <span className="cv-live" />
+        </div>
+      );
+    default:
+      return null;
+  }
+}
 
 const METRICS = [
   { num: "10s", lbl: "to first call on a hot lead" },
@@ -363,7 +431,7 @@ export default function LandingPage() {
           <div className="cp-features-grid">
             {FEATURES.map((f) => (
               <div className="cp-card cp-reveal" key={f.title}>
-                <div className="cp-card-ico">{f.icon}</div>
+                <div className="cp-card-visual"><FeatureViz type={f.type} /></div>
                 <h3>{f.title}</h3>
                 <p>{f.body}</p>
               </div>
