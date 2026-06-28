@@ -89,13 +89,61 @@ const FAQS = [
 ];
 
 const FEATURES = [
-  { icon: "⚡", title: "10-second hot-lead alerts", body: "New lead in? The right phone rings instantly. Win the buyer before the competition calls." },
-  { icon: "📞", title: "AI auto-dialer", body: "Tap once, it calls your entire list back-to-back. No misdials, no time wasted between calls." },
-  { icon: "🎙️", title: "Every call recorded", body: "Automatic recording and history on every number — for coaching, quality and disputes." },
-  { icon: "🔁", title: "Smart follow-ups", body: "Missed, busy or no-answer? The next attempt is scheduled automatically. Nothing forgotten." },
-  { icon: "📊", title: "Funnel to booking", body: "Enquiry → site visit → token → booked. Always know your live pipeline and its value." },
-  { icon: "🛡️", title: "Owner dashboard", body: "Calls, leads and bookings per caller, in real time. Full visibility, zero chasing." },
-];
+  { type: "alert", title: "10-second hot-lead alerts", body: "New lead in? The right phone rings instantly. Win the buyer before the competition calls." },
+  { type: "dialer", title: "AI auto-dialer", body: "Tap once, it calls your entire list back-to-back. No misdials, no time wasted between calls." },
+  { type: "record", title: "Every call recorded", body: "Automatic recording and history on every number — for coaching, quality and disputes." },
+  { type: "followup", title: "Smart follow-ups", body: "Missed, busy or no-answer? The next attempt is scheduled automatically. Nothing forgotten." },
+  { type: "funnel", title: "Funnel to booking", body: "Enquiry → site visit → token → booked. Always know your live pipeline and its value." },
+  { type: "dashboard", title: "Owner dashboard", body: "Calls, leads and bookings per caller, in real time. Full visibility, zero chasing." },
+] as const;
+
+// Small animated CSS-art icons (no emoji) — each one moves to convey the feature.
+function FeatureIcon({ type }: { type: string }) {
+  switch (type) {
+    case "alert":
+      return (
+        <span className="fi fi-ping">
+          <span className="ping-ring" />
+          <span className="ping-ring" />
+          <span className="ping-core" />
+        </span>
+      );
+    case "dialer":
+      return (
+        <span className="fi fi-dial">
+          <i /><i /><i /><i />
+        </span>
+      );
+    case "record":
+      return (
+        <span className="fi fi-wave">
+          <i /><i /><i /><i /><i />
+          <span className="rec-dot" />
+        </span>
+      );
+    case "followup":
+      return (
+        <span className="fi fi-loop">
+          <span className="loop-ring" />
+        </span>
+      );
+    case "funnel":
+      return (
+        <span className="fi fi-bars">
+          <i /><i /><i />
+        </span>
+      );
+    case "dashboard":
+      return (
+        <span className="fi fi-dash">
+          <i /><i /><i />
+          <span className="live" />
+        </span>
+      );
+    default:
+      return null;
+  }
+}
 
 const METRICS = [
   { num: "10s", lbl: "to first call on a hot lead" },
@@ -363,7 +411,7 @@ export default function LandingPage() {
           <div className="cp-features-grid">
             {FEATURES.map((f) => (
               <div className="cp-card cp-reveal" key={f.title}>
-                <div className="cp-card-ico">{f.icon}</div>
+                <div className="cp-card-ico"><FeatureIcon type={f.type} /></div>
                 <h3>{f.title}</h3>
                 <p>{f.body}</p>
               </div>
