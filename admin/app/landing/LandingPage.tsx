@@ -31,6 +31,12 @@ function Icon({ name }: { name: string }) {
     calendar: <><rect x="3" y="4.5" width="18" height="17" rx="2" /><path d="M16 2.5v4M8 2.5v4M3 10h18" /></>,
     crown: <path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8Z" />,
     check: <path d="M5 13l4 4L19 7" />,
+    home: <><path d="M3 11l9-7 9 7" /><path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9" /></>,
+    building: <><path d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16" /><path d="M14 9h5a1 1 0 0 1 1 1v11M3 21h18M8 8h2M8 12h2M8 16h2" /></>,
+    bell: <><path d="M18 9a6 6 0 1 0-12 0c0 5-2 7-2 7h16s-2-2-2-7Z" /><path d="M10.3 20a2 2 0 0 0 3.4 0" /></>,
+    refresh: <path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v4h-4" />,
+    zap: <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5l3 2" /></>,
   };
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -214,16 +220,16 @@ function FeatureViz({ type }: { type: string }) {
 // Comparison: y = has it, p = partial/limited, n = doesn't. Ordered so Call Pro
 // AI is the only column that's all-green.
 const COMPARE = [
-  { f: "Made for", us: "Real estate", tele: "Generic", sell: "Enterprise", cally: "Tracking" },
-  { f: "Built for the property sale", us: "y", tele: "n", sell: "y", cally: "n" },
-  { f: "Cloud calling, no SIM", us: "y", tele: "y", sell: "p", cally: "n" },
-  { f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
-  { f: "10-second lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
-  { f: "AI call summary", us: "y", tele: "n", sell: "n", cally: "n" },
-  { f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
-  { f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
-  { f: "Runs itself, no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
-  { f: "Setup time", us: "Same day", tele: "Days", sell: "Weeks", cally: "Days" },
+  { ic: "home", f: "Made for", us: "Real estate", tele: "Generic", sell: "Enterprise", cally: "Tracking" },
+  { ic: "building", f: "Built for the property sale", us: "y", tele: "n", sell: "y", cally: "n" },
+  { ic: "cloud", f: "Cloud calling, no SIM", us: "y", tele: "y", sell: "p", cally: "n" },
+  { ic: "phone", f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
+  { ic: "bell", f: "10-second lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
+  { ic: "doc", f: "AI call summary", us: "y", tele: "n", sell: "n", cally: "n" },
+  { ic: "refresh", f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
+  { ic: "chart", f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
+  { ic: "zap", f: "Runs itself, no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
+  { ic: "clock", f: "Setup time", us: "Same day", tele: "Days", sell: "Weeks", cally: "Days" },
 ];
 
 const COMP_COLS = [
@@ -233,8 +239,8 @@ const COMP_COLS = [
 ] as const;
 
 function Mark({ v }: { v: string }) {
-  if (v === "y") return <span className="cmp-yes" aria-label="Yes">✓</span>;
-  if (v === "p") return <span className="cmp-part" aria-label="Limited">~</span>;
+  if (v === "y") return <span className="cmp-yes" aria-label="Yes"><Icon name="check" /></span>;
+  if (v === "p") return <span className="cmp-part" aria-label="Limited">–</span>;
   if (v === "n") return <span className="cmp-no" aria-label="No">✕</span>;
   return <span className="cmp-txt">{v}</span>;
 }
@@ -268,7 +274,9 @@ const WA = "https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20dem
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [active, setActive] = useState(0);
+  const [rival, setRival] = useState<"tele" | "sell" | "cally">("tele");
   const rootRef = useRef<HTMLDivElement>(null);
+  const rivalName = COMP_COLS.find((c) => c.key === rival)?.name ?? "";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -548,33 +556,50 @@ export default function LandingPage() {
             <h2>
               See why Call Pro AI is <span className="cp-grad">built for real estate.</span>
             </h2>
-            <p>Compare the features and see how we help you get more calls, more visits and more bookings.</p>
+            <p>Compare us with any tool — one at a time, feature by feature.</p>
           </div>
-          <div className="cp-cmp-wrap cp-reveal">
-            <div className="cp-cmp">
-              <div className="cp-cmp-head">
-                <span className="cp-cmp-feat">Features</span>
-                <span className="cp-cmp-col cp-cmp-us">
-                  <b>Call&nbsp;Pro&nbsp;AI</b>
-                  <em>★ Best for real estate</em>
-                </span>
-                {COMP_COLS.map((c) => (
-                  <span className="cp-cmp-col" key={c.key}>
-                    <span className="cp-cmp-logo">{c.mono}</span>
-                    {c.name}
-                  </span>
-                ))}
+
+          {/* pick a competitor to compare against */}
+          <div className="cp-seg cp-reveal" role="tablist" aria-label="Compare against">
+            {COMP_COLS.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                role="tab"
+                aria-selected={rival === c.key}
+                className={`cp-seg-btn ${rival === c.key ? "on" : ""}`}
+                onClick={() => setRival(c.key)}
+              >
+                vs {c.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="cp-vs cp-reveal">
+            <div className="cp-vs-row cp-vs-head">
+              <div className="cp-vs-feat" />
+              <div className="cp-vs-c cp-vs-us">
+                <span className="cp-vs-badge">★ Best for Real Estate</span>
+                <span className="cp-vs-name">Call Pro AI</span>
               </div>
-              {COMPARE.map((r) => (
-                <div className="cp-cmp-row" key={r.f}>
-                  <span className="cp-cmp-feat">{r.f}</span>
-                  <span className="cp-cmp-col cp-cmp-us"><Mark v={r.us} /></span>
-                  {COMP_COLS.map((c) => (
-                    <span className="cp-cmp-col" key={c.key}><Mark v={r[c.key]} /></span>
-                  ))}
-                </div>
-              ))}
+              <div className="cp-vs-c cp-vs-rival">{rivalName}</div>
             </div>
+            {COMPARE.map((r) => (
+              <div className="cp-vs-row" key={r.f}>
+                <div className="cp-vs-feat">
+                  <span className="cp-vs-fic"><Icon name={r.ic} /></span>
+                  {r.f}
+                </div>
+                <div className="cp-vs-c cp-vs-us"><Mark v={r.us} /></div>
+                <div className="cp-vs-c"><Mark v={r[rival]} /></div>
+              </div>
+            ))}
+          </div>
+
+          <div className="cp-vs-legend cp-reveal">
+            <span><i className="cmp-yes"><Icon name="check" /></i> Included</span>
+            <span><i className="cmp-part">~</i> Limited</span>
+            <span><i className="cmp-no">✕</i> Not available</span>
           </div>
         </div>
       </section>
@@ -584,7 +609,6 @@ export default function LandingPage() {
         <div className="cp-shell">
           <div className="cp-plan cp-reveal">
             <div className="cp-plan-left">
-              <span className="cp-plan-kick"><Icon name="crown" /> Custom investment plan</span>
               <h3>
                 One plan.<br />
                 <span className="cp-grad">100% built for you.</span>
