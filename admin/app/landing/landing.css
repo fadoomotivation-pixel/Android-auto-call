@@ -555,75 +555,85 @@
 .cp-card p { color: var(--muted); font-size: 15px; }
 
 /* ---- COMPARISON ----------------------------------------------------------- */
-.cp-cmp-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.cp-cmp-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-top: 4px; }
 .cp-cmp {
+  position: relative;
   min-width: 340px;
-  max-width: 780px;
+  max-width: 760px;
   margin: 0 auto;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--bg-2);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
+}
+/* the elevated, glowing winner column behind the Call Pro AI cells */
+.cp-cmp-spot {
+  position: absolute;
+  top: -4px; bottom: -4px;
+  left: 28.57%; width: 17.86%;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.09), rgba(79, 70, 229, 0.04));
+  box-shadow: 0 18px 44px -18px rgba(99, 70, 229, 0.55);
+  border: 1.5px solid rgba(124, 58, 237, 0.35);
+  z-index: 0;
 }
 .cp-cmp-head,
-.cp-cmp-row { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr; align-items: center; }
+.cp-cmp-row { position: relative; z-index: 1; display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr; align-items: center; }
 .cp-cmp-head { border-bottom: 1px solid var(--line); }
 .cp-cmp-head .cp-cmp-col {
-  padding: 13px 4px; text-align: center;
-  font-size: 11px; font-weight: 700; color: var(--muted);
+  padding: 12px 4px; text-align: center;
+  font-size: 11.5px; font-weight: 700; color: var(--muted);
   line-height: 1.2;
 }
 .cp-cmp-head .cp-cmp-us {
   color: #fff;
   background: linear-gradient(135deg, #4f46e5, #7c3aed);
   border-radius: 14px 14px 0 0;
+  padding: 11px 4px;
+  display: flex; flex-direction: column; gap: 3px;
 }
+.cp-cmp-head .cp-cmp-us b { font-size: 12.5px; }
+.cp-cmp-head .cp-cmp-us em { font-style: normal; font-size: 8.5px; font-weight: 600; letter-spacing: 0.03em; color: rgba(255, 255, 255, 0.82); }
 .cp-cmp-feat { padding: 12px 14px; font-size: 12.5px; font-weight: 600; color: var(--ink); line-height: 1.3; }
 .cp-cmp-row { border-top: 1px solid var(--line-2); }
-.cp-cmp-row .cp-cmp-col { text-align: center; padding: 11px 4px; font-size: 15px; }
-/* highlighted winning column */
-.cp-cmp-row .cp-cmp-us { background: rgba(79, 70, 229, 0.06); }
-.cp-cmp-row:last-child .cp-cmp-us { border-radius: 0 0 14px 14px; }
+.cp-cmp-row .cp-cmp-col { text-align: center; padding: 12px 4px; font-size: 15px; }
+.cp-cmp-row .cp-cmp-us .cmp-yes { font-size: 17px; }
 .cmp-yes { color: var(--ok); font-weight: 800; }
 .cmp-part { color: var(--warm); font-weight: 800; }
-.cmp-no { color: #c7ccd9; font-weight: 700; }
+.cmp-no { color: #ccd1dd; font-weight: 700; }
 
-/* ---- RESULTS (dark band) -------------------------------------------------- */
-.cp-grad-l {
-  background: linear-gradient(100deg, #ffffff 0%, #c7d2fe 50%, #a5b4fc 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.cp-results {
-  position: relative;
-  overflow: hidden;
-  text-align: center;
-  border-radius: 28px;
-  padding: 60px 36px;
-  color: #fff;
-  background: linear-gradient(165deg, #0c1024 0%, #171c3a 100%);
-  box-shadow: var(--shadow-xl);
-}
-.cp-results-bg {
-  position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(620px 320px at 82% -12%, rgba(124, 58, 237, 0.4), transparent 60%),
-    radial-gradient(520px 320px at 0% 24%, rgba(37, 99, 235, 0.28), transparent 60%);
-}
-.cp-results > * { position: relative; z-index: 1; }
-.cp-results .cp-eyebrow { color: #c7d2fe; background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.18); }
-.cp-results h2 { color: #fff; font-size: clamp(28px, 5vw, 46px); max-width: 680px; margin: 16px auto 14px; }
-.cp-results > p { color: rgba(255, 255, 255, 0.7); font-size: 17px; max-width: 560px; margin: 0 auto 42px; }
-.cp-results-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 42px; }
-@media (max-width: 680px) { .cp-results-stats { grid-template-columns: 1fr 1fr; gap: 26px 16px; } }
-.cp-rstat .num { font-family: var(--font-display), sans-serif; font-size: clamp(32px, 5.4vw, 48px); font-weight: 700; line-height: 1; }
-.cp-rstat .lbl { color: rgba(255, 255, 255, 0.6); font-size: 13.5px; margin-top: 8px; }
-.cp-results-quote {
-  max-width: 660px; margin: 0 auto; padding-top: 30px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+/* ---- PAYOFF (light, quote-led) -------------------------------------------- */
+.cp-payoff-head { text-align: center; max-width: 760px; margin: 0 auto 44px; }
+.cp-payoff-head h2 { font-size: clamp(30px, 5vw, 50px); margin-top: 16px; }
+.cp-bigquote {
+  max-width: 800px; margin: 0 auto; text-align: center;
   font-family: var(--font-display), sans-serif;
-  font-size: clamp(18px, 2.6vw, 25px); line-height: 1.42; color: #eef1ff;
+  font-size: clamp(22px, 3.4vw, 33px); font-weight: 500; line-height: 1.35;
+  letter-spacing: -0.01em; color: var(--ink);
 }
-.cp-results-quote .who { display: block; margin-top: 18px; font-family: var(--font-body), sans-serif; font-size: 14px; font-weight: 500; color: rgba(255, 255, 255, 0.55); }
+.cp-bigquote cite {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  margin-top: 28px; font-style: normal;
+}
+.cp-bq-av {
+  width: 44px; height: 44px; border-radius: 13px; flex: none;
+  display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 15px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  box-shadow: 0 8px 18px -6px rgba(79, 70, 229, 0.6);
+}
+.cp-bigquote cite > span:last-child {
+  text-align: left; font-family: var(--font-body), sans-serif;
+  font-size: 14px; color: var(--muted); line-height: 1.35;
+}
+.cp-bigquote cite b { display: block; font-size: 15px; color: var(--ink); }
+.cp-payoff-stats {
+  display: flex; justify-content: center; flex-wrap: wrap; gap: 18px 40px;
+  margin-top: 52px; padding-top: 40px; border-top: 1px solid var(--line);
+  max-width: 800px; margin-left: auto; margin-right: auto;
+}
+.cp-pstat { text-align: center; }
+.cp-pstat .num { font-family: var(--font-display), sans-serif; font-size: clamp(28px, 4.4vw, 40px); font-weight: 700; display: block; }
+.cp-pstat .lbl { color: var(--muted); font-size: 13px; margin-top: 4px; display: block; }
 
 /* ---- CTA ------------------------------------------------------------------ */
 .cp-cta {
