@@ -507,26 +507,6 @@
 }
 .cp-pain-f .ck { flex: none; color: var(--ok); font-weight: 700; font-size: 13px; margin-top: 1px; }
 
-/* ---- ROI ------------------------------------------------------------------ */
-.cp-roi {
-  text-align: center;
-  padding: 56px 32px;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(79, 70, 229, 0.06), var(--bg-2));
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-md);
-}
-.cp-roi h2 { font-size: clamp(26px, 4vw, 40px); max-width: 700px; margin: 16px auto 14px; }
-.cp-roi p { color: var(--muted); font-size: 17px; max-width: 580px; margin: 0 auto 28px; }
-.cp-roi-points { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-.cp-roi-point {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-weight: 600; font-size: 14px; color: var(--ink-soft);
-  background: var(--bg-2); border: 1px solid var(--line);
-  border-radius: 999px; padding: 9px 15px; box-shadow: var(--shadow-sm);
-}
-.cp-roi-point .ck { color: var(--ok); font-weight: 700; }
-
 /* ---- FAQ ------------------------------------------------------------------ */
 .cp-faq { max-width: 760px; margin: 0 auto; }
 .cp-faq details {
@@ -579,7 +559,7 @@
 /* ---- METRICS + QUOTE ------------------------------------------------------ */
 .cp-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 36px; }
 @media (max-width: 720px) { .cp-metrics { grid-template-columns: 1fr 1fr; } }
-.cp-metric { text-align: center; padding: 26px 14px; border-radius: 16px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
+.cp-metric { text-align: center; padding: 22px 14px; border-radius: 16px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-sm); }
 .cp-metric .num { font-family: var(--font-display), sans-serif; font-size: clamp(28px, 4.6vw, 42px); font-weight: 600; }
 .cp-metric .lbl { color: var(--muted); font-size: 13.5px; margin-top: 6px; }
 .cp-quote { max-width: 800px; margin: 0 auto; text-align: center; padding: 40px 26px; border-radius: 22px; background: #fff; border: 1px solid var(--line); box-shadow: var(--shadow-md); }
