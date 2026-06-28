@@ -51,32 +51,14 @@ const STORY = [
 
 const STORY_SCREENS = [ScreenLeads, ScreenAlert, ScreenCall, ScreenPipeline, ScreenDashboard];
 
-// Founder pain points → how Call Pro AI fixes each one.
+// Founder pain points → how Call Pro AI fixes each one. Short and sharp.
 const PAINS = [
-  {
-    p: "“I spend lakhs on ads, but my team takes hours to call the leads.”",
-    f: "Leads are auto-assigned and called within seconds — your ad money stops leaking.",
-  },
-  {
-    p: "“Leads are scattered across WhatsApp, Excel and diaries.”",
-    f: "Every lead lives in one app — organised, searchable, never lost.",
-  },
-  {
-    p: "“I can't tell who's actually working and who's sitting idle.”",
-    f: "See calls made and leads worked per caller, live, from anywhere.",
-  },
-  {
-    p: "“Hot buyers go cold because nobody follows up.”",
-    f: "Follow-ups are scheduled automatically with reminders — every lead is worked.",
-  },
-  {
-    p: "“When a telecaller leaves, my leads and data go with them.”",
-    f: "All leads, numbers and recordings stay with you, the owner. Always.",
-  },
-  {
-    p: "“I have no idea how many bookings are really in my pipeline.”",
-    f: "A live funnel shows enquiry → site visit → token → booking, with value.",
-  },
+  { p: "Leads called hours too late", f: "Auto-assigned and dialled within seconds." },
+  { p: "Leads scattered across WhatsApp & Excel", f: "Every lead in one organised place." },
+  { p: "No idea who's working", f: "Each caller's calls and leads, live." },
+  { p: "Hot buyers go cold", f: "Follow-ups auto-scheduled with reminders." },
+  { p: "Callers leave with your data", f: "Leads and recordings stay with you." },
+  { p: "No real view of the pipeline", f: "Live funnel from enquiry to booking." },
 ];
 
 const FAQS = [
@@ -169,14 +151,19 @@ export default function LandingPage() {
       const ScrollTrigger = stMod.ScrollTrigger ?? stMod.default;
       gsap.registerPlugin(ScrollTrigger);
       ctx = gsap.context(() => {
+        // Calm, simple fade-in for page content — no movement/skew/bounce.
+        // All the real "life & physics" lives on the phone (see CSS .cp-phone).
         gsap.utils.toArray<HTMLElement>(".cp-reveal").forEach((el) => {
-          gsap.to(el, {
-            opacity: 1,
-            y: 0,
-            duration: 0.85,
-            ease: "power3.out",
-            scrollTrigger: { trigger: el, start: "top 88%" },
-          });
+          gsap.fromTo(
+            el,
+            { opacity: 0 },
+            {
+              opacity: 1,
+              duration: 0.6,
+              ease: "power1.out",
+              scrollTrigger: { trigger: el, start: "top 90%" },
+            },
+          );
         });
       }, rootRef);
     })();
@@ -186,7 +173,8 @@ export default function LandingPage() {
     };
   }, []);
 
-  const stickyTilt = `rotateY(${-16 + active * 6}deg) rotateX(6deg)`;
+  // Bigger, more dramatic 3D swing as you move through the steps.
+  const stickyTilt = `rotateY(${-22 + active * 10}deg) rotateX(${9 - active * 2.4}deg)`;
 
   return (
     <div className="cp" ref={rootRef}>
@@ -276,31 +264,6 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* PAIN → SOLUTION (for the founder) */}
-      <section className="cp-section" id="why">
-        <div className="cp-shell">
-          <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">Sound familiar?</span>
-            <h2>You&apos;re not losing deals to bad ads. You&apos;re losing them after the lead comes in.</h2>
-            <p>
-              Most small real-estate teams don&apos;t have a lead problem — they have a
-              follow-up problem. Here&apos;s what that looks like, and how Call Pro AI fixes it.
-            </p>
-          </div>
-          <div className="cp-pains">
-            {PAINS.map((x) => (
-              <div className="cp-pain cp-reveal" key={x.p}>
-                <p className="cp-pain-q">{x.p}</p>
-                <div className="cp-pain-f">
-                  <span className="ck">✓</span>
-                  <span>{x.f}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* STORY — business model walkthrough */}
       <section className="cp-section cp-story" id="how">
         <div className="cp-shell">
@@ -357,7 +320,7 @@ export default function LandingPage() {
               <div className="cp-mphone-wrap">
                 <div
                   className="cp-phone cp-mphone"
-                  style={{ transform: `rotateY(${-10 + active * 5}deg) rotateX(4deg)` }}
+                  style={{ transform: `rotateY(${-15 + active * 7.5}deg) rotateX(${6 - active * 1.6}deg)` }}
                 >
                   <div className="cp-phone-notch" />
                   <div className="cp-screen">
@@ -481,6 +444,31 @@ export default function LandingPage() {
                 Email us
               </a>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PAIN → SOLUTION (for the founder) — final reinforcement above footer */}
+      <section className="cp-section" id="why">
+        <div className="cp-shell">
+          <div className="cp-section-head cp-reveal">
+            <span className="cp-eyebrow">Sound familiar?</span>
+            <h2>You&apos;re not losing deals to bad ads. You&apos;re losing them after the lead comes in.</h2>
+            <p>
+              Most small real-estate teams don&apos;t have a lead problem — they have a
+              follow-up problem. Here&apos;s what that looks like, and how Call Pro AI fixes it.
+            </p>
+          </div>
+          <div className="cp-pains">
+            {PAINS.map((x) => (
+              <div className="cp-pain cp-reveal" key={x.p}>
+                <h3 className="cp-pain-p">{x.p}</h3>
+                <p className="cp-pain-f">
+                  <span className="ck">✓</span>
+                  <span>{x.f}</span>
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
