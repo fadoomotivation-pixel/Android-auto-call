@@ -407,9 +407,24 @@
 }
 .cp-mphone .cp-phone-notch { top: 9px; width: 80px; height: 18px; }
 .cp-mphone .cp-screen { border-radius: 26px; }
-.cp-mcap { text-align: center; max-width: 340px; padding: 0 22px; }
-.cp-mcap .cp-step-kick { justify-content: center; }
-.cp-mcap h3 { font-size: 20px; margin-top: 9px; line-height: 1.25; }
+/* step label sits vertically along the LEFT side of the phone, and changes as
+   you scroll (Capture → Respond → Call → Follow up → Control). */
+.cp-mcap {
+  position: absolute;
+  left: 34px;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.cp-mcap .cp-step-kick {
+  font-family: var(--font-display), sans-serif;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  text-transform: none;
+}
 .cp-mdots { display: flex; gap: 7px; justify-content: center; margin-top: 14px; }
 .cp-mdots span { width: 7px; height: 7px; border-radius: 50%; background: #d5d8e3; transition: width 0.3s ease, background 0.3s ease; }
 .cp-mdots span.on { width: 22px; border-radius: 999px; background: linear-gradient(90deg, #4f46e5, #7c3aed); }
@@ -663,6 +678,62 @@
 .cp-dash-track { flex: 1; height: 7px; border-radius: 999px; background: #e9eaf1; overflow: hidden; }
 .cp-dash-track span { display: block; height: 100%; background: linear-gradient(90deg, #4f46e5, #7c3aed); border-radius: 999px; }
 .cp-dash-num { font-size: 12px; font-weight: 700; color: #4f46e5; }
+
+/* ===========================================================================
+   LIVE SCREEN ANIMATIONS — each phone screen has its own looping micro-motion
+   so it reads like a working app, not a static mockup.
+   =========================================================================== */
+
+/* Capture (Leads): the call icons pulse with a soft ring */
+.cp-lead-call { animation: cpcallpulse 1.8s ease-in-out infinite; }
+@keyframes cpcallpulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+  50% { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.12); }
+}
+
+/* Respond (Alert): the countdown ticks, the badge glows, the Call button rings
+   like a live incoming call */
+.cp-alert-timer span { display: block; animation: cptick 1s ease-in-out infinite; }
+@keyframes cptick { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+.cp-alert-badge { animation: cpbadgeglow 1.5s ease-in-out infinite; }
+@keyframes cpbadgeglow { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.cp-alert-cta { animation: cpincoming 1.5s ease-in-out infinite; }
+@keyframes cpincoming {
+  0%, 100% { box-shadow: 0 10px 24px -8px rgba(34, 197, 94, 0.6), 0 0 0 0 rgba(34, 197, 94, 0.45); }
+  50% { box-shadow: 0 12px 28px -8px rgba(34, 197, 94, 0.9), 0 0 0 14px rgba(34, 197, 94, 0); }
+}
+
+/* Call (recording): the waveform dances and REC blinks */
+.cp-wave span { transform-origin: center; animation: cpwave 0.9s ease-in-out infinite; }
+@keyframes cpwave { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+.cp-rec { animation: cpblink 1.1s steps(1, end) infinite; }
+@keyframes cpblink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.25; } }
+
+/* Follow up (Pipeline): a light sheen slides across each funnel bar */
+.cp-stage-bar span { position: relative; overflow: hidden; }
+.cp-stage-bar span::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  transform: translateX(-130%);
+  animation: cpshine 2.4s ease-in-out infinite;
+}
+.cp-stage:nth-child(3) .cp-stage-bar span::after { animation-delay: 0.2s; }
+.cp-stage:nth-child(4) .cp-stage-bar span::after { animation-delay: 0.4s; }
+.cp-stage:nth-child(5) .cp-stage-bar span::after { animation-delay: 0.6s; }
+.cp-stage:nth-child(6) .cp-stage-bar span::after { animation-delay: 0.8s; }
+@keyframes cpshine { 0% { transform: translateX(-130%); } 55%, 100% { transform: translateX(320%); } }
+
+/* Dashboard: the weekly bars gently breathe */
+.cp-dash-chart span { transform-origin: bottom; animation: cpbreathe 2.2s ease-in-out infinite; }
+.cp-dash-chart span:nth-child(odd) { animation-delay: 0.3s; }
+@keyframes cpbreathe { 0%, 100% { transform: scaleY(0.92); } 50% { transform: scaleY(1); } }
+
+/* Only animate the screen that's actually on-screen — pause the rest. */
+.cp-story-screen:not(.active) *,
+.cp-story-screen:not(.active) *::after { animation-play-state: paused !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .cp *, .cp *::before, .cp *::after {

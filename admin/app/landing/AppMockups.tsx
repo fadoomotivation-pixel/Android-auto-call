@@ -54,7 +54,7 @@ export function ScreenLeads() {
           <span>Hot</span>
           <span>Follow-up</span>
         </div>
-        {leads.map((l) => (
+        {leads.map((l, idx) => (
           <div className="cp-lead" key={l.n}>
             <div className={`cp-lead-av t-${l.t}`}>{l.i}</div>
             <div className="cp-lead-main">
@@ -65,7 +65,9 @@ export function ScreenLeads() {
               <div className="cp-lead-sub">{l.p}</div>
               <div className="cp-lead-budget">{l.b}</div>
             </div>
-            <div className="cp-lead-call">📞</div>
+            <div className="cp-lead-call" style={{ animationDelay: `${idx * 0.3}s` }}>
+              📞
+            </div>
           </div>
         ))}
       </div>
@@ -110,7 +112,13 @@ export function ScreenCall() {
       <div className="cp-call-timer">02:14</div>
       <div className="cp-wave">
         {Array.from({ length: 28 }).map((_, i) => (
-          <span key={i} style={{ height: `${20 + Math.abs(Math.sin(i * 0.9)) * 60}%` }} />
+          <span
+            key={i}
+            style={{
+              height: `${20 + Math.abs(Math.sin(i * 0.9)) * 60}%`,
+              animationDelay: `${(i % 12) * 0.06}s`,
+            }}
+          />
         ))}
       </div>
       <div className="cp-call-actions">
