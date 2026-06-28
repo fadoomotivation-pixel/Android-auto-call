@@ -197,8 +197,10 @@ function FeatureViz({ type }: { type: string }) {
 // AI is the only column that's all-green.
 const COMPARE = [
   { f: "Built for real estate (site visit → token → booking)", us: "y", tele: "n", sell: "y", cally: "n" },
+  { f: "Cloud calling — no SIM hassle", us: "y", tele: "y", sell: "p", cally: "n" },
   { f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
   { f: "10-second hot-lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
+  { f: "AI call summary & next step", us: "y", tele: "n", sell: "n", cally: "n" },
   { f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
   { f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
   { f: "Runs itself — no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
@@ -530,28 +532,32 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* PROOF — one extra booking pays for it, the numbers, one quote */}
+      {/* RESULTS — bold dark band: the payoff, numbers, one quote */}
       <section className="cp-section" id="proof">
         <div className="cp-shell">
-          <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">Why it pays for itself</span>
-            <h2>One extra booking covers Call Pro AI.</h2>
-            <p>It costs a fraction of your monthly ad spend.</p>
-          </div>
-          <div className="cp-metrics">
-            {METRICS.map((m) => (
-              <div className="cp-metric cp-reveal" key={m.lbl}>
-                <div className="num cp-grad">{m.num}</div>
-                <div className="lbl">{m.lbl}</div>
-              </div>
-            ))}
-          </div>
-          <div className="cp-quote cp-reveal">
+          <div className="cp-results cp-reveal">
+            <div className="cp-results-bg" />
+            <span className="cp-eyebrow">The payoff</span>
+            <h2>
+              An effortless system that <span className="cp-grad-l">closes more.</span>
+            </h2>
             <p>
-              &ldquo;Our callers used to lose half the day deciding who to ring. Now the app
-              just calls — and I finally see every booking the moment it happens.&rdquo;
+              One extra booking covers Call Pro AI for a long time — it costs a fraction of your
+              monthly ad spend.
             </p>
-            <div className="who">— Sales head, plotting project · Hyderabad</div>
+            <div className="cp-results-stats">
+              {METRICS.map((m) => (
+                <div className="cp-rstat" key={m.lbl}>
+                  <div className="num cp-grad-l">{m.num}</div>
+                  <div className="lbl">{m.lbl}</div>
+                </div>
+              ))}
+            </div>
+            <blockquote className="cp-results-quote">
+              &ldquo;Our callers used to lose half the day deciding who to ring. Now the app just
+              calls — and I finally see every booking the moment it happens.&rdquo;
+              <span className="who">— Sales head, plotting project · Hyderabad</span>
+            </blockquote>
           </div>
         </div>
       </section>
@@ -578,10 +584,10 @@ export default function LandingPage() {
       <section className="cp-section" id="demo">
         <div className="cp-shell">
           <div className="cp-cta cp-reveal">
-            <h2>See it run on your own leads.</h2>
+            <h2>Start closing more — effortlessly.</h2>
             <p>
-              Book a 15-minute demo. We&apos;ll set up your team and show the first calls going
-              out — live, on WhatsApp.
+              Book a 15-minute demo on your own leads. We&apos;ll set up your team and show the
+              first calls going out — live, on WhatsApp.
             </p>
             <div className="cp-cta-row">
               <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
