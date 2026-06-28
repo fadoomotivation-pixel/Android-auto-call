@@ -539,19 +539,13 @@ export default function LandingPage() {
           <div className="cp-section-head cp-reveal">
             <span className="cp-eyebrow">Sound familiar?</span>
             <h2>You&apos;re not losing deals to bad ads. You&apos;re losing them after the lead comes in.</h2>
-            <p>
-              Most small real-estate teams don&apos;t have a lead problem — they have a
-              follow-up problem. Here&apos;s what that looks like, and how Call Pro AI fixes it.
-            </p>
+            <p>Small teams don&apos;t have a lead problem. They have a follow-up problem.</p>
           </div>
           <div className="cp-pains">
             {PAINS.map((x) => (
               <div className="cp-pain cp-reveal" key={x.p}>
                 <h3 className="cp-pain-p">{x.p}</h3>
-                <p className="cp-pain-f">
-                  <span className="ck">✓</span>
-                  <span>{x.f}</span>
-                </p>
+                <p className="cp-pain-f">{x.f}</p>
               </div>
             ))}
           </div>
