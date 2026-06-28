@@ -284,10 +284,50 @@
   position: absolute;
   inset: 0;
   opacity: 0;
-  transition: opacity 0.4s ease;
-  will-change: opacity;
+  transform: translateY(18px) scale(0.97);
+  transition: opacity 0.5s ease, transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+  pointer-events: none;
 }
-.cp-story-screen.active { opacity: 1; }
+.cp-story-screen.active { opacity: 1; transform: none; }
+
+/* The app's own content springs in when its screen becomes active — rows, cards,
+   bars rise and settle one after another so the phone feels like a live app. */
+.cp-story-screen .cp-app-body > *,
+.cp-story-screen .cp-alert-inner > *,
+.cp-story-screen .cp-app-call > * {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.45s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cp-story-screen.active .cp-app-body > *,
+.cp-story-screen.active .cp-alert-inner > *,
+.cp-story-screen.active .cp-app-call > * {
+  opacity: 1;
+  transform: none;
+}
+.cp-story-screen.active .cp-app-body > *:nth-child(1),
+.cp-story-screen.active .cp-alert-inner > *:nth-child(1),
+.cp-story-screen.active .cp-app-call > *:nth-child(1) { transition-delay: 0.1s; }
+.cp-story-screen.active .cp-app-body > *:nth-child(2),
+.cp-story-screen.active .cp-alert-inner > *:nth-child(2),
+.cp-story-screen.active .cp-app-call > *:nth-child(2) { transition-delay: 0.16s; }
+.cp-story-screen.active .cp-app-body > *:nth-child(3),
+.cp-story-screen.active .cp-alert-inner > *:nth-child(3),
+.cp-story-screen.active .cp-app-call > *:nth-child(3) { transition-delay: 0.22s; }
+.cp-story-screen.active .cp-app-body > *:nth-child(4),
+.cp-story-screen.active .cp-alert-inner > *:nth-child(4),
+.cp-story-screen.active .cp-app-call > *:nth-child(4) { transition-delay: 0.28s; }
+.cp-story-screen.active .cp-app-body > *:nth-child(5),
+.cp-story-screen.active .cp-alert-inner > *:nth-child(5),
+.cp-story-screen.active .cp-app-call > *:nth-child(5) { transition-delay: 0.34s; }
+.cp-story-screen.active .cp-app-body > *:nth-child(6),
+.cp-story-screen.active .cp-alert-inner > *:nth-child(6),
+.cp-story-screen.active .cp-app-call > *:nth-child(6) { transition-delay: 0.4s; }
+.cp-story-screen.active .cp-app-body > *:nth-child(7),
+.cp-story-screen.active .cp-app-call > *:nth-child(7) { transition-delay: 0.46s; }
+.cp-story-screen.active .cp-app-body > *:nth-child(8),
+.cp-story-screen.active .cp-app-call > *:nth-child(8) { transition-delay: 0.52s; }
 
 .cp-story-steps { display: flex; flex-direction: column; }
 .cp-step-block {
