@@ -524,7 +524,7 @@ export default function LandingPage() {
         <div className="cp-shell">
           <div className="cp-section-head cp-reveal">
             <span className="cp-eyebrow">The selling system</span>
-            <h2>An effortless selling system — not another CRM to manage.</h2>
+            <h2>An effortless selling system — for Real Estate.</h2>
             <p>
               Generic dialers only make calls. Enterprise CRMs need a setup team. Call Pro AI
               runs the whole sale for your team — capture, call, follow up and close — right out
