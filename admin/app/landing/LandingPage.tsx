@@ -205,7 +205,7 @@ const COMPARE = [
   { f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
   { f: "Runs itself — no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
   { f: "Live in a day, not a quarter", us: "y", tele: "y", sell: "n", cally: "y" },
-  { f: "Made for small builders", us: "y", tele: "y", sell: "n", cally: "y" },
+  { f: "No setup team needed", us: "y", tele: "y", sell: "n", cally: "y" },
 ];
 
 function Mark({ v }: { v: string }) {
@@ -476,9 +476,9 @@ export default function LandingPage() {
             <span className="cp-eyebrow">The selling system</span>
             <h2>An effortless selling system — not another CRM to manage.</h2>
             <p>
-              Generic dialers only make calls. Big-builder CRMs need a setup team. Call Pro AI
-              runs the whole sale for a small real-estate team — capture, call, follow up and
-              close — right out of the box.
+              Generic dialers only make calls. Enterprise CRMs need a setup team. Call Pro AI
+              runs the whole sale for your team — capture, call, follow up and close — right out
+              of the box.
             </p>
           </div>
           <div className="cp-sys-line cp-reveal">
@@ -502,18 +502,22 @@ export default function LandingPage() {
       <section className="cp-section" id="compare">
         <div className="cp-shell">
           <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">How we compare</span>
-            <h2>The only one built to close plots.</h2>
+            <span className="cp-eyebrow">Why Call Pro AI</span>
+            <h2>Trackers track. CRMs store. We close.</h2>
             <p>
-              Dialers just make calls. Enterprise CRMs are built for big developers with a setup
-              team. Call Pro AI is the effortless selling system made for small real-estate teams.
+              Call trackers just log what happened. Big CRMs make you feed them data. Call Pro AI
+              is the only one built to turn your real-estate leads into bookings.
             </p>
           </div>
           <div className="cp-cmp-wrap cp-reveal">
             <div className="cp-cmp">
+              <span className="cp-cmp-spot" aria-hidden />
               <div className="cp-cmp-head">
                 <span className="cp-cmp-feat" />
-                <span className="cp-cmp-col cp-cmp-us">Call&nbsp;Pro&nbsp;AI</span>
+                <span className="cp-cmp-col cp-cmp-us">
+                  <b>Call&nbsp;Pro&nbsp;AI</b>
+                  <em>★ Best for real estate</em>
+                </span>
                 <span className="cp-cmp-col">TeleCRM</span>
                 <span className="cp-cmp-col">Sell.Do</span>
                 <span className="cp-cmp-col">Callyzer</span>
@@ -532,32 +536,34 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* RESULTS — bold dark band: the payoff, numbers, one quote */}
-      <section className="cp-section" id="proof">
+      {/* PAYOFF — the transformation, told through one customer's words */}
+      <section className="cp-section cp-payoff" id="proof">
         <div className="cp-shell">
-          <div className="cp-results cp-reveal">
-            <div className="cp-results-bg" />
+          <div className="cp-payoff-head cp-reveal">
             <span className="cp-eyebrow">The payoff</span>
             <h2>
-              An effortless system that <span className="cp-grad-l">closes more.</span>
+              Your team stops chasing. <br />
+              Your plots <span className="cp-grad">start selling.</span>
             </h2>
-            <p>
-              One extra booking covers Call Pro AI for a long time — it costs a fraction of your
-              monthly ad spend.
-            </p>
-            <div className="cp-results-stats">
-              {METRICS.map((m) => (
-                <div className="cp-rstat" key={m.lbl}>
-                  <div className="num cp-grad-l">{m.num}</div>
-                  <div className="lbl">{m.lbl}</div>
-                </div>
-              ))}
-            </div>
-            <blockquote className="cp-results-quote">
-              &ldquo;Our callers used to lose half the day deciding who to ring. Now the app just
-              calls — and I finally see every booking the moment it happens.&rdquo;
-              <span className="who">— Sales head, plotting project · Hyderabad</span>
-            </blockquote>
+          </div>
+          <blockquote className="cp-bigquote cp-reveal">
+            &ldquo;Our callers used to lose half the day deciding who to ring. Now the app just
+            calls — and I see every booking the moment it happens.&rdquo;
+            <cite>
+              <span className="cp-bq-av">RK</span>
+              <span>
+                <b>Rohit Kulkarni</b>
+                Sales head · plotting project, Hyderabad
+              </span>
+            </cite>
+          </blockquote>
+          <div className="cp-payoff-stats cp-reveal">
+            {METRICS.map((m) => (
+              <div className="cp-pstat" key={m.lbl}>
+                <span className="num cp-grad">{m.num}</span>
+                <span className="lbl">{m.lbl}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -584,7 +590,7 @@ export default function LandingPage() {
       <section className="cp-section" id="demo">
         <div className="cp-shell">
           <div className="cp-cta cp-reveal">
-            <h2>Start closing more — effortlessly.</h2>
+            <h2>Start closing more, starting today.</h2>
             <p>
               Book a 15-minute demo on your own leads. We&apos;ll set up your team and show the
               first calls going out — live, on WhatsApp.
