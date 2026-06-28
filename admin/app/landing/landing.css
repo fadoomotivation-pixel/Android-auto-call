@@ -344,11 +344,11 @@
 
 .cp-story-steps { display: flex; flex-direction: column; }
 .cp-step-block {
-  min-height: 78vh;
+  min-height: 46vh;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 20px 0;
+  padding: 16px 0;
   opacity: 0.35;
   transition: opacity 0.4s ease;
 }
@@ -467,45 +467,27 @@
 /* the active screen crossfade inside the pinned phone reuses .cp-story-screen */
 
 /* ---- PAIN → SOLUTION ------------------------------------------------------ */
-.cp-pains { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-@media (max-width: 860px) { .cp-pains { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 560px) { .cp-pains { grid-template-columns: 1fr; } }
+/* Apple-minimal: no boxes, no dots, no check icons — just clean type, hairline
+   separators and lots of whitespace. */
+.cp-pains { display: grid; grid-template-columns: 1fr 1fr; gap: 0 64px; max-width: 960px; margin: 0 auto; }
+@media (max-width: 680px) { .cp-pains { grid-template-columns: 1fr; } }
 .cp-pain {
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 24px 22px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  padding: 28px 0;
+  border-top: 1px solid var(--line);
 }
-.cp-pain:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: #dcdfea; }
 .cp-pain-p {
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 600;
   color: var(--ink);
   line-height: 1.35;
-  position: relative;
-  padding-left: 18px;
-}
-.cp-pain-p::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 7px;
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--hot);
-  box-shadow: 0 0 0 4px rgba(240, 71, 106, 0.12);
 }
 .cp-pain-f {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line-2);
-  display: flex; gap: 8px; align-items: flex-start;
+  margin-top: 9px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 15.5px;
   line-height: 1.5;
 }
-.cp-pain-f .ck { flex: none; color: var(--ok); font-weight: 700; font-size: 13px; margin-top: 1px; }
+.cp-pain-f::before { content: "→ "; color: var(--accent); font-weight: 700; }
 
 /* ---- FAQ ------------------------------------------------------------------ */
 .cp-faq { max-width: 760px; margin: 0 auto; }
