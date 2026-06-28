@@ -196,7 +196,8 @@ function FeatureViz({ type }: { type: string }) {
 // Comparison: y = has it, p = partial/limited, n = doesn't. Ordered so Call Pro
 // AI is the only column that's all-green.
 const COMPARE = [
-  { f: "Built for real estate (site visit → token → booking)", us: "y", tele: "n", sell: "y", cally: "n" },
+  { f: "Made for", us: "Real estate", tele: "Generic", sell: "Enterprise", cally: "Tracking" },
+  { f: "Built for the sale (site visit → token → booking)", us: "y", tele: "n", sell: "y", cally: "n" },
   { f: "Cloud calling — no SIM hassle", us: "y", tele: "y", sell: "p", cally: "n" },
   { f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
   { f: "10-second hot-lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
@@ -204,14 +205,14 @@ const COMPARE = [
   { f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
   { f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
   { f: "Runs itself — no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
-  { f: "Live in a day, not a quarter", us: "y", tele: "y", sell: "n", cally: "y" },
-  { f: "No setup team needed", us: "y", tele: "y", sell: "n", cally: "y" },
+  { f: "Setup time", us: "Same day", tele: "Days", sell: "Weeks", cally: "Days" },
 ];
 
 function Mark({ v }: { v: string }) {
   if (v === "y") return <span className="cmp-yes" aria-label="Yes">✓</span>;
   if (v === "p") return <span className="cmp-part" aria-label="Limited">~</span>;
-  return <span className="cmp-no" aria-label="No">✕</span>;
+  if (v === "n") return <span className="cmp-no" aria-label="No">✕</span>;
+  return <span className="cmp-txt">{v}</span>;
 }
 
 const METRICS = [
@@ -599,7 +600,7 @@ export default function LandingPage() {
               <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
                 Book a demo on WhatsApp
               </a>
-              <a className="cp-btn cp-btn-ghost" href="mailto:hello@callproai.in">
+              <a className="cp-btn cp-btn-ghost" href="mailto:admin@callproai.in">
                 Email us
               </a>
             </div>
@@ -647,7 +648,7 @@ export default function LandingPage() {
               <div className="cp-footer-col">
                 <h4>Company</h4>
                 <a href={WA} target="_blank" rel="noopener noreferrer">WhatsApp us</a>
-                <a href="mailto:hello@callproai.in">Contact</a>
+                <a href="mailto:admin@callproai.in">Contact</a>
                 <a href="/privacy">Privacy</a>
                 <a href="/login">Sign in</a>
               </div>

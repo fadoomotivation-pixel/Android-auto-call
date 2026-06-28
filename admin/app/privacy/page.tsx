@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — SalesAutoCall",
+  title: "Privacy Policy — Call Pro AI",
 };
 
 // Public privacy policy page (Google Play requires a public privacy URL).
@@ -9,17 +9,17 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <main style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px", lineHeight: 1.6 }}>
-      <h1>SalesAutoCall — Privacy Policy</h1>
+      <h1>Call Pro AI — Privacy Policy</h1>
       <p><em>Last updated: 2026-06-08</em></p>
 
       <p>
-        SalesAutoCall (&quot;the app&quot;) is a business-to-business sales-productivity
+        Call Pro AI (&quot;the app&quot;) is a business-to-business sales-productivity
         tool used by a company&apos;s own sales agents. This policy explains what data the
         app handles and why.
       </p>
       <ul>
-        <li><strong>Provider:</strong> [Your Company Legal Name]</li>
-        <li><strong>Contact:</strong> [privacy@yourcompany.com]</li>
+        <li><strong>Provider:</strong> Call Pro AI</li>
+        <li><strong>Contact:</strong> admin@callproai.in</li>
       </ul>
 
       <h2>What we collect</h2>
@@ -61,7 +61,7 @@ export default function PrivacyPage() {
       <h2>Retention &amp; deletion</h2>
       <p>
         Company admins can delete contacts and account data from the dashboard. To request
-        deletion of your personal data, contact [privacy@yourcompany.com].
+        deletion of your personal data, contact admin@callproai.in.
       </p>
 
       <h2>Children</h2>
