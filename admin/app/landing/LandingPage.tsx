@@ -226,7 +226,14 @@ const INCLUDED = [
 ];
 
 // The end-to-end flow shown as "your complete sales engine".
-const SALES_ENGINE = ["Lead Generation", "Lead Capture", "AI Calling", "Follow-ups", "Site Visit", "Booking"];
+const SALES_ENGINE = [
+  { ic: "📣", l: "Lead Generation" },
+  { ic: "📥", l: "Lead Capture" },
+  { ic: "📞", l: "AI Calling" },
+  { ic: "💬", l: "Follow-ups" },
+  { ic: "📍", l: "Site Visit" },
+  { ic: "🏆", l: "Booking" },
+];
 
 const WA = "https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20demo";
 
@@ -608,10 +615,10 @@ export default function LandingPage() {
           <div className="cp-ef cp-reveal">
             <div className="cp-ef-title">Your complete sales engine</div>
             <div className="cp-ef-row">
-              {SALES_ENGINE.map((s, i) => (
-                <div className="cp-ef-step" key={s}>
-                  <span className="cp-ef-num">{i + 1}</span>
-                  <span className="cp-ef-label">{s}</span>
+              {SALES_ENGINE.map((s) => (
+                <div className="cp-ef-step" key={s.l}>
+                  <span className="cp-ef-ic">{s.ic}</span>
+                  <span className="cp-ef-label">{s.l}</span>
                 </div>
               ))}
             </div>
