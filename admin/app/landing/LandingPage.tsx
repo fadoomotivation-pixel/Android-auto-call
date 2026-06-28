@@ -73,7 +73,6 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [active, setActive] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
-  const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -95,7 +94,10 @@ export default function LandingPage() {
       },
       { rootMargin: "-45% 0px -45% 0px", threshold: 0 },
     );
-    stepRefs.current.forEach((el) => el && obs.observe(el));
+    // Observe both the desktop step blocks and the mobile scroll-track markers.
+    // Whichever set is visible (the other is display:none) drives `active`.
+    const targets = rootRef.current?.querySelectorAll<HTMLElement>("[data-story-step]");
+    targets?.forEach((el) => obs.observe(el));
     return () => obs.disconnect();
   }, []);
 
@@ -244,16 +246,14 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* steps */}
+            {/* steps (desktop) */}
             <div className="cp-story-steps">
               {STORY.map((s, i) => (
                 <div
                   className={`cp-step-block ${i === active ? "active" : ""}`}
                   key={s.title}
+                  data-story-step
                   data-index={i}
-                  ref={(el) => {
-                    stepRefs.current[i] = el;
-                  }}
                 >
                   <span className="cp-step-kick">
                     <span className="num">{i + 1}</span>
@@ -266,13 +266,46 @@ export default function LandingPage() {
                       <span key={t}>{t}</span>
                     ))}
                   </div>
-                  {/* phone shown inline on mobile */}
-                  <div className="cp-step-phone">
-                    <PhoneFrame>
-                      <s.Screen />
-                    </PhoneFrame>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* MOBILE: one pinned phone, screen + caption change as you scroll */}
+          <div className="cp-story-mobile">
+            <div className="cp-mstage">
+              <div className="cp-mphone-wrap">
+                <div
+                  className="cp-phone cp-mphone"
+                  style={{ transform: `rotateY(${-10 + active * 5}deg) rotateX(4deg)` }}
+                >
+                  <div className="cp-phone-notch" />
+                  <div className="cp-screen">
+                    {STORY_SCREENS.map((Screen, i) => (
+                      <div className={`cp-story-screen ${i === active ? "active" : ""}`} key={i}>
+                        <Screen />
+                      </div>
+                    ))}
                   </div>
                 </div>
+              </div>
+              <div className="cp-mcap">
+                <span className="cp-step-kick">
+                  <span className="num">{active + 1}</span>
+                  {STORY[active].kick}
+                </span>
+                <h3>{STORY[active].title}</h3>
+                <div className="cp-mdots">
+                  {STORY.map((_, i) => (
+                    <span key={i} className={i === active ? "on" : ""} />
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* invisible scroll track — each marker swaps the pinned phone */}
+            <div className="cp-mtrack">
+              {STORY.map((s, i) => (
+                <div className="cp-mstep" key={s.title} data-story-step data-index={i} />
               ))}
             </div>
           </div>
