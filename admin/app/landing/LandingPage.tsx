@@ -468,29 +468,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ROI */}
-      <section className="cp-section" id="roi">
-        <div className="cp-shell">
-          <div className="cp-roi cp-reveal">
-            <span className="cp-eyebrow">Why it pays for itself</span>
-            <h2>One extra booking covers Call Pro AI for a long time.</h2>
-            <p>
-              It costs a fraction of what you already spend on ads each month. Close even one
-              more deal — or stop wasting a single batch of leads — and it has more than paid
-              for itself.
-            </p>
-            <div className="cp-roi-points">
-              <span className="cp-roi-point"><span className="ck">✓</span> Less than your monthly ad spend</span>
-              <span className="cp-roi-point"><span className="ck">✓</span> More calls, faster, every day</span>
-              <span className="cp-roi-point"><span className="ck">✓</span> Zero leads wasted</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* PROOF */}
+      {/* PROOF — one extra booking pays for it, the numbers, one quote */}
       <section className="cp-section" id="proof">
         <div className="cp-shell">
+          <div className="cp-section-head cp-reveal">
+            <span className="cp-eyebrow">Why it pays for itself</span>
+            <h2>One extra booking covers Call Pro AI.</h2>
+            <p>It costs a fraction of your monthly ad spend.</p>
+          </div>
           <div className="cp-metrics">
             {METRICS.map((m) => (
               <div className="cp-metric cp-reveal" key={m.lbl}>
