@@ -54,26 +54,32 @@ const STORY_SCREENS = [ScreenLeads, ScreenAlert, ScreenCall, ScreenPipeline, Scr
 // Founder pain points → how Call Pro AI fixes each one.
 const PAINS = [
   {
+    icon: "💸",
     p: "“I spend lakhs on ads, but my team takes hours to call the leads.”",
     f: "Leads are auto-assigned and called within seconds — your ad money stops leaking.",
   },
   {
+    icon: "🗂️",
     p: "“Leads are scattered across WhatsApp, Excel and diaries.”",
     f: "Every lead lives in one app — organised, searchable, never lost.",
   },
   {
+    icon: "👀",
     p: "“I can't tell who's actually working and who's sitting idle.”",
     f: "See calls made and leads worked per caller, live, from anywhere.",
   },
   {
+    icon: "❄️",
     p: "“Hot buyers go cold because nobody follows up.”",
     f: "Follow-ups are scheduled automatically with reminders — every lead is worked.",
   },
   {
+    icon: "🔒",
     p: "“When a telecaller leaves, my leads and data go with them.”",
     f: "All leads, numbers and recordings stay with you, the owner. Always.",
   },
   {
+    icon: "📊",
     p: "“I have no idea how many bookings are really in my pipeline.”",
     f: "A live funnel shows enquiry → site visit → token → booking, with value.",
   },
@@ -169,15 +175,54 @@ export default function LandingPage() {
       const ScrollTrigger = stMod.ScrollTrigger ?? stMod.default;
       gsap.registerPlugin(ScrollTrigger);
       ctx = gsap.context(() => {
-        gsap.utils.toArray<HTMLElement>(".cp-reveal").forEach((el) => {
-          gsap.to(el, {
-            opacity: 1,
-            y: 0,
-            duration: 0.85,
-            ease: "power3.out",
-            scrollTrigger: { trigger: el, start: "top 88%" },
-          });
+        // Grids reveal as a springy stagger — cards rise + settle one after another.
+        gsap.utils.toArray<HTMLElement>("[data-stagger]").forEach((group) => {
+          const items = group.querySelectorAll<HTMLElement>(":scope > .cp-reveal");
+          gsap.fromTo(
+            items,
+            { opacity: 0, y: 48, scale: 0.96 },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              duration: 0.8,
+              ease: "back.out(1.4)",
+              stagger: 0.09,
+              scrollTrigger: { trigger: group, start: "top 80%" },
+            },
+          );
         });
+
+        // Standalone reveals (section heads, quote, ROI, FAQ).
+        gsap.utils.toArray<HTMLElement>(".cp-reveal").forEach((el) => {
+          if (el.closest("[data-stagger]")) return;
+          gsap.fromTo(
+            el,
+            { opacity: 0, y: 42 },
+            {
+              opacity: 1,
+              y: 0,
+              duration: 0.9,
+              ease: "power3.out",
+              scrollTrigger: { trigger: el, start: "top 86%" },
+            },
+          );
+        });
+
+        // Premium "physics": card groups skew slightly with scroll velocity, then
+        // spring back — the subtle inertia that reads as expensive.
+        const skewEls = gsap.utils.toArray<HTMLElement>("[data-skew]");
+        if (skewEls.length) {
+          const setters = skewEls.map((el) =>
+            gsap.quickTo(el, "skewY", { duration: 0.5, ease: "power3" }),
+          );
+          ScrollTrigger.create({
+            onUpdate: (self) => {
+              const v = gsap.utils.clamp(-4, 4, self.getVelocity() / -560);
+              setters.forEach((s) => s(v));
+            },
+          });
+        }
       }, rootRef);
     })();
     return () => {
@@ -287,10 +332,13 @@ export default function LandingPage() {
               follow-up problem. Here&apos;s what that looks like, and how Call Pro AI fixes it.
             </p>
           </div>
-          <div className="cp-pains">
+          <div className="cp-pains" data-stagger data-skew>
             {PAINS.map((x) => (
               <div className="cp-pain cp-reveal" key={x.p}>
-                <p className="cp-pain-q">{x.p}</p>
+                <div className="cp-pain-top">
+                  <span className="cp-pain-ic">{x.icon}</span>
+                  <p className="cp-pain-q">{x.p}</p>
+                </div>
                 <div className="cp-pain-f">
                   <span className="ck">✓</span>
                   <span>{x.f}</span>
@@ -393,7 +441,7 @@ export default function LandingPage() {
             <h2>A calling engine, not just a CRM.</h2>
             <p>Everything your team needs to call more leads and close more plots — in one app.</p>
           </div>
-          <div className="cp-features-grid">
+          <div className="cp-features-grid" data-stagger data-skew>
             {FEATURES.map((f) => (
               <div className="cp-card cp-reveal" key={f.title}>
                 <div className="cp-card-ico">{f.icon}</div>
@@ -428,7 +476,7 @@ export default function LandingPage() {
       {/* PROOF */}
       <section className="cp-section" id="proof">
         <div className="cp-shell">
-          <div className="cp-metrics">
+          <div className="cp-metrics" data-stagger data-skew>
             {METRICS.map((m) => (
               <div className="cp-metric cp-reveal" key={m.lbl}>
                 <div className="num cp-grad">{m.num}</div>

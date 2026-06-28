@@ -371,24 +371,45 @@
 .cp-pain {
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 24px;
+  border-radius: 18px;
+  padding: 20px;
   box-shadow: var(--shadow-sm);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
-.cp-pain:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+.cp-pain:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: #dcdfea; }
+.cp-pain-top { display: flex; gap: 13px; align-items: flex-start; }
+.cp-pain-ic {
+  flex: none;
+  width: 40px; height: 40px;
+  border-radius: 11px;
+  display: grid; place-items: center;
+  font-size: 19px;
+  background: linear-gradient(135deg, rgba(240, 71, 106, 0.12), rgba(245, 158, 11, 0.1));
+  border: 1px solid rgba(240, 71, 106, 0.14);
+}
 .cp-pain-q {
-  font-family: var(--font-display), sans-serif;
-  font-size: 17px;
+  /* body font + lighter size reads premium, not heavy/aggressive */
+  font-size: 15.5px;
   font-weight: 600;
   color: var(--ink);
-  line-height: 1.4;
+  line-height: 1.42;
+  padding-top: 2px;
 }
-.cp-pain-f { margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--line-2); display: flex; gap: 9px; color: var(--ink-soft); font-size: 14.5px; }
+.cp-pain-f {
+  margin-top: 14px;
+  display: flex; gap: 9px; align-items: flex-start;
+  background: rgba(16, 185, 129, 0.07);
+  border: 1px solid rgba(16, 185, 129, 0.16);
+  border-radius: 12px;
+  padding: 11px 12px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
 .cp-pain-f .ck {
-  flex: none; width: 19px; height: 19px; border-radius: 6px; margin-top: 1px;
+  flex: none; width: 18px; height: 18px; border-radius: 6px; margin-top: 1px;
   display: grid; place-items: center; font-size: 11px;
-  background: rgba(16, 185, 129, 0.14); color: var(--ok);
+  background: var(--ok); color: #fff;
 }
 
 /* ---- ROI ------------------------------------------------------------------ */
@@ -498,7 +519,8 @@
 .cp-footer-bottom { border-top: 1px solid var(--line); padding-top: 22px; display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; color: var(--faint); font-size: 13px; }
 
 /* ---- scroll reveal -------------------------------------------------------- */
-.cp-reveal { opacity: 0; transform: translateY(22px); }
+.cp-reveal { opacity: 0; will-change: transform, opacity; }
+[data-skew] { will-change: transform; }
 
 /* ===========================================================================
    APP SCREEN MOCKUPS (inside .cp-screen) — recreate the real premium app UI
