@@ -526,15 +526,12 @@ export default function LandingPage() {
             <span className="cp-eyebrow">The selling system</span>
             <h2>An effortless selling system — for Real Estate.</h2>
             <p>
-              Generic dialers only make calls. Enterprise CRMs need a setup team. Call Pro AI
-              runs the whole sale for your team — capture, call, follow up and close — right out
-              of the box.
+              Call Pro AI runs the whole sale for your team — capture, call, follow up and
+              close — right out of the box.
             </p>
           </div>
           <div className="cp-sys-line cp-reveal">
             <span>Built only for real estate</span>
-            <span>Runs itself — no data entry</span>
-            <span>Live in a day, not a quarter</span>
           </div>
           <div className="cp-features-grid">
             {FEATURES.map((f) => (
