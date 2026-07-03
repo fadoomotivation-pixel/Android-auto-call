@@ -1425,6 +1425,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Buyer changed their mind: remove the planned site visit and, if the lead
+     *  was parked at Site Visit, walk it back to Interested. */
+    fun clearSiteVisit(contactId: String) {
+        viewModelScope.launch {
+            runCatching { Repository.clearSiteVisit(contactId) }
+                .onSuccess {
+                    val revert = _state.value.leads.find { it.id == contactId }?.status == "site_visit"
+                    if (revert) runCatching { Repository.updateContact(contactId, mapOf("status" to "interested")) }
+                    set { st ->
+                        st.copy(
+                            leads = st.leads.map { c ->
+                                if (c.id == contactId) c.copy(
+                                    siteVisitAt = null, siteVisitProject = null,
+                                    status = if (revert) "interested" else c.status,
+                                ) else c
+                            },
+                            message = "Site visit removed",
+                        )
+                    }
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
     fun setLeadTemperature(contactId: String, temperature: String) {
         viewModelScope.launch {
             runCatching { Repository.setTemperature(contactId, temperature) }

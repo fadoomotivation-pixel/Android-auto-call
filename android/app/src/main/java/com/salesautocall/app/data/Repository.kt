@@ -648,6 +648,13 @@ object Repository {
         client.from("contacts").update(patch) { filter { eq("id", contactId) } }
     }
 
+    /** Buyer changed their mind: wipe the planned site visit date + project. */
+    suspend fun clearSiteVisit(contactId: String) {
+        client.from("contacts").update(mapOf<String, String?>("site_visit_at" to null, "site_visit_project" to null)) {
+            filter { eq("id", contactId) }
+        }
+    }
+
     /** Creates one lead, owned by the current rep's company. Returns the new row. */
     suspend fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?): Contact {
         val profile = myProfile() ?: error("No profile yet. Ask your admin to add you to a company.")
