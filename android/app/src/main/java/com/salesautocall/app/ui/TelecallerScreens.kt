@@ -932,13 +932,13 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            // One compact, horizontally-scrolling filter row — the quick views a rep
-            // actually reaches for come first, stages after. Keeps the leads on
-            // screen instead of pushing them below a 4-row wall of chips.
+            // Every filter chip visible at once (wraps to 2-3 short rows) — no more
+            // hunting for "Contacted" or "Token Paid" inside a horizontal scroll.
             item {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                FlowRow(
+                    Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     FilterTab("All", app.leads.size, selected == "all", MaterialTheme.colorScheme.primary) { selected = "all" }
                     FilterTab("Uncontacted", app.leads.count { it.status in setOf("new", "queued") }, selected == "uncontacted", MaterialTheme.colorScheme.primary) { selected = "uncontacted" }
@@ -950,30 +950,26 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            // Power-dial the whole filtered list, back-to-back, with the post-call
-            // sheet between each — the single biggest time-saver for a busy rep.
-            if (!selectMode && filtered.isNotEmpty()) {
-                item {
-                    // Compact tonal pill (not a second full-width solid-blue bar) so
-                    // there's one clear primary action on the screen, not two.
-                    Row(
-                        Modifier.clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                            .clickable { vm.callList(filtered, "Leads") }
-                            .padding(horizontal = 14.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Call all ${filtered.size}", color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-            // Temperature filter + sort
+            // Call-all + temperature filter + sort, on ONE compact row.
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        // Power-dial the whole filtered list back-to-back — the single
+                        // biggest time-saver for a busy rep.
+                        if (!selectMode && filtered.isNotEmpty()) {
+                            Row(
+                                Modifier.clip(RoundedCornerShape(50))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                    .clickable { vm.callList(filtered, "Leads") }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Call ${filtered.size}", color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                         val temps = listOf(null to "All", "hot" to "🔥 Hot", "warm" to "🌤 Warm", "cold" to "❄️ Cold")
                         temps.forEach { (key, label) ->
                             val on = tempFilter == key
