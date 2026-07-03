@@ -6,7 +6,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.telephony.PhoneStateListener
@@ -131,31 +130,8 @@ class ManualCallService : Service() {
         while (true) if (stateChannel.receive() == target) return
     }
 
-    private fun placeCall(phone: String): Boolean {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
-            != PackageManager.PERMISSION_GRANTED
-        ) return false
-        return try {
-            fun buildIntent(withPackage: Boolean) = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                // Force the device's default phone app so a SIP app (e.g. ZoiPer) can't
-                // intercept the SIM call with an "Open with" chooser.
-                if (withPackage) systemDialerPackage()?.let { pkg -> setPackage(pkg) }
-            }
-            try {
-                startActivity(buildIntent(true))
-            } catch (_: android.content.ActivityNotFoundException) {
-                startActivity(buildIntent(false))
-            }
-            true
-        } catch (e: SecurityException) {
-            false
-        }
-    }
-
-    private fun systemDialerPackage(): String? = runCatching {
-        (getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager).defaultDialerPackage
-    }.getOrNull()
+    private fun placeCall(phone: String): Boolean =
+        CallRouter.place(this, phone, simSlot = null, serviceManaged = true)
 
     private fun registerListener() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)

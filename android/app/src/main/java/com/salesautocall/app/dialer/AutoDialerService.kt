@@ -6,12 +6,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.IBinder
-import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
-import android.telephony.SubscriptionManager
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
 import androidx.core.app.ActivityCompat
@@ -235,57 +232,12 @@ class AutoDialerService : Service() {
     }
 
     /**
-     * Places an outgoing call. On dual-SIM devices a [simSlot] (0/1) selects the
-     * subscription via its PhoneAccountHandle; otherwise the system default SIM
-     * is used.
+     * Places an outgoing call via [CallRouter] — fully in-app when the app is
+     * the default phone app, else through the system dialer. On dual-SIM
+     * devices [simSlot] (0/1) selects the subscription.
      */
-    private fun placeCall(phone: String, simSlot: Int?): Boolean {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE)
-            != PackageManager.PERMISSION_GRANTED
-        ) return false
-
-        return try {
-            fun buildIntent(withPackage: Boolean) = Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone")).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                phoneAccountForSlot(simSlot)?.let {
-                    putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, it)
-                }
-                // Force the device's default phone app so a SIP app (e.g. ZoiPer) can't
-                // intercept the SIM call with an "Open with" chooser.
-                if (withPackage) systemDialerPackage()?.let { pkg -> setPackage(pkg) }
-            }
-            try {
-                startActivity(buildIntent(true))
-            } catch (_: android.content.ActivityNotFoundException) {
-                startActivity(buildIntent(false))
-            }
-            true
-        } catch (e: SecurityException) {
-            false
-        }
-    }
-
-    private fun systemDialerPackage(): String? = runCatching {
-        (getSystemService(Context.TELECOM_SERVICE) as TelecomManager).defaultDialerPackage
-    }.getOrNull()
-
-    private fun phoneAccountForSlot(simSlot: Int?): android.telecom.PhoneAccountHandle? {
-        if (simSlot == null) return null
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
-            != PackageManager.PERMISSION_GRANTED
-        ) return null
-        return try {
-            val telecom = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
-            val subs = getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
-            val info = subs.activeSubscriptionInfoList?.firstOrNull { it.simSlotIndex == simSlot }
-                ?: return null
-            telecom.callCapablePhoneAccounts.firstOrNull { handle ->
-                handle.id.contains(info.subscriptionId.toString())
-            }
-        } catch (e: SecurityException) {
-            null
-        }
-    }
+    private fun placeCall(phone: String, simSlot: Int?): Boolean =
+        CallRouter.place(this, phone, simSlot, serviceManaged = true)
 
     // ---------- telephony listener ----------
 
