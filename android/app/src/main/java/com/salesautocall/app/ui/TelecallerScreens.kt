@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -83,7 +84,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
@@ -366,27 +366,6 @@ private fun GhostIconButton(icon: androidx.compose.ui.graphics.vector.ImageVecto
     }
 }
 
-/** Multi-segment pipeline bar coloured by stage proportion. */
-@Composable
-private fun PipelineBar(counts: List<Pair<Stage, Int>>) {
-    val total = counts.sumOf { it.second }.coerceAtLeast(1)
-    val active = counts.filter { it.second > 0 }
-    if (active.isEmpty()) {
-        Box(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant))
-        return
-    }
-    // Premium look: each stage is its own rounded segment with a small gap.
-    Row(Modifier.fillMaxWidth().height(12.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        active.forEach { (stage, n) ->
-            Box(
-                Modifier.weight(n.toFloat() / total).fillMaxSize()
-                    .clip(RoundedCornerShape(50))
-                    .background(Brush.verticalGradient(listOf(stage.color, stage.color.copy(alpha = 0.78f)))),
-            )
-        }
-    }
-}
-
 /** Group an Indian 10-digit number as "98765 43210" for easy reading; otherwise return as-is. */
 private fun prettyPhone(raw: String): String {
     val d = raw.filter { it.isDigit() }
@@ -532,6 +511,17 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     val unprotected = app.leads.filter {
         it.status in setOf("interested", "callback") && it.id !in protectedIds && it.phone !in protectedPhones
     }
+    // Today's Plan buckets — WHO asked for a callback, WHOSE visit is fixed,
+    // WHOSE visit already happened. Names up front, not buried in statuses.
+    val nowMs = System.currentTimeMillis()
+    val callbacks = app.followUpList.sortedBy { instantMillis(it.dueAt) ?: Long.MAX_VALUE }
+    val visitsPlanned = app.leads
+        .mapNotNull { c -> c.siteVisitAt?.let { instantMillis(it) }?.let { ms -> c to ms } }
+        .filter { it.second >= nowMs }.sortedBy { it.second }
+    val visitsDone = app.leads
+        .mapNotNull { c -> c.siteVisitAt?.let { instantMillis(it) }?.let { ms -> c to ms } }
+        .filter { it.second < nowMs && it.first.status !in setOf("booked", "lost", "not_interested", "dnc") }
+        .sortedByDescending { it.second }
 
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -567,6 +557,49 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Amber)
+                    }
+                }
+            }
+        }
+
+        // TODAY'S PLAN — the rep's whole day, by what the customer said:
+        // who asked for a callback, whose site visit is fixed, whose visit
+        // happened (and now needs closing). Names first, statuses never.
+        if (callbacks.isNotEmpty() || visitsPlanned.isNotEmpty() || visitsDone.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        SectionHeader(
+                            if (due > 0) "Today's Plan · $due due now" else "Today's Plan",
+                            "All follow-ups", onOpenFollowUps,
+                        )
+                        PlanBucket(
+                            emoji = "↻", title = "Asked to call back", color = Indigo,
+                            rows = callbacks.take(3).map { f ->
+                                PlanRow(f.name ?: f.phone, relativeDue(f.dueAt), f.note, f.phone,
+                                    overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= nowMs)
+                            },
+                            more = callbacks.size - 3, onCall = { vm.dialManual(it) },
+                        )
+                        PlanBucket(
+                            emoji = "🏠", title = "Site visit fixed", color = Purple,
+                            rows = visitsPlanned.take(3).map { (c, _) ->
+                                PlanRow(c.name ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone)
+                            },
+                            more = visitsPlanned.size - 3, onCall = { vm.dialManual(it) },
+                        )
+                        PlanBucket(
+                            emoji = "✅", title = "Visit done — close them", color = Teal,
+                            rows = visitsDone.take(3).map { (c, _) ->
+                                PlanRow(c.name ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone)
+                            },
+                            more = visitsDone.size - 3, onCall = { vm.dialManual(it) },
+                        )
                     }
                 }
             }
@@ -609,27 +642,31 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 Column(Modifier.padding(16.dp)) {
                     SectionHeader("Lead Pipeline", "View all", onOpenLeads)
                     Spacer(Modifier.height(14.dp))
-                    Row(Modifier.fillMaxWidth()) {
+                    // One row per stage — full label, count, and a bar you can
+                    // actually read. No wrapped words, no 7-way squeeze.
+                    val maxCount = stageCounts.maxOf { it.second }.coerceAtLeast(1)
+                    Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
                         stageCounts.forEach { (stage, n) ->
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
-                            ) {
-                                Text(n.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                Text(
-                                    stage.label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
-                                    fontSize = 10.sp,
-                                    lineHeight = 12.sp,
-                                    maxLines = 2,
-                                )
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(8.dp).clip(CircleShape).background(stage.color))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stage.label, style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+                                    Text(n.toString(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                        color = if (n > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Spacer(Modifier.height(5.dp))
+                                Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)) {
+                                    if (n > 0) {
+                                        Box(Modifier.fillMaxWidth(n / maxCount.toFloat()).fillMaxHeight()
+                                            .clip(RoundedCornerShape(50)).background(stage.color))
+                                    }
+                                }
                             }
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
-                    PipelineBar(stageCounts)
                 }
             }
         }
@@ -645,36 +682,6 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                     QuickAction("Calendar", Icons.Default.CalendarMonth, accent, Modifier.weight(1f)) { onNavigate("calendar") }
                     QuickAction("AI Coach", Icons.Default.AutoAwesome, accent, Modifier.weight(1f)) { onNavigate("ai") }
                     QuickAction("Attendance", Icons.Default.AccessTime, accent, Modifier.weight(1f)) { onNavigate("attendance") }
-                }
-            }
-        }
-
-        // Upcoming follow-ups
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            ) {
-                Column(Modifier.padding(16.dp)) {
-                    SectionHeader(if (due > 0) "Follow-ups · $due due now" else "Upcoming Follow-ups", "View all", onOpenFollowUps)
-                    Spacer(Modifier.height(10.dp))
-                    val list = app.followUpList.take(3)
-                    if (list.isEmpty()) {
-                        Text("No callbacks scheduled. Open a lead and tap “Follow-up”.",
-                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        list.forEachIndexed { i, f ->
-                            if (i > 0) Spacer(Modifier.height(10.dp))
-                            UpcomingRow(
-                                f,
-                                onCall = { vm.dialManual(f.phone) },
-                                onSnooze = { f.id?.let { vm.snoozeFollowUp(it, 1) } },
-                                onDone = { f.id?.let { vm.completeFollowUp(it) } }
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -740,25 +747,62 @@ private fun QuickAction(label: String, icon: androidx.compose.ui.graphics.vector
     }
 }
 
+/** One line of Today's Plan: who, when, and (if captured) what they said. */
+private data class PlanRow(
+    val name: String,
+    val whenLabel: String,
+    val detail: String?,
+    val phone: String,
+    val overdue: Boolean = false,
+)
+
+/** A titled bucket inside Today's Plan (callbacks / visits fixed / visits done). */
 @Composable
-private fun UpcomingRow(f: FollowUp, onCall: () -> Unit, onSnooze: () -> Unit, onDone: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Avatar(f.name ?: f.phone, size = 38)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(f.name ?: f.phone, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text("${dayLabel(f.dueAt)}, ${timeOnly(f.dueAt)}", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            IconButton(onClick = onSnooze, modifier = Modifier.size(36.dp).clip(CircleShape).background(Amber.copy(alpha = 0.12f))) {
-                Icon(Icons.Default.Schedule, contentDescription = "Snooze 1h", tint = Amber, modifier = Modifier.size(18.dp))
+private fun PlanBucket(
+    emoji: String,
+    title: String,
+    color: Color,
+    rows: List<PlanRow>,
+    more: Int,
+    onCall: (String) -> Unit,
+) {
+    if (rows.isEmpty()) return
+    Spacer(Modifier.height(12.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(emoji, fontSize = 13.sp)
+        Spacer(Modifier.width(6.dp))
+        Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = color)
+    }
+    Spacer(Modifier.height(6.dp))
+    rows.forEachIndexed { i, r ->
+        if (i > 0) Spacer(Modifier.height(6.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(color.copy(alpha = 0.07f))
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(r.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Spacer(Modifier.width(8.dp))
+                    Text(r.whenLabel, style = MaterialTheme.typography.labelSmall,
+                        color = if (r.overdue) Red else color, fontWeight = FontWeight.Bold)
+                }
+                r.detail?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
             }
-            IconButton(onClick = onDone, modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))) {
-                Icon(Icons.Default.Check, contentDescription = "Done", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            IconButton(onClick = { onCall(r.phone) }, modifier = Modifier.size(34.dp).clip(CircleShape).background(Green.copy(alpha = 0.12f))) {
+                Icon(Icons.Default.Call, contentDescription = "Call ${r.name}", tint = Green, modifier = Modifier.size(17.dp))
             }
-            ActionButton(Icons.Default.Call, "Call", Green, onClick = onCall)
         }
+    }
+    if (more > 0) {
+        Spacer(Modifier.height(5.dp))
+        Text("+$more more", style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
     }
 }
 
@@ -770,7 +814,10 @@ private fun UpcomingRow(f: FollowUp, onCall: () -> Unit, onSnooze: () -> Unit, o
 fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val app by vm.state.collectAsState()
     val context = LocalContext.current
-    LaunchedEffect(Unit) { vm.loadLeads() }
+    LaunchedEffect(Unit) { vm.loadLeads(); vm.loadFollowUps() }
+    // Pending follow-up per lead, so every card can say "call back · Today 4 PM".
+    val fuByContact = remember(app.followUpList) { app.followUpList.filter { it.contactId != null }.associateBy { it.contactId } }
+    val fuByPhone = remember(app.followUpList) { app.followUpList.associateBy { it.phone } }
 
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf("all") }
@@ -998,6 +1045,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 else -> items(filtered, key = { it.id ?: it.phone }) { c ->
                     LeadCard(
                         c = c,
+                        followUp = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone],
                         cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
                         selectMode = selectMode,
                         isSelected = c.id != null && c.id in selectedIds,
@@ -1173,6 +1221,7 @@ private fun WhatsAppChatDialog(
 @Composable
 private fun LeadCard(
     c: Contact,
+    followUp: FollowUp? = null,
     cloudOn: Boolean,
     selectMode: Boolean = false,
     isSelected: Boolean = false,
@@ -1245,6 +1294,44 @@ private fun LeadCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
+                }
+            }
+
+            // WHAT THE CUSTOMER SAID — the one line the rep actually needs:
+            // "call back Today 4 PM", "site visit fixed Tomorrow", "visit done —
+            // close them". Never buried in a status word again.
+            run {
+                val visitMs = c.siteVisitAt?.let { instantMillis(it) }
+                val now = System.currentTimeMillis()
+                val intent: Triple<String, Color, String?>? = when {
+                    followUp != null -> {
+                        val late = (instantMillis(followUp.dueAt) ?: Long.MAX_VALUE) <= now
+                        Triple(
+                            if (late) "↻ Call back — due now" else "↻ Call back · ${dayLabel(followUp.dueAt)} ${timeOnly(followUp.dueAt)}",
+                            if (late) Red else Indigo,
+                            followUp.note?.takeIf { it.isNotBlank() },
+                        )
+                    }
+                    visitMs != null && visitMs >= now ->
+                        Triple("🏠 Site visit fixed · ${dayLabel(c.siteVisitAt)}", Purple, c.siteVisitProject?.takeIf { it.isNotBlank() })
+                    visitMs != null && c.status !in setOf("booked", "lost", "not_interested", "dnc") ->
+                        Triple("✅ Visit done ${dayLabel(c.siteVisitAt)} — close them", Teal, c.siteVisitProject?.takeIf { it.isNotBlank() })
+                    else -> null
+                }
+                intent?.let { (label, color, detail) ->
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .background(color.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
+                        detail?.let {
+                            Spacer(Modifier.width(6.dp))
+                            Text("· $it", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        }
+                    }
                 }
             }
 
