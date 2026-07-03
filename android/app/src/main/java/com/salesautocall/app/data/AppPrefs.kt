@@ -49,6 +49,12 @@ object AppPrefs {
     fun getPushToken(context: Context): String = prefs(context).getString("push_token", "") ?: ""
     fun setPushToken(context: Context, v: String) = prefs(context).edit().putString("push_token", v).apply()
 
+    // Phone's native call-recording folder (SAF tree URI). When set, we harvest
+    // the OEM's own both-sides recording instead of the mic-only MediaRecorder.
+    fun getRecordingFolder(context: Context): String = prefs(context).getString("native_rec_folder", "") ?: ""
+    fun setRecordingFolder(context: Context, uri: String) = prefs(context).edit().putString("native_rec_folder", uri).apply()
+    fun clearRecordingFolder(context: Context) = prefs(context).edit().remove("native_rec_folder").apply()
+
     // Auto-answer the CallerDesk agent-leg callback so the rep taps once, not twice.
     // On by default; reps who share their phone can switch it off and pick up by hand.
     fun getAutoAnswer(context: Context): Boolean = prefs(context).getBoolean("callerdesk_autoanswer", true)

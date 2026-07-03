@@ -133,13 +133,22 @@ class AutoDialerService : Service() {
                 if (!wentOffhook) {
                     outcome = "no_answer"
                 } else {
-                    // Best-effort recording while the call is connected (device-dependent).
-                    if (cfg.recordingEnabled) runCatching { SimRecorder.start(this) }
+                    // Prefer the phone's OWN native recording (both sides, real
+                    // quality) — the OS records, we harvest. Only fall back to the
+                    // mic-only MediaRecorder when no native folder is configured.
+                    val useNative = cfg.recordingEnabled &&
+                        NativeRecordingHarvester.isConfigured(this@AutoDialerService)
+                    if (cfg.recordingEnabled && !useNative) runCatching { SimRecorder.start(this) }
                     // Now wait for it to return to idle = call ended.
                     awaitState(TelephonyManager.CALL_STATE_IDLE)
-                    recordingPath = runCatching { SimRecorder.stop() }.getOrNull()
                     durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()
                     outcome = if (durationSec >= cfg.connectedThresholdSeconds) "connected" else "no_answer"
+                    recordingPath = when {
+                        useNative && outcome == "connected" -> harvestNative(startedAt, contact.phone)
+                        cfg.recordingEnabled && !useNative -> runCatching { SimRecorder.stop() }.getOrNull()
+                        else -> null
+                    }
+                    if (useNative) runCatching { SimRecorder.stop() }  // no-op safety
                 }
             }
             val endedAt = Instant.now()
@@ -180,6 +189,17 @@ class AutoDialerService : Service() {
         }
         updateNotification("Auto-dial finished — ${queue.size} calls")
         stopForeground(STOP_FOREGROUND_DETACH)
+    }
+
+    /** Pulls the OEM's native recording for the just-ended call and stages it as a
+     *  cache file so it flows through the same upload path as a mic recording. */
+    private suspend fun harvestNative(startedAt: Instant, phone: String): String? {
+        val bytes = runCatching {
+            NativeRecordingHarvester.harvest(this@AutoDialerService, startedAt.toEpochMilli(), phone)
+        }.getOrNull() ?: return null
+        return runCatching {
+            File(cacheDir, "native_${System.currentTimeMillis()}.m4a").also { it.writeBytes(bytes) }.absolutePath
+        }.getOrNull()
     }
 
     private fun persistResult(
