@@ -132,6 +132,9 @@ fun LeadDetailScreen(vm: MainViewModel) {
     }
     var scheduleOpen by remember { mutableStateOf(false) }
     var visitOpen by remember { mutableStateOf(false) }
+    // Buyer changed their mind: confirmations for walking a lead back / cancelling.
+    var confirmMoveKey by remember { mutableStateOf<String?>(null) }
+    var confirmClearVisit by remember { mutableStateOf(false) }
 
     val followUp = app.followUpList.firstOrNull {
         (it.contactId != null && it.contactId == contact.id) || it.phone == contact.phone
@@ -206,12 +209,14 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             title = if (fuMs != null && fuMs <= nowMs) "↻ Call back — DUE NOW" else "↻ Next: call back · ${fuMs?.let { fmtWhen(it) } ?: ""}",
                             detail = followUp.note,
                             actionLabel = "Change",
+                            onDelete = { followUp.id?.let { vm.completeFollowUp(it) } },
                         ) { scheduleOpen = true }
                         visitMs != null && visitMs >= nowMs -> NextStepCard(
                             color = PurpleL,
                             title = "🏠 Next: site visit · ${fmtWhen(visitMs)}",
                             detail = contact.siteVisitProject,
                             actionLabel = "Change",
+                            onDelete = { confirmClearVisit = true },
                         ) { visitOpen = true }
                         !terminal -> NextStepCard(
                             color = AmberL,
@@ -236,6 +241,9 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             }
                         }
                     },
+                    onMoveBack = { key -> confirmMoveKey = key },
+                    onEditVisit = { visitOpen = true },
+                    onClearVisit = { confirmClearVisit = true },
                 )
             }
             item {
@@ -325,11 +333,53 @@ fun LeadDetailScreen(vm: MainViewModel) {
             },
         )
     }
+
+    // Buyer changed their mind → walk the lead back to an earlier stage.
+    confirmMoveKey?.let { key ->
+        val label = FUNNEL.firstOrNull { it.key == key }?.label ?: key
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmMoveKey = null },
+            title = { Text("Move back to $label?") },
+            text = { Text("Buyer changed their mind? The lead will go back to \"$label\" — notes and call history stay safe.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirmMoveKey = null
+                    val status = when (key) { "new" -> "new"; "contacted" -> "called"; else -> key }
+                    contact.id?.let { vm.applyLead(it, status, null, null, null, null, null, null) }
+                }) { Text("Move back") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmMoveKey = null }) { Text("Cancel") } },
+        )
+    }
+
+    // Cancel a fixed site visit — clears the date and reverts to Interested.
+    if (confirmClearVisit) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmClearVisit = false },
+            title = { Text("Cancel site visit?") },
+            text = { Text("The visit date will be removed. If the lead was at Site Visit it moves back to Interested.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirmClearVisit = false
+                    contact.id?.let { vm.clearSiteVisit(it) }
+                }) { Text("Yes, cancel visit", color = RedL) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmClearVisit = false }) { Text("Keep it") } },
+        )
+    }
 }
 
-/** The always-visible "what happens next" strip on a lead. */
+/** The always-visible "what happens next" strip on a lead. [onDelete] shows a
+ *  small ✕ so the rep can cancel the plan when the buyer changes their mind. */
 @Composable
-private fun NextStepCard(color: Color, title: String, detail: String?, actionLabel: String, onAction: () -> Unit) {
+private fun NextStepCard(
+    color: Color,
+    title: String,
+    detail: String?,
+    actionLabel: String,
+    onDelete: (() -> Unit)? = null,
+    onAction: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
             .background(color.copy(alpha = 0.10f)).padding(horizontal = 14.dp, vertical = 12.dp),
@@ -349,13 +399,31 @@ private fun NextStepCard(color: Color, title: String, detail: String?, actionLab
         ) {
             Text(actionLabel, color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
         }
+        onDelete?.let {
+            Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier.size(30.dp).clip(CircleShape).background(color.copy(alpha = 0.14f))
+                    .clickable { it() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("✕", color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
 /** Vertical real-estate funnel: every stage on its own line with a ✓ trail,
- *  the current stage highlighted, later stages one tap away. */
+ *  the current stage highlighted, later stages one tap away. Fully editable:
+ *  done steps tap to walk the lead back, the fixed site visit can be edited
+ *  or cancelled — buyers change their minds, the funnel keeps up. */
 @Composable
-private fun FunnelStepper(contact: Contact, onSet: (String) -> Unit) {
+private fun FunnelStepper(
+    contact: Contact,
+    onSet: (String) -> Unit,
+    onMoveBack: (String) -> Unit,
+    onEditVisit: () -> Unit,
+    onClearVisit: () -> Unit,
+) {
     val idx = FUNNEL.indexOfFirst { contact.status in it.statuses }
     Column(Modifier.padding(horizontal = 16.dp)) {
         FUNNEL.forEachIndexed { i, step ->
@@ -368,7 +436,13 @@ private fun FunnelStepper(contact: Contact, onSet: (String) -> Unit) {
             }
             Row(
                 Modifier.fillMaxWidth()
-                    .then(if (step.settable && !current) Modifier.clip(RoundedCornerShape(10.dp)).clickable { onSet(step.key) } else Modifier),
+                    .then(
+                        when {
+                            step.settable && !current && !done -> Modifier.clip(RoundedCornerShape(10.dp)).clickable { onSet(step.key) }
+                            done -> Modifier.clip(RoundedCornerShape(10.dp)).clickable { onMoveBack(step.key) }
+                            else -> Modifier
+                        },
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Rail: circle + connector down to the next step.
@@ -412,13 +486,35 @@ private fun FunnelStepper(contact: Contact, onSet: (String) -> Unit) {
                         Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                if (current) {
-                    Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                // Contextual actions — edit or undo without hunting through menus.
+                val hasVisit = step.key == "site_visit" && !contact.siteVisitAt.isNullOrBlank()
+                when {
+                    hasVisit -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(PurpleL.copy(alpha = 0.12f))
+                            .clickable { onEditVisit() }.padding(horizontal = 10.dp, vertical = 4.dp)) {
+                            Text("Edit", color = PurpleL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
+                        Box(Modifier.size(24.dp).clip(CircleShape).background(RedL.copy(alpha = 0.12f))
+                            .clickable { onClearVisit() }, contentAlignment = Alignment.Center) {
+                            Text("✕", color = RedL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    current && i > 0 -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { onMoveBack(FUNNEL[i - 1].key) }.padding(horizontal = 10.dp, vertical = 4.dp)) {
+                            Text("↶ Undo", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
+                        Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)) {
+                            Text("NOW", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    current -> Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
                         .padding(horizontal = 10.dp, vertical = 4.dp)) {
                         Text("NOW", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
-                } else if (step.settable) {
-                    Text("Set", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                    done -> Text("Undo", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                    step.settable -> Text("Set", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
