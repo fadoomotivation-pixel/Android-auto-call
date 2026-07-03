@@ -149,6 +149,14 @@ data class AppState(
     /** "Who did what, when" timeline entries for the open lead. */
     val leadDetailActivities: List<com.salesautocall.app.data.LeadActivity> = emptyList(),
     val leadDetailLoading: Boolean = false,
+    // Voice notes on the open lead ("kya baat hui" in the rep's own voice).
+    val voiceNotes: List<com.salesautocall.app.data.LeadVoiceNote> = emptyList(),
+    /** True while the mic is capturing a new voice note. */
+    val voiceRecording: Boolean = false,
+    /** True while a finished take uploads + registers. */
+    val voiceUploading: Boolean = false,
+    /** Voice note currently playing (null = none). */
+    val playingNoteId: String? = null,
 )
 
 enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
@@ -1767,13 +1775,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
-        set { it.copy(leadDetailId = contactId, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), leadDetailLoading = true) }
+        set { it.copy(leadDetailId = contactId, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true) }
         viewModelScope.launch {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())
+            val notes = runCatching { Repository.fetchVoiceNotes(contactId) }.getOrDefault(emptyList())
             set {
                 if (it.leadDetailId == contactId)
-                    it.copy(leadDetailCalls = calls, leadDetailActivities = acts, leadDetailLoading = false)
+                    it.copy(leadDetailCalls = calls, leadDetailActivities = acts, voiceNotes = notes, leadDetailLoading = false)
                 else it
             }
         }
@@ -1781,8 +1790,110 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshLeadDetail() { _state.value.leadDetailId?.let { openLeadDetail(it) } }
 
-    fun closeLeadDetail() = set {
-        it.copy(leadDetailId = null, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), playingCallId = null)
+    fun closeLeadDetail() {
+        stopVoiceNotePlayback()
+        if (_state.value.voiceRecording) com.salesautocall.app.data.VoiceNoteRecorder.cancel()
+        set {
+            it.copy(
+                leadDetailId = null, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(),
+                voiceNotes = emptyList(), voiceRecording = false, playingCallId = null,
+            )
+        }
+    }
+
+    // ---------- voice notes (rep's own voice, with the AI twist) ----------
+
+    private var notePlayer: android.media.MediaPlayer? = null
+
+    fun startVoiceNote() {
+        if (_state.value.voiceRecording) return
+        stopVoiceNotePlayback()
+        val ok = com.salesautocall.app.data.VoiceNoteRecorder.start(getApplication())
+        if (ok) set { it.copy(voiceRecording = true) }
+        else set { it.copy(error = "Mic not available — allow the Microphone permission.") }
+    }
+
+    fun cancelVoiceNote() {
+        com.salesautocall.app.data.VoiceNoteRecorder.cancel()
+        set { it.copy(voiceRecording = false) }
+    }
+
+    /** Stops the take and ships it: upload → row → AI → refresh the list. */
+    fun finishVoiceNote() {
+        val contactId = _state.value.leadDetailId ?: run { cancelVoiceNote(); return }
+        val take = com.salesautocall.app.data.VoiceNoteRecorder.stop()
+        set { it.copy(voiceRecording = false) }
+        if (take == null) {
+            set { it.copy(error = "Nothing recorded — try again.") }
+            return
+        }
+        val (file, seconds) = take
+        viewModelScope.launch {
+            set { it.copy(voiceUploading = true) }
+            val note = runCatching {
+                withContext(Dispatchers.IO) { Repository.addVoiceNote(contactId, file.readBytes(), seconds) }
+            }.getOrNull()
+            runCatching { file.delete() }
+            if (note != null) {
+                set { st ->
+                    st.copy(
+                        voiceUploading = false,
+                        voiceNotes = listOf(note) + st.voiceNotes,
+                        message = "🎤 Voice note saved — AI summary ban raha hai…",
+                    )
+                }
+                // Give the AI a moment, then refresh so transcript/summary appears.
+                kotlinx.coroutines.delay(12_000)
+                val fresh = runCatching { Repository.fetchVoiceNotes(contactId) }.getOrNull()
+                if (fresh != null) set { if (it.leadDetailId == contactId) it.copy(voiceNotes = fresh) else it }
+            } else {
+                set { it.copy(voiceUploading = false, error = "Couldn't save the voice note. Check internet and retry.") }
+            }
+        }
+    }
+
+    /** Re-pulls notes (e.g. the "AI processing" one) for the open lead. */
+    fun refreshVoiceNotes() {
+        val contactId = _state.value.leadDetailId ?: return
+        viewModelScope.launch {
+            runCatching { Repository.fetchVoiceNotes(contactId) }.getOrNull()?.let { fresh ->
+                set { if (it.leadDetailId == contactId) it.copy(voiceNotes = fresh) else it }
+            }
+        }
+    }
+
+    fun playVoiceNote(note: com.salesautocall.app.data.LeadVoiceNote) {
+        val id = note.id ?: return
+        stopVoiceNotePlayback()
+        set { it.copy(playingNoteId = id) }
+        viewModelScope.launch {
+            val bytes = runCatching {
+                withContext(Dispatchers.IO) { Repository.downloadVoiceNote(note.audioPath) }
+            }.getOrNull()
+            if (bytes == null || _state.value.playingNoteId != id) {
+                if (bytes == null) set { it.copy(playingNoteId = null, error = "Couldn't load the audio.") }
+                return@launch
+            }
+            runCatching {
+                val f = java.io.File(getApplication<Application>().cacheDir, "vn_play.m4a")
+                f.writeBytes(bytes)
+                val p = android.media.MediaPlayer()
+                p.setDataSource(f.absolutePath)
+                p.prepare()
+                p.setOnCompletionListener { stopVoiceNotePlayback() }
+                p.start()
+                notePlayer = p
+            }.onFailure {
+                set { st -> st.copy(playingNoteId = null, error = "Playback failed.") }
+            }
+        }
+    }
+
+    fun stopVoiceNotePlayback() {
+        runCatching { notePlayer?.stop() }
+        runCatching { notePlayer?.release() }
+        notePlayer = null
+        if (_state.value.playingNoteId != null) set { it.copy(playingNoteId = null) }
     }
 
     // ---------- lead activity logging ----------

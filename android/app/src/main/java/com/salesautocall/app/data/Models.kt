@@ -167,6 +167,24 @@ data class LeaderboardRow(
     val leads: Int = 0,
 )
 
+/** A telecaller's spoken note about a lead ("kya baat hui"), with the AI twist. */
+@Serializable
+data class LeadVoiceNote(
+    val id: String? = null,
+    @SerialName("company_id") val companyId: String,
+    @SerialName("contact_id") val contactId: String,
+    @SerialName("actor_id") val actorId: String? = null,
+    @SerialName("actor_name") val actorName: String? = null,
+    @SerialName("audio_path") val audioPath: String,
+    @SerialName("duration_seconds") val durationSeconds: Int = 0,
+    val transcript: String? = null,
+    val summary: String? = null,
+    @SerialName("suggested_disposition") val suggestedDisposition: String? = null,
+    /** pending | processing | ready | failed */
+    @SerialName("ai_status") val aiStatus: String = "pending",
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
 /** One entry in a lead's activity timeline (what the telecaller did, and when). */
 @Serializable
 data class LeadActivity(
