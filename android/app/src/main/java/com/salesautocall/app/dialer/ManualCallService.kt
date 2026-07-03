@@ -83,16 +83,34 @@ class ManualCallService : Service() {
             if (!wentOffhook) {
                 outcome = "no_answer"
             } else {
-                if (record) runCatching { SimRecorder.start(this) }
+                // Prefer the phone's native both-sides recording; MediaRecorder
+                // (mic-only) is the fallback when no native folder is set.
+                val useNative = record && NativeRecordingHarvester.isConfigured(this@ManualCallService)
+                if (record && !useNative) runCatching { SimRecorder.start(this) }
                 awaitState(TelephonyManager.CALL_STATE_IDLE)
-                recordingPath = runCatching { SimRecorder.stop() }.getOrNull()
                 durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()
                 outcome = if (durationSec >= CONNECTED_THRESHOLD_SEC) "connected" else "no_answer"
+                recordingPath = when {
+                    useNative && outcome == "connected" -> harvestNative(startedAt, phone)
+                    record && !useNative -> runCatching { SimRecorder.stop() }.getOrNull()
+                    else -> null
+                }
+                if (useNative) runCatching { SimRecorder.stop() }
             }
         }
         persist(phone, companyId, salespersonId, startedAt, durationSec, outcome, recordingPath)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /** Stages the OEM's native recording as a cache file for the shared uploader. */
+    private suspend fun harvestNative(startedAt: Instant, phone: String): String? {
+        val bytes = runCatching {
+            NativeRecordingHarvester.harvest(this@ManualCallService, startedAt.toEpochMilli(), phone)
+        }.getOrNull() ?: return null
+        return runCatching {
+            File(cacheDir, "native_${System.currentTimeMillis()}.m4a").also { it.writeBytes(bytes) }.absolutePath
+        }.getOrNull()
     }
 
     private fun persist(

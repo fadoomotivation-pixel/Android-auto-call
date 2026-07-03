@@ -374,6 +374,60 @@ private fun CompanyCard(vm: MainViewModel, app: AppState) {
     }
 }
 
+/**
+ * Points the app at the phone's own call-recording folder so we can harvest the
+ * OEM's both-sides recording (native quality) instead of a mic-only capture.
+ * This is how reliable call recorders work on modern Android — the OS records,
+ * we pick up the file.
+ */
+@Composable
+private fun CallRecordingFolderCard(context: android.content.Context) {
+    var folder by remember { mutableStateOf(com.salesautocall.app.data.AppPrefs.getRecordingFolder(context)) }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            com.salesautocall.app.data.AppPrefs.setRecordingFolder(context, uri.toString())
+            folder = uri.toString()
+        }
+    }
+    val connected = folder.isNotBlank()
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Call recording (both sides)", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Modern phones block apps from recording the other person directly. " +
+                    "Turn ON your phone's built-in call recording (Phone app → Settings → " +
+                    "Call recording), then pick that folder here — we'll attach each " +
+                    "recording to the lead and back it up automatically.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            if (connected) {
+                Text("✓ Folder connected", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                Text(android.net.Uri.decode(folder.substringAfterLast('/').substringAfterLast('%3A')),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { picker.launch(null) }) { Text("Change folder") }
+                    TextButton(onClick = {
+                        com.salesautocall.app.data.AppPrefs.clearRecordingFolder(context); folder = ""
+                    }) { Text("Disconnect") }
+                }
+            } else {
+                Button(onClick = { picker.launch(null) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Select recording folder")
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
     Card(Modifier.fillMaxWidth()) {
@@ -891,6 +945,9 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
 
         Spacer(Modifier.height(16.dp))
         CloudCallingCard(vm, app)
+
+        Spacer(Modifier.height(16.dp))
+        CallRecordingFolderCard(context)
 
         Spacer(Modifier.height(16.dp))
         Card(Modifier.fillMaxWidth()) {
