@@ -809,7 +809,7 @@ private fun PlanBucket(
 // ════════════════════════════════════════════════════════════
 //  LEADS
 // ════════════════════════════════════════════════════════════
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val app by vm.state.collectAsState()
@@ -820,9 +820,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val fuByPhone = remember(app.followUpList) { app.followUpList.associateBy { it.phone } }
 
     var query by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf("all") }
+    // One simple question on screen: "which bucket?" — the fine-grained stage /
+    // temperature / sort controls live in the Filters sheet, not the page.
+    var bucket by remember { mutableStateOf("all") }              // all | new | working | pipeline | booked
+    var stageFilter by remember { mutableStateOf<String?>(null) } // exact stage from the sheet
+    var quick by remember { mutableStateOf<String?>(null) }       // "today" | "retry"
     var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
     var sortBy by remember { mutableStateOf("default") }          // "default" | "score" | "recent"
+    var sheetOpen by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
 
@@ -846,13 +852,22 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         if (app.leadsSelectRequested) { selectMode = true; vm.consumeLeadSelect() }
     }
 
-    val base = when (selected) {
-        "all" -> app.leads
-        // Quick views a rep reaches for hourly.
-        "uncontacted" -> app.leads.filter { it.status in setOf("new", "queued") }
-        "today" -> app.leads.filter { isToday(it.createdAt) }
-        "retry" -> app.leads.filter { it.status in setOf("no_answer", "busy", "callback", "follow_up") }
-        else -> app.leads.filter { stageOf(it.status).key == selected || it.status in (STAGES.firstOrNull { s -> s.key == selected }?.statuses ?: emptySet()) }
+    // Buckets a rep actually thinks in. Sheet filters (exact stage / quick views)
+    // override the bucket when active.
+    val newSet = setOf("new", "queued")
+    val workingSet = setOf("called", "no_answer", "busy", "callback", "follow_up", "interested")
+    val pipelineSet = setOf("site_visit", "negotiation", "proposal", "token_paid")
+    val base = when {
+        stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
+        quick == "today" -> app.leads.filter { isToday(it.createdAt) }
+        quick == "retry" -> app.leads.filter { it.status in setOf("no_answer", "busy", "callback", "follow_up") }
+        else -> when (bucket) {
+            "new" -> app.leads.filter { it.status in newSet }
+            "working" -> app.leads.filter { it.status in workingSet }
+            "pipeline" -> app.leads.filter { it.status in pipelineSet }
+            "booked" -> app.leads.filter { it.status == "booked" }
+            else -> app.leads
+        }
     }
     val tempFiltered = if (tempFilter == null) base else base.filter { it.temperature == tempFilter }
     val searched = if (query.isBlank()) tempFiltered else tempFiltered.filter {
@@ -868,55 +883,51 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
 
     fun exitSelect() { selectMode = false; selectedIds = emptySet() }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier.weight(1f),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
                 if (!selectMode) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Leads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                                Text("${app.leads.size} total · ${app.leads.count { it.status in setOf("new", "queued") }} new",
-                                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                    // Jobs rule: a title, a count, and nothing shouting. Utilities
+                    // (refresh / AI score / select) live behind two quiet circles.
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Leads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                            Text("${app.leads.size} total · ${app.leads.count { it.status in setOf("new", "queued") }} new",
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(
                                 Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface)
                                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
                                     .clickable { vm.loadLeads(force = true) },
                                 contentAlignment = Alignment.Center,
                             ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
-                        }
-                        // One primary action (Select & Call); AI Score is a quiet secondary.
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Box(
-                                Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(14.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                    .clickable(enabled = !app.aiScoringLeads) { vm.scoreLeads() },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (app.aiScoringLeads) {
-                                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Spacer(Modifier.width(7.dp)); Text("Scoring…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                                    } else {
-                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(7.dp)); Text("AI Score", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                                    }
+                            Box {
+                                Box(
+                                    Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface)
+                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                                        .clickable { menuOpen = true },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (app.aiScoringLeads) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    else Icon(Icons.Default.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                                 }
-                            }
-                            Box(
-                                Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(14.dp))
-                                    .background(MaterialTheme.colorScheme.primary)
-                                    .clickable { selectMode = true },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Checklist, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(7.dp)); Text("Select & Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                                androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text(if (app.aiScoringLeads) "Scoring…" else "AI Score leads") },
+                                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                                        onClick = { menuOpen = false; if (!app.aiScoringLeads) vm.scoreLeads() },
+                                    )
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text("Select leads") },
+                                        leadingIcon = { Icon(Icons.Default.Checklist, contentDescription = null) },
+                                        onClick = { menuOpen = false; selectMode = true },
+                                    )
                                 }
                             }
                         }
@@ -932,76 +943,69 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            // Every filter chip visible at once (wraps to 2-3 short rows) — no more
-            // hunting for "Contacted" or "Token Paid" inside a horizontal scroll.
+            // Search + Filters: one slim row. Everything fine-grained hides in the sheet.
             item {
-                FlowRow(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FilterTab("All", app.leads.size, selected == "all", MaterialTheme.colorScheme.primary) { selected = "all" }
-                    FilterTab("Uncontacted", app.leads.count { it.status in setOf("new", "queued") }, selected == "uncontacted", MaterialTheme.colorScheme.primary) { selected = "uncontacted" }
-                    FilterTab("Added today", app.leads.count { isToday(it.createdAt) }, selected == "today", MaterialTheme.colorScheme.primary) { selected = "today" }
-                    FilterTab("Retry", app.leads.count { it.status in setOf("no_answer", "busy", "callback", "follow_up") }, selected == "retry", MaterialTheme.colorScheme.primary) { selected = "retry" }
-                    STAGES.forEach { st ->
-                        val n = app.leads.count { it.status in st.statuses }
-                        FilterTab(st.label, n, selected == st.key, st.color) { selected = st.key }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        query, { query = it }, placeholder = { Text("Search name or phone") },
+                        singleLine = true, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp),
+                    )
+                    val filtersOn = stageFilter != null || tempFilter != null || quick != null || sortBy != "default"
+                    Box(
+                        Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                            .background(if (filtersOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                            .border(1.dp, if (filtersOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                            .clickable { sheetOpen = true },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Default.Sort, contentDescription = "Filters",
+                            tint = if (filtersOn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp))
                     }
                 }
             }
-            // Call-all + temperature filter + sort, on ONE compact row.
+            // Five buckets a rep thinks in — one calm row, no chip wall.
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        // Power-dial the whole filtered list back-to-back — the single
-                        // biggest time-saver for a busy rep.
-                        if (!selectMode && filtered.isNotEmpty()) {
-                            Row(
-                                Modifier.clip(RoundedCornerShape(50))
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                                    .clickable { vm.callList(filtered, "Leads") }
-                                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Call ${filtered.size}", color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                        val temps = listOf(null to "All", "hot" to "🔥 Hot", "warm" to "🌤 Warm", "cold" to "❄️ Cold")
-                        temps.forEach { (key, label) ->
-                            val on = tempFilter == key
-                            Box(
-                                Modifier.clip(RoundedCornerShape(50))
-                                    .background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
-                                    .clickable { tempFilter = key }
-                                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                            ) {
-                                Text(label, style = MaterialTheme.typography.labelMedium,
-                                    color = if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
-                            }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val segments = listOf(
+                        "all" to Triple("All", app.leads.size, MaterialTheme.colorScheme.primary),
+                        "new" to Triple("New", app.leads.count { it.status in newSet }, MaterialTheme.colorScheme.primary),
+                        "working" to Triple("Working", app.leads.count { it.status in workingSet }, Indigo),
+                        "pipeline" to Triple("Pipeline", app.leads.count { it.status in pipelineSet }, Purple),
+                        "booked" to Triple("Booked", app.leads.count { it.status == "booked" }, Green),
+                    )
+                    segments.forEach { (key, seg) ->
+                        val (label, n, color) = seg
+                        FilterTab(label, n, bucket == key && stageFilter == null && quick == null, color) {
+                            bucket = key; stageFilter = null; quick = null
                         }
                     }
-                    // Sort toggle
-                    var showSort by remember { mutableStateOf(false) }
-                    Box {
-                        IconButton(onClick = { showSort = true }) {
-                            Icon(Icons.Default.Sort, contentDescription = "Sort", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        androidx.compose.material3.DropdownMenu(
-                            expanded = showSort,
-                            onDismissRequest = { showSort = false },
-                        ) {
-                            listOf("default" to "Default", "score" to "AI Score ↓", "recent" to "Newest first").forEach { (key, label) ->
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = {
-                                        Text(label, fontWeight = if (sortBy == key) FontWeight.Bold else FontWeight.Normal)
-                                    },
-                                    onClick = { sortBy = key; showSort = false },
-                                )
+                }
+            }
+            // Active sheet-filters show as dismissible chips — tap ✕ to clear.
+            run {
+                val active = buildList {
+                    stageFilter?.let { sf -> add(Triple("stage", STAGES.firstOrNull { it.key == sf }?.label ?: sf) { stageFilter = null }) }
+                    quick?.let { q -> add(Triple("quick", if (q == "today") "Added today" else "Retry") { quick = null }) }
+                    tempFilter?.let { t -> add(Triple("temp", when (t) { "hot" -> "🔥 Hot"; "warm" -> "🌤 Warm"; else -> "❄️ Cold" }) { tempFilter = null }) }
+                    if (sortBy != "default") add(Triple("sort", if (sortBy == "score") "AI Score ↓" else "Newest first") { sortBy = "default" })
+                }
+                if (active.isNotEmpty()) {
+                    item {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            active.forEach { (_, label, clear) ->
+                                Row(
+                                    Modifier.clip(RoundedCornerShape(50))
+                                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                                        .clickable { clear() }
+                                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(label, style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.SemiBold)
+                                    Spacer(Modifier.width(5.dp))
+                                    Text("✕", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                }
                             }
                         }
                     }
@@ -1023,13 +1027,6 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            item {
-                OutlinedTextField(
-                    query, { query = it }, placeholder = { Text("Search by name or phone…") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                )
-            }
-
             when {
                 app.leadsLoading && app.leads.isEmpty() ->
                     item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
@@ -1078,6 +1075,92 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         Spacer(Modifier.width(6.dp))
                         Text("Start Campaign")
                     }
+                }
+            }
+        }
+    }
+
+    // THE one action on this screen: power-dial whatever is in view.
+    if (!selectMode && filtered.isNotEmpty()) {
+        androidx.compose.material3.ExtendedFloatingActionButton(
+            onClick = { vm.callList(filtered, "Leads") },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            icon = { Icon(Icons.Default.Call, contentDescription = null) },
+            text = { Text("Call ${filtered.size}", fontWeight = FontWeight.Bold) },
+        )
+    }
+    }
+
+    // FILTERS — all the fine-grained power, one sheet away.
+    if (sheetOpen) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { sheetOpen = false }) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Filters", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { stageFilter = null; tempFilter = null; quick = null; sortBy = "default" }) { Text("Clear all") }
+                }
+                Text("Stage", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    STAGES.forEach { st ->
+                        val n = app.leads.count { it.status in st.statuses }
+                        FilterTab(st.label, n, stageFilter == st.key, st.color) {
+                            stageFilter = if (stageFilter == st.key) null else st.key
+                            quick = null
+                        }
+                    }
+                }
+                Text("Temperature", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("hot" to "🔥 Hot", "warm" to "🌤 Warm", "cold" to "❄️ Cold").forEach { (key, label) ->
+                        val on = tempFilter == key
+                        Box(
+                            Modifier.clip(RoundedCornerShape(50))
+                                .background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { tempFilter = if (on) null else key }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelMedium,
+                                color = if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+                }
+                Text("Quick views", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("today" to "Added today", "retry" to "Retry (no answer/busy)").forEach { (key, label) ->
+                        val on = quick == key
+                        Box(
+                            Modifier.clip(RoundedCornerShape(50))
+                                .background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { quick = if (on) null else key; stageFilter = null }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelMedium,
+                                color = if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+                }
+                Text("Sort", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("default" to "Default", "score" to "AI Score ↓", "recent" to "Newest").forEach { (key, label) ->
+                        val on = sortBy == key
+                        Box(
+                            Modifier.clip(RoundedCornerShape(50))
+                                .background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { sortBy = key }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelMedium,
+                                color = if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+                }
+                Button(onClick = { sheetOpen = false }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 24.dp)) {
+                    Text("Show ${filtered.size} leads")
                 }
             }
         }
