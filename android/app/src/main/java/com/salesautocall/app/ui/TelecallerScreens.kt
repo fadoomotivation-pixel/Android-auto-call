@@ -1376,6 +1376,19 @@ private fun LeadCard(
                 }
             }
 
+            // Last note, right on the card — "Not pic", "Vrindavan mai chaiye" —
+            // so a rep scanning the list remembers the conversation instantly.
+            c.notes?.takeIf { it.isNotBlank() }?.let { n ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "📝 $n",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+
             // WHAT THE CUSTOMER SAID — the one line the rep actually needs:
             // "call back Today 4 PM", "site visit fixed Tomorrow", "visit done —
             // close them". Never buried in a status word again.
@@ -1386,7 +1399,9 @@ private fun LeadCard(
                     followUp != null -> {
                         val late = (instantMillis(followUp.dueAt) ?: Long.MAX_VALUE) <= now
                         Triple(
-                            if (late) "↻ Call back — due now" else "↻ Call back · ${dayLabel(followUp.dueAt)} ${timeOnly(followUp.dueAt)}",
+                            // Show HOW late ("Overdue 12d"), not just that it's due —
+                            // a 90-day-old promise reads very differently from a 5-minute one.
+                            if (late) "↻ Call back · ${relativeDue(followUp.dueAt)}" else "↻ Call back · ${dayLabel(followUp.dueAt)} ${timeOnly(followUp.dueAt)}",
                             if (late) Red else Indigo,
                             followUp.note?.takeIf { it.isNotBlank() },
                         )
