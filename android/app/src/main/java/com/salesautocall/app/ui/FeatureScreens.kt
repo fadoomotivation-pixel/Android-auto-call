@@ -418,7 +418,7 @@ private fun CallRecordingFolderCard(context: android.content.Context) {
             Spacer(Modifier.height(12.dp))
             if (connected) {
                 Text("✓ Folder connected", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                Text(android.net.Uri.decode(folder.substringAfterLast('/').substringAfterLast('%3A')),
+                Text(android.net.Uri.decode(folder.substringAfterLast('/').substringAfterLast("%3A")),
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

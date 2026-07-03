@@ -64,6 +64,7 @@ private val WhatsAppGreen = Color(0xFF25D366)
 @Composable
 fun CallsScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
+    val context = LocalContext.current
     LaunchedEffect(Unit) { vm.loadCalls(); vm.loadLeads(); vm.loadDeviceRecents() }
     var sub by remember { mutableIntStateOf(0) } // 0 = Phone, 1 = App, 2 = Missed, 3 = Follow-up
 
