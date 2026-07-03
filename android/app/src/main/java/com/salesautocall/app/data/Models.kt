@@ -167,6 +167,19 @@ data class LeaderboardRow(
     val leads: Int = 0,
 )
 
+/** One entry in a lead's activity timeline (what the telecaller did, and when). */
+@Serializable
+data class LeadActivity(
+    val id: String? = null,
+    @SerialName("company_id") val companyId: String,
+    @SerialName("contact_id") val contactId: String,
+    @SerialName("actor_id") val actorId: String? = null,
+    @SerialName("actor_name") val actorName: String? = null,
+    val type: String = "update",
+    val detail: String,
+    @SerialName("created_at") val createdAt: String? = null,
+)
+
 @Serializable
 data class CallLog(
     val id: String? = null,

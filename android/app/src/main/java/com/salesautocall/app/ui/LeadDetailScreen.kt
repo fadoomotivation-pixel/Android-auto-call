@@ -159,6 +159,15 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     Spacer(Modifier.height(10.dp))
                     Text(contact.name ?: contact.phone, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(contact.phone, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // When the lead arrived — "kis date ko aayi".
+                    isoMs(contact.createdAt)?.let { ms ->
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            "Added ${fmtWhen(ms)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     // One quiet status line: a temperature dot + muted stage text — no pills.
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -291,6 +300,32 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                 // so typing it and tapping Save no longer loses the amount.
                                 tokenAmount = if (contact.status == "token_paid") token.ifBlank { null } else null)
                         }
+                    }
+                }
+            }
+
+            // JOURNEY — kab aayi, kab kisne kya update kiya (stage / note / follow-up …).
+            item { SectionLabel("Journey") }
+            run {
+                val journey = buildList {
+                    addAll(app.leadDetailActivities.map { a ->
+                        Triple(a.createdAt, a.type, a.detail + (a.actorName?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""))
+                    })
+                    contact.createdAt?.let { add(Triple(it, "created", "Lead added")) }
+                }.sortedByDescending { it.first ?: "" }
+                if (journey.isEmpty() && !app.leadDetailLoading) {
+                    item {
+                        Text(
+                            "Updates you make on this lead will show here with date & time.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
+                } else {
+                    items(journey.size) { i ->
+                        val (atIso, type, text) = journey[i]
+                        JourneyRow(atIso, type, text, last = i == journey.lastIndex)
                     }
                 }
             }
@@ -807,4 +842,36 @@ private fun waTemplateLocal(name: String?, project: String?, agent: String?, com
     val ref = project?.trim()?.takeIf { it.isNotBlank() }?.let { " Aapne $it ke liye enquiry ki thi." }
         ?: " Aapki property enquiry ke regarding."
     return "$hi main $who$co se baat kar raha hoon.$ref Property ki details aur best offer share karna chahta hoon — kya abhi baat kar sakte hain?"
+}
+
+/** One "Journey" timeline row: emoji dot + what happened + when (and by whom). */
+@Composable
+private fun JourneyRow(atIso: String?, type: String, text: String, last: Boolean) {
+    val (emoji, tint) = when (type) {
+        "created" -> "🟢" to GreenL
+        "status" -> "🔁" to IndigoL
+        "temperature" -> "🌡️" to AmberL
+        "note" -> "📝" to Color(0xFF64748B)
+        "budget" -> "💰" to GreenL
+        "site_visit" -> "📍" to PurpleL
+        "follow_up" -> "⏰" to Color(0xFF0891B2)
+        "call" -> "📞" to GreenL
+        else -> "✏️" to Color(0xFF64748B)
+    }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(28.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) { Text(emoji, style = MaterialTheme.typography.labelMedium) }
+            if (!last) Box(Modifier.width(2.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.padding(bottom = 8.dp)) {
+            Text(text, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            isoMs(atIso)?.let {
+                Text(fmtWhen(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 }

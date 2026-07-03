@@ -117,6 +117,12 @@ class AutoDialerService : Service() {
             while (stateChannel.tryReceive().isSuccess) { /* discard */ }
 
             val startedAt = Instant.now()
+            // Prefer the phone's OWN native recording (both sides, real
+            // quality) — the OS records, we harvest. Only fall back to the
+            // mic-only MediaRecorder when no native folder is configured.
+            val useNative = cfg.recordingEnabled &&
+                NativeRecordingHarvester.isConfigured(this@AutoDialerService)
+            SimCallMonitor.begin(contact.phone, contact.name, nativeRec = useNative)
             val placed = placeCall(contact.phone, cfg.simSlot)
             var outcome: String
             var durationSec = 0
@@ -133,24 +139,26 @@ class AutoDialerService : Service() {
                 if (!wentOffhook) {
                     outcome = "no_answer"
                 } else {
-                    // Prefer the phone's OWN native recording (both sides, real
-                    // quality) — the OS records, we harvest. Only fall back to the
-                    // mic-only MediaRecorder when no native folder is configured.
-                    val useNative = cfg.recordingEnabled &&
-                        NativeRecordingHarvester.isConfigured(this@AutoDialerService)
-                    if (cfg.recordingEnabled && !useNative) runCatching { SimRecorder.start(this) }
+                    var recStarted = false
+                    if (cfg.recordingEnabled && !useNative) {
+                        recStarted = runCatching { SimRecorder.start(this) }.getOrDefault(false)
+                    }
+                    SimCallMonitor.onActive(recording = recStarted)
+                    bringAppToFront()
                     // Now wait for it to return to idle = call ended.
                     awaitState(TelephonyManager.CALL_STATE_IDLE)
                     durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()
                     outcome = if (durationSec >= cfg.connectedThresholdSeconds) "connected" else "no_answer"
+                    // Manual REC toggle may have stopped (and stashed) the recorder already.
+                    val micPath = runCatching { SimRecorder.stop() }.getOrNull()
+                        ?: SimCallMonitor.takeManualRecording()
                     recordingPath = when {
-                        useNative && outcome == "connected" -> harvestNative(startedAt, contact.phone)
-                        cfg.recordingEnabled && !useNative -> runCatching { SimRecorder.stop() }.getOrNull()
-                        else -> null
+                        useNative && outcome == "connected" -> harvestNative(startedAt, contact.phone) ?: micPath
+                        else -> micPath
                     }
-                    if (useNative) runCatching { SimRecorder.stop() }  // no-op safety
                 }
             }
+            SimCallMonitor.end(this)
             val endedAt = Instant.now()
 
             persistResult(contact.id, contact, startedAt, endedAt, durationSec, outcome, cfg.simSlot, recordingPath)
@@ -191,6 +199,15 @@ class AutoDialerService : Service() {
         stopForeground(STOP_FOREGROUND_DETACH)
     }
 
+    /** Best-effort: reopen the app over the system dialer once the call is off-hook. */
+    private fun bringAppToFront() {
+        runCatching {
+            val i = Intent(this, com.salesautocall.app.MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(i)
+        }
+    }
+
     /** Pulls the OEM's native recording for the just-ended call and stages it as a
      *  cache file so it flows through the same upload path as a mic recording. */
     private suspend fun harvestNative(startedAt: Instant, phone: String): String? {
@@ -212,7 +229,9 @@ class AutoDialerService : Service() {
         simSlot: Int?,
         recordingPath: String?,
     ) {
-        scope.launch(Dispatchers.IO) {
+        // NonCancellable: a Stop tap (or service teardown) right after a call must
+        // not kill the insert/upload mid-flight — that's how calls went missing.
+        scope.launch(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
             runCatching {
                 val logId = Repository.logCall(
                     CallLog(
