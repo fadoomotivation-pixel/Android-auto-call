@@ -84,6 +84,10 @@ data class AppState(
     val leadFilter: String = "open",
     /** Set when another screen (e.g. Campaign tab) asks Leads to open in select mode. */
     val leadsSelectRequested: Boolean = false,
+    // lead history timeline (kab aayi, kab kya update hua)
+    val historyFor: Contact? = null,
+    val historyItems: List<LeadTimelineItem> = emptyList(),
+    val historyLoading: Boolean = false,
     // in-app WhatsApp chat (tracked via the company number)
     val waChatContact: Contact? = null,
     val waThread: List<WhatsAppMessage> = emptyList(),
@@ -121,6 +125,15 @@ enum class LeadFilter(val key: String, val label: String, val statuses: Set<Stri
     BOOKED("booked", "Booked", setOf("booked")),
     ALL("all", "All", emptySet()),
 }
+
+/** One row of a lead's history timeline (creation, updates, calls, follow-ups). */
+data class LeadTimelineItem(
+    val atIso: String?,
+    /** "created" | "status" | "temperature" | "note" | "budget" | "site_visit" | "follow_up" | "call" | "update" */
+    val type: String,
+    val text: String,
+    val by: String? = null,
+)
 
 /** Roll-up shown in the Calls-tab summary card. */
 data class CallSummary(
@@ -751,6 +764,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 Repository.setDisposition(contactId, status, null)
                 Repository.clearSuggestedDisposition(callLogId)
             }.onSuccess {
+                launchActivityLog(contactId) {
+                    add("status" to "Stage → ${stageDisplay(status)} (AI suggestion applied)")
+                }
                 set { st ->
                     st.copy(
                         callList = st.callList.map { c ->
@@ -908,6 +924,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { Repository.setDisposition(contactId, status, null) }
                 .onSuccess {
+                    launchActivityLog(contactId) { add("status" to "Stage → ${stageDisplay(status)}") }
                     set { st ->
                         st.copy(leads = st.leads.map { c ->
                             if (c.id == contactId) c.copy(status = status) else c
@@ -943,15 +960,92 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             ) else c
                         })
                     }
+                    // Record what changed in the lead's history timeline.
+                    launchActivityLog(contactId) {
+                        if (status != null) add("status" to "Stage → ${stageDisplay(status)}")
+                        if (temperature != null) add("temperature" to "Marked ${temperature.replaceFirstChar { c -> c.uppercase() }}")
+                        if (budget != null) add("budget" to "Budget: $budget")
+                        if (note != null) add("note" to "Note: $note")
+                        if (svProj != null || svAt != null) {
+                            val at = svAt?.let { s -> " on ${prettyDateTime(s)}" } ?: ""
+                            add("site_visit" to "Site visit${svProj?.let { p -> ": $p" } ?: ""}$at")
+                        }
+                    }
                 }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
     }
 
+    /** Fire-and-forget history entries; failures never disturb the main flow. */
+    private fun launchActivityLog(contactId: String, build: MutableList<Pair<String, String>>.() -> Unit) {
+        val entries = mutableListOf<Pair<String, String>>().apply(build)
+        if (entries.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            entries.forEach { (type, detail) ->
+                runCatching { Repository.logLeadActivity(contactId, type, detail) }
+            }
+        }
+    }
+
+    /** Human label for a pipeline status key ("site_visit" → "Site Visit"). */
+    private fun stageDisplay(status: String): String = when (status) {
+        "new", "queued" -> "New"
+        "called", "no_answer", "busy" -> "Contacted"
+        "callback" -> "Callback"
+        "follow_up" -> "Follow-up"
+        "interested" -> "Interested"
+        "site_visit" -> "Site Visit"
+        "proposal" -> "Proposal"
+        "booked" -> "Closed / Won"
+        "not_interested" -> "Not interested"
+        "lost" -> "Lost"
+        "dnc" -> "Do Not Call"
+        else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
+    }
+
+    private fun prettyDateTime(iso: String): String = runCatching {
+        java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("d MMM, h:mm a"))
+    }.getOrDefault(iso.take(16).replace('T', ' '))
+
+    // ---------- lead history timeline ----------
+
+    /** Opens the "Lead history" dialog: created date + updates + calls, newest first. */
+    fun openLeadHistory(c: Contact) {
+        set { it.copy(historyFor = c, historyItems = emptyList(), historyLoading = true) }
+        val id = c.id ?: run {
+            set { it.copy(historyLoading = false) }
+            return
+        }
+        viewModelScope.launch {
+            val items = mutableListOf<LeadTimelineItem>()
+            runCatching { Repository.fetchLeadActivities(id) }.getOrNull()?.forEach { a ->
+                items += LeadTimelineItem(a.createdAt, a.type, a.detail, a.actorName)
+            }
+            runCatching { Repository.fetchCallsForContact(id) }.getOrNull()?.forEach { call ->
+                val dur = if (call.durationSeconds > 0) " · ${call.durationSeconds / 60}m ${call.durationSeconds % 60}s" else ""
+                val outcome = when (call.outcome) {
+                    "connected" -> "Connected"; "no_answer" -> "No answer"; "missed" -> "Missed"; "failed" -> "Failed"
+                    else -> call.outcome ?: "—"
+                }
+                val dir = if (call.direction == "incoming") "Incoming call" else "Call"
+                items += LeadTimelineItem(call.startedAt, "call", "$dir — $outcome$dur")
+            }
+            c.createdAt?.let { items += LeadTimelineItem(it, "created", "Lead added") }
+            items.sortByDescending { it.atIso ?: "" }
+            set { it.copy(historyItems = items, historyLoading = false) }
+        }
+    }
+
+    fun closeLeadHistory() = set { it.copy(historyFor = null, historyItems = emptyList(), historyLoading = false) }
+
     fun setLeadTemperature(contactId: String, temperature: String) {
         viewModelScope.launch {
             runCatching { Repository.setTemperature(contactId, temperature) }
                 .onSuccess {
+                    launchActivityLog(contactId) {
+                        add("temperature" to "Marked ${temperature.replaceFirstChar { c -> c.uppercase() }}")
+                    }
                     set { st ->
                         st.copy(leads = st.leads.map { c ->
                             if (c.id == contactId) c.copy(temperature = temperature) else c
@@ -993,6 +1087,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         set { st ->
                             st.copy(leads = st.leads.map { c ->
                                 if (c.id == contactId) c.copy(status = "follow_up") else c
+                            })
+                        }
+                        launchActivityLog(contactId) {
+                            add("follow_up" to buildString {
+                                append("Follow-up scheduled for ${shortWhen(dueAtMillis)}")
+                                if (!note.isNullOrBlank()) append(" — $note")
                             })
                         }
                     }
