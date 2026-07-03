@@ -1,18 +1,23 @@
 package com.salesautocall.app
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.viewModels
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.salesautocall.app.ui.AppRoot
 import com.salesautocall.app.ui.AppTheme
 import com.salesautocall.app.ui.MainViewModel
+import com.salesautocall.app.ui.PermissionOnboarding
 import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
@@ -32,13 +37,9 @@ class MainActivity : ComponentActivity() {
 
     private val vm: MainViewModel by viewModels()
 
-    private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { /* no-op */ }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        requestRuntimePermissions()
 
         // Hourly call-log sync, but only on a network and not when the battery is
         // low — so it never wakes the phone to fail or drain a dying battery.
@@ -55,7 +56,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             AppTheme {
                 Surface {
-                    AppRoot(vm)
+                    // First run (or missing essentials): a friendly one-screen
+                    // permission request with reasons, instead of a raw dialog burst.
+                    var showPerms by remember { mutableStateOf(!essentialsGranted()) }
+                    if (showPerms) PermissionOnboarding(onDone = { showPerms = false })
+                    else AppRoot(vm)
                 }
             }
         }
@@ -115,20 +120,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requestRuntimePermissions() {
-        val perms = mutableListOf(
+    /** True when the permissions the app can't function without are all granted. */
+    private fun essentialsGranted(): Boolean {
+        val essentials = mutableListOf(
             Manifest.permission.CALL_PHONE,
             Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.READ_CALL_LOG,
             Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            // Lets the app auto-answer the CallerDesk callback (one-tap cloud calling).
-            Manifest.permission.ANSWER_PHONE_CALLS,
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            perms += Manifest.permission.POST_NOTIFICATIONS
+            essentials += Manifest.permission.POST_NOTIFICATIONS
         }
-        permissionLauncher.launch(perms.toTypedArray())
+        return essentials.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
     }
 }
