@@ -363,6 +363,12 @@ private sealed class Tab(val route: String, val label: String) {
 @Composable
 private fun MainShell(vm: MainViewModel) {
     val state by vm.state.collectAsState()
+
+    if (state.company == null && !state.loading && state.profile != null) {
+        RequireCompanyScreen(vm)
+        return
+    }
+
     val nav = rememberNavController()
     val tabs = listOf(Tab.Home, Tab.Leads, Tab.Dialer, Tab.Campaign, Tab.Team)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -825,5 +831,65 @@ private fun QuickTile(item: QuickAction, modifier: Modifier = Modifier, onClick:
         Icon(item.icon, contentDescription = item.label, tint = MenuAccent, modifier = Modifier.size(22.dp))
         Spacer(Modifier.height(7.dp))
         Text(item.label, style = MaterialTheme.typography.labelMedium, color = MenuText, maxLines = 1)
+    }
+}
+
+@Composable
+private fun RequireCompanyScreen(vm: MainViewModel) {
+    val state by vm.state.collectAsState()
+    var code by remember { mutableStateOf("") }
+    
+    Box(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            Modifier.fillMaxWidth(0.85f).padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                Icons.Default.Business,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Join your team",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "You need to join a company before using the app. Ask your admin for the 6-character invite code.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(32.dp))
+            OutlinedTextField(
+                value = code,
+                onValueChange = { code = it.uppercase() },
+                label = { Text("Invite Code") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(24.dp))
+            Button(
+                onClick = { vm.joinCompany(code) },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                enabled = code.isNotBlank() && !state.loading
+            ) {
+                if (state.loading) {
+                    CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                } else {
+                    Text("Join Company")
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            TextButton(onClick = { vm.signOut() }) {
+                Text("Sign out", color = MaterialTheme.colorScheme.error)
+            }
+        }
     }
 }

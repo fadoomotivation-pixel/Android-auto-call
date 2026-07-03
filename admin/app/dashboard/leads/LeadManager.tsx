@@ -50,6 +50,7 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
     let q = supabase
       .from("contacts")
       .select("id, name, phone, company_name, status, salesperson_id, budget, territory, created_at")
+      .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (tab === "unassigned") {
       q = q.is("salesperson_id", null);
@@ -60,7 +61,7 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
     const s = safe(search);
     if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
     return q;
-  }, [supabase, tab, agentFilter, search]);
+  }, [supabase, tab, agentFilter, search, companyId]);
 
   const load = useCallback(
     async (reset: boolean) => {
@@ -76,20 +77,20 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
   );
 
   const refreshStats = useCallback(async () => {
-    const totalRes = await supabase.from("contacts").select("id", { count: "exact", head: true });
-    const unRes = await supabase.from("contacts").select("id", { count: "exact", head: true }).is("salesperson_id", null);
+    const totalRes = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("company_id", companyId);
+    const unRes = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("company_id", companyId).is("salesperson_id", null);
     const total = totalRes.count ?? 0;
     const unassigned = unRes.count ?? 0;
     setStats({ total, unassigned, assigned: total - unassigned });
     const counts: Record<string, number> = {};
     await Promise.all(
       salespeople.map(async (sp) => {
-        const r = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("salesperson_id", sp.id);
+        const r = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("salesperson_id", sp.id);
         counts[sp.id] = r.count ?? 0;
       }),
     );
     setAgentCounts(counts);
-  }, [supabase, salespeople]);
+  }, [supabase, salespeople, companyId]);
 
   // Reload list when filters change (debounced for search).
   useEffect(() => {
@@ -159,6 +160,23 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
     setSelected(new Set());
     await load(true);
     await refreshStats();
+  }
+
+  async function deleteSelected() {
+    if (selected.size === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete ${selected.size} lead(s)?`)) return;
+    setBusy(true);
+    const { error } = await supabase.rpc("admin_delete_contacts", { p_contact_ids: Array.from(selected) });
+    setBusy(false);
+    if (error) {
+      setMsg(`Error deleting leads: ${error.message}`);
+    } else {
+      setMsg(`Deleted ${selected.size} lead(s).`);
+      setSelected(new Set());
+      await load(true);
+      await refreshStats();
+    }
+    setTimeout(() => setMsg(null), 3000);
   }
 
   async function autoAssignByTerritory() {
@@ -284,6 +302,11 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
             Unassign ({selected.size})
           </button>
         )}
+        {selected.size > 0 && (
+          <button className="link" style={{ color: "#ef4444" }} disabled={busy} onClick={deleteSelected}>
+            🗑️ Delete ({selected.size})
+          </button>
+        )}
       </div>
 
       {/* Quick select */}
@@ -311,6 +334,7 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
                   {l.company_name && <span>· 🏢 {l.company_name}</span>}
                   {l.territory && <span>· 📍 {l.territory}</span>}
                   {l.budget && <span>· 💰 {l.budget}</span>}
+                  {l.created_at && <span>· 🕒 {new Date(l.created_at).toLocaleString()}</span>}
                 </div>
                 {tab === "assigned" && <div style={{ color: "var(--accent)", fontSize: 12, marginTop: 6, fontWeight: 500 }}>→ Assigned to: {nameOf(l.salesperson_id)}</div>}
               </div>

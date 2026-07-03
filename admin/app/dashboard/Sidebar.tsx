@@ -26,8 +26,8 @@ export function Sidebar({
         </button>
       </div>
       <aside className={`sidebar ${isOpen ? "mobile-open" : ""}`} onClick={() => setIsOpen(false)}>
-        <h1 className="no-print" style={{ display: "none" }}>📞 SalesAutoCall</h1>
-        <NavLink href="/dashboard" label="Overview" />
+        <h1 className="no-print" style={{ display: "none" }}>SalesAutoCall</h1>
+        <NavLink href="/dashboard" label="✨ Overview" />
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
         {profile?.role === "admin" && <NavLink href="/dashboard/attendance" label="📅 Attendance" />}
@@ -56,11 +56,22 @@ export function Sidebar({
         
         <div className="spacer" />
         
-        <div style={{ padding: "0 6px 10px", color: "var(--muted)", fontSize: 12 }}>
-          <div style={{ color: "var(--text)", fontWeight: 600 }}>
+        <div style={{ 
+          padding: "12px", 
+          background: "rgba(255,255,255,0.03)", 
+          borderRadius: "12px", 
+          border: "1px solid rgba(255,255,255,0.05)",
+          marginBottom: "12px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "2px"
+        }}>
+          <div style={{ color: "#fff", fontWeight: 600, fontSize: "13px" }}>
             {company?.name ?? "No company"}
           </div>
-          <div>{profile?.full_name ?? email}</div>
+          <div style={{ color: "var(--muted)", fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {profile?.full_name ?? email}
+          </div>
         </div>
         
         <form action="/auth/signout" method="post">

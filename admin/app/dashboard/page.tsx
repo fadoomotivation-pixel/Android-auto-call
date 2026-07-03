@@ -20,21 +20,45 @@ function fmtDuration(seconds: number) {
 
 export default async function OverviewPage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id, role")
+    .eq("id", user.id)
+    .single();
+
+  const isSuper = profile?.role === "admin" && !profile.company_id; // Approximation, platform_admins is the true source
+
   const since14 = new Date(Date.now() - 14 * 86400000).toISOString();
+
+  let contactsQuery = supabase.from("contacts").select("id", { count: "exact", head: true });
+  let callsCountQuery = supabase.from("call_logs").select("id", { count: "exact", head: true });
+  let salesQuery = supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "salesperson");
+  let recentCallsQuery = supabase
+    .from("call_logs")
+    .select("id,phone,outcome,salesperson_id,duration_seconds,created_at")
+    .gte("created_at", since14)
+    .order("created_at", { ascending: false })
+    .limit(5000);
+  let peopleQuery = supabase.from("profiles").select("id, full_name").eq("role", "salesperson");
+
+  if (profile?.company_id) {
+    contactsQuery = contactsQuery.eq("company_id", profile.company_id);
+    callsCountQuery = callsCountQuery.eq("company_id", profile.company_id);
+    salesQuery = salesQuery.eq("company_id", profile.company_id);
+    recentCallsQuery = recentCallsQuery.eq("company_id", profile.company_id);
+    peopleQuery = peopleQuery.eq("company_id", profile.company_id);
+  }
 
   const [{ count: contactCount }, { count: callCount }, { count: salesCount }, { data: recent }, { data: people }] =
     await Promise.all([
-      supabase.from("contacts").select("*", { count: "exact", head: true }),
-      supabase.from("call_logs").select("*", { count: "exact", head: true }),
-      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "salesperson"),
-      supabase
-        .from("call_logs")
-        .select("id,phone,outcome,salesperson_id,duration_seconds,created_at")
-        .gte("created_at", since14)
-        .order("created_at", { ascending: false })
-        .limit(5000)
-        .returns<RecentCall[]>(),
-      supabase.from("profiles").select("id, full_name"),
+      contactsQuery,
+      callsCountQuery,
+      salesQuery,
+      recentCallsQuery.returns<RecentCall[]>(),
+      peopleQuery,
     ]);
 
   const calls = recent ?? [];
@@ -110,9 +134,12 @@ export default async function OverviewPage() {
                   style={{
                     width: "100%",
                     height: `${(perDay[d] / maxDay) * 100}%`,
-                    minHeight: 3,
-                    background: "var(--accent)",
-                    borderRadius: 6,
+                    minHeight: 4,
+                    background: "linear-gradient(180deg, var(--accent) 0%, rgba(16,185,129,0.2) 100%)",
+                    borderTop: "1px solid rgba(255,255,255,0.4)",
+                    borderRadius: "6px 6px 2px 2px",
+                    boxShadow: "0 -4px 12px rgba(16,185,129,0.2)",
+                    transition: "height 1s cubic-bezier(0.4, 0, 0.2, 1)"
                   }}
                 />
                 <div style={{ fontSize: 10, color: "var(--muted)" }}>{d.slice(5)}</div>
@@ -132,8 +159,8 @@ export default async function OverviewPage() {
                   <div style={{ width: 92, fontSize: 12 }}>
                     <span className={`badge ${o}`}>{o}</span>
                   </div>
-                  <div style={{ flex: 1, background: "var(--panel-2)", borderRadius: 6, overflow: "hidden" }}>
-                    <div style={{ width: `${(n / maxOutcome) * 100}%`, background: "var(--accent)", height: 16 }} />
+                  <div style={{ flex: 1, background: "rgba(0,0,0,0.3)", borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.05)", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.2)" }}>
+                    <div style={{ width: `${(n / maxOutcome) * 100}%`, background: "linear-gradient(90deg, var(--accent) 0%, #34d399 100%)", height: 16, borderRadius: 8, boxShadow: "0 0 12px rgba(16,185,129,0.4)" }} />
                   </div>
                   <div style={{ width: 36, textAlign: "right", fontSize: 13 }}>{n}</div>
                 </div>

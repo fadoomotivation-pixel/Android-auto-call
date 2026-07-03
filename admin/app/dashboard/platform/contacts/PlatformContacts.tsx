@@ -136,6 +136,24 @@ export function PlatformContacts({
     flash(`Reassigned ${data ?? 0} lead(s) to ${companyName(assignCompany)}.`);
   }
 
+  async function deleteSelected() {
+    if (selected.size === 0) return;
+    if (!confirm(`Are you sure you want to permanently delete ${selected.size} lead(s)?`)) return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    const { error } = await supabase.rpc("admin_delete_contacts", {
+      p_contact_ids: Array.from(selected)
+    });
+    setBusy(false);
+    if (error) {
+      setErr(error.message);
+      return;
+    }
+    setSelected(new Set());
+    flash(`Deleted ${selected.size} lead(s).`);
+  }
+
   async function createLeads(leads: ParsedLead[]) {
     if (!addCompany) {
       setErr("Pick a company to add the leads to.");
@@ -230,6 +248,14 @@ export function PlatformContacts({
               disabled={busy || !assignCompany || selected.size === 0}
             >
               {busy ? "Working…" : `Assign ${selected.size}`}
+            </button>
+            <button
+              className="primary"
+              style={{ background: "#ef4444", borderColor: "#ef4444" }}
+              onClick={deleteSelected}
+              disabled={busy || selected.size === 0}
+            >
+              🗑️ Delete {selected.size}
             </button>
           </div>
         </div>
@@ -353,7 +379,7 @@ export function PlatformContacts({
           </thead>
           <tbody>
             {rows.map((c) => (
-              <tr key={c.id}>
+              <tr key={c.id} className="hover-row">
                 <td>
                   <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} />
                 </td>

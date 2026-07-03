@@ -35,6 +35,8 @@ export function ImportLeads({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [duplicateConflicts, setDuplicateConflicts] = useState<ParsedLead[]>([]);
+  const [freshLeads, setFreshLeads] = useState<ParsedLead[]>([]);
 
   async function onFile(file: File) {
     setError(null);
@@ -80,23 +82,47 @@ export function ImportLeads({
     setBusy(true);
     setError(null);
 
-    // Skip leads whose phone already exists for this company, so re-importing
-    // an overlapping CSV (common with weekly ad-lead exports) never creates
-    // duplicate contacts. Match on the last 10 digits to ignore +91 prefixes.
+    // Check for duplicates
     const norm = (p: string) => (p || "").replace(/\D/g, "").slice(-10);
     const { data: existing } = await supabase
       .from("contacts")
       .select("phone")
       .eq("company_id", companyId);
     const have = new Set((existing ?? []).map((r) => norm(r.phone as string)));
-    const fresh = parsed.filter((l) => !have.has(norm(l.phone)));
-    if (fresh.length === 0) {
+    const fresh: typeof parsed = [];
+    const dupes: typeof parsed = [];
+    const seenNew = new Set<string>();
+    
+    for (const l of parsed) {
+      const n = norm(l.phone);
+      if (!have.has(n) && !seenNew.has(n)) {
+        fresh.push(l);
+        seenNew.add(n);
+      } else {
+        dupes.push(l);
+      }
+    }
+
+    if (dupes.length > 0) {
+      setFreshLeads(fresh);
+      setDuplicateConflicts(dupes);
       setBusy(false);
-      setError(`All ${parsed.length} lead(s) already exist for this company — nothing to import.`);
       return;
     }
 
-    const rows = fresh.map((l) => ({
+    await executeImport(fresh);
+  }
+
+  async function executeImport(leadsToImport: ParsedLead[]) {
+    if (leadsToImport.length === 0) {
+      setBusy(false);
+      setDuplicateConflicts([]);
+      setError(`All ${parsed.length} lead(s) already exist for this company (or are duplicates) — nothing to import.`);
+      return;
+    }
+
+    setBusy(true);
+    const rows = leadsToImport.map((l) => ({
       company_id: companyId,
       salesperson_id: assignTo || null,
       name: l.name,
@@ -214,20 +240,48 @@ export function ImportLeads({
 
         {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, color: "var(--muted)" }}>Assign to (optional):</span>
-          <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input}>
-            <option value="">Leave unassigned</option>
-            {salespeople.map((sp) => (
-              <option key={sp.id} value={sp.id}>{sp.full_name || sp.id.slice(0, 8)}</option>
-            ))}
-          </select>
-          <div style={{ flex: 1 }} />
-          <button className="link" onClick={onClose}>Cancel</button>
-          <button className="primary" style={{ width: "auto", padding: "9px 18px" }} disabled={busy || parsed.length === 0} onClick={doImport}>
-            {busy ? "Importing…" : `Import ${parsed.length || ""}`}
-          </button>
-        </div>
+        {duplicateConflicts.length > 0 ? (
+          <div className="card" style={{ marginTop: 12, background: "rgba(245, 158, 11, 0.05)", border: "1px solid rgba(245, 158, 11, 0.2)" }}>
+            <strong style={{ color: "#f59e0b" }}>⚠️ Found {duplicateConflicts.length} duplicate leads</strong>
+            <p className="subtitle" style={{ marginTop: 4 }}>
+              These numbers already exist in your system or appear multiple times in your file.
+            </p>
+            <div style={{ marginTop: 8, fontSize: 13, color: "var(--muted)", maxHeight: 80, overflow: "auto" }}>
+              {duplicateConflicts.slice(0, 10).map((l, i) => <div key={i}>{l.name || l.phone} ({l.phone})</div>)}
+              {duplicateConflicts.length > 10 ? <div>...and {duplicateConflicts.length - 10} more</div> : null}
+            </div>
+            
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button className="primary" style={{ flex: 1 }} onClick={() => {
+                setDuplicateConflicts([]);
+                executeImport(parsed); // Force import all
+              }}>
+                Import Anyway ({parsed.length})
+              </button>
+              <button className="link" style={{ flex: 1, border: "1px solid var(--border)" }} onClick={() => {
+                setDuplicateConflicts([]);
+                executeImport(freshLeads); // Skip dupes
+              }}>
+                Skip Duplicates ({freshLeads.length})
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, color: "var(--muted)" }}>Assign to (optional):</span>
+            <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input}>
+              <option value="">Leave unassigned</option>
+              {salespeople.map((sp) => (
+                <option key={sp.id} value={sp.id}>{sp.full_name || sp.id.slice(0, 8)}</option>
+              ))}
+            </select>
+            <div style={{ flex: 1 }} />
+            <button className="link" onClick={onClose}>Cancel</button>
+            <button className="primary" style={{ width: "auto", padding: "9px 18px" }} disabled={busy || parsed.length === 0} onClick={doImport}>
+              {busy ? "Importing…" : `Import ${parsed.length || ""}`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
