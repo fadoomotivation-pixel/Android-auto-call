@@ -1842,10 +1842,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         message = "🎤 Voice note saved — AI summary ban raha hai…",
                     )
                 }
-                // Give the AI a moment, then refresh so transcript/summary appears.
+                // Give the AI a moment, then refresh everything — it may have set a
+                // site visit / callback / budget from what the rep said.
                 kotlinx.coroutines.delay(12_000)
-                val fresh = runCatching { Repository.fetchVoiceNotes(contactId) }.getOrNull()
-                if (fresh != null) set { if (it.leadDetailId == contactId) it.copy(voiceNotes = fresh) else it }
+                if (_state.value.leadDetailId == contactId) {
+                    refreshLeadDetail()
+                    loadLeads(force = true)
+                    loadFollowUps(force = true)
+                }
             } else {
                 set { it.copy(voiceUploading = false, error = "Couldn't save the voice note. Check internet and retry.") }
             }
