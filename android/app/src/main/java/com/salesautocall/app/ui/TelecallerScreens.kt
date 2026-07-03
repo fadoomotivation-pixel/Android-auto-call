@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
@@ -524,6 +525,13 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     val pipelineValue = app.leads.filter { it.status !in setOf("lost", "not_interested", "dnc") }.sumOf { parseBudgetRupees(it.budget) }
     val tokenCollected = app.leads.sumOf { it.tokenAmount ?: 0.0 }
     val hotUncontacted = app.leads.count { it.temperature == "hot" && it.status in setOf("new", "queued") }
+    // Safety net: interested/callback leads with NO pending follow-up are
+    // "unprotected" — one tap gives each a reminder so none can slip away.
+    val protectedIds = app.followUpList.mapNotNull { it.contactId }.toSet()
+    val protectedPhones = app.followUpList.map { it.phone }.toSet()
+    val unprotected = app.leads.filter {
+        it.status in setOf("interested", "callback") && it.id !in protectedIds && it.phone !in protectedPhones
+    }
 
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -532,6 +540,37 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     ) {
         // Greeting hero
         item { GreetingCard(app, firstName, onOpenAttendance = { onNavigate("attendance") }) }
+
+        // "No lead left behind" — interested leads without a reminder, fixed in one tap.
+        if (unprotected.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Amber.copy(alpha = 0.12f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                ) {
+                    Row(
+                        Modifier.clickable { vm.protectLeads(unprotected) }.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(40.dp).clip(CircleShape).background(Amber.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+                            Text("🛡️", fontSize = 18.sp)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${unprotected.size} interested lead${if (unprotected.size == 1) "" else "s"} without a reminder",
+                                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                            )
+                            Text("Tap to protect all — follow-up tomorrow 10 AM",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Amber)
+                    }
+                }
+            }
+        }
 
         // Stat tiles 2×2
         item {
@@ -1457,12 +1496,16 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
     val app by vm.state.collectAsState()
     val who = app.postCallName ?: app.postCallPhone ?: return
     val connected = app.postCallConnected
-    var showSchedule by remember { mutableStateOf(false) }
+    // Which flow the schedule chips are serving: plain callback vs. an
+    // Interested lead whose next touch we refuse to leave unscheduled.
+    var scheduleFor by remember { mutableStateOf<String?>(null) }
     // Optional temperature + note captured in the SAME step as the outcome, so a
     // good call ("Interested, hot, wants corner plot") is one screen, not five.
     var temp by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf("") }
     fun dispose(status: String) = vm.postCallDispose(status, temp, note)
+    // Last conversation context — the rep should never have to remember it.
+    val lead = app.postCallContactId?.let { id -> app.leads.find { it.id == id } }
 
     AlertDialog(
         onDismissRequest = { vm.dismissPostCall() },
@@ -1474,8 +1517,28 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
             }
         },
         text = {
-            if (!showSchedule) {
+            if (scheduleFor == null) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    // Context strip: last note + budget, always in front of the rep.
+                    val lastNote = lead?.notes?.takeIf { it.isNotBlank() }
+                    val budget = lead?.budget?.takeIf { it.isNotBlank() }
+                    if (lastNote != null || budget != null) {
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
+                        ) {
+                            budget?.let {
+                                Text("💰 $it", style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            lastNote?.let {
+                                Text("📝 $it", style = MaterialTheme.typography.bodySmall, maxLines = 2,
+                                    color = MaterialTheme.colorScheme.onSurface)
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
                     // Temperature (optional, one tap) — call hot leads back first.
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         TEMPERATURES.forEach { (key, label) ->
@@ -1511,8 +1574,10 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DispoButton("Callback ↻", Indigo.copy(alpha = 0.12f), Indigo, Modifier.weight(1f)) { showSchedule = true }
-                        DispoButton("Interested ⭐", Green.copy(alpha = 0.12f), Green, Modifier.weight(1f)) { dispose("interested") }
+                        DispoButton("Callback ↻", Indigo.copy(alpha = 0.12f), Indigo, Modifier.weight(1f)) { scheduleFor = "callback" }
+                        // Interested NEVER ends without a next touch — it opens the
+                        // schedule chips instead of silently closing the sheet.
+                        DispoButton("Interested ⭐", Green.copy(alpha = 0.12f), Green, Modifier.weight(1f)) { scheduleFor = "interested" }
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1521,18 +1586,30 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     }
                 }
             } else {
-                // Inline quick-snooze for Callback — carries the temp + note too.
+                val interested = scheduleFor == "interested"
+                // Inline quick-snooze — carries the temp + note, and stamps the
+                // right status so an Interested lead stays "interested".
                 QuickScheduleChips(
                     who = who,
-                    onPick = { millis, n -> vm.postCallScheduleFollowUp(millis, n ?: note.ifBlank { null }, temp) },
-                    onBack = { showSchedule = false },
+                    headline = if (interested) "⭐ Interested — lock the next call" else "When should we remind you?",
+                    onPick = { millis, n ->
+                        vm.postCallScheduleFollowUp(millis, n ?: note.ifBlank { null }, temp, scheduleFor ?: "callback")
+                    },
+                    onBack = { scheduleFor = null },
+                    onSkip = if (interested) ({ dispose("interested") }) else null,
+                    skipLabel = "Save interested without reminder",
                 )
             }
         },
         confirmButton = {},
         dismissButton = {
-            if (!showSchedule) {
-                TextButton(onClick = { vm.dismissPostCall() }) { Text("Skip") }
+            if (scheduleFor == null) {
+                // A typed note or temperature is never thrown away — Skip
+                // becomes "Save & close" the moment something is captured.
+                val hasContext = note.isNotBlank() || temp != null
+                TextButton(onClick = {
+                    if (hasContext) vm.postCallSaveContext(temp, note) else vm.dismissPostCall()
+                }) { Text(if (hasContext) "Save & close" else "Skip") }
             }
         },
     )
@@ -1558,13 +1635,16 @@ private fun QuickScheduleChips(
     who: String,
     onPick: (Long, String?) -> Unit,
     onBack: (() -> Unit)? = null,
+    headline: String = "When should we remind you?",
+    onSkip: (() -> Unit)? = null,
+    skipLabel: String = "Skip reminder",
 ) {
     val now = java.time.ZonedDateTime.now()
     fun at(days: Long, hour: Int) = now.plusDays(days).withHour(hour).withMinute(0).withSecond(0).toInstant().toEpochMilli()
     val currentHour = now.hour
 
     Column {
-        Text("When should we remind you?", style = MaterialTheme.typography.labelLarge)
+        Text(headline, style = MaterialTheme.typography.labelLarge)
         Spacer(Modifier.height(8.dp))
         // Smart presets — hide options that are already in the past.
         OutlinedButton(onClick = { onPick(now.plusMinutes(30).toInstant().toEpochMilli(), null) },
@@ -1585,8 +1665,12 @@ private fun QuickScheduleChips(
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Tomorrow 10 AM") }
         OutlinedButton(onClick = { onPick(at(1, 16), null) },
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Tomorrow 4 PM") }
+        if (onSkip != null) {
+            Spacer(Modifier.height(2.dp))
+            TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text(skipLabel) }
+        }
         if (onBack != null) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(2.dp))
             TextButton(onClick = onBack) { Text("← Back to disposition") }
         }
     }

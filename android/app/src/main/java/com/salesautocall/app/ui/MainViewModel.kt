@@ -1556,14 +1556,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Schedule a follow-up from the post-call popup, carrying any temperature /
-     *  note captured on the sheet, then dismiss it. */
-    fun postCallScheduleFollowUp(dueAtMillis: Long, note: String?, temperature: String? = null) {
+     *  note captured on the sheet, then dismiss it. [status] lets the Interested
+     *  flow stamp the lead "interested" while still locking in the next touch. */
+    fun postCallScheduleFollowUp(dueAtMillis: Long, note: String?, temperature: String? = null, status: String = "callback") {
         val s = _state.value
         val contactId = s.postCallContactId
         val phone = s.postCallPhone ?: return
         val name = s.postCallName
         scheduleFollowUp(contactId, phone, name, dueAtMillis, note)
-        postCallDispose("callback", temperature, note)
+        postCallDispose(status, temperature, note)
+    }
+
+    /** "Skip" with a note/temperature typed: save what was captured without
+     *  touching the lead's status, so nothing the rep wrote is ever lost. */
+    fun postCallSaveContext(temperature: String?, note: String?) {
+        val contactId = _state.value.postCallContactId
+        val cleanNote = note?.trim()?.ifBlank { null }
+        if (contactId != null && (cleanNote != null || temperature != null)) {
+            viewModelScope.launch {
+                runCatching {
+                    if (cleanNote != null) Repository.setContactNote(contactId, cleanNote)
+                    if (temperature != null) Repository.setTemperature(contactId, temperature)
+                }
+                set { st ->
+                    st.copy(leads = st.leads.map { c ->
+                        if (c.id == contactId) c.copy(notes = cleanNote ?: c.notes, temperature = temperature ?: c.temperature) else c
+                    }, message = "✓ Note saved")
+                }
+            }
+        }
+        dismissPostCall()
+    }
+
+    /** Safety net: give every unprotected interested/callback lead a follow-up
+     *  tomorrow 10 AM in one tap — no lead ever sits without a next action. */
+    fun protectLeads(items: List<Contact>) {
+        if (items.isEmpty()) return
+        val due = java.time.ZonedDateTime.now().plusDays(1)
+            .withHour(10).withMinute(0).withSecond(0).toInstant().toEpochMilli()
+        viewModelScope.launch {
+            val iso = java.time.Instant.ofEpochMilli(due).toString()
+            items.forEach { c ->
+                runCatching { Repository.scheduleFollowUp(c.id, c.phone, c.name, iso, "Safety net — don't lose this lead") }
+                    .onSuccess { saved ->
+                        FollowUpReminder.schedule(getApplication(), saved?.id ?: c.phone, c.name, c.phone,
+                            "Safety net — don't lose this lead", due)
+                    }
+            }
+            set { it.copy(message = "🛡️ ${items.size} lead${if (items.size == 1) "" else "s"} protected — follow-up tomorrow 10 AM") }
+            loadFollowUps(force = true)
+        }
     }
 
     /** Count of follow-ups due now or overdue — the red badge on Home. */
