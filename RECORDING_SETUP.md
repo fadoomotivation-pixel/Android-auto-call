@@ -6,6 +6,21 @@ and delete the whole company's.
 
 You only need to do this once.
 
+## 0. On each telecaller's phone: enable in-app calling (important!)
+
+Android 10+ blocks call-audio capture for normal apps — that's why SIM
+recordings used to come out empty or missing. The fix is built into the app:
+make **Call Pro AI the phone's default calling app**.
+
+1. Open the app → **Dialer** (or **Calls**) tab → tap the **"Turn on in-app
+   calling"** banner → confirm **Call Pro AI** as the default phone app.
+2. That's it. From now on every SIM call — auto-dial, keypad, or call-back from
+   Recent Calls — runs on the app's own call screen (no jump to the system
+   dialer) and recording starts automatically when the call connects.
+
+This also enables the in-app screen for **incoming** calls, which are now
+logged into call history too.
+
 ## 1. Create a Google OAuth client
 1. Go to <https://console.cloud.google.com/> → create/select a project.
 2. **APIs & Services → Library →** enable **Google Drive API**.

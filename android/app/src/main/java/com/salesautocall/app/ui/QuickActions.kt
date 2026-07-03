@@ -13,14 +13,25 @@ import androidx.core.content.ContextCompat
 /** One-tap shortcuts used by the telecaller call list / follow-up rows. */
 object QuickActions {
 
-    /** Places a direct SIM call when we hold CALL_PHONE, else opens the dialer pre-filled. */
+    /**
+     * Places a direct SIM call when we hold CALL_PHONE — through
+     * [com.salesautocall.app.dialer.ManualCallService] so the call is logged,
+     * recorded (best-effort) and, when the app is the default phone app, runs
+     * entirely on the in-app call screen. Without the permission it falls back
+     * to opening the dialer pre-filled.
+     */
     fun call(context: Context, phone: String) {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) ==
             PackageManager.PERMISSION_GRANTED
-        val action = if (granted) Intent.ACTION_CALL else Intent.ACTION_DIAL
+        if (granted) {
+            runCatching {
+                com.salesautocall.app.dialer.ManualCallService.dial(context, phone, null, null, record = true)
+            }.onFailure { toast(context, "Couldn't start call") }
+            return
+        }
         runCatching {
             context.startActivity(
-                Intent(action, Uri.parse("tel:$phone")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         }.onFailure { toast(context, "Couldn't start call") }
     }

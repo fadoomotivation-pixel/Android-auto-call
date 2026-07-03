@@ -56,12 +56,20 @@ fun DialerScreen(vm: MainViewModel) {
     val cloudAvailable = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank()
     var useCloud by remember(cloudAvailable) { mutableStateOf(cloudAvailable) }
 
+    // Number handed in via ACTION_DIAL / tel: links (we're a dialer app now).
+    val prefill by com.salesautocall.app.dialer.DialPrefill.pending.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(prefill) {
+        com.salesautocall.app.dialer.DialPrefill.consume()?.let { number = it }
+    }
+
     Column(
         Modifier.fillMaxSize().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(24.dp))
         Text("Dialer", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        InAppCallingBanner()
 
         // ---- call method: SIM (your number) vs Cloud (uroperator) ----
         if (cloudAvailable) {
