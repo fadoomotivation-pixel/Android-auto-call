@@ -383,6 +383,10 @@ private fun CompanyCard(vm: MainViewModel, app: AppState) {
 @Composable
 private fun CallRecordingFolderCard(context: android.content.Context) {
     var folder by remember { mutableStateOf(com.salesautocall.app.data.AppPrefs.getRecordingFolder(context)) }
+    // Auto-detect where the phone saves call recordings so the rep doesn't hunt.
+    val detected by androidx.compose.runtime.produceState<String?>(initialValue = null) {
+        value = runCatching { com.salesautocall.app.dialer.RecordingFolders.detectDisplayPath(context) }.getOrNull()
+    }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
@@ -396,6 +400,10 @@ private fun CallRecordingFolderCard(context: android.content.Context) {
             folder = uri.toString()
         }
     }
+    // Open the picker pre-navigated to the detected folder (one-tap confirm).
+    fun launchAt(path: String?) = picker.launch(
+        com.salesautocall.app.dialer.RecordingFolders.initialPickerUri(path),
+    )
     val connected = folder.isNotBlank()
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -414,14 +422,30 @@ private fun CallRecordingFolderCard(context: android.content.Context) {
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { picker.launch(null) }) { Text("Change folder") }
+                    OutlinedButton(onClick = { launchAt(detected) }) { Text("Change folder") }
                     TextButton(onClick = {
                         com.salesautocall.app.data.AppPrefs.clearRecordingFolder(context); folder = ""
                     }) { Text("Disconnect") }
                 }
             } else {
-                Button(onClick = { picker.launch(null) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Select recording folder")
+                // Detected suggestion: one tap opens the picker right on the folder.
+                detected?.let { path ->
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                    ) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Found your recordings", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text(path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            }
+                            Button(onClick = { launchAt(path) }) { Text("Use this") }
+                        }
+                    }
+                }
+                Button(onClick = { launchAt(detected) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (detected != null) "Choose a different folder" else "Select recording folder")
                 }
             }
         }

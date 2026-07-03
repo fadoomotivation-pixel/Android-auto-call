@@ -67,14 +67,16 @@ fun CallsScreen(vm: MainViewModel) {
     LaunchedEffect(Unit) { vm.loadCalls(); vm.loadLeads(); vm.loadDeviceRecents() }
     var sub by remember { mutableIntStateOf(0) } // 0 = Phone, 1 = App, 2 = Missed, 3 = Follow-up
 
-    // Resolve the lead's name for a call (by contact id, else last-10-digit match)
-    // so rows read like a CRM ("Vikram") instead of a bare number.
-    fun nameFor(c: CallLog): String? {
-        val byId = c.contactId?.let { id -> app.leads.find { it.id == id }?.name }
-        if (!byId.isNullOrBlank()) return byId
-        val tail = c.phone.filter { it.isDigit() }.takeLast(10)
-        return app.leads.find { it.phone.filter { ch -> ch.isDigit() }.takeLast(10) == tail }?.name?.ifBlank { null }
+    // Build phone/id → name lookups ONCE per lead-list change, not per row per
+    // scroll frame. A linear app.leads.find() on every visible row was the fling jank.
+    val nameByPhone = remember(app.leads) {
+        app.leads.mapNotNull { l -> l.name?.takeIf { it.isNotBlank() }?.let { l.phone.filter { c -> c.isDigit() }.takeLast(10) to it } }.toMap()
     }
+    val nameById = remember(app.leads) {
+        app.leads.mapNotNull { l -> l.id?.let { id -> l.name?.takeIf { it.isNotBlank() }?.let { id to it } } }.toMap()
+    }
+    fun nameFor(c: CallLog): String? =
+        c.contactId?.let { nameById[it] } ?: nameByPhone[c.phone.filter { it.isDigit() }.takeLast(10)]
 
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -216,7 +218,8 @@ private fun PhoneRecentRow(
         Modifier.fillMaxWidth().clickable { if (isKnown) onOpenLead() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
@@ -302,7 +305,8 @@ private fun SummaryCard(s: CallSummary) {
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -347,7 +351,8 @@ private fun CallRow(
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column {
             Row(

@@ -1319,7 +1319,10 @@ private fun LeadCard(
         modifier = cardMod,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = container),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        // Flat + hairline border instead of a per-row shadow — shadow rasterization
+        // on every visible card was the fling jank. Border is basically free.
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
