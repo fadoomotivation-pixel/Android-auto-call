@@ -81,6 +81,8 @@ data class AppState(
     val callFilter: CallFilter = CallFilter.ALL,
     val callList: List<CallLog> = emptyList(),
     val callsLoading: Boolean = false,
+    // Phone's own system call log (every call, in/out/missed) for the fast recents tab.
+    val deviceRecents: List<com.salesautocall.app.data.DeviceCall> = emptyList(),
     val callSummary: CallSummary = CallSummary(),
     /** id of the call whose recording is currently playing/loading (null = none). */
     val playingCallId: String? = null,
@@ -757,6 +759,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (f == _state.value.callFilter) return
         set { it.copy(callFilter = f) }
         loadCalls(force = true) // filter changed → fetch the new range now
+    }
+
+    /** Reads the phone's own call log for the fast recents tab (needs READ_CALL_LOG). */
+    fun loadDeviceRecents() {
+        viewModelScope.launch {
+            val list = runCatching {
+                com.salesautocall.app.data.DeviceRecents.read(getApplication())
+            }.getOrDefault(emptyList())
+            set { it.copy(deviceRecents = list) }
+        }
     }
 
     fun loadCalls(force: Boolean = false) {

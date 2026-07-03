@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
@@ -63,8 +64,8 @@ private val WhatsAppGreen = Color(0xFF25D366)
 @Composable
 fun CallsScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
-    LaunchedEffect(Unit) { vm.loadCalls(); vm.loadLeads() }
-    var sub by remember { mutableIntStateOf(0) } // 0 = All, 1 = Missed, 2 = Follow-up
+    LaunchedEffect(Unit) { vm.loadCalls(); vm.loadLeads(); vm.loadDeviceRecents() }
+    var sub by remember { mutableIntStateOf(0) } // 0 = Phone, 1 = App, 2 = Missed, 3 = Follow-up
 
     // Resolve the lead's name for a call (by contact id, else last-10-digit match)
     // so rows read like a CRM ("Vikram") instead of a bare number.
@@ -109,22 +110,59 @@ fun CallsScreen(vm: MainViewModel) {
         }
         Spacer(Modifier.height(12.dp))
 
-        // ---- summary card ----
-        SummaryCard(app.callSummary)
-        Spacer(Modifier.height(12.dp))
-
         val followUps = vm.followUps()
         val missed = vm.missedCalls()
-        TabRow(selectedTabIndex = sub) {
-            Tab(selected = sub == 0, onClick = { sub = 0 }, text = { Text("All") })
-            Tab(selected = sub == 1, onClick = { sub = 1 }, text = { Text("Missed (${missed.size})") })
-            Tab(selected = sub == 2, onClick = { sub = 2 }, text = { Text("Follow-up (${followUps.size})") })
+        // Phone tab first — it's the fast, native-dialer-style recents everyone reaches for.
+        androidx.compose.material3.ScrollableTabRow(selectedTabIndex = sub, edgePadding = 0.dp) {
+            Tab(selected = sub == 0, onClick = { sub = 0 }, text = { Text("Phone") })
+            Tab(selected = sub == 1, onClick = { sub = 1 }, text = { Text("App") })
+            Tab(selected = sub == 2, onClick = { sub = 2 }, text = { Text("Missed (${missed.size})") })
+            Tab(selected = sub == 3, onClick = { sub = 3 }, text = { Text("Follow-up (${followUps.size})") })
         }
         Spacer(Modifier.height(8.dp))
 
+        if (sub == 0) {
+            // ---- PHONE: the device's own call log, GoDial-style ----
+            val known = remember(app.leads) {
+                app.leads.associateBy { it.phone.filter { ch -> ch.isDigit() }.takeLast(10) }
+            }
+            if (app.deviceRecents.isEmpty()) {
+                Text("No recent calls, or call-log access is off. Enable the Phone permission to see your dialer history here.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val grouped = app.deviceRecents.groupBy { dayBucket(it.timeMillis) }
+                    grouped.forEach { (bucket, calls) ->
+                        item(key = "h-$bucket") {
+                            Text(bucket, style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
+                        }
+                        items(calls, key = { "${it.number}-${it.timeMillis}" }) { dc ->
+                            val lead = known[dc.digits]
+                            PhoneRecentRow(
+                                dc = dc,
+                                leadName = lead?.name?.takeIf { it.isNotBlank() },
+                                isKnown = lead != null,
+                                onCall = { QuickActions.call(context, dc.number) },
+                                onWhatsApp = { QuickActions.whatsApp(context, dc.number) },
+                                onOpenLead = { lead?.id?.let { vm.openLeadDetail(it) } },
+                                onAddLead = { vm.addLead("", dc.number, null, null, null); vm.loadDeviceRecents() },
+                            )
+                        }
+                    }
+                }
+            }
+            return@Column
+        }
+
+        // ---- summary card (app-logged calls only) ----
+        SummaryCard(app.callSummary)
+        Spacer(Modifier.height(12.dp))
+
         val rows = when (sub) {
-            1 -> missed
-            2 -> followUps
+            2 -> missed
+            3 -> followUps
             else -> app.callList
         }
 
@@ -132,8 +170,8 @@ fun CallsScreen(vm: MainViewModel) {
             app.callsLoading -> Box(Modifier.fillMaxWidth().padding(32.dp)) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
             rows.isEmpty() -> Text(
                 when (sub) {
-                    1 -> "No missed calls 🎉"
-                    2 -> "No follow-ups — every call connected 🎉"
+                    2 -> "No missed calls 🎉"
+                    3 -> "No follow-ups — every call connected 🎉"
                     else -> "No calls in this period yet."
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -154,6 +192,94 @@ fun CallsScreen(vm: MainViewModel) {
             }
         }
     }
+}
+
+/** GoDial-style recent-call row from the device call log: direction arrow,
+ *  colored avatar, time + duration, and a one-tap add-to-lead for unknown
+ *  numbers (or open the lead if we already know them). */
+@Composable
+private fun PhoneRecentRow(
+    dc: com.salesautocall.app.data.DeviceCall,
+    leadName: String?,
+    isKnown: Boolean,
+    onCall: () -> Unit,
+    onWhatsApp: () -> Unit,
+    onOpenLead: () -> Unit,
+    onAddLead: () -> Unit,
+) {
+    val accent = when (dc.direction) {
+        "missed" -> Color(0xFFEF4444)
+        "in" -> Color(0xFF16A34A)
+        else -> Color(0xFF2563EB)
+    }
+    Card(
+        Modifier.fillMaxWidth().clickable { if (isKnown) onOpenLead() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(40.dp).clip(CircleShape).background(accent.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center) {
+                val label = leadName?.firstOrNull { it.isLetter() }?.uppercaseChar()?.toString()
+                    ?: dc.number.firstOrNull { it.isDigit() }?.toString() ?: "#"
+                Text(label, color = accent, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        when (dc.direction) {
+                            "missed" -> Icons.Default.CallMissed
+                            "in" -> Icons.Default.CallReceived
+                            else -> Icons.Default.CallMade
+                        },
+                        contentDescription = dc.direction, tint = accent, modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    Text(leadName ?: dc.number, style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                Text(
+                    buildString {
+                        append(prettyClock(dc.timeMillis))
+                        if (dc.durationSec > 0) append("  ·  ${formatDuration(dc.durationSec)}")
+                    },
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onWhatsApp) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsAppGreen) }
+            IconButton(onClick = onCall) { Icon(Icons.Default.Call, contentDescription = "Call", tint = MaterialTheme.colorScheme.primary) }
+            if (!isKnown) {
+                Box(
+                    Modifier.size(38.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)
+                        .clickable { onAddLead() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Default.PersonAdd, contentDescription = "Add as lead", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp)) }
+            }
+        }
+    }
+}
+
+/** "Today" / "Yesterday" / "12 Jun" bucket header for the phone recents list. */
+private fun dayBucket(ms: Long): String {
+    val zone = java.time.ZoneId.systemDefault()
+    val d = java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
+    val today = java.time.LocalDate.now(zone)
+    return when (d) {
+        today -> "Today"
+        today.minusDays(1) -> "Yesterday"
+        else -> d.format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
+    }
+}
+
+private fun prettyClock(ms: Long): String {
+    val t = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault())
+    val h12 = ((t.hour + 11) % 12) + 1
+    return "%d:%02d %s".format(h12, t.minute, if (t.hour < 12) "AM" else "PM")
 }
 
 /** Avatar circle for a call row — initial + a subtle tint by call direction. */
