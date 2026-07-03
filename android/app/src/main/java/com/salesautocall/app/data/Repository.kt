@@ -6,6 +6,7 @@ import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.storage.storage
 import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.setBody
@@ -673,6 +674,54 @@ object Repository {
             order("created_at", Order.DESCENDING)
             limit(limit.toLong())
         }.decodeList<LeadActivity>()
+
+    // ---------- lead voice notes ----------
+
+    /**
+     * Uploads a spoken "how the call went" note to the private voice-notes
+     * bucket, inserts its row, kicks off the AI transcript/summary in the
+     * background, and stamps the lead's activity timeline. Returns the note.
+     */
+    suspend fun addVoiceNote(contactId: String, bytes: ByteArray, durationSeconds: Int): LeadVoiceNote? {
+        val uid = currentUserId() ?: return null
+        val profile = myProfile() ?: return null
+        val company = profile.companyId ?: return null
+        val path = "$company/$contactId/${java.util.UUID.randomUUID()}.m4a"
+        client.storage.from("voice-notes").upload(path, bytes)
+        val note = client.from("lead_voice_notes").insert(
+            LeadVoiceNote(
+                companyId = company,
+                contactId = contactId,
+                actorId = uid,
+                actorName = profile.fullName,
+                audioPath = path,
+                durationSeconds = durationSeconds,
+            ),
+        ) { select() }.decodeSingleOrNull<LeadVoiceNote>()
+        note?.id?.let { id ->
+            // Fire-and-forget: the AI twist (Groq Whisper + Llama) runs server-side.
+            runCatching {
+                client.functions.invoke("voice-note-ai") {
+                    setBody(buildJsonObject { put("note_id", JsonPrimitive(id)) })
+                }
+            }
+            runCatching {
+                logLeadActivity(contactId, "note", "🎤 Voice note (${durationSeconds}s) recorded")
+            }
+        }
+        return note
+    }
+
+    suspend fun fetchVoiceNotes(contactId: String, limit: Int = 50): List<LeadVoiceNote> =
+        client.from("lead_voice_notes").select {
+            filter { eq("contact_id", contactId) }
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<LeadVoiceNote>()
+
+    /** Downloads a voice note's audio (RLS/company-scoped) for in-app playback. */
+    suspend fun downloadVoiceNote(path: String): ByteArray =
+        client.storage.from("voice-notes").downloadAuthenticated(path)
 
     /** Buyer changed their mind: wipe the planned site visit date + project. */
     suspend fun clearSiteVisit(contactId: String) {

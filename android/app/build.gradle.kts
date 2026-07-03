@@ -110,6 +110,8 @@ dependencies {
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.auth)
     implementation(libs.supabase.functions)
+    // Voice-note audio lives in Supabase Storage (private bucket).
+    implementation("io.github.jan-tennert.supabase:storage-kt")
     implementation(libs.ktor.client.android)
 
     // Native SIP/VoIP engine (registers over SIP-UDP like Zoiper, handles audio).

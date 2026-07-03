@@ -304,6 +304,20 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
             }
 
+            // VOICE NOTES — call ke baad "kya baat hui" apni awaaz me; AI twist ke saath.
+            item { SectionLabel("Voice notes") }
+            item { VoiceNoteRecorderCard(vm, recording = app.voiceRecording, uploading = app.voiceUploading) }
+            items(app.voiceNotes, key = { it.id ?: it.audioPath }) { n ->
+                VoiceNoteRow(
+                    n = n,
+                    playing = n.id != null && n.id == app.playingNoteId,
+                    onPlay = { vm.playVoiceNote(n) },
+                    onStop = { vm.stopVoiceNotePlayback() },
+                    onRefreshAi = { vm.refreshVoiceNotes() },
+                    onApplyDisposition = { key -> contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) } },
+                )
+            }
+
             // JOURNEY — kab aayi, kab kisne kya update kiya (stage / note / follow-up …).
             item { SectionLabel("Journey") }
             run {
@@ -871,6 +885,154 @@ private fun JourneyRow(atIso: String?, type: String, text: String, last: Boolean
             Text(text, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             isoMs(atIso)?.let {
                 Text(fmtWhen(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** Record card: idle → one-tap record; recording → live timer + Save / Discard. */
+@Composable
+private fun VoiceNoteRecorderCard(vm: MainViewModel, recording: Boolean, uploading: Boolean) {
+    var seconds by remember { mutableStateOf(0) }
+    LaunchedEffect(recording) {
+        seconds = 0
+        while (recording) {
+            kotlinx.coroutines.delay(1000)
+            seconds++
+        }
+    }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+        when {
+            recording -> Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(RedL.copy(alpha = 0.10f)).padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(RedL))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "Recording…  %d:%02d".format(seconds / 60, seconds % 60),
+                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = RedL,
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "Discard",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable { vm.cancelVoiceNote() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    Modifier.clip(RoundedCornerShape(50)).background(GreenL)
+                        .clickable { vm.finishVoiceNote() }.padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text("✓ Save", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                }
+            }
+            uploading -> Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("Saving voice note…", style = MaterialTheme.typography.bodyMedium)
+            }
+            else -> Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+                    .clickable { vm.startVoiceNote() }.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Mic, contentDescription = "Record", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text("Record voice note", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary)
+                    Text("Call ke baad bolo kya baat hui — AI summary khud ban jayegi",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** One saved voice note: play, who/when, and the AI transcript + summary. */
+@Composable
+private fun VoiceNoteRow(
+    n: com.salesautocall.app.data.LeadVoiceNote,
+    playing: Boolean,
+    onPlay: () -> Unit,
+    onStop: () -> Unit,
+    onRefreshAi: () -> Unit,
+    onApplyDisposition: (String) -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(38.dp).clip(CircleShape)
+                    .background(if (playing) RedL else MaterialTheme.colorScheme.primary)
+                    .clickable { if (playing) onStop() else onPlay() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (playing) "⏸" else "▶", color = Color.White, fontSize = 16.sp)
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "🎤 ${n.durationSeconds}s voice note",
+                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                )
+                val meta = buildString {
+                    n.actorName?.takeIf { it.isNotBlank() }?.let { append(it) }
+                    isoMs(n.createdAt)?.let { if (isNotEmpty()) append(" · "); append(fmtWhen(it)) }
+                }
+                if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        when (n.aiStatus) {
+            "ready" -> {
+                if (!n.summary.isNullOrBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("✨ AI: ${n.summary}", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface)
+                }
+                n.suggestedDisposition?.takeIf { it.isNotBlank() }?.let { d ->
+                    val label = SETTABLE.firstOrNull { it.first == d }?.second ?: d
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("AI suggests:", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(6.dp))
+                        Box(
+                            Modifier.clip(RoundedCornerShape(50)).background(IndigoL.copy(alpha = 0.14f))
+                                .clickable { onApplyDisposition(d) }.padding(horizontal = 10.dp, vertical = 4.dp),
+                        ) {
+                            Text("$label — Apply", style = MaterialTheme.typography.labelMedium,
+                                color = IndigoL, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            "failed" -> {
+                Spacer(Modifier.height(6.dp))
+                Text("AI summary failed — audio saved, admin can still listen.",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            else -> {
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRefreshAi() }) {
+                    CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp, color = IndigoL)
+                    Spacer(Modifier.width(6.dp))
+                    Text("AI summary ban raha hai… (tap to refresh)",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
