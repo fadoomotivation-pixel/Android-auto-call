@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.Contact
 
@@ -86,8 +87,8 @@ private val FUNNEL = listOf(
 
 /** Ways a lead leaves the funnel (or loops back for another call). */
 private val EXITS = listOf(
-    "callback" to "↻ Callback", "not_interested" to "Not interested",
-    "lost" to "Lost", "dnc" to "🚫 Do Not Call",
+    "callback" to "Callback", "not_interested" to "Not interested",
+    "lost" to "Lost", "dnc" to "Do Not Call",
 )
 
 private fun isoMs(iso: String?): Long? = iso?.let {
@@ -170,8 +171,14 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
-                        Text(SETTABLE.firstOrNull { it.first == contact.status }?.second ?: contact.status,
-                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // Show the stage's clean label ("Contacted"), never a raw
+                        // status word like "called".
+                        Text(
+                            FUNNEL.firstOrNull { contact.status in it.statuses }?.label
+                                ?: SETTABLE.firstOrNull { it.first == contact.status }?.second
+                                ?: contact.status.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -288,10 +295,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
             }
 
-            item {
-                Text("Call history", style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
-            }
+            item { SectionLabel("Call history") }
             if (app.leadDetailLoading) {
                 item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
             } else if (app.leadDetailCalls.isEmpty()) {
@@ -459,11 +463,11 @@ private fun FunnelStepper(
                         )
                     }
                     if (i < FUNNEL.lastIndex) {
-                        Box(Modifier.width(2.dp).height(18.dp).background(if (done) GreenL else MaterialTheme.colorScheme.outlineVariant))
+                        Box(Modifier.width(2.dp).height(14.dp).background(if (done) GreenL else MaterialTheme.colorScheme.outlineVariant))
                     }
                 }
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f).padding(bottom = if (i < FUNNEL.lastIndex) 14.dp else 0.dp)) {
+                Column(Modifier.weight(1f).padding(bottom = if (i < FUNNEL.lastIndex) 12.dp else 0.dp)) {
                     Text(
                         step.label,
                         style = MaterialTheme.typography.bodyLarge,
@@ -486,7 +490,8 @@ private fun FunnelStepper(
                         Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                // Contextual actions — edit or undo without hunting through menus.
+                // One quiet badge, not a column of labels. The rail is the affordance;
+                // a single caption below the funnel explains the tap.
                 val hasVisit = step.key == "site_visit" && !contact.siteVisitAt.isNullOrBlank()
                 when {
                     hasVisit -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -499,25 +504,20 @@ private fun FunnelStepper(
                             Text("✕", color = RedL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                         }
                     }
-                    current && i > 0 -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { onMoveBack(FUNNEL[i - 1].key) }.padding(horizontal = 10.dp, vertical = 4.dp)) {
-                            Text("↶ Undo", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                        }
-                        Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)) {
-                            Text("NOW", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                        }
-                    }
                     current -> Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
                         .padding(horizontal = 10.dp, vertical = 4.dp)) {
                         Text("NOW", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
-                    done -> Text("Undo", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
-                    step.settable -> Text("Set", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Tap any stage to move this lead",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.padding(start = 38.dp),
+        )
     }
 }
 
@@ -644,8 +644,15 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
 
 @Composable
 private fun SectionLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.padding(start = 16.dp, top = 10.dp, bottom = 4.dp))
+    // Quiet, uppercase, tracked-out — the section whispers, the content speaks.
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        letterSpacing = 1.2.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 6.dp),
+    )
 }
 
 /** Common after-call notes a real-estate telecaller jots, in the Hinglish they
