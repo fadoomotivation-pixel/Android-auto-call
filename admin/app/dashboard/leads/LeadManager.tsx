@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ImportLeads } from "./ImportLeads";
+import { LeadHistory } from "./LeadHistory";
 
 type Sp = { id: string; full_name: string | null; territory: string | null };
 type Lead = {
@@ -15,6 +16,7 @@ type Lead = {
   budget: string | null;
   territory: string | null;
   created_at: string;
+  notes: string | null;
 };
 
 const PAGE = 50;
@@ -40,6 +42,7 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [historyId, setHistoryId] = useState<string | null>(null);
 
   const [stats, setStats] = useState({ total: 0, unassigned: 0, assigned: 0 });
   const [agentCounts, setAgentCounts] = useState<Record<string, number>>({});
@@ -49,7 +52,7 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
   const buildQuery = useCallback(() => {
     let q = supabase
       .from("contacts")
-      .select("id, name, phone, company_name, status, salesperson_id, budget, territory, created_at")
+      .select("id, name, phone, company_name, status, salesperson_id, budget, territory, created_at, notes")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     if (tab === "unassigned") {
@@ -336,9 +339,23 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
                   {l.budget && <span>· 💰 {l.budget}</span>}
                   {l.created_at && <span>· 🕒 {new Date(l.created_at).toLocaleString()}</span>}
                 </div>
+                {l.notes && (
+                  <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)", padding: "8px 12px", background: "rgba(16, 185, 129, 0.05)", borderLeft: "3px solid var(--accent)", borderRadius: 6 }}>
+                    <strong>Admin/App Notes:</strong> {l.notes}
+                  </div>
+                )}
                 {tab === "assigned" && <div style={{ color: "var(--accent)", fontSize: 12, marginTop: 6, fontWeight: 500 }}>→ Assigned to: {nameOf(l.salesperson_id)}</div>}
               </div>
-              <span className={`badge ${l.status}`} style={{ boxShadow: "0 0 10px rgba(255,255,255,0.05)" }}>{l.status}</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+                <span className={`badge ${l.status}`} style={{ boxShadow: "0 0 10px rgba(255,255,255,0.05)" }}>{l.status}</span>
+                <button 
+                  className="link" 
+                  style={{ fontSize: 12, padding: "4px 10px", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "var(--muted)", background: "rgba(255,255,255,0.03)" }} 
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setHistoryId(l.id); }}
+                >
+                  📖 View History
+                </button>
+              </div>
             </label>
           ))}
         </div>
@@ -364,6 +381,8 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
           }}
         />
       )}
+
+      {historyId && <LeadHistory contactId={historyId} onClose={() => setHistoryId(null)} />}
     </div>
   );
 }
