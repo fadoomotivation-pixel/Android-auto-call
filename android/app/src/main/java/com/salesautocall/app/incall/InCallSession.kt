@@ -82,6 +82,11 @@ object InCallSession {
     private val _state = MutableStateFlow<InCallUiState?>(null)
     val state: StateFlow<InCallUiState?> = _state.asStateFlow()
 
+    /** Applies [transform] to the live UI state (no-op once the call is gone). */
+    private fun update(transform: (InCallUiState) -> InCallUiState) {
+        _state.value = _state.value?.let(transform)
+    }
+
     // ---------- lifecycle (driven by CrmInCallService) ----------
 
     fun bind(svc: CrmInCallService, c: Call) {
