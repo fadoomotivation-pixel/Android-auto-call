@@ -146,6 +146,8 @@ data class AppState(
     // Lead detail page (full-screen overlay): which lead is open + its call history.
     val leadDetailId: String? = null,
     val leadDetailCalls: List<CallLog> = emptyList(),
+    /** "Who did what, when" timeline entries for the open lead. */
+    val leadDetailActivities: List<com.salesautocall.app.data.LeadActivity> = emptyList(),
     val leadDetailLoading: Boolean = false,
 )
 
@@ -1371,6 +1373,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { Repository.setDisposition(contactId, status, null) }
                 .onSuccess {
+                    launchActivityLog(contactId) { add("status" to "Stage → ${stageDisplay(status)}") }
                     set { st ->
                         st.copy(leads = st.leads.map { c ->
                             if (c.id == contactId) c.copy(status = status) else c
@@ -1419,6 +1422,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             runCatching { Repository.updateContact(contactId, patch) }
                 .onSuccess {
+                    // Record what changed in the lead's history timeline.
+                    launchActivityLog(contactId) {
+                        if (status != null) add("status" to "Stage → ${stageDisplay(status)}")
+                        if (temperature != null) add("temperature" to "Marked ${temperature.replaceFirstChar { c -> c.uppercase() }}")
+                        if (budget != null) add("budget" to "Budget: $budget")
+                        if (note != null) add("note" to "Note: $note")
+                        if (svProj != null || svAt != null) {
+                            val at = svAt?.let { s -> " on ${prettyDateTime(s)}" } ?: ""
+                            add("site_visit" to "Site visit${svProj?.let { p -> ": $p" } ?: ""}$at")
+                        }
+                        if (token != null) add("budget" to "Token amount: ₹${if (token % 1.0 == 0.0) token.toLong() else token}")
+                    }
                     set { st ->
                         st.copy(leads = st.leads.map { c ->
                             if (c.id == contactId) c.copy(
@@ -1465,6 +1480,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { Repository.setTemperature(contactId, temperature) }
                 .onSuccess {
+                    launchActivityLog(contactId) {
+                        add("temperature" to "Marked ${temperature.replaceFirstChar { c -> c.uppercase() }}")
+                    }
                     set { st ->
                         st.copy(leads = st.leads.map { c ->
                             if (c.id == contactId) c.copy(temperature = temperature) else c
@@ -1507,6 +1525,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         set { st ->
                             st.copy(leads = st.leads.map { c ->
                                 if (c.id == contactId) c.copy(status = "follow_up") else c
+                            })
+                        }
+                        launchActivityLog(contactId) {
+                            add("follow_up" to buildString {
+                                append("Follow-up scheduled for ${shortWhen(dueAtMillis)}")
+                                if (!note.isNullOrBlank()) append(" — $note")
                             })
                         }
                     }
@@ -1743,16 +1767,53 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
-        set { it.copy(leadDetailId = contactId, leadDetailCalls = emptyList(), leadDetailLoading = true) }
+        set { it.copy(leadDetailId = contactId, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), leadDetailLoading = true) }
         viewModelScope.launch {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
-            set { if (it.leadDetailId == contactId) it.copy(leadDetailCalls = calls, leadDetailLoading = false) else it }
+            val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())
+            set {
+                if (it.leadDetailId == contactId)
+                    it.copy(leadDetailCalls = calls, leadDetailActivities = acts, leadDetailLoading = false)
+                else it
+            }
         }
     }
 
     fun refreshLeadDetail() { _state.value.leadDetailId?.let { openLeadDetail(it) } }
 
-    fun closeLeadDetail() = set { it.copy(leadDetailId = null, leadDetailCalls = emptyList(), playingCallId = null) }
+    fun closeLeadDetail() = set {
+        it.copy(leadDetailId = null, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), playingCallId = null)
+    }
+
+    // ---------- lead activity logging ----------
+
+    /** Fire-and-forget history entries; failures never disturb the main flow. */
+    private fun launchActivityLog(contactId: String, build: MutableList<Pair<String, String>>.() -> Unit) {
+        val entries = mutableListOf<Pair<String, String>>().apply(build)
+        if (entries.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            entries.forEach { (type, detail) ->
+                runCatching { Repository.logLeadActivity(contactId, type, detail) }
+            }
+        }
+    }
+
+    /** Human label for a pipeline status key ("token_paid" → "Token Paid"). */
+    private fun stageDisplay(status: String): String = when (status) {
+        "new", "queued" -> "New enquiry"
+        "called", "no_answer", "busy" -> "Contacted"
+        "callback" -> "Callback"
+        "follow_up" -> "Follow-up"
+        "interested" -> "Interested"
+        "site_visit" -> "Site Visit"
+        "negotiation", "proposal" -> "Negotiation"
+        "token_paid" -> "Token Paid"
+        "booked" -> "Booked / Won"
+        "not_interested" -> "Not interested"
+        "lost" -> "Lost"
+        "dnc" -> "Do Not Call"
+        else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
+    }
 
     private fun parseInstant(iso: String): Long =
         runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
@@ -1760,6 +1821,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun shortWhen(millis: Long): String =
         java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(millis), java.time.ZoneId.systemDefault())
             .format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, h:mm a"))
+
+    private fun prettyDateTime(iso: String): String = runCatching {
+        java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("d MMM, h:mm a"))
+    }.getOrDefault(iso.take(16).replace('T', ' '))
 
     private fun displayName(uri: Uri): String {
         var name = "import.csv"

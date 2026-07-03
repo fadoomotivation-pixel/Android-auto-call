@@ -76,6 +76,11 @@ class ManualCallService : Service() {
         var outcome = "failed"
         var recordingPath: String? = null
 
+        // Prefer the phone's native both-sides recording; MediaRecorder
+        // (mic-only) is the fallback when no native folder is set.
+        val useNative = record && NativeRecordingHarvester.isConfigured(this@ManualCallService)
+        SimCallMonitor.begin(phone, name = null, nativeRec = useNative)
+
         if (placeCall(phone)) {
             val wentOffhook = withTimeoutOrNull(OFFHOOK_TIMEOUT_MS) {
                 awaitState(TelephonyManager.CALL_STATE_OFFHOOK)
@@ -83,24 +88,41 @@ class ManualCallService : Service() {
             if (!wentOffhook) {
                 outcome = "no_answer"
             } else {
-                // Prefer the phone's native both-sides recording; MediaRecorder
-                // (mic-only) is the fallback when no native folder is set.
-                val useNative = record && NativeRecordingHarvester.isConfigured(this@ManualCallService)
-                if (record && !useNative) runCatching { SimRecorder.start(this) }
+                var recStarted = false
+                if (record && !useNative) {
+                    recStarted = runCatching { SimRecorder.start(this) }.getOrDefault(false)
+                }
+                SimCallMonitor.onActive(recording = recStarted)
+                // Pull the telecaller back into the CRM so our call screen (timer,
+                // REC, notes) is what they see — the system dialer keeps the call.
+                bringAppToFront()
                 awaitState(TelephonyManager.CALL_STATE_IDLE)
                 durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()
                 outcome = if (durationSec >= CONNECTED_THRESHOLD_SEC) "connected" else "no_answer"
+                // Manual REC toggle may have stopped (and stashed) the recorder already.
+                val micPath = runCatching { SimRecorder.stop() }.getOrNull()
+                    ?: SimCallMonitor.takeManualRecording()
                 recordingPath = when {
-                    useNative && outcome == "connected" -> harvestNative(startedAt, phone)
-                    record && !useNative -> runCatching { SimRecorder.stop() }.getOrNull()
-                    else -> null
+                    useNative && outcome == "connected" -> harvestNative(startedAt, phone) ?: micPath
+                    else -> micPath
                 }
-                if (useNative) runCatching { SimRecorder.stop() }
             }
         }
+        SimCallMonitor.end(this)
+        // Persist BEFORE stopping — stopSelf() cancels this scope, and a launched
+        // persist coroutine used to die mid-insert (calls vanished from history).
         persist(phone, companyId, salespersonId, startedAt, durationSec, outcome, recordingPath)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /** Best-effort: reopen the app over the system dialer once the call is off-hook. */
+    private fun bringAppToFront() {
+        runCatching {
+            val i = Intent(this, com.salesautocall.app.MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(i)
+        }
     }
 
     /** Stages the OEM's native recording as a cache file for the shared uploader. */
@@ -113,11 +135,12 @@ class ManualCallService : Service() {
         }.getOrNull()
     }
 
-    private fun persist(
+    /** Runs to completion even while the service shuts down (non-cancellable). */
+    private suspend fun persist(
         phone: String, companyId: String?, salespersonId: String?,
         startedAt: Instant, durationSec: Int, outcome: String, recordingPath: String?,
     ) {
-        scope.launch(Dispatchers.IO) {
+        kotlinx.coroutines.withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
             runCatching {
                 val company = companyId ?: Repository.myCompany()?.id ?: return@runCatching
                 val sales = salespersonId ?: Repository.currentUserId() ?: return@runCatching
