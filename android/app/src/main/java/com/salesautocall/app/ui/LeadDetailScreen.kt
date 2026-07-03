@@ -33,12 +33,14 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +65,53 @@ private val SETTABLE = listOf(
 )
 private val TEMPS = listOf("hot" to "🔥 Hot", "warm" to "🌤 Warm", "cold" to "❄️ Cold")
 
+private val GreenL = Color(0xFF16A34A)
+private val AmberL = Color(0xFFF59E0B)
+private val IndigoL = Color(0xFF4F46E5)
+private val PurpleL = Color(0xFF7C3AED)
+private val RedL = Color(0xFFEF4444)
+
+/** The real-estate journey, top to bottom. First two steps are milestones the
+ *  system stamps itself; from "Interested" onward the rep moves the lead. */
+private data class FunnelStep(val key: String, val label: String, val statuses: Set<String>, val settable: Boolean)
+private val FUNNEL = listOf(
+    FunnelStep("new", "New enquiry", setOf("new", "queued"), false),
+    FunnelStep("contacted", "Contacted", setOf("called", "no_answer", "busy", "callback", "follow_up"), false),
+    FunnelStep("interested", "Interested", setOf("interested"), true),
+    FunnelStep("site_visit", "Site Visit", setOf("site_visit"), true),
+    FunnelStep("negotiation", "Negotiation", setOf("negotiation", "proposal"), true),
+    FunnelStep("token_paid", "Token Paid", setOf("token_paid"), true),
+    FunnelStep("booked", "Booked 🏆", setOf("booked"), true),
+)
+
+/** Ways a lead leaves the funnel (or loops back for another call). */
+private val EXITS = listOf(
+    "callback" to "↻ Callback", "not_interested" to "Not interested",
+    "lost" to "Lost", "dnc" to "🚫 Do Not Call",
+)
+
+private fun isoMs(iso: String?): Long? = iso?.let {
+    runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+        ?: runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+        ?: runCatching {
+            java.time.LocalDateTime.parse(it).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }.getOrNull()
+}
+
+private fun fmtWhen(ms: Long): String {
+    val zone = java.time.ZoneId.systemDefault()
+    val d = java.time.Instant.ofEpochMilli(ms).atZone(zone)
+    val today = java.time.LocalDate.now(zone)
+    val day = when (d.toLocalDate()) {
+        today -> "Today"
+        today.plusDays(1) -> "Tomorrow"
+        today.minusDays(1) -> "Yesterday"
+        else -> "${d.dayOfMonth} ${d.month.name.take(3).lowercase().replaceFirstChar { c -> c.uppercase() }}"
+    }
+    val h12 = ((d.hour + 11) % 12) + 1
+    return "$day, $h12:${"%02d".format(d.minute)} ${if (d.hour < 12) "AM" else "PM"}"
+}
+
 /** Full-screen 360° view of one lead: profile, one-tap actions, status/stage editor,
  *  and the full call history with playable recordings + AI summaries. */
 @Composable
@@ -74,10 +123,18 @@ fun LeadDetailScreen(vm: MainViewModel) {
     // System back / back-gesture returns to the lead list instead of exiting the app.
     BackHandler { vm.closeLeadDetail() }
 
+    // Follow-ups power the "next step" panel — never let a lead sit without one.
+    LaunchedEffect(Unit) { vm.loadFollowUps() }
+
     var note by remember(contact.id) { mutableStateOf(contact.notes ?: "") }
-    var budget by remember(contact.id) { mutableStateOf(contact.budget ?: "") }
     var token by remember(contact.id) {
         mutableStateOf(contact.tokenAmount?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: "")
+    }
+    var scheduleOpen by remember { mutableStateOf(false) }
+    var visitOpen by remember { mutableStateOf(false) }
+
+    val followUp = app.followUpList.firstOrNull {
+        (it.contactId != null && it.contactId == contact.id) || it.phone == contact.phone
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -135,8 +192,59 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
             }
 
-            item { SectionLabel("Stage") }
-            item { ChipRow(SETTABLE, contact.status) { key -> contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, if (key == "token_paid") token.ifBlank { null } else null) } } }
+            // NEXT STEP — the telecaller's safety rail. Either it shows what's
+            // planned (callback / site visit) or it screams that nothing is.
+            item {
+                val visitMs = isoMs(contact.siteVisitAt)
+                val nowMs = System.currentTimeMillis()
+                val fuMs = followUp?.let { isoMs(it.dueAt) }
+                val terminal = contact.status in setOf("booked", "lost", "not_interested", "dnc")
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    when {
+                        followUp != null -> NextStepCard(
+                            color = if (fuMs != null && fuMs <= nowMs) RedL else IndigoL,
+                            title = if (fuMs != null && fuMs <= nowMs) "↻ Call back — DUE NOW" else "↻ Next: call back · ${fuMs?.let { fmtWhen(it) } ?: ""}",
+                            detail = followUp.note,
+                            actionLabel = "Change",
+                        ) { scheduleOpen = true }
+                        visitMs != null && visitMs >= nowMs -> NextStepCard(
+                            color = PurpleL,
+                            title = "🏠 Next: site visit · ${fmtWhen(visitMs)}",
+                            detail = contact.siteVisitProject,
+                            actionLabel = "Change",
+                        ) { visitOpen = true }
+                        !terminal -> NextStepCard(
+                            color = AmberL,
+                            title = "⚠️ No next step planned",
+                            detail = "Set a reminder so this lead is never forgotten",
+                            actionLabel = "Set now",
+                        ) { scheduleOpen = true }
+                    }
+                }
+            }
+
+            item { SectionLabel("Sales funnel") }
+            item {
+                FunnelStepper(
+                    contact = contact,
+                    onSet = { key ->
+                        when (key) {
+                            "site_visit" -> visitOpen = true
+                            else -> contact.id?.let {
+                                vm.applyLead(it, key, null, null, null, null, null,
+                                    if (key == "token_paid") token.ifBlank { null } else null)
+                            }
+                        }
+                    },
+                )
+            }
+            item {
+                // Exits & loops: callback re-schedules, the rest close the lead out.
+                ChipRow(EXITS, contact.status) { key ->
+                    if (key == "callback") scheduleOpen = true
+                    else contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) }
+                }
+            }
 
             if (contact.status == "token_paid") {
                 item {
@@ -156,14 +264,13 @@ fun LeadDetailScreen(vm: MainViewModel) {
 
             item {
                 Column(Modifier.padding(16.dp)) {
-                    OutlinedTextField(budget, { budget = it }, label = { Text("Budget") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(8.dp))
+                    // Budget lives in the notes when it matters — the field was dead
+                    // weight. Notes (voice + Hinglish quick chips) carry the context.
                     IntelligentNotes(note) { note = it }
                     Spacer(Modifier.height(8.dp))
                     DetailAction(Icons.Default.CalendarMonth, "Save details", MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth()) {
                         contact.id?.let {
-                            vm.applyLead(it, null, null,
-                                budget.trim().ifBlank { null }.takeIf { b -> b != contact.budget },
+                            vm.applyLead(it, null, null, null,
                                 note.trim().ifBlank { null }.takeIf { n -> n != contact.notes },
                                 // Persist the booking token too when the lead is at Token Paid,
                                 // so typing it and tapping Save no longer loses the amount.
@@ -189,6 +296,219 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
             }
         }
+    }
+
+    if (scheduleOpen) {
+        PickWhenDialog(
+            title = "Follow-up · ${contact.name ?: contact.phone}",
+            onDismiss = { scheduleOpen = false },
+            onPick = { millis ->
+                scheduleOpen = false
+                vm.scheduleFollowUp(contact.id, contact.phone, contact.name, millis, null)
+                if (contact.status !in setOf("interested", "site_visit", "negotiation", "token_paid", "booked")) {
+                    contact.id?.let { vm.applyLead(it, "callback", null, null, null, null, null, null) }
+                }
+            },
+        )
+    }
+    if (visitOpen) {
+        PickWhenDialog(
+            title = "Site visit · ${contact.name ?: contact.phone}",
+            visitMode = true,
+            onDismiss = { visitOpen = false },
+            onPick = { millis ->
+                visitOpen = false
+                contact.id?.let {
+                    vm.applyLead(it, "site_visit", null, null, null, null,
+                        java.time.Instant.ofEpochMilli(millis).toString(), null)
+                }
+            },
+        )
+    }
+}
+
+/** The always-visible "what happens next" strip on a lead. */
+@Composable
+private fun NextStepCard(color: Color, title: String, detail: String?, actionLabel: String, onAction: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(color.copy(alpha = 0.10f)).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = color, fontWeight = FontWeight.Bold)
+            detail?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(2.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(
+            Modifier.clip(RoundedCornerShape(50)).background(color)
+                .clickable { onAction() }.padding(horizontal = 13.dp, vertical = 7.dp),
+        ) {
+            Text(actionLabel, color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** Vertical real-estate funnel: every stage on its own line with a ✓ trail,
+ *  the current stage highlighted, later stages one tap away. */
+@Composable
+private fun FunnelStepper(contact: Contact, onSet: (String) -> Unit) {
+    val idx = FUNNEL.indexOfFirst { contact.status in it.statuses }
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        FUNNEL.forEachIndexed { i, step ->
+            val done = idx > i
+            val current = idx == i
+            val stepColor = when {
+                done -> GreenL
+                current -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.outlineVariant
+            }
+            Row(
+                Modifier.fillMaxWidth()
+                    .then(if (step.settable && !current) Modifier.clip(RoundedCornerShape(10.dp)).clickable { onSet(step.key) } else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Rail: circle + connector down to the next step.
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier.size(26.dp).clip(CircleShape)
+                            .background(if (done || current) stepColor else MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            if (done) "✓" else "${i + 1}",
+                            color = if (done || current) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    if (i < FUNNEL.lastIndex) {
+                        Box(Modifier.width(2.dp).height(18.dp).background(if (done) GreenL else MaterialTheme.colorScheme.outlineVariant))
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f).padding(bottom = if (i < FUNNEL.lastIndex) 14.dp else 0.dp)) {
+                    Text(
+                        step.label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (current) FontWeight.Bold else FontWeight.Medium,
+                        color = when {
+                            current -> MaterialTheme.colorScheme.primary
+                            done -> MaterialTheme.colorScheme.onSurface
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    // The detail that matters at each milestone.
+                    val sub = when (step.key) {
+                        "site_visit" -> isoMs(contact.siteVisitAt)?.let { ms ->
+                            listOfNotNull(fmtWhen(ms), contact.siteVisitProject?.takeIf { it.isNotBlank() }).joinToString(" · ")
+                        }
+                        "token_paid" -> contact.tokenAmount?.takeIf { it > 0 }?.let { "₹${if (it % 1.0 == 0.0) it.toLong() else it}" }
+                        else -> null
+                    }
+                    sub?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (current) {
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)) {
+                        Text("NOW", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                } else if (step.settable) {
+                    Text("Set", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}
+
+/** Quick when-picker: smart chips plus a full date & time fallback. Used for
+ *  both follow-up reminders and fixing the site-visit day. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PickWhenDialog(
+    title: String,
+    visitMode: Boolean = false,
+    onDismiss: () -> Unit,
+    onPick: (Long) -> Unit,
+) {
+    val now = java.time.ZonedDateTime.now()
+    fun at(days: Long, hour: Int) = now.plusDays(days).withHour(hour).withMinute(0).withSecond(0).toInstant().toEpochMilli()
+    val options = if (visitMode) buildList {
+        if (now.hour < 11) add("Today 11 AM" to at(0, 11))
+        if (now.hour < 16) add("Today 4 PM" to at(0, 16))
+        add("Tomorrow 11 AM" to at(1, 11))
+        add("Tomorrow 4 PM" to at(1, 16))
+        val toSunday = ((7 - now.dayOfWeek.value) % 7).let { if (it == 0) 7 else it }
+        add("Sunday 11 AM" to at(toSunday.toLong(), 11))
+    } else listOf(
+        "In 1 hour" to now.plusHours(1).toInstant().toEpochMilli(),
+        "In 3 hours" to now.plusHours(3).toInstant().toEpochMilli(),
+        "Tomorrow 10 AM" to at(1, 10),
+        "Tomorrow 4 PM" to at(1, 16),
+        "In 2 days, 11 AM" to at(2, 11),
+    )
+
+    var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
+    var pickedDate by remember { mutableStateOf<Long?>(null) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                options.forEach { (label, millis) ->
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { onPick(millis) },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    ) { Text(label) }
+                }
+                androidx.compose.material3.Button(
+                    onClick = { showDate = true },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                ) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Pick a date & time")
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+
+    if (showDate) {
+        val dps = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = now.toInstant().toEpochMilli())
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { pickedDate = dps.selectedDateMillis; showDate = false; showTime = true }) { Text("Next") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { showDate = false }) { Text("Cancel") } },
+        ) { androidx.compose.material3.DatePicker(state = dps) }
+    }
+
+    if (showTime) {
+        val tps = androidx.compose.material3.rememberTimePickerState(initialHour = 11, initialMinute = 0, is24Hour = false)
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showTime = false },
+            title = { Text("Pick a time") },
+            text = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { androidx.compose.material3.TimePicker(state = tps) } },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    val base = pickedDate ?: now.toInstant().toEpochMilli()
+                    val day = java.time.Instant.ofEpochMilli(base).atZone(java.time.ZoneId.of("UTC")).toLocalDate()
+                    val millis = day.atTime(tps.hour, tps.minute).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    showTime = false
+                    onPick(millis)
+                }) { Text("Set") }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { showTime = false }) { Text("Back") } },
+        )
     }
 }
 
