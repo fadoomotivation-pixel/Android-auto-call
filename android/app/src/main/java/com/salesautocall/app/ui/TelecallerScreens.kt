@@ -614,7 +614,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     LaunchedEffect(Unit) { vm.loadLeads() }
 
     var query by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf("all") }
+    // Fresh leads first — the telecaller's worklist opens on "New" by default.
+    var selected by remember { mutableStateOf("new") }
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
     var selectMode by remember { mutableStateOf(false) }
@@ -729,6 +730,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         onWhatsApp = { vm.openWaChat(c) },
                         onSchedule = { scheduleFor = c },
                         onMore = { actionFor = c },
+                        onHistory = { vm.openLeadHistory(c) },
                     )
                 }
             }
@@ -792,6 +794,83 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             onOpenPhoneApp = { openWhatsApp(context, c.phone) },
             onDismiss = { vm.closeWaChat() },
         )
+    }
+    app.historyFor?.let { c ->
+        LeadHistoryDialog(
+            who = c.name ?: c.phone,
+            entries = app.historyItems,
+            loading = app.historyLoading,
+            onDismiss = { vm.closeLeadHistory() },
+        )
+    }
+}
+
+/**
+ * "Kab aayi, kab kya hua" — the lead's full journey: added date, every stage /
+ * note / budget update by the telecaller, follow-ups and calls, newest first.
+ */
+@Composable
+private fun LeadHistoryDialog(
+    who: String,
+    entries: List<LeadTimelineItem>,
+    loading: Boolean,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("History · $who") },
+        text = {
+            when {
+                loading -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                entries.isEmpty() -> Text(
+                    "No activity yet. Updates you make on this lead (stage, notes, calls, follow-ups) will show here.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                else -> LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(entries.size) { i -> TimelineRow(entries[i], last = i == entries.lastIndex) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun TimelineRow(item: LeadTimelineItem, last: Boolean) {
+    val (emoji, tint) = when (item.type) {
+        "created" -> "🟢" to Green
+        "status" -> "🔁" to Indigo
+        "temperature" -> "🌡️" to Amber
+        "note" -> "📝" to Slate
+        "budget" -> "💰" to Green
+        "site_visit" -> "📍" to Purple
+        "follow_up" -> "⏰" to Cyan
+        "call" -> "📞" to Green
+        else -> "✏️" to Slate
+    }
+    Row(Modifier.fillMaxWidth()) {
+        // timeline gutter: dot + connector line
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(28.dp).clip(CircleShape).background(tint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
+            ) { Text(emoji, style = MaterialTheme.typography.labelMedium) }
+            if (!last) Box(Modifier.width(2.dp).height(26.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.padding(bottom = 10.dp)) {
+            Text(item.text, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            val meta = buildString {
+                item.atIso?.let { append(dayLabel(it)); append(", "); append(timeOnly(it)) }
+                item.by?.takeIf { it.isNotBlank() }?.let {
+                    if (isNotEmpty()) append(" · ")
+                    append(it)
+                }
+            }
+            if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -873,6 +952,7 @@ private fun LeadCard(
     onWhatsApp: () -> Unit,
     onSchedule: () -> Unit,
     onMore: () -> Unit,
+    onHistory: () -> Unit = {},
 ) {
     val cardMod = Modifier.fillMaxWidth()
         .then(if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)) else Modifier)
@@ -931,6 +1011,29 @@ private fun LeadCard(
                 Spacer(Modifier.weight(1f))
                 c.notes?.takeIf { it.isNotBlank() }?.let {
                     Text("📝", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            // When the lead arrived + one-tap history of what was done on it.
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                c.createdAt?.let {
+                    Text(
+                        "Added ${dayLabel(it)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                if (!selectMode) {
+                    Text(
+                        "🕑 History",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).clickable { onHistory() }
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
                 }
             }
 
@@ -1258,7 +1361,7 @@ private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit
 //  TEAM / REPORTS
 // ════════════════════════════════════════════════════════════
 @Composable
-fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit, onCallHistory: () -> Unit) {
+fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit) {
     val app by vm.state.collectAsState()
     LaunchedEffect(Unit) { vm.loadLeaderboard(app.leaderboardPeriod) }
 
@@ -1269,11 +1372,9 @@ fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit, onCallHistory: () -> 
     ) {
         item { Text("Reports & Team", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item { LeaderboardCard(vm, app, compact = false) }
+        // Call history now lives on the bottom bar ("Calls" tab) — one tap away.
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ActionButton(Icons.Default.TrendingUp, "Campaign analytics", MaterialTheme.colorScheme.primary, Modifier.weight(1f), onClick = onCampaigns)
-                ActionButton(Icons.Default.Call, "Call history", MaterialTheme.colorScheme.primary, Modifier.weight(1f), onClick = onCallHistory)
-            }
+            ActionButton(Icons.Default.TrendingUp, "Campaign analytics", MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth(), onClick = onCampaigns)
         }
     }
 }

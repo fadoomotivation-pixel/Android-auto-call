@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
@@ -290,6 +291,7 @@ private sealed class Tab(val route: String, val label: String) {
     data object Leads : Tab("leads", "Leads")
     data object Dialer : Tab("dialer", "Dialer")
     data object Campaign : Tab("campaign", "Call List")
+    data object Calls : Tab("calls", "Calls")
     data object Team : Tab("team", "Reports")
 }
 
@@ -298,7 +300,8 @@ private sealed class Tab(val route: String, val label: String) {
 private fun MainShell(vm: MainViewModel) {
     val state by vm.state.collectAsState()
     val nav = rememberNavController()
-    val tabs = listOf(Tab.Home, Tab.Leads, Tab.Dialer, Tab.Campaign, Tab.Team)
+    // Call history sits on the bottom bar; Reports stays one tap away in the drawer.
+    val tabs = listOf(Tab.Home, Tab.Leads, Tab.Dialer, Tab.Campaign, Tab.Calls)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -382,6 +385,7 @@ private fun MainShell(vm: MainViewModel) {
                                         is Tab.Leads -> Icons.Default.People
                                         is Tab.Dialer -> Icons.Default.Dialpad
                                         is Tab.Campaign -> Icons.Default.Campaign
+                                        is Tab.Calls -> Icons.Default.History
                                         else -> Icons.Default.Leaderboard
                                     },
                                     contentDescription = tab.label,
@@ -443,11 +447,7 @@ private fun MainShell(vm: MainViewModel) {
                         })
                     }
                     composable(Tab.Team.route) {
-                        TeamScreen(
-                            vm,
-                            onCampaigns = { nav.navigate("analytics") },
-                            onCallHistory = { nav.navigate("calls") },
-                        )
+                        TeamScreen(vm, onCampaigns = { nav.navigate("analytics") })
                     }
                     composable("followups") { FollowUpsScreen(vm, onBack = { nav.popBackStack() }) }
                     composable("attendance") { AttendanceScreen(vm, onBack = { nav.popBackStack() }) }

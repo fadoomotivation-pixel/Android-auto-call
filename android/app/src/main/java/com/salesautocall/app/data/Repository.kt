@@ -416,6 +416,40 @@ object Repository {
         client.from("contacts").update(patch) { filter { eq("id", contactId) } }
     }
 
+    // ---------- lead activity timeline ----------
+
+    /** Appends a "who did what, when" entry to a lead's history. */
+    suspend fun logLeadActivity(contactId: String, type: String, detail: String) {
+        val uid = currentUserId() ?: return
+        val profile = myProfile() ?: return
+        val company = profile.companyId ?: return
+        client.from("lead_activities").insert(
+            LeadActivity(
+                companyId = company,
+                contactId = contactId,
+                actorId = uid,
+                actorName = profile.fullName,
+                type = type,
+                detail = detail,
+            ),
+        )
+    }
+
+    suspend fun fetchLeadActivities(contactId: String, limit: Int = 100): List<LeadActivity> =
+        client.from("lead_activities").select {
+            filter { eq("contact_id", contactId) }
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<LeadActivity>()
+
+    /** All calls ever made to a lead (for the history timeline). */
+    suspend fun fetchCallsForContact(contactId: String, limit: Int = 100): List<CallLog> =
+        client.from("call_logs").select {
+            filter { eq("contact_id", contactId) }
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<CallLog>()
+
     // ---------- follow-ups ----------
 
     /** Schedules a callback for a lead at [dueAtIso]. Returns the stored row (with id). */
