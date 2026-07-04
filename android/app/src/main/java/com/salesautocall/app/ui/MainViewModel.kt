@@ -1842,13 +1842,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         message = "🎤 Voice note saved — AI summary ban raha hai…",
                     )
                 }
-                // Give the AI a moment, then refresh everything — it may have set a
-                // site visit / callback / budget from what the rep said.
-                kotlinx.coroutines.delay(12_000)
-                if (_state.value.leadDetailId == contactId) {
-                    refreshLeadDetail()
-                    loadLeads(force = true)
-                    loadFollowUps(force = true)
+                // Poll every 5s (up to ~60s) until the AI finishes, then refresh
+                // everything — it may have set a site visit / callback / budget.
+                var kicked = false
+                repeat(12) { attempt ->
+                    kotlinx.coroutines.delay(5_000)
+                    if (_state.value.leadDetailId != contactId) return@launch
+                    val fresh = runCatching { Repository.fetchVoiceNotes(contactId) }.getOrNull() ?: return@repeat
+                    set { if (it.leadDetailId == contactId) it.copy(voiceNotes = fresh) else it }
+                    val mine = fresh.firstOrNull { it.id == note.id } ?: return@repeat
+                    when (mine.aiStatus) {
+                        "ready", "failed" -> {
+                            refreshLeadDetail()
+                            loadLeads(force = true)
+                            loadFollowUps(force = true)
+                            return@launch
+                        }
+                        // Still "pending" after 15s = the server trigger hiccuped; kick once.
+                        "pending" -> if (!kicked && attempt >= 2) {
+                            kicked = true
+                            val id = note.id
+                            if (id != null) viewModelScope.launch(Dispatchers.IO) {
+                                runCatching { Repository.requestVoiceNoteAi(id) }
+                            }
+                        }
+                    }
                 }
             } else {
                 set { it.copy(voiceUploading = false, error = "Couldn't save the voice note. Check internet and retry.") }
@@ -1856,12 +1874,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Re-pulls notes (e.g. the "AI processing" one) for the open lead. */
+    /** Re-pulls notes (e.g. the "AI processing" one) for the open lead, and
+     *  re-kicks the AI for any note that never left "pending". */
     fun refreshVoiceNotes() {
         val contactId = _state.value.leadDetailId ?: return
         viewModelScope.launch {
             runCatching { Repository.fetchVoiceNotes(contactId) }.getOrNull()?.let { fresh ->
                 set { if (it.leadDetailId == contactId) it.copy(voiceNotes = fresh) else it }
+                fresh.filter { it.aiStatus == "pending" }.forEach { n ->
+                    val id = n.id ?: return@forEach
+                    viewModelScope.launch(Dispatchers.IO) { runCatching { Repository.requestVoiceNoteAi(id) } }
+                }
             }
         }
     }

@@ -44,33 +44,58 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
         const val CHANNEL_ID = "hot_leads"
         const val ASSIGN_CHANNEL_ID = "lead_assignments"
+        const val FOLLOWUP_CHANNEL_ID = "followups"
+        const val AGENDA_CHANNEL_ID = "agenda"
+        const val QUOTES_CHANNEL_ID = "quotes"
 
-        /** Creates every high-importance push channel (so background system
-         *  notifications can ring on the channel the server names). */
+        private val KNOWN_CHANNELS =
+            setOf(CHANNEL_ID, ASSIGN_CHANNEL_ID, FOLLOWUP_CHANNEL_ID, AGENDA_CHANNEL_ID, QUOTES_CHANNEL_ID)
+
+        /** Small professional chime bundled in res/raw, as a channel sound URI. */
+        private fun soundUri(context: Context, resId: Int): android.net.Uri =
+            android.net.Uri.parse("android.resource://${context.packageName}/$resId")
+
+        /** Creates every push channel — each with its own small, professional
+         *  sound — so background notifications ring on the channel the server names. */
         fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val nm = context.getSystemService(NotificationManager::class.java)
-                if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+                val audio = android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+
+                fun create(id: String, name: String, desc: String, soundRes: Int?, importance: Int) {
+                    if (nm.getNotificationChannel(id) != null) return
                     nm.createNotificationChannel(
-                        NotificationChannel(CHANNEL_ID, "Hot leads", NotificationManager.IMPORTANCE_HIGH).apply {
-                            description = "Instant alerts when a new lead needs a call"
-                        }
+                        NotificationChannel(id, name, importance).apply {
+                            description = desc
+                            if (soundRes != null) setSound(soundUri(context, soundRes), audio)
+                        },
                     )
                 }
-                if (nm.getNotificationChannel(ASSIGN_CHANNEL_ID) == null) {
-                    nm.createNotificationChannel(
-                        NotificationChannel(ASSIGN_CHANNEL_ID, "Lead assignments", NotificationManager.IMPORTANCE_HIGH).apply {
-                            description = "When new leads are assigned to you"
-                        }
-                    )
-                }
+                create(CHANNEL_ID, "Hot leads", "Instant alerts when a new lead needs a call", null, NotificationManager.IMPORTANCE_HIGH)
+                create(ASSIGN_CHANNEL_ID, "Lead assignments", "When new leads are assigned to you", null, NotificationManager.IMPORTANCE_HIGH)
+                create(
+                    FOLLOWUP_CHANNEL_ID, "Follow-up & visit reminders",
+                    "Callback times, site-visit reminders and forgotten-lead nudges",
+                    R.raw.chime_followup, NotificationManager.IMPORTANCE_HIGH,
+                )
+                create(
+                    AGENDA_CHANNEL_ID, "Daily agenda", "Aaj ka plan — your 10 AM day brief",
+                    R.raw.chime_agenda, NotificationManager.IMPORTANCE_HIGH,
+                )
+                create(
+                    QUOTES_CHANNEL_ID, "Motivation", "Aaj ka funda — quick sales tips",
+                    R.raw.chime_quote, NotificationManager.IMPORTANCE_DEFAULT,
+                )
             }
         }
 
         fun notify(context: Context, title: String, body: String, contactId: String?, channelId: String = CHANNEL_ID) {
             ensureChannel(context)
             // Only ring on a known channel; fall back to hot_leads otherwise.
-            val ch = if (channelId == ASSIGN_CHANNEL_ID) ASSIGN_CHANNEL_ID else CHANNEL_ID
+            val ch = if (channelId in KNOWN_CHANNELS) channelId else CHANNEL_ID
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 if (contactId != null) putExtra("open_contact_id", contactId)

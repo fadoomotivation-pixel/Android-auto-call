@@ -244,6 +244,21 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
             }
 
+            // VOICE NOTES — right after the call actions: call khatam, bolo kya
+            // baat hui, aur AI baaki sab set kar dega. The telecaller's #1 habit.
+            item { SectionLabel("Voice notes") }
+            item { VoiceNoteRecorderCard(vm, recording = app.voiceRecording, uploading = app.voiceUploading) }
+            items(app.voiceNotes, key = { it.id ?: it.audioPath }) { n ->
+                VoiceNoteRow(
+                    n = n,
+                    playing = n.id != null && n.id == app.playingNoteId,
+                    onPlay = { vm.playVoiceNote(n) },
+                    onStop = { vm.stopVoiceNotePlayback() },
+                    onRefreshAi = { vm.refreshVoiceNotes() },
+                    onApplyDisposition = { key -> contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) } },
+                )
+            }
+
             item { SectionLabel("Sales funnel") }
             item {
                 FunnelStepper(
@@ -304,20 +319,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
             }
 
-            // VOICE NOTES — call ke baad "kya baat hui" apni awaaz me; AI twist ke saath.
-            item { SectionLabel("Voice notes") }
-            item { VoiceNoteRecorderCard(vm, recording = app.voiceRecording, uploading = app.voiceUploading) }
-            items(app.voiceNotes, key = { it.id ?: it.audioPath }) { n ->
-                VoiceNoteRow(
-                    n = n,
-                    playing = n.id != null && n.id == app.playingNoteId,
-                    onPlay = { vm.playVoiceNote(n) },
-                    onStop = { vm.stopVoiceNotePlayback() },
-                    onRefreshAi = { vm.refreshVoiceNotes() },
-                    onApplyDisposition = { key -> contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) } },
-                )
-            }
-
             // JOURNEY — kab aayi, kab kisne kya update kiya (stage / note / follow-up …).
             item { SectionLabel("Journey") }
             run {
@@ -344,7 +345,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
             }
 
-            item { SectionLabel("Call history") }
+            item { SectionLabel("Calls & recordings") }
             if (app.leadDetailLoading) {
                 item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
             } else if (app.leadDetailCalls.isEmpty()) {

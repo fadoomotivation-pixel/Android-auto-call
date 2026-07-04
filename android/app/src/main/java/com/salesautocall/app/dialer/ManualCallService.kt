@@ -94,8 +94,15 @@ class ManualCallService : Service() {
                 }
                 SimCallMonitor.onActive(recording = recStarted)
                 // Pull the telecaller back into the CRM so our call screen (timer,
-                // REC, notes) is what they see — the system dialer keeps the call.
-                bringAppToFront()
+                // REC, notes) is what they see. The system in-call UI slides over
+                // right as the call connects, so wait for it to settle and try
+                // twice — some phones re-raise their own screen once.
+                scope.launch {
+                    kotlinx.coroutines.delay(1500)
+                    bringAppToFront()
+                    kotlinx.coroutines.delay(2500)
+                    if (SimCallMonitor.state.value != null) bringAppToFront()
+                }
                 awaitState(TelephonyManager.CALL_STATE_IDLE)
                 durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()
                 outcome = if (durationSec >= CONNECTED_THRESHOLD_SEC) "connected" else "no_answer"

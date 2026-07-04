@@ -698,18 +698,22 @@ object Repository {
                 durationSeconds = durationSeconds,
             ),
         ) { select() }.decodeSingleOrNull<LeadVoiceNote>()
-        note?.id?.let { id ->
-            // Fire-and-forget: the AI twist (Groq Whisper + Llama) runs server-side.
-            runCatching {
-                client.functions.invoke("voice-note-ai") {
-                    setBody(buildJsonObject { put("note_id", JsonPrimitive(id)) })
-                }
-            }
+        // The AI twist runs server-side: a DB trigger fires voice-note-ai the
+        // moment the row lands (bulletproof — never depends on this device).
+        note?.id?.let {
             runCatching {
                 logLeadActivity(contactId, "note", "🎤 Voice note (${durationSeconds}s) recorded")
             }
         }
         return note
+    }
+
+    /** Re-kicks the AI for a note stuck in "pending" (e.g. trigger hiccup). */
+    suspend fun requestVoiceNoteAi(noteId: String) {
+        client.functions.invoke(
+            function = "voice-note-ai",
+            body = buildJsonObject { put("note_id", JsonPrimitive(noteId)) },
+        )
     }
 
     suspend fun fetchVoiceNotes(contactId: String, limit: Int = 50): List<LeadVoiceNote> =
