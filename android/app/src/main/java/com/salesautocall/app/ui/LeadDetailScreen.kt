@@ -259,7 +259,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 )
             }
 
-            item { SectionLabel("Sales funnel") }
+            item { FunnelHeader() }
             item {
                 FunnelStepper(
                     contact = contact,
@@ -561,13 +561,39 @@ private fun FunnelStepper(
                 }
             }
         }
+    }
+}
+
+/** Section header for the funnel: title + a friendly "how to use" pill on top. */
+@Composable
+private fun FunnelHeader() {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Sales funnel",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Row(
+                Modifier.clip(RoundedCornerShape(50))
+                    .background(IndigoL.copy(alpha = 0.12f))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("👆", style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    "Tap a stage to move this lead",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = IndigoL, fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
         Spacer(Modifier.height(8.dp))
-        Text(
-            "Tap any stage to move this lead",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.padding(start = 38.dp),
-        )
     }
 }
 
