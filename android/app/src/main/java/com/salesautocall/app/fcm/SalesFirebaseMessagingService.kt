@@ -75,7 +75,10 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
                     )
                 }
                 create(CHANNEL_ID, "Hot leads", "Instant alerts when a new lead needs a call", null, NotificationManager.IMPORTANCE_HIGH)
-                create(ASSIGN_CHANNEL_ID, "Lead assignments", "When new leads are assigned to you", null, NotificationManager.IMPORTANCE_HIGH)
+                create(
+                    ASSIGN_CHANNEL_ID, "Lead assignments", "When new leads are assigned to you",
+                    R.raw.chime_followup, NotificationManager.IMPORTANCE_HIGH,
+                )
                 create(
                     FOLLOWUP_CHANNEL_ID, "Follow-up & visit reminders",
                     "Callback times, site-visit reminders and forgotten-lead nudges",

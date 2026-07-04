@@ -111,6 +111,19 @@ fun AppRoot(vm: MainViewModel) {
     val context = LocalContext.current
     var crash by remember { mutableStateOf(AppPrefs.getLastCrash(context)) }
 
+    // Fail-safe for missed assignment pushes: on every foreground, pull leads
+    // assigned while the rep was away and alert locally (with sound).
+    if (state.signedIn) {
+        val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+        androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) vm.checkNewAssignments()
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+    }
+
     if (state.signedIn) MainShell(vm) else LoginScreen(vm)
 
     // In-app softphone call overlay.

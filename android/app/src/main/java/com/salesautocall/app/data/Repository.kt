@@ -636,6 +636,20 @@ object Repository {
         }.decodeList<Contact>()
     }
 
+    /** Leads assigned to me after [sinceIso] (newest first) — for the app-open
+     *  "new leads assigned while you were away" catch-up alert. */
+    suspend fun fetchNewAssignments(sinceIso: String, limit: Int = 50): List<Contact> {
+        val uid = currentUserId() ?: return emptyList()
+        return client.from("contacts").select {
+            filter {
+                eq("salesperson_id", uid)
+                gt("assigned_at", sinceIso)
+            }
+            order("assigned_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<Contact>()
+    }
+
     /** Sets the Hot/Warm/Cold triage flag on a lead. */
     suspend fun setTemperature(contactId: String, temperature: String) {
         client.from("contacts").update(mapOf("temperature" to temperature)) {
