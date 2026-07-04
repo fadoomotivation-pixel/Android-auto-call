@@ -2,14 +2,18 @@ import { createClient } from "@/lib/supabase/server";
 import { LiveFeed } from "./LiveFeed";
 import { ExportCalls } from "./ExportCalls";
 
-interface RecentCall {
-  id: string;
-  phone: string;
-  outcome: string | null;
-  salesperson_id: string;
-  duration_seconds: number;
-  created_at: string;
-}
+type Trend = { d: string; n: number };
+type Outcome = { o: string; n: number };
+type Leader = { id: string; name: string; calls: number; connected: number };
+type Stats = {
+  salespeople: number;
+  contacts: number;
+  calls_total: number;
+  talk_14d: number;
+  trend: Trend[];
+  outcomes: Outcome[];
+  leaderboard: Leader[];
+};
 
 function fmtDuration(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -17,152 +21,81 @@ function fmtDuration(seconds: number) {
   if (h) return `${h}h ${m}m`;
   return `${m}m`;
 }
+function fmtNum(n: number) {
+  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`;
+}
 
 export default async function OverviewPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("company_id, role")
-    .eq("id", user.id)
-    .single();
+  // One aggregated round trip (was: pulling up to 5000 call rows per load).
+  // The RPC returns a single jsonb object; supabase-js types rpc as an array,
+  // so cast manually rather than via .returns<>() (which rejects non-array T).
+  const [{ data: statsRaw }, { data: people }] = await Promise.all([
+    supabase.rpc("get_overview_stats"),
+    supabase.from("profiles").select("id, full_name").eq("role", "salesperson"),
+  ]);
 
-  const isSuper = profile?.role === "admin" && !profile.company_id; // Approximation, platform_admins is the true source
-
-  const since14 = new Date(Date.now() - 14 * 86400000).toISOString();
-
-  let contactsQuery = supabase.from("contacts").select("id", { count: "exact", head: true });
-  let callsCountQuery = supabase.from("call_logs").select("id", { count: "exact", head: true });
-  let salesQuery = supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "salesperson");
-  let recentCallsQuery = supabase
-    .from("call_logs")
-    .select("id,phone,outcome,salesperson_id,duration_seconds,created_at")
-    .gte("created_at", since14)
-    .order("created_at", { ascending: false })
-    .limit(5000);
-  let peopleQuery = supabase.from("profiles").select("id, full_name").eq("role", "salesperson");
-
-  if (profile?.company_id) {
-    contactsQuery = contactsQuery.eq("company_id", profile.company_id);
-    callsCountQuery = callsCountQuery.eq("company_id", profile.company_id);
-    salesQuery = salesQuery.eq("company_id", profile.company_id);
-    recentCallsQuery = recentCallsQuery.eq("company_id", profile.company_id);
-    peopleQuery = peopleQuery.eq("company_id", profile.company_id);
-  }
-
-  const [{ count: contactCount }, { count: callCount }, { count: salesCount }, { data: recent }, { data: people }] =
-    await Promise.all([
-      contactsQuery,
-      callsCountQuery,
-      salesQuery,
-      recentCallsQuery.returns<RecentCall[]>(),
-      peopleQuery,
-    ]);
-
-  const calls = recent ?? [];
+  const s: Stats = (statsRaw as unknown as Stats | null) ?? {
+    salespeople: 0, contacts: 0, calls_total: 0, talk_14d: 0, trend: [], outcomes: [], leaderboard: [],
+  };
   const names: Record<string, string> = Object.fromEntries(
     (people ?? []).map((p: { id: string; full_name: string | null }) => [p.id, p.full_name ?? "—"]),
   );
 
-  const totalTalk = calls.reduce((s, c) => s + (c.duration_seconds || 0), 0);
-
-  // 7-day trend
-  const dayKeys: string[] = [];
-  for (let i = 6; i >= 0; i--) {
-    dayKeys.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
-  }
-  const perDay: Record<string, number> = Object.fromEntries(dayKeys.map((d) => [d, 0]));
-  for (const c of calls) {
-    const d = c.created_at.slice(0, 10);
-    if (d in perDay) perDay[d]++;
-  }
-  const maxDay = Math.max(1, ...dayKeys.map((d) => perDay[d]));
-
-  // outcome breakdown
-  const outcomes: Record<string, number> = {};
-  for (const c of calls) {
-    const o = c.outcome || "unknown";
-    outcomes[o] = (outcomes[o] || 0) + 1;
-  }
-  const outcomeEntries = Object.entries(outcomes).sort((a, b) => b[1] - a[1]);
-  const maxOutcome = Math.max(1, ...outcomeEntries.map(([, n]) => n));
-
-  // last-24h leaderboard
-  const since24 = Date.now() - 86400000;
-  const board: Record<string, { calls: number; connected: number }> = {};
-  for (const c of calls) {
-    if (new Date(c.created_at).getTime() < since24) continue;
-    const b = (board[c.salesperson_id] ??= { calls: 0, connected: 0 });
-    b.calls++;
-    if (c.outcome === "connected") b.connected++;
-  }
-  const leaders = Object.entries(board)
-    .map(([id, b]) => ({ id, name: names[id] || "—", ...b }))
-    .sort((a, b) => b.calls - a.calls)
-    .slice(0, 8);
+  const maxDay = Math.max(1, ...s.trend.map((t) => t.n));
+  const maxOutcome = Math.max(1, ...s.outcomes.map((o) => o.n));
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div className="page-head">
         <div>
           <h2>Command center</h2>
-          <p className="subtitle">Live view of your team&apos;s calling activity.</p>
+          <p className="subtitle">A calm, live view of your team&apos;s calling.</p>
         </div>
         <ExportCalls names={names} />
       </div>
 
       <div className="cards">
-        <div className="card"><div className="label">Salespeople</div><div className="value">{salesCount ?? 0}</div></div>
-        <div className="card"><div className="label">Contacts</div><div className="value">{contactCount ?? 0}</div></div>
-        <div className="card"><div className="label">Calls (total)</div><div className="value">{callCount ?? 0}</div></div>
-        <div className="card"><div className="label">Talk time (14d)</div><div className="value">{fmtDuration(totalTalk)}</div></div>
+        <Stat label="Salespeople" value={fmtNum(s.salespeople)} />
+        <Stat label="Contacts" value={fmtNum(s.contacts)} />
+        <Stat label="Calls" value={fmtNum(s.calls_total)} />
+        <Stat label="Talk time · 14d" value={fmtDuration(s.talk_14d)} />
       </div>
 
       <LiveFeed names={names} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 28 }}>
+      <div className="split-2">
         <div className="card">
-          <div className="label">Calls — last 7 days</div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 140, marginTop: 16 }}>
-            {dayKeys.map((d) => (
-              <div key={d} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                <div style={{ fontSize: 11, color: "var(--muted)" }}>{perDay[d]}</div>
-                <div
-                  title={`${d}: ${perDay[d]}`}
-                  style={{
-                    width: "100%",
-                    height: `${(perDay[d] / maxDay) * 100}%`,
-                    minHeight: 4,
-                    background: "linear-gradient(180deg, var(--accent) 0%, rgba(16,185,129,0.2) 100%)",
-                    borderTop: "1px solid rgba(255,255,255,0.4)",
-                    borderRadius: "6px 6px 2px 2px",
-                    boxShadow: "0 -4px 12px rgba(16,185,129,0.2)",
-                    transition: "height 1s cubic-bezier(0.4, 0, 0.2, 1)"
-                  }}
-                />
-                <div style={{ fontSize: 10, color: "var(--muted)" }}>{d.slice(5)}</div>
+          <div className="label">Calls · last 7 days</div>
+          <div className="bars">
+            {s.trend.map((t) => (
+              <div key={t.d} className="bar-col">
+                <div className="bar-n">{t.n}</div>
+                <div className="bar" style={{ height: `${(t.n / maxDay) * 100}%` }} title={`${t.d}: ${t.n}`} />
+                <div className="bar-x">{t.d.slice(5)}</div>
               </div>
             ))}
           </div>
         </div>
 
         <div className="card">
-          <div className="label">Outcomes (14 days)</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
-            {outcomeEntries.length === 0 ? (
+          <div className="label">Outcomes · 14 days</div>
+          <div className="bars-h">
+            {s.outcomes.length === 0 ? (
               <div style={{ color: "var(--muted)" }}>No calls yet.</div>
             ) : (
-              outcomeEntries.map(([o, n]) => (
-                <div key={o} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 92, fontSize: 12 }}>
-                    <span className={`badge ${o}`}>{o}</span>
+              s.outcomes.map((o) => (
+                <div key={o.o} className="bar-h-row">
+                  <div className="bar-h-label"><span className={`badge ${o.o}`}>{o.o}</span></div>
+                  <div className="bar-h-track">
+                    <div className="bar-h-fill" style={{ width: `${(o.n / maxOutcome) * 100}%` }} />
                   </div>
-                  <div style={{ flex: 1, background: "rgba(0,0,0,0.3)", borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.05)", boxShadow: "inset 0 2px 4px rgba(0,0,0,0.2)" }}>
-                    <div style={{ width: `${(n / maxOutcome) * 100}%`, background: "linear-gradient(90deg, var(--accent) 0%, #34d399 100%)", height: 16, borderRadius: 8, boxShadow: "0 0 12px rgba(16,185,129,0.4)" }} />
-                  </div>
-                  <div style={{ width: 36, textAlign: "right", fontSize: 13 }}>{n}</div>
+                  <div className="bar-h-n">{o.n}</div>
                 </div>
               ))
             )}
@@ -170,35 +103,44 @@ export default async function OverviewPage() {
         </div>
       </div>
 
-      <h3 style={{ margin: "0 0 12px" }}>Today&apos;s leaderboard (last 24h)</h3>
-      {leaders.length === 0 ? (
+      <h3 className="section-h">Today&apos;s leaderboard · last 24h</h3>
+      {s.leaderboard.length === 0 ? (
         <div className="empty">No calls in the last 24 hours.</div>
       ) : (
-        <div style={{ overflowX: "auto", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(10, 10, 12, 0.4)", backdropFilter: "blur(24px)", boxShadow: "0 16px 40px rgba(0,0,0,0.3)" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-          <thead>
-            <tr style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>#</th>
-              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>Telecaller</th>
-              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>Calls</th>
-              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>Connected</th>
-              <th style={{ padding: "16px 20px", color: "var(--muted)", fontWeight: 600, fontSize: 13, textTransform: "uppercase", letterSpacing: "1px" }}>Connect rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leaders.map((l, i) => (
-              <tr key={l.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background 0.2s" }} className="hover-row">
-                <td style={{ padding: "16px 20px", fontWeight: 500, color: "var(--muted)" }}>{i + 1}</td>
-                <td style={{ padding: "16px 20px", fontWeight: 500, color: "#fff" }}>{l.name}</td>
-                <td style={{ padding: "16px 20px", color: "var(--text)" }}>{l.calls}</td>
-                <td style={{ padding: "16px 20px", color: "var(--good)" }}>{l.connected}</td>
-                <td style={{ padding: "16px 20px", color: "var(--accent)" }}>{l.calls ? Math.round((l.connected / l.calls) * 100) : 0}%</td>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style={{ width: 48 }}>#</th>
+                <th>Telecaller</th>
+                <th>Calls</th>
+                <th>Connected</th>
+                <th>Connect rate</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {s.leaderboard.map((l, i) => (
+                <tr key={l.id} className="hover-row">
+                  <td style={{ color: "var(--muted)" }}>{i + 1}</td>
+                  <td style={{ color: "#fff", fontWeight: 500 }}>{l.name}</td>
+                  <td>{l.calls}</td>
+                  <td style={{ color: "var(--good)" }}>{l.connected}</td>
+                  <td style={{ color: "var(--accent)" }}>{l.calls ? Math.round((l.connected / l.calls) * 100) : 0}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="card stat">
+      <div className="label">{label}</div>
+      <div className="value">{value}</div>
+    </div>
   );
 }
