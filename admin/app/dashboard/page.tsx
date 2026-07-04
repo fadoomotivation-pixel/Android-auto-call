@@ -33,12 +33,14 @@ export default async function OverviewPage() {
   if (!user) return null;
 
   // One aggregated round trip (was: pulling up to 5000 call rows per load).
-  const [{ data: stats }, { data: people }] = await Promise.all([
-    supabase.rpc("get_overview_stats").returns<Stats>(),
+  // The RPC returns a single jsonb object; supabase-js types rpc as an array,
+  // so cast manually rather than via .returns<>() (which rejects non-array T).
+  const [{ data: statsRaw }, { data: people }] = await Promise.all([
+    supabase.rpc("get_overview_stats"),
     supabase.from("profiles").select("id, full_name").eq("role", "salesperson"),
   ]);
 
-  const s: Stats = stats ?? {
+  const s: Stats = (statsRaw as unknown as Stats | null) ?? {
     salespeople: 0, contacts: 0, calls_total: 0, talk_14d: 0, trend: [], outcomes: [], leaderboard: [],
   };
   const names: Record<string, string> = Object.fromEntries(
