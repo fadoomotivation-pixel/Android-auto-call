@@ -144,7 +144,14 @@ class AutoDialerService : Service() {
                         recStarted = runCatching { SimRecorder.start(this) }.getOrDefault(false)
                     }
                     SimCallMonitor.onActive(recording = recStarted)
-                    bringAppToFront()
+                    // Wait for the system in-call UI to settle, then reclaim the
+                    // screen (twice — some phones re-raise their own screen once).
+                    scope.launch {
+                        delay(1500)
+                        bringAppToFront()
+                        delay(2500)
+                        if (SimCallMonitor.state.value != null) bringAppToFront()
+                    }
                     // Now wait for it to return to idle = call ended.
                     awaitState(TelephonyManager.CALL_STATE_IDLE)
                     durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()

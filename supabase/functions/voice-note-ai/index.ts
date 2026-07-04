@@ -121,7 +121,8 @@ Deno.serve(async (req) => {
     const bytes = new Uint8Array(await blob.arrayBuffer());
 
     const form = new FormData();
-    form.append("model", "whisper-large-v3");
+    // turbo: ~4x faster than large-v3, same Hinglish quality for short notes.
+    form.append("model", "whisper-large-v3-turbo");
     form.append("file", new Blob([bytes], { type: "audio/mp4" }), "note.m4a");
     const tr = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST", headers: { Authorization: `Bearer ${GROQ}` }, body: form,
@@ -182,7 +183,7 @@ Deno.serve(async (req) => {
       if (new Date(sendAtIso).getTime() <= Date.now()) return; // never schedule the past
       await admin.from("scheduled_notifications").insert({
         company_id: note.company_id, user_id: rep, contact_id: note.contact_id,
-        title, body, channel: "hot_leads", send_at: sendAtIso,
+        title, body, channel: "followups", send_at: sendAtIso,
       });
     }
 
