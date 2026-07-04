@@ -1139,6 +1139,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * App-open catch-up for lead assignments — the fail-safe for the push:
+     * if a lead was assigned while the rep's device wasn't registered (fresh
+     * install / token rotated), the FCM alert is lost. On every foreground we
+     * pull leads assigned since we last checked and fire a local notification
+     * (with the assignment sound) so nothing is ever missed.
+     */
+    fun checkNewAssignments() {
+        val ctx = getApplication<Application>()
+        viewModelScope.launch {
+            if (Repository.currentUserId() == null) return@launch
+            val seen = AppPrefs.getAssignSeenAt(ctx)
+            // First run on this device: seed the watermark, don't alert old leads.
+            if (seen.isBlank()) {
+                AppPrefs.setAssignSeenAt(ctx, java.time.Instant.now().toString())
+                return@launch
+            }
+            val fresh = runCatching { Repository.fetchNewAssignments(seen) }.getOrNull().orEmpty()
+            if (fresh.isEmpty()) return@launch
+            // Advance the watermark past the newest assignment we just saw.
+            val newest = fresh.mapNotNull { it.assignedAt }.maxOrNull() ?: java.time.Instant.now().toString()
+            AppPrefs.setAssignSeenAt(ctx, newest)
+
+            val n = fresh.size
+            val names = fresh.mapNotNull { it.name?.takeIf { nm -> nm.isNotBlank() } }.take(3).joinToString(", ")
+            val body = when {
+                n == 1 && names.isNotBlank() -> "$names — tap to start calling"
+                names.isNotBlank() -> "$n new leads ($names${if (n > 3) " +${n - 3} more" else ""}) — tap to start calling"
+                else -> "$n new lead${if (n > 1) "s" else ""} assigned — tap to start calling"
+            }
+            com.salesautocall.app.fcm.SalesFirebaseMessagingService.notify(
+                ctx,
+                title = "📋 New leads assigned",
+                body = body,
+                contactId = fresh.firstOrNull()?.id,
+                channelId = com.salesautocall.app.fcm.SalesFirebaseMessagingService.ASSIGN_CHANNEL_ID,
+            )
+            // Refresh the list so the badge/leads reflect the new work immediately.
+            loadLeads(force = true)
+        }
+    }
+
     // ---------- site-visit geofencing ----------
 
     /**

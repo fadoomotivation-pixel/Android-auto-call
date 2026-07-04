@@ -49,6 +49,10 @@ object AppPrefs {
     fun getPushToken(context: Context): String = prefs(context).getString("push_token", "") ?: ""
     fun setPushToken(context: Context, v: String) = prefs(context).edit().putString("push_token", v).apply()
 
+    /** ISO timestamp up to which the rep has already seen assigned-lead alerts. */
+    fun getAssignSeenAt(context: Context): String = prefs(context).getString("assign_seen_at", "") ?: ""
+    fun setAssignSeenAt(context: Context, v: String) = prefs(context).edit().putString("assign_seen_at", v).apply()
+
     // Phone's native call-recording folder (SAF tree URI). When set, we harvest
     // the OEM's own both-sides recording instead of the mic-only MediaRecorder.
     fun getRecordingFolder(context: Context): String = prefs(context).getString("native_rec_folder", "") ?: ""
