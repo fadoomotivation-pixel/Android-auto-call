@@ -440,6 +440,28 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* WHY CALL PRO AI — competitor-style green-tick reasons */}
+      <section className="cp-why cp-reveal">
+        <div className="cp-shell">
+          <h2 className="cp-why-h">Why <span className="cp-grad">Call Pro AI?</span></h2>
+          <div className="cp-why-grid">
+            {[
+              "Built only for real-estate sales — not a generic CRM",
+              "Runs on any Android phone — no SIM, no hardware",
+              "Every call recorded, with an AI summary",
+              "Hot leads reach the right caller in seconds",
+              "Your data stays with you, even if a caller leaves",
+              "Set up the same day — simpler than WhatsApp",
+            ].map((r) => (
+              <div className="cp-why-item" key={r}>
+                <span className="cp-why-tick"><Icon name="check" /></span>
+                <span>{r}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* TRUST STRIP */}
       <div className="cp-logos">
         <div className="cp-shell cp-logos-inner">
