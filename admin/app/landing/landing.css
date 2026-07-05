@@ -1033,3 +1033,36 @@
   }
   .cp-reveal { opacity: 1; transform: none; }
 }
+
+/* ── Proof stats band (competitor-style big-number credibility) ───────── */
+.cp-stats { padding: 18px 0 6px; }
+.cp-stats-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+}
+.cp-stat-tile {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px 20px;
+  box-shadow: var(--shadow-sm);
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.cp-stat-tile:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: #dfe1ee;
+}
+.cp-stat-n {
+  display: flex; align-items: baseline; gap: 3px;
+  font-weight: 800; font-size: 44px; line-height: 1; letter-spacing: -0.03em;
+}
+.cp-stat-n em { font-style: normal; font-size: 24px; font-weight: 800; color: var(--accent-2); }
+.cp-stat-l { margin-top: 10px; color: var(--muted); font-size: 14px; line-height: 1.35; font-weight: 500; }
+
+@media (max-width: 900px) {
+  .cp-stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .cp-stat-n { font-size: 38px; }
+}
+@media (max-width: 420px) {
+  .cp-stat-tile { padding: 18px 16px; }
+}

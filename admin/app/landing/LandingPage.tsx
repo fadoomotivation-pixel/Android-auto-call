@@ -420,6 +420,26 @@ export default function LandingPage() {
         </div>
       </header>
 
+      {/* PROOF STATS — big numbers, competitor-style credibility band */}
+      <section className="cp-stats cp-reveal">
+        <div className="cp-shell cp-stats-grid">
+          {[
+            { n: "10", u: "sec", l: "Hot-lead alert to the right caller" },
+            { n: "100", u: "%", l: "Calls recorded & logged" },
+            { n: "3", u: "×", l: "Faster follow-up on every lead" },
+            { n: "0", u: "", l: "Leads lost in Excel or WhatsApp" },
+          ].map((s) => (
+            <div className="cp-stat-tile" key={s.l}>
+              <div className="cp-stat-n">
+                <span className="cp-grad">{s.n}</span>
+                {s.u && <em>{s.u}</em>}
+              </div>
+              <div className="cp-stat-l">{s.l}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* TRUST STRIP */}
       <div className="cp-logos">
         <div className="cp-shell cp-logos-inner">
