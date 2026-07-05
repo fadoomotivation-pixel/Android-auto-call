@@ -76,15 +76,41 @@ function systemPrompt(): string {
     '"budget": string|null, "temperature": string|null}. ' +
     "summary: clear English, max ~80 words — outcome, the customer's intent/" +
     "objections, and the telecaller's next action. " +
-    "disposition: the lead's stage per this note, exactly one of " +
-    `[${DISPOSITIONS.map((d) => `"${d}"`).join(", ")}] or "unknown". ` +
+    "disposition: the lead's CURRENT funnel stage after THIS call — pick the " +
+    "single best of: 'interested' (keen, wants details), 'site_visit' (a visit " +
+    "was agreed or planned), 'negotiation' (discussing price/loan/token), " +
+    "'token_paid' (paid a booking token), 'booked' (deal closed/won), 'callback' " +
+    "(asked to call later, or no-answer/busy), 'not_interested', 'lost', 'dnc' " +
+    "(said do not call). Use 'unknown' ONLY if the note truly gives no signal. " +
     "site_visit_date: ONLY if a site visit was agreed/planned, resolve phrases " +
     'like "27 tarik", "agle Sunday", "parso" to YYYY-MM-DD (future). ' +
     "site_visit_time: HH:MM 24h if a time was said, else null. " +
     "callback_date/callback_time: ONLY if the lead asked to be called back at " +
     "a specific day/time. budget: as spoken (e.g. \"45L\", \"1.2 Cr\") or null. " +
-    'temperature: "hot"|"warm"|"cold" only if the interest level is clear, else null.'
+    "temperature: ALWAYS rate the buyer's intent in this call — 'hot' (ready to " +
+    "visit/book/negotiating, very keen), 'warm' (interested but needs time / will " +
+    "discuss with family / comparing), or 'cold' (not interested, only enquiring, " +
+    "no answer, or asked not to call). Use null only if there is truly no signal."
   );
+}
+
+/** Human funnel-stage label for the journey log / summary. */
+function stageLabel(s: string): string {
+  const m: Record<string, string> = {
+    interested: "Interested", site_visit: "Site Visit", negotiation: "Negotiation",
+    token_paid: "Token Paid", booked: "Booked / Won", callback: "Callback",
+    not_interested: "Not interested", lost: "Lost", dnc: "Do Not Call",
+  };
+  return m[s] ?? s;
+}
+
+/** Fallback temperature inferred from the funnel stage when the model omits it. */
+function tempFromDisposition(d: string | null): string | null {
+  if (!d) return null;
+  if (["site_visit", "negotiation", "token_paid", "booked"].includes(d)) return "hot";
+  if (d === "interested") return "warm";
+  if (["not_interested", "lost", "dnc"].includes(d)) return "cold";
+  return null; // callback / unknown → leave as-is
 }
 
 Deno.serve(async (req) => {
@@ -163,6 +189,10 @@ Deno.serve(async (req) => {
       if (typeof p.temperature === "string" && ["hot", "warm", "cold"].includes(p.temperature)) temp = p.temperature;
     } catch { /* keep raw as summary */ }
 
+    // If the model didn't hand back a temperature, derive one from the stage so
+    // the lead's hot/warm/cold badge is always kept accurate from the note.
+    if (!temp) temp = tempFromDisposition(disposition);
+
     // ---------- AUTO-ACTIONS ----------
     const actions: string[] = [];
     const { data: contact } = await admin.from("contacts")
@@ -201,6 +231,19 @@ Deno.serve(async (req) => {
       await remind(istIso(svDate, "08:30"), "🏠 Today: site visit",
         `Today is ${who}'s site visit (${pretty}). All the best!`);
       actions.push("Reminders scheduled (day before 10 AM + visit morning)");
+    }
+
+    // Move the sales funnel to match what was said — the "tap any stage" that
+    // the rep would otherwise do by hand. Skipped when a site visit already set
+    // the stage above, on no/unknown signal, or when it would undo a won deal.
+    if (contact && disposition && !svDate && disposition !== contact.status) {
+      const locked = contact.status === "booked" || contact.status === "token_paid";
+      const wouldUndoWin = locked && !["booked", "token_paid"].includes(disposition);
+      if (!wouldUndoWin) {
+        await admin.from("contacts").update({ status: disposition }).eq("id", contact.id);
+        actions.push(`Stage → ${stageLabel(disposition)}`);
+        await logAct("status", `Stage → ${stageLabel(disposition)} (from voice note)`);
+      }
     }
 
     // Lead asked for a callback at a time → follow-up + push at that moment.
