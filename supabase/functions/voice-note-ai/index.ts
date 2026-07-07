@@ -73,15 +73,19 @@ function systemPrompt(): string {
     'Reply ONLY with JSON: {"summary": string, "disposition": string, ' +
     '"site_visit_date": string|null, "site_visit_time": string|null, ' +
     '"callback_date": string|null, "callback_time": string|null, ' +
-    '"budget": string|null, "temperature": string|null}. ' +
+    '"budget": string|null, "temperature": string|null, "next_step": string|null, ' +
+    '"phone_invalid": boolean, "requirements": {"bhk": string|null, "size": string|null, ' +
+    '"location": string|null, "purpose": string|null, "timeline": string|null, ' +
+    '"loan_needed": boolean|null}}. ' +
     "summary: clear English, max ~80 words — outcome, the customer's intent/" +
     "objections, and the telecaller's next action. " +
     "disposition: the lead's CURRENT funnel stage after THIS call — pick the " +
     "single best of: 'interested' (keen, wants details), 'site_visit' (a visit " +
     "was agreed or planned), 'negotiation' (discussing price/loan/token), " +
     "'token_paid' (paid a booking token), 'booked' (deal closed/won), 'callback' " +
-    "(asked to call later, or no-answer/busy), 'not_interested', 'lost', 'dnc' " +
-    "(said do not call). Use 'unknown' ONLY if the note truly gives no signal. " +
+    "(asked to call later, OR the call did not connect — no answer, busy, phone " +
+    "switched off, cut, not picked), 'not_interested', 'lost', 'dnc' " +
+    "(said do not call). Use 'unknown' ONLY if the note is empty/a test with no signal. " +
     "site_visit_date: ONLY if a site visit was agreed/planned, resolve phrases " +
     'like "27 tarik", "agle Sunday", "parso" to YYYY-MM-DD (future). ' +
     "site_visit_time: HH:MM 24h if a time was said, else null. " +
@@ -90,9 +94,24 @@ function systemPrompt(): string {
     "temperature: ALWAYS rate the buyer's intent in this call — 'hot' (ready to " +
     "visit/book/negotiating, very keen), 'warm' (interested but needs time / will " +
     "discuss with family / comparing), or 'cold' (not interested, only enquiring, " +
-    "no answer, or asked not to call). Use null only if there is truly no signal."
+    "no answer, or asked not to call). Use null only if there is truly no signal. " +
+    "next_step: one short, concrete coaching line IN HINGLISH telling the telecaller " +
+    "the smartest next move / how to handle the objection raised (e.g. \"Price zyada " +
+    "bola — EMI aur payment-plan ka option samjhao\", \"Family se discuss karega — 2 din " +
+    "baad follow-up aur brochure WhatsApp karo\"). null only if the call didn't connect. " +
+    "phone_invalid: true ONLY if the note says the number is wrong / not in service / " +
+    "does not exist. requirements: fill any the customer stated — bhk (e.g. \"2 BHK\", " +
+    "\"plot\"), size (e.g. \"1200 sqft\", \"200 gaj\"), location (area/sector), purpose " +
+    "('investment' or 'end_use'), timeline (when they want to buy), loan_needed (true if " +
+    "they need finance/loan). Use null for anything not mentioned."
   );
 }
+
+// A note where the call simply didn't connect. The transcript is often terse or
+// mis-scripted, but the English summary is reliable — so we match on that as a
+// safety net to make sure "couldn't reach" ALWAYS becomes a callback.
+const UNREACHED_RE =
+  /(no answer|not answer|didn.?t answer|not connect|call cut|call not|switch.?ed? off|not pick|didn.?t pick|un(reachable|available)|number not (in service|saved|reachable|valid)|line busy|phone (off|busy|switched|not))/i;
 
 /** Human funnel-stage label for the journey log / summary. */
 function stageLabel(s: string): string {
@@ -150,6 +169,16 @@ Deno.serve(async (req) => {
     // turbo: ~4x faster than large-v3, same Hinglish quality for short notes.
     form.append("model", "whisper-large-v3-turbo");
     form.append("file", new Blob([bytes], { type: "audio/mp4" }), "note.m4a");
+    // Pin the language to Hindi (stops Whisper rendering Hindi speech in
+    // Urdu/Arabic script) and prime it with real-estate vocabulary so project
+    // names, budgets and stage words transcribe cleanly.
+    form.append("language", "hi");
+    form.append(
+      "prompt",
+      "Real estate telecaller call note in Hindi/Hinglish. Common words: site visit, " +
+        "booking, token, plot, BHK, budget, lakh, crore, gaj, loan, EMI, callback, " +
+        "interested, not interested, number band, call cut, switch off.",
+    );
     const tr = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST", headers: { Authorization: `Bearer ${GROQ}` }, body: form,
     });
@@ -177,6 +206,8 @@ Deno.serve(async (req) => {
     let svDate: string | null = null, svTime: string | null = null;
     let cbDate: string | null = null, cbTime: string | null = null;
     let budget: string | null = null, temp: string | null = null;
+    let nextStep: string | null = null, phoneInvalid = false;
+    let reqs: Record<string, string> = {};
     try {
       const p = JSON.parse(raw);
       if (typeof p.summary === "string" && p.summary.trim()) summary = p.summary.trim();
@@ -187,7 +218,20 @@ Deno.serve(async (req) => {
       if (typeof p.callback_time === "string" && TIME_RE.test(p.callback_time)) cbTime = p.callback_time;
       if (typeof p.budget === "string" && p.budget.trim()) budget = p.budget.trim().slice(0, 40);
       if (typeof p.temperature === "string" && ["hot", "warm", "cold"].includes(p.temperature)) temp = p.temperature;
+      if (typeof p.next_step === "string" && p.next_step.trim()) nextStep = p.next_step.trim().slice(0, 200);
+      if (p.phone_invalid === true) phoneInvalid = true;
+      if (p.requirements && typeof p.requirements === "object") {
+        const R = p.requirements as Record<string, unknown>;
+        for (const k of ["bhk", "size", "location", "purpose", "timeline"]) {
+          if (typeof R[k] === "string" && (R[k] as string).trim()) reqs[k] = (R[k] as string).trim().slice(0, 60);
+        }
+        if (R.loan_needed === true) reqs.loan_needed = "yes";
+      }
     } catch { /* keep raw as summary */ }
+
+    // Safety net: if the model gave no stage but the note is clearly a call that
+    // didn't connect, treat it as a callback so the lead never stalls in "New".
+    if (!disposition && UNREACHED_RE.test(`${summary} ${transcript}`)) disposition = "callback";
 
     // If the model didn't hand back a temperature, derive one from the stage so
     // the lead's hot/warm/cold badge is always kept accurate from the note.
@@ -196,7 +240,7 @@ Deno.serve(async (req) => {
     // ---------- AUTO-ACTIONS ----------
     const actions: string[] = [];
     const { data: contact } = await admin.from("contacts")
-      .select("id, name, phone, salesperson_id, company_id, status, budget, temperature")
+      .select("id, name, phone, salesperson_id, company_id, status, budget, temperature, extra")
       .eq("id", note.contact_id).maybeSingle();
     const rep: string | null = contact?.salesperson_id ?? note.actor_id ?? null;
     const who = contact?.name ?? contact?.phone ?? "lead";
@@ -217,8 +261,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Spoken command: "number galat hai / band aa raha hai" → retire the lead so
+    // nobody wastes another call on it. We use 'dnc' (Do Not Call) because that
+    // is the dead state every part of the system already honours consistently —
+    // it's terminal on the lead page, an exit chip, out of every pipeline bucket,
+    // and protected from the "reassign makes it New again" trigger. A
+    // wrong_number marker is kept in extra so it can be reported separately.
+    if (contact && phoneInvalid && !["dnc", "booked", "token_paid"].includes(contact.status)) {
+      const prev = (contact.extra && typeof contact.extra === "object" ? contact.extra : {}) as Record<string, unknown>;
+      await admin.from("contacts").update({ status: "dnc", extra: { ...prev, wrong_number: true } }).eq("id", contact.id);
+      actions.push("Wrong number → Do Not Call");
+      await logAct("status", "Wrong / invalid number — moved to Do Not Call (from voice note)");
+    }
+
     // Site visit agreed → set the stage + date, and arm both reminders.
-    if (contact && svDate && svDate >= today) {
+    if (contact && !phoneInvalid && svDate && svDate >= today) {
       const visitAt = istIso(svDate, svTime ?? "11:00");
       await admin.from("contacts").update({
         status: "site_visit", site_visit_at: visitAt,
@@ -236,7 +293,7 @@ Deno.serve(async (req) => {
     // Move the sales funnel to match what was said — the "tap any stage" that
     // the rep would otherwise do by hand. Skipped when a site visit already set
     // the stage above, on no/unknown signal, or when it would undo a won deal.
-    if (contact && disposition && !svDate && disposition !== contact.status) {
+    if (contact && !phoneInvalid && disposition && !svDate && disposition !== contact.status) {
       const locked = contact.status === "booked" || contact.status === "token_paid";
       const wouldUndoWin = locked && !["booked", "token_paid"].includes(disposition);
       if (!wouldUndoWin) {
@@ -274,12 +331,38 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Requirements the customer stated → build a lasting profile on the lead
+    // (stored in extra.requirements) and surface it in the note.
+    let reqLine = "";
+    if (contact && Object.keys(reqs).length) {
+      const prev = (contact.extra && typeof contact.extra === "object" ? contact.extra : {}) as Record<string, unknown>;
+      const merged = { ...(prev.requirements as Record<string, unknown> ?? {}), ...reqs };
+      await admin.from("contacts").update({ extra: { ...prev, requirements: merged } }).eq("id", contact.id);
+      const parts: string[] = [];
+      if (reqs.bhk) parts.push(reqs.bhk);
+      if (reqs.size) parts.push(reqs.size);
+      if (reqs.location) parts.push(`in ${reqs.location}`);
+      if (reqs.purpose) parts.push(reqs.purpose === "investment" ? "investment" : "end-use");
+      if (reqs.timeline) parts.push(reqs.timeline);
+      if (reqs.loan_needed) parts.push("needs loan");
+      reqLine = parts.join(" · ");
+      if (reqLine) { actions.push("Requirements captured"); await logAct("requirement", `Needs: ${reqLine} (from voice note)`); }
+    }
+
+    // Coaching: store the "what to say next" tip on the lead so it shows up
+    // even in the app the rep already has.
+    if (contact && nextStep) {
+      await admin.from("contacts").update({ ai_next_action: nextStep }).eq("id", contact.id);
+    }
+
     if (actions.length) summary = `${summary}\n⚡ AI did: ${actions.join(" · ")}`;
+    if (reqLine) summary = `${summary}\n📋 Needs: ${reqLine}`;
+    if (nextStep) summary = `${summary}\n👉 Next: ${nextStep}`;
 
     await admin.from("lead_voice_notes")
       .update({ transcript, summary, suggested_disposition: disposition, ai_status: "ready" })
       .eq("id", note_id);
-    return json({ ok: true, summary, disposition: disposition ?? undefined, actions });
+    return json({ ok: true, summary, disposition: disposition ?? undefined, actions, next_step: nextStep ?? undefined });
   } catch (e) {
     await admin.from("lead_voice_notes").update({ ai_status: "failed" }).eq("id", note_id);
     return json({ ok: false, error: String(e) }, 500);
