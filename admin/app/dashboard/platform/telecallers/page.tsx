@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { TelecallerOverview } from "@/lib/types";
 import Link from "next/link";
+import { AssignCompany } from "./AssignCompany";
 
 export default async function PlatformTelecallersPage() {
   const supabase = await createClient();
@@ -15,13 +16,17 @@ export default async function PlatformTelecallersPage() {
     .maybeSingle();
   if (!pa) return <div className="empty">Not authorized — super admin only.</div>;
 
-  const { data, error } = await supabase
-    .from("v_telecaller_overview")
-    .select("*")
-    .order("calls", { ascending: false })
-    .returns<TelecallerOverview[]>();
+  const [{ data, error }, { data: companies }] = await Promise.all([
+    supabase
+      .from("v_telecaller_overview")
+      .select("*")
+      .order("calls", { ascending: false })
+      .returns<TelecallerOverview[]>(),
+    supabase.from("companies").select("id, name").order("name", { ascending: true }),
+  ]);
 
   const rows = data ?? [];
+  const companyList = companies ?? [];
 
   return (
     <>
@@ -58,7 +63,14 @@ export default async function PlatformTelecallersPage() {
             {rows.map((t) => (
               <tr key={t.salesperson_id}>
                 <td>{t.full_name || "—"}</td>
-                <td>{t.company_name || "—"}</td>
+                <td>
+                  <AssignCompany
+                    userId={t.salesperson_id}
+                    name={t.full_name || ""}
+                    companyId={t.company_id}
+                    companies={companyList}
+                  />
+                </td>
                 <td>{t.latest_campaign || "—"}</td>
                 <td>{t.campaigns}</td>
                 <td>{t.calls}</td>

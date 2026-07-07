@@ -8,18 +8,45 @@ interface FbIntegration {
   page_access_token_secret_id: string | null; // token itself lives in Vault, never sent to the client
   verify_token: string;
   created_at: string;
+  dataset_id: string | null;
+  capi_enabled: boolean | null;
+  capi_token_secret_id: string | null;
+  capi_event_map: Record<string, string> | null;
 }
+
+// Which funnel stage sends which Meta event by default (matches the meta-capi function).
+const DEFAULT_EVENT_MAP: Record<string, string> = {
+  interested: "QualifiedLead",
+  site_visit: "Schedule",
+  negotiation: "InitiateCheckout",
+  token_paid: "Purchase",
+  booked: "Purchase",
+};
+const STAGE_LABELS: Record<string, string> = {
+  interested: "Interested",
+  site_visit: "Site visit",
+  negotiation: "Negotiation",
+  token_paid: "Token paid",
+  booked: "Booked / Won",
+};
 
 export default function FacebookSetupPage() {
   const supabase = createClient();
   const [integration, setIntegration] = useState<FbIntegration | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
+
   const [pageId, setPageId] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [verifyToken, setVerifyToken] = useState("");
-  
+
+  // CAPI (send conversions back to Meta)
+  const [datasetId, setDatasetId] = useState("");
+  const [capiToken, setCapiToken] = useState("");
+  const [capiEnabled, setCapiEnabled] = useState(false);
+  const [eventMap, setEventMap] = useState<Record<string, string>>({ ...DEFAULT_EVENT_MAP });
+  const [savingCapi, setSavingCapi] = useState(false);
+
   const webhookUrl = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/facebook-webhook";
 
   useEffect(() => {
@@ -40,7 +67,10 @@ export default function FacebookSetupPage() {
         setIntegration(data);
         setPageId(data.page_id);
         setVerifyToken(data.verify_token);
-        // token is write-only — never fetched to the client (it's in Vault)
+        setDatasetId(data.dataset_id ?? "");
+        setCapiEnabled(!!data.capi_enabled);
+        setEventMap({ ...DEFAULT_EVENT_MAP, ...(data.capi_event_map ?? {}) });
+        // tokens are write-only — never fetched to the client (they live in Vault)
       } else {
         // Generate a random verify token for new setup
         setVerifyToken(Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15));
@@ -88,6 +118,43 @@ export default function FacebookSetupPage() {
     }
     setSaving(false);
   }
+
+  async function handleSaveCapi(e: React.FormEvent) {
+    e.preventDefault();
+    if (!integration) {
+      alert("Save the Page integration above first, then set up conversions.");
+      return;
+    }
+    setSavingCapi(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userData?.user?.id!).single();
+    if (profile?.company_id) {
+      const { error } = await supabase.rpc("set_facebook_capi", {
+        p_company: profile.company_id,
+        p_dataset_id: datasetId.trim() || null,
+        p_token: capiToken.trim() || null, // blank = keep current
+        p_event_map: eventMap,
+        p_enabled: capiEnabled,
+      });
+      if (error) {
+        alert("Error saving conversions setup: " + error.message);
+      } else {
+        setCapiToken("");
+        setIntegration({
+          ...integration,
+          dataset_id: datasetId.trim() || null,
+          capi_enabled: capiEnabled,
+          capi_token_secret_id: capiToken.trim() ? "saved" : integration.capi_token_secret_id,
+          capi_event_map: eventMap,
+        });
+        alert("Conversions setup saved. Meta will now learn which leads convert.");
+      }
+    }
+    setSavingCapi(false);
+  }
+
+  const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" } as const;
+  const labelStyle = { display: "block", marginBottom: 8, fontSize: 13, fontWeight: 500, color: "var(--muted)", letterSpacing: "0.2px" } as const;
 
   if (loading) return <div>Loading...</div>;
 
@@ -162,6 +229,73 @@ export default function FacebookSetupPage() {
             }}
           >
             {saving ? "Saving..." : "Save Integration"}
+          </button>
+        </form>
+      </div>
+
+      {/* Step 3 — close the loop: send conversions BACK to Meta (CAPI) */}
+      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
+        <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 3: Send conversions back to Meta</h3>
+        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>
+          Teach Meta which leads actually convert. When a Meta lead reaches a stage below, we send Meta a
+          Conversions API event (keyed on the original lead), so its optimization finds more people like your
+          <b style={{ color: "var(--text)" }}> best</b> buyers — not just more form-fillers.
+        </p>
+
+        <form onSubmit={handleSaveCapi} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Pixel / Dataset ID</label>
+            <input type="text" value={datasetId} onChange={(e) => setDatasetId(e.target.value)} placeholder="e.g. 1234567890123456" style={inputStyle} />
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 2px 0" }}>Events Manager → Data Sources → your pixel → Settings → <b>Dataset ID</b>.</p>
+          </div>
+
+          <div>
+            <label style={labelStyle}>
+              Conversions API Token {integration?.capi_token_secret_id && <span style={{ color: "#1877F2" }}>· saved 🔒</span>}
+            </label>
+            <input
+              type="password"
+              autoComplete="off"
+              value={capiToken}
+              onChange={(e) => setCapiToken(e.target.value)}
+              placeholder={integration?.capi_token_secret_id ? "Stored securely — leave blank to keep current" : "Generate under Pixel → Settings → Conversions API"}
+              style={inputStyle}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Stage → Meta event</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {Object.keys(DEFAULT_EVENT_MAP).map((stage) => (
+                <div key={stage} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ minWidth: 120, fontSize: 13, color: "var(--text)" }}>{STAGE_LABELS[stage]}</span>
+                  <span style={{ color: "var(--muted)" }}>→</span>
+                  <input
+                    type="text"
+                    value={eventMap[stage] ?? ""}
+                    onChange={(e) => setEventMap((m) => ({ ...m, [stage]: e.target.value }))}
+                    placeholder="(don't send)"
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 12, color: "var(--muted)", margin: "8px 2px 0" }}>
+              Leave a row blank to not send that stage. Each signal is sent once per lead.
+            </p>
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 14, color: "var(--text)" }}>
+            <input type="checkbox" checked={capiEnabled} onChange={(e) => setCapiEnabled(e.target.checked)} style={{ width: 18, height: 18 }} />
+            Enable sending conversions to Meta
+          </label>
+
+          <button
+            type="submit"
+            disabled={savingCapi}
+            style={{ background: "linear-gradient(135deg, #1877F2, #0A52CC)", color: "white", padding: "12px 20px", borderRadius: 8, border: "none", fontWeight: 600, cursor: savingCapi ? "wait" : "pointer", boxShadow: "0 4px 16px rgba(24, 119, 242, 0.3)", marginTop: 4 }}
+          >
+            {savingCapi ? "Saving..." : "Save Conversions Setup"}
           </button>
         </form>
       </div>
