@@ -261,12 +261,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Spoken command: "number galat hai / band aa raha hai" → mark the lead
-    // invalid so nobody wastes another call on it.
-    if (contact && phoneInvalid && contact.status !== "invalid") {
-      await admin.from("contacts").update({ status: "invalid" }).eq("id", contact.id);
-      actions.push("Marked number invalid");
-      await logAct("status", "Number marked invalid (from voice note)");
+    // Spoken command: "number galat hai / band aa raha hai" → retire the lead so
+    // nobody wastes another call on it. We use 'dnc' (Do Not Call) because that
+    // is the dead state every part of the system already honours consistently —
+    // it's terminal on the lead page, an exit chip, out of every pipeline bucket,
+    // and protected from the "reassign makes it New again" trigger. A
+    // wrong_number marker is kept in extra so it can be reported separately.
+    if (contact && phoneInvalid && !["dnc", "booked", "token_paid"].includes(contact.status)) {
+      const prev = (contact.extra && typeof contact.extra === "object" ? contact.extra : {}) as Record<string, unknown>;
+      await admin.from("contacts").update({ status: "dnc", extra: { ...prev, wrong_number: true } }).eq("id", contact.id);
+      actions.push("Wrong number → Do Not Call");
+      await logAct("status", "Wrong / invalid number — moved to Do Not Call (from voice note)");
     }
 
     // Site visit agreed → set the stage + date, and arm both reminders.
