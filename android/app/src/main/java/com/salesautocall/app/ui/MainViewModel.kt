@@ -851,8 +851,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun dialManual(phone: String) {
         val clean = phone.trim()
         if (clean.isEmpty()) return
+        // Resolve the lead's name now so the in-call screen (and the system
+        // overlay) can show it — the call screen no longer holds a ViewModel.
+        val key = clean.filter { it.isDigit() }.takeLast(10)
+        val name = _state.value.leads.firstOrNull {
+            !it.name.isNullOrBlank() && it.phone.filter { c -> c.isDigit() }.takeLast(10) == key
+        }?.name
         com.salesautocall.app.dialer.ManualCallService.dial(
-            getApplication(), clean, _state.value.company?.id, null, recordingEnabled(),
+            getApplication(), clean, _state.value.company?.id, null, recordingEnabled(), name,
         )
     }
 

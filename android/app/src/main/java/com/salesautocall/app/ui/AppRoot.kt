@@ -150,7 +150,7 @@ fun AppRoot(vm: MainViewModel) {
     // dialer keeps the call; the telecaller keeps the CRM. Minimizes to a chip.
     val simCall by com.salesautocall.app.dialer.SimCallMonitor.state.collectAsState()
     if (state.signedIn && simCall != null) {
-        SimCallScreen(vm)
+        SimCallScreen()
     }
 
     crash?.let { text ->

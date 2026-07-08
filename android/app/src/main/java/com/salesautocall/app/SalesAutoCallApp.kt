@@ -16,6 +16,8 @@ class SalesAutoCallApp : Application() {
         createDialerChannel()
         createFollowUpChannel()
         com.salesautocall.app.fcm.SalesFirebaseMessagingService.ensureChannel(this)
+        // Float the in-app call screen over the system dialer when a SIM call runs.
+        com.salesautocall.app.dialer.CallOverlay.init(this)
     }
 
     /** Saves the stack trace of any uncaught crash so it can be shown on next launch. */
