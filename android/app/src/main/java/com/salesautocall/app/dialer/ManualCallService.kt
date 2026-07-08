@@ -40,6 +40,7 @@ class ManualCallService : Service() {
     private var telephonyCallback: TelephonyCallback? = null
     private var legacyListener: PhoneStateListener? = null
     private var job: Job? = null
+    private var leadName: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -58,6 +59,7 @@ class ManualCallService : Service() {
         val companyId = intent.getStringExtra(EXTRA_COMPANY_ID)
         val salespersonId = intent.getStringExtra(EXTRA_SALESPERSON_ID)
         val record = intent.getBooleanExtra(EXTRA_RECORD, true)
+        leadName = intent.getStringExtra(EXTRA_NAME)
         runCatching {
             androidx.core.app.ServiceCompat.startForeground(this, NOTIF_ID, notification("Calling $phone…"), callFgsType())
         }.onFailure {
@@ -79,7 +81,7 @@ class ManualCallService : Service() {
         // Prefer the phone's native both-sides recording; MediaRecorder
         // (mic-only) is the fallback when no native folder is set.
         val useNative = record && NativeRecordingHarvester.isConfigured(this@ManualCallService)
-        SimCallMonitor.begin(phone, name = null, nativeRec = useNative)
+        SimCallMonitor.begin(phone, name = leadName, nativeRec = useNative)
 
         if (placeCall(phone)) {
             val wentOffhook = withTimeoutOrNull(OFFHOOK_TIMEOUT_MS) {
@@ -93,15 +95,17 @@ class ManualCallService : Service() {
                     recStarted = runCatching { SimRecorder.start(this) }.getOrDefault(false)
                 }
                 SimCallMonitor.onActive(recording = recStarted)
-                // Pull the telecaller back into the CRM so our call screen (timer,
-                // REC, notes) is what they see. The system in-call UI slides over
-                // right as the call connects, so wait for it to settle and try
-                // twice — some phones re-raise their own screen once.
-                scope.launch {
-                    kotlinx.coroutines.delay(1500)
-                    bringAppToFront()
-                    kotlinx.coroutines.delay(2500)
-                    if (SimCallMonitor.state.value != null) bringAppToFront()
+                // Present our call cockpit over the phone's in-call UI. With the
+                // overlay permission we float above the dialer (reliable); without
+                // it we fall back to bringing the CRM activity forward (best-effort,
+                // the system dialer may re-raise once, so we retry).
+                if (!CallOverlay.canDraw(this)) {
+                    scope.launch {
+                        kotlinx.coroutines.delay(1500)
+                        bringAppToFront()
+                        kotlinx.coroutines.delay(2500)
+                        if (SimCallMonitor.state.value != null) bringAppToFront()
+                    }
                 }
                 awaitState(TelephonyManager.CALL_STATE_IDLE)
                 durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()
@@ -261,13 +265,18 @@ class ManualCallService : Service() {
         private const val EXTRA_COMPANY_ID = "company_id"
         private const val EXTRA_SALESPERSON_ID = "salesperson_id"
         private const val EXTRA_RECORD = "record"
+        private const val EXTRA_NAME = "name"
 
-        fun dial(context: Context, phone: String, companyId: String?, salespersonId: String?, record: Boolean) {
+        fun dial(
+            context: Context, phone: String, companyId: String?, salespersonId: String?,
+            record: Boolean, name: String? = null,
+        ) {
             val i = Intent(context, ManualCallService::class.java)
                 .putExtra(EXTRA_PHONE, phone)
                 .putExtra(EXTRA_COMPANY_ID, companyId)
                 .putExtra(EXTRA_SALESPERSON_ID, salespersonId)
                 .putExtra(EXTRA_RECORD, record)
+                .putExtra(EXTRA_NAME, name)
             context.startService(i)
         }
     }

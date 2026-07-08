@@ -74,17 +74,15 @@ private val ChipBg = Color(0x1FFFFFFF)
  * mute / speaker, end call, and a minimize chip so they can browse leads mid-call.
  */
 @Composable
-fun SimCallScreen(vm: MainViewModel) {
+fun SimCallScreen() {
     val call by SimCallMonitor.state.collectAsState()
     val ui = call ?: return
-    val app by vm.state.collectAsState()
     val context = LocalContext.current
 
-    // Show the lead's name when we can match the number.
-    val displayName = ui.name ?: remember(ui.phone, app.leads) {
-        val key = ui.phone.filter { it.isDigit() }.takeLast(10)
-        app.leads.firstOrNull { !it.name.isNullOrBlank() && it.phone.filter { c -> c.isDigit() }.takeLast(10) == key }?.name
-    }
+    // The lead's name is resolved at dial time and carried on the call state, so
+    // this screen needs no ViewModel — it can render in the app OR in the
+    // system-overlay window that floats above the phone's own call screen.
+    val displayName = ui.name
 
     if (ui.minimized) {
         // Floating on-call chip — browsing the CRM while the call runs.

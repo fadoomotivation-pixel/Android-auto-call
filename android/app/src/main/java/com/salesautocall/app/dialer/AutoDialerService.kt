@@ -144,13 +144,16 @@ class AutoDialerService : Service() {
                         recStarted = runCatching { SimRecorder.start(this) }.getOrDefault(false)
                     }
                     SimCallMonitor.onActive(recording = recStarted)
-                    // Wait for the system in-call UI to settle, then reclaim the
+                    // With the overlay permission the call cockpit floats above the
+                    // dialer on its own; without it, fall back to reclaiming the
                     // screen (twice — some phones re-raise their own screen once).
-                    scope.launch {
-                        delay(1500)
-                        bringAppToFront()
-                        delay(2500)
-                        if (SimCallMonitor.state.value != null) bringAppToFront()
+                    if (!CallOverlay.canDraw(this)) {
+                        scope.launch {
+                            delay(1500)
+                            bringAppToFront()
+                            delay(2500)
+                            if (SimCallMonitor.state.value != null) bringAppToFront()
+                        }
                     }
                     // Now wait for it to return to idle = call ended.
                     awaitState(TelephonyManager.CALL_STATE_IDLE)
