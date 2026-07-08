@@ -14,6 +14,11 @@ type Stats = {
   outcomes: Outcome[];
   leaderboard: Leader[];
 };
+type SpeedRep = {
+  id: string; name: string; leads_7d: number; called_7d: number;
+  median_min: number; within_5min: number; breaching_now: number;
+};
+type Speed = { reps: SpeedRep[]; total_breaching: number };
 
 function fmtDuration(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -23,6 +28,14 @@ function fmtDuration(seconds: number) {
 }
 function fmtNum(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`;
+}
+/** Minutes → a human "4m" / "2h 57m" / "1d 3h". */
+function fmtMinutes(min: number) {
+  if (!min || min <= 0) return "—";
+  if (min < 60) return `${Math.round(min)}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h ${Math.round(min % 60)}m`;
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
 export default async function OverviewPage() {
@@ -35,14 +48,16 @@ export default async function OverviewPage() {
   // One aggregated round trip (was: pulling up to 5000 call rows per load).
   // The RPC returns a single jsonb object; supabase-js types rpc as an array,
   // so cast manually rather than via .returns<>() (which rejects non-array T).
-  const [{ data: statsRaw }, { data: people }] = await Promise.all([
+  const [{ data: statsRaw }, { data: people }, { data: speedRaw }] = await Promise.all([
     supabase.rpc("get_overview_stats"),
     supabase.from("profiles").select("id, full_name").eq("role", "salesperson"),
+    supabase.rpc("get_speed_to_lead"),
   ]);
 
   const s: Stats = (statsRaw as unknown as Stats | null) ?? {
     salespeople: 0, contacts: 0, calls_total: 0, talk_14d: 0, trend: [], outcomes: [], leaderboard: [],
   };
+  const speed: Speed = (speedRaw as unknown as Speed | null) ?? { reps: [], total_breaching: 0 };
   const names: Record<string, string> = Object.fromEntries(
     (people ?? []).map((p: { id: string; full_name: string | null }) => [p.id, p.full_name ?? "—"]),
   );
@@ -102,6 +117,57 @@ export default async function OverviewPage() {
           </div>
         </div>
       </div>
+
+      {/* The 5-minute rule: how fast each telecaller jumps on a fresh lead. */}
+      <h3 className="section-h">
+        Speed to lead · 7 days
+        {speed.total_breaching > 0 && (
+          <span className="badge dnc" style={{ marginLeft: 10, verticalAlign: "middle" }}>
+            🔥 {speed.total_breaching} uncalled right now
+          </span>
+        )}
+      </h3>
+      {speed.reps.length === 0 ? (
+        <div className="empty">No fresh leads assigned in the last 7 days.</div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Telecaller</th>
+                <th>New leads</th>
+                <th>Called</th>
+                <th>Median first call</th>
+                <th>Within 5 min</th>
+                <th>Uncalled now</th>
+              </tr>
+            </thead>
+            <tbody>
+              {speed.reps.map((r) => {
+                const fast = r.median_min > 0 && r.median_min <= 5;
+                return (
+                  <tr key={r.id} className="hover-row">
+                    <td style={{ color: "#fff", fontWeight: 500 }}>{r.name}</td>
+                    <td>{r.leads_7d}</td>
+                    <td>{r.called_7d}</td>
+                    <td style={{ color: fast ? "var(--good)" : r.median_min > 60 ? "var(--bad)" : "var(--accent)", fontWeight: 600 }}>
+                      {fmtMinutes(r.median_min)}
+                    </td>
+                    <td style={{ color: "var(--good)" }}>{r.within_5min}</td>
+                    <td style={{ color: r.breaching_now ? "var(--bad)" : "var(--muted)", fontWeight: r.breaching_now ? 700 : 400 }}>
+                      {r.breaching_now || "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="subtitle" style={{ marginTop: 6 }}>
+        Leads called within 5 minutes convert several times better. Reps get an automatic
+        push when a fresh lead sits uncalled for 10 minutes (escalation at 45).
+      </p>
 
       <h3 className="section-h">Today&apos;s leaderboard · last 24h</h3>
       {s.leaderboard.length === 0 ? (
