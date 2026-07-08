@@ -94,7 +94,7 @@ class ManualCallService : Service() {
                 if (record && !useNative) {
                     recStarted = runCatching { SimRecorder.start(this) }.getOrDefault(false)
                 }
-                SimCallMonitor.onActive(recording = recStarted)
+                SimCallMonitor.onActive(recording = recStarted, speakerForced = recStarted && SimRecorder.usedSpeaker)
                 // Present our call cockpit over the phone's in-call UI. With the
                 // overlay permission we float above the dialer (reliable); without
                 // it we fall back to bringing the CRM activity forward (best-effort,
@@ -113,8 +113,13 @@ class ManualCallService : Service() {
                 // Manual REC toggle may have stopped (and stashed) the recorder already.
                 val micPath = runCatching { SimRecorder.stop() }.getOrNull()
                     ?: SimCallMonitor.takeManualRecording()
+                // Native mode never runs the mic recorder, so harvest for any call
+                // with a few seconds of talk — not only ones past the "connected"
+                // threshold — so a short but real conversation the phone recorded
+                // isn't dropped. The 3s floor skips instant no-answers (whose 9s
+                // harvest poll would otherwise find nothing).
                 recordingPath = when {
-                    useNative && outcome == "connected" -> harvestNative(startedAt, phone) ?: micPath
+                    useNative && durationSec >= NATIVE_HARVEST_MIN_SEC -> harvestNative(startedAt, phone) ?: micPath
                     else -> micPath
                 }
             }
@@ -261,6 +266,7 @@ class ManualCallService : Service() {
         private const val NOTIF_ID = 4343
         private const val OFFHOOK_TIMEOUT_MS = 30_000L
         private const val CONNECTED_THRESHOLD_SEC = 8
+        private const val NATIVE_HARVEST_MIN_SEC = 3
         private const val EXTRA_PHONE = "phone"
         private const val EXTRA_COMPANY_ID = "company_id"
         private const val EXTRA_SALESPERSON_ID = "salesperson_id"

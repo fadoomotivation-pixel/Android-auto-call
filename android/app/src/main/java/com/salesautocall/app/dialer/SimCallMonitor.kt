@@ -63,9 +63,20 @@ object SimCallMonitor {
         _state.value = SimCallUi(phone = phone, name = name, nativeRec = nativeRec)
     }
 
-    /** Call went off-hook. [recording] = the service auto-started the MediaRecorder. */
-    fun onActive(recording: Boolean) = update {
-        it.copy(phase = "active", activeAtMillis = System.currentTimeMillis(), recording = it.recording || recording)
+    /**
+     * Call went off-hook. [recording] = the service auto-started the MediaRecorder;
+     * [speakerForced] = that recorder had to switch the loudspeaker on to capture
+     * the remote party, so the call screen's Speaker toggle must reflect it (else
+     * the rep taps "Speaker" to turn it on, actually turns it OFF, and the
+     * customer drops out of the recording).
+     */
+    fun onActive(recording: Boolean, speakerForced: Boolean = false) = update {
+        it.copy(
+            phase = "active",
+            activeAtMillis = System.currentTimeMillis(),
+            recording = it.recording || recording,
+            speakerOn = it.speakerOn || speakerForced,
+        )
     }
 
     fun end(context: Context?) {
@@ -95,7 +106,7 @@ object SimCallMonitor {
             update { it.copy(recording = false) }
         } else {
             val ok = runCatching { SimRecorder.start(context.applicationContext) }.getOrDefault(false)
-            if (ok) update { it.copy(recording = true) }
+            if (ok) update { it.copy(recording = true, speakerOn = it.speakerOn || SimRecorder.usedSpeaker) }
         }
     }
 
