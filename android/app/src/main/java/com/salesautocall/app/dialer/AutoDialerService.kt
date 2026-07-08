@@ -143,7 +143,7 @@ class AutoDialerService : Service() {
                     if (cfg.recordingEnabled && !useNative) {
                         recStarted = runCatching { SimRecorder.start(this) }.getOrDefault(false)
                     }
-                    SimCallMonitor.onActive(recording = recStarted)
+                    SimCallMonitor.onActive(recording = recStarted, speakerForced = recStarted && SimRecorder.usedSpeaker)
                     // With the overlay permission the call cockpit floats above the
                     // dialer on its own; without it, fall back to reclaiming the
                     // screen (twice — some phones re-raise their own screen once).
@@ -162,8 +162,14 @@ class AutoDialerService : Service() {
                     // Manual REC toggle may have stopped (and stashed) the recorder already.
                     val micPath = runCatching { SimRecorder.stop() }.getOrNull()
                         ?: SimCallMonitor.takeManualRecording()
+                    // Native mode never runs the mic recorder, so harvest for any
+                    // call with a few seconds of talk (not only ones past the
+                    // "connected" threshold) so a short but real conversation the
+                    // phone recorded isn't dropped. The 3s floor skips instant
+                    // no-answers, whose harvest poll would find nothing.
                     recordingPath = when {
-                        useNative && outcome == "connected" -> harvestNative(startedAt, contact.phone) ?: micPath
+                        useNative && durationSec >= NATIVE_HARVEST_MIN_SEC ->
+                            harvestNative(startedAt, contact.phone) ?: micPath
                         else -> micPath
                     }
                 }
@@ -409,6 +415,7 @@ class AutoDialerService : Service() {
         const val ACTION_STOP = "com.salesautocall.app.STOP"
         private const val NOTIF_ID = 4242
         private const val OFFHOOK_TIMEOUT_MS = 30_000L
+        private const val NATIVE_HARVEST_MIN_SEC = 3
 
         fun start(context: Context) {
             // Plain startService (the app is in the foreground when the user taps
