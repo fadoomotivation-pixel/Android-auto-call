@@ -254,7 +254,14 @@ object Repository {
             header("Content-Type", "application/octet-stream")
             setBody(bytes)
         }
-        return resp.bodyAsText()
+        val body = resp.bodyAsText()
+        // The function returns non-2xx when the company's Drive isn't connected or
+        // the upload fails. Surface that as an error instead of a silent "success"
+        // so the call log doesn't get stuck showing a recording that never lands.
+        if (resp.status.value !in 200..299) {
+            throw IllegalStateException("recording-upload ${resp.status.value}: ${body.take(180)}")
+        }
+        return body
     }
 
     /**
