@@ -1301,6 +1301,17 @@ private fun WhatsAppChatDialog(
     )
 }
 
+/** Small tinted status pill used on lead cards (stage / temperature / date). */
+@Composable
+private fun LeadMiniChip(label: String, color: Color) {
+    Box(
+        Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
 @Composable
 private fun LeadCard(
     c: Contact,
@@ -1364,23 +1375,22 @@ private fun LeadCard(
                 }
             }
 
-            // One quiet meta line: stage · project · budget. No pills, no rainbow,
-            // no emoji — the stage reads as plain muted text.
-            run {
-                val parts = listOfNotNull(
-                    stageOf(c.status).label,
-                    c.companyName?.takeIf { it.isNotBlank() },
-                    c.budget?.takeIf { it.isNotBlank() },
-                )
-                if (parts.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        parts.joinToString("   ·   "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
+            // Status chips a rep reads at a glance: stage (coloured), temperature,
+            // and when the lead came in — plus budget/project if we have them.
+            Spacer(Modifier.height(10.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                val stage = stageOf(c.status)
+                LeadMiniChip(stage.label, stage.color)
+                c.temperature?.takeIf { it.isNotBlank() }?.let { t ->
+                    val (label, col) = when (t) {
+                        "hot" -> "🔥 Hot" to Red
+                        "warm" -> "🌤 Warm" to Amber
+                        else -> "❄️ Cold" to Cyan
+                    }
+                    LeadMiniChip(label, col)
                 }
+                c.createdAt?.let { LeadMiniChip("📅 ${dayLabel(it)} ${timeOnly(it)}", Slate) }
+                c.budget?.takeIf { it.isNotBlank() }?.let { LeadMiniChip("💰 $it", Green) }
             }
 
             // Last note, right on the card — "Not pic", "Vrindavan mai chaiye" —
@@ -1454,7 +1464,7 @@ private fun LeadCard(
                 Spacer(Modifier.height(14.dp))
                 // One primary action (Call); WhatsApp + Schedule are quiet secondaries.
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PrimaryCallButton("Call", Modifier.weight(1f)) { if (cloudOn) onCloudCall() else onCall() }
+                    PrimaryCallButton("Call Now", Modifier.weight(1f)) { if (cloudOn) onCloudCall() else onCall() }
                     GhostIconButton(Icons.Default.Chat, "WhatsApp") { onWhatsApp() }
                     GhostIconButton(Icons.Default.CalendarMonth, "Schedule") { onSchedule() }
                 }
