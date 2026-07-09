@@ -12,6 +12,7 @@ interface FbIntegration {
   capi_enabled: boolean | null;
   capi_token_secret_id: string | null;
   capi_event_map: Record<string, string> | null;
+  auto_assign: boolean | null;
 }
 
 // Which funnel stage sends which Meta event by default (matches the meta-capi function).
@@ -39,6 +40,9 @@ export default function FacebookSetupPage() {
   const [pageId, setPageId] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [verifyToken, setVerifyToken] = useState("");
+  // Lead routing: on = auto-assign to least-loaded telecaller; off = leave
+  // unassigned for the admin to distribute (super-admin decides).
+  const [autoAssign, setAutoAssign] = useState(true);
 
   // CAPI (send conversions back to Meta)
   const [datasetId, setDatasetId] = useState("");
@@ -69,6 +73,7 @@ export default function FacebookSetupPage() {
         setVerifyToken(data.verify_token);
         setDatasetId(data.dataset_id ?? "");
         setCapiEnabled(!!data.capi_enabled);
+        setAutoAssign(data.auto_assign ?? true);
         setEventMap({ ...DEFAULT_EVENT_MAP, ...(data.capi_event_map ?? {}) });
         // tokens are write-only — never fetched to the client (they live in Vault)
       } else {
@@ -93,6 +98,7 @@ export default function FacebookSetupPage() {
         company_id: profile.company_id,
         page_id: pageId,
         verify_token: verifyToken,
+        auto_assign: autoAssign,
         updated_at: new Date().toISOString()
       });
 
@@ -212,9 +218,29 @@ export default function FacebookSetupPage() {
               required={!integration?.page_access_token_secret_id}
             />
           </div>
-          
-          <button 
-            type="submit" 
+
+          {/* Lead routing — auto-assign vs admin-controlled distribution */}
+          <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "rgba(255,255,255,0.02)" }}>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={autoAssign}
+                onChange={(e) => setAutoAssign(e.target.checked)}
+                style={{ marginTop: 3, width: 18, height: 18, accentColor: "#1877F2", flexShrink: 0 }}
+              />
+              <span>
+                <span style={{ fontWeight: 600, color: "var(--text)" }}>Auto-assign new leads to telecallers</span>
+                <span style={{ display: "block", fontSize: 13, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>
+                  {autoAssign
+                    ? "On — each new lead goes straight to the least-busy telecaller."
+                    : "Off — new leads arrive UNASSIGNED. You (admin) decide who works each one from Lead Management (per-lead Assign, or one-click Distribute)."}
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <button
+            type="submit"
             disabled={saving}
             style={{ 
               background: "linear-gradient(135deg, #1877F2, #0A52CC)", 

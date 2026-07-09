@@ -51,7 +51,7 @@ serve(async (req) => {
           // Find integration for this page
           const { data: integration, error: intError } = await supabaseAdmin
             .from("facebook_integrations")
-            .select("company_id")
+            .select("company_id, auto_assign")
             .eq("page_id", pageId)
             .single();
 
@@ -112,13 +112,17 @@ serve(async (req) => {
                 continue;
               }
 
-              // Fair routing: the least-loaded active telecaller today gets the
-              // lead (was: always the FIRST active rep, which buried one person
-              // under every Meta lead while the rest sat idle).
-              const { data: nextRep } = await supabaseAdmin.rpc("pick_next_rep", {
-                p_company: integration.company_id,
-              });
-              const assignedRep = (nextRep as string | null) ?? null;
+              // Routing. When auto_assign is off, the lead lands UNASSIGNED so the
+              // admin decides who works it (superadmin-controlled distribution).
+              // When on, fair routing gives it to the least-loaded active
+              // telecaller today.
+              let assignedRep: string | null = null;
+              if (integration.auto_assign !== false) {
+                const { data: nextRep } = await supabaseAdmin.rpc("pick_next_rep", {
+                  p_company: integration.company_id,
+                });
+                assignedRep = (nextRep as string | null) ?? null;
+              }
 
               // Clean phone (remove spaces, etc)
               const cleanPhone = phone.replace(/[^0-9+]/g, "");
