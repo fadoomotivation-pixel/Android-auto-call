@@ -79,6 +79,7 @@ fun CallsScreen(vm: MainViewModel) {
     fun nameFor(c: CallLog): String? =
         c.contactId?.let { nameById[it] } ?: nameByPhone[c.phone.filter { it.isDigit() }.takeLast(10)]
 
+    Refreshable(onRefresh = { vm.loadCalls(force = true); vm.loadDeviceRecents(); vm.loadFollowUps(force = true) }) {
     Column(Modifier.fillMaxWidth().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Calls", style = MaterialTheme.typography.headlineSmall)
@@ -194,6 +195,7 @@ fun CallsScreen(vm: MainViewModel) {
                 }
             }
         }
+    }
     }
 }
 

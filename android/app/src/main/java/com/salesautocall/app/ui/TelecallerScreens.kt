@@ -523,6 +523,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         .filter { it.second < nowMs && it.first.status !in setOf("booked", "lost", "not_interested", "dnc") }
         .sortedByDescending { it.second }
 
+    Refreshable(onRefresh = { vm.loadHome(force = true); vm.loadLeads(force = true) }, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -693,6 +694,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         item { LeaderboardCard(vm, app, compact = true) }
 
         app.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+    }
     }
 }
 
@@ -885,8 +887,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Column(Modifier.fillMaxSize()) {
+        Refreshable(onRefresh = { vm.loadLeads(force = true) }, modifier = Modifier.weight(1f)) {
         LazyColumn(
-            Modifier.weight(1f),
+            Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -1052,6 +1055,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     )
                 }
             }
+        }
         }
 
         // Start-campaign action bar (bulk select → one-tap auto-dial)
