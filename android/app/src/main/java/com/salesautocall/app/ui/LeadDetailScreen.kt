@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -113,6 +114,17 @@ private fun fmtWhen(ms: Long): String {
     return "$day, $h12:${"%02d".format(d.minute)} ${if (d.hour < 12) "AM" else "PM"}"
 }
 
+/** Small translucent pill on the hero gradient. */
+@Composable
+private fun HeroChip(text: String, tint: Color) {
+    Box(
+        Modifier.clip(RoundedCornerShape(50)).background(Color(0x24FFFFFF))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text(text, style = MaterialTheme.typography.labelMedium, color = tint, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 /** Full-screen 360° view of one lead: profile, one-tap actions, status/stage editor,
  *  and the full call history with playable recordings + AI summaries. */
 @Composable
@@ -142,6 +154,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
     }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Refreshable(onRefresh = { vm.refreshLeadDetail(); vm.refreshVoiceNotes(); vm.loadFollowUps(force = true) }) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
             item {
                 Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -152,60 +165,83 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
             }
 
-            // Header
+            // Header — a proper hero: gradient card, identity, live chips, the AI
+            // coach's next move, and the two actions that matter. First impression
+            // of the lead = first impression of the app.
             item {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFF1D4ED8), Color(0xFF7C3AED))))
+                        .padding(horizontal = 20.dp, vertical = 22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     LeadAvatar(contact.name ?: contact.phone, size = 72)
                     Spacer(Modifier.height(10.dp))
-                    Text(contact.name ?: contact.phone, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(contact.phone, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(contact.name ?: contact.phone, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(contact.phone, style = MaterialTheme.typography.bodyMedium, color = Color(0xCCFFFFFF))
                     // When the lead arrived — "kis date ko aayi".
                     isoMs(contact.createdAt)?.let { ms ->
                         Spacer(Modifier.height(2.dp))
-                        Text(
-                            "Added ${fmtWhen(ms)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text("Added ${fmtWhen(ms)}", style = MaterialTheme.typography.labelSmall, color = Color(0x99FFFFFF))
                     }
-                    Spacer(Modifier.height(8.dp))
-                    // One quiet status line: a temperature dot + muted stage text — no pills.
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Spacer(Modifier.height(14.dp))
+                    // Live chips: temperature · stage · budget.
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         contact.temperature?.takeIf { it.isNotBlank() }?.let { t ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val dot = when (t) { "hot" -> Color(0xFFEF4444); "warm" -> Color(0xFFF59E0B); else -> Color(0xFF2563EB) }
-                                Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
-                                Spacer(Modifier.width(6.dp))
-                                Text(t.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val (emoji, tint) = when (t) {
+                                "hot" -> "🔥" to Color(0xFFFECACA)
+                                "warm" -> "🌤" to Color(0xFFFDE68A)
+                                else -> "❄️" to Color(0xFFBFDBFE)
                             }
+                            HeroChip("$emoji ${t.replaceFirstChar { it.uppercase() }}", tint)
                         }
-                        // Show the stage's clean label ("Contacted"), never a raw
-                        // status word like "called".
-                        Text(
+                        HeroChip(
                             FUNNEL.firstOrNull { contact.status in it.statuses }?.label
                                 ?: SETTABLE.firstOrNull { it.first == contact.status }?.second
                                 ?: contact.status.replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            Color.White,
                         )
+                        contact.budget?.takeIf { it.isNotBlank() }?.let { HeroChip("₹ $it", Color(0xFFBBF7D0)) }
                     }
-                    Spacer(Modifier.height(14.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // Primary action: Call (solid). WhatsApp is a quiet secondary.
+                    // The AI coach's "what to say next" — from the last voice note.
+                    contact.aiNextAction?.takeIf { it.isNotBlank() }?.let { tip ->
+                        Spacer(Modifier.height(14.dp))
                         Row(
-                            Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary)
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                .background(Color(0x2EFFFFFF)).padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("👉", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.width(8.dp))
+                            Text(tip, style = MaterialTheme.typography.bodySmall, color = Color.White, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Primary action: Call (white on gradient). WhatsApp is the glassy secondary.
+                        Row(
+                            Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color.White)
                                 .clickable {
                                     val id = contact.id
                                     if (app.callerdeskCalling) vm.cloudCall(contact.phone, id, contact.campaignId) else vm.dialManual(contact.phone)
-                                }.padding(vertical = 12.dp),
+                                }.padding(vertical = 13.dp),
                             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Call, contentDescription = null, tint = Color(0xFF1D4ED8), modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            Text("Call", color = Color(0xFF1D4ED8), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                         }
-                        DetailAction(Icons.Default.Chat, "WhatsApp", MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f)) {
-                            openWhatsAppLocal(context, contact.phone, waTemplateLocal(contact.name, contact.companyName, app.profile?.fullName, app.company?.name))
+                        Row(
+                            Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color(0x33FFFFFF))
+                                .clickable {
+                                    openWhatsAppLocal(context, contact.phone, waTemplateLocal(contact.name, contact.companyName, app.profile?.fullName, app.company?.name))
+                                }.padding(vertical = 13.dp),
+                            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("WhatsApp", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -357,6 +393,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         onPlay = { call.id?.let { vm.playRecording(it) } }, onStop = { vm.stopRecording() })
                 }
             }
+        }
         }
     }
 
