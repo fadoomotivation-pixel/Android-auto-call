@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { CompanyOverview } from "@/lib/types";
 import Link from "next/link";
+import CompanyRowActions from "./CompanyRowActions";
 
 export default async function PlatformCompaniesPage() {
   const supabase = await createClient();
@@ -66,6 +67,7 @@ export default async function PlatformCompaniesPage() {
               <th>Calls</th>
               <th>Last activity</th>
               <th>Created</th>
+              <th style={{ textAlign: "right" }}>Manage</th>
             </tr>
           </thead>
           <tbody>
@@ -78,6 +80,7 @@ export default async function PlatformCompaniesPage() {
                 <td>{c.calls}</td>
                 <td>{c.last_call_at ? new Date(c.last_call_at).toLocaleString() : "—"}</td>
                 <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                <td><CompanyRowActions companyId={c.company_id} name={c.name} /></td>
               </tr>
             ))}
           </tbody>
