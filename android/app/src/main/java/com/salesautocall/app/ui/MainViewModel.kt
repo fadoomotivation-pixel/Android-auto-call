@@ -85,6 +85,7 @@ data class AppState(
     val callFilter: CallFilter = CallFilter.ALL,
     val callList: List<CallLog> = emptyList(),
     val callsLoading: Boolean = false,
+    val recordingSyncing: Boolean = false,
     // Phone's own system call log (every call, in/out/missed) for the fast recents tab.
     val deviceRecents: List<com.salesautocall.app.data.DeviceCall> = emptyList(),
     val callSummary: CallSummary = CallSummary(),
@@ -814,6 +815,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     set { it.copy(callList = list, callSummary = summary, callsLoading = false) }
                 }
                 .onFailure { e -> set { it.copy(callsLoading = false, error = e.message ?: "Couldn't load calls") } }
+        }
+    }
+
+    /**
+     * Backfills recordings for already-logged calls by matching the dialer's
+     * files (oDialer/Truecaller name their files "<phone>-<time>.<ext>") to each
+     * call by the phone number in the filename, then the closest timestamp. This
+     * is more reliable than the live per-call harvest, which can miss a file the
+     * dialer flushes only after we've stopped polling. One tap attaches every
+     * recording the app can see in the connected folder.
+     */
+    fun syncRecordings() {
+        if (_state.value.recordingSyncing) return
+        val ctx = getApplication<Application>()
+        if (!com.salesautocall.app.dialer.NativeRecordingHarvester.isConfigured(ctx)) {
+            set { it.copy(error = "Pehle recording folder connect karo (Settings → Call recording).") }
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            set { it.copy(recordingSyncing = true, message = "Recordings sync ho rahi hain…") }
+            val (attached, failed, firstError) = runCatching { Repository.syncRecordings(ctx, null) }
+                .getOrDefault(Triple(0, 0, "error"))
+            val msg = when {
+                attached > 0 && failed == 0 -> "✓ $attached recording attach ho gayi (AI summary bhi ban rahi hai). Refresh karo."
+                attached > 0 -> "✓ $attached attach hui, $failed fail. ${firstError ?: ""}"
+                failed > 0 -> "Upload fail ho raha hai: ${firstError ?: "unknown"}. (Company ki Drive connected hai?)"
+                else -> "Koi recording match nahi hui. Folder sahi hai aur calls app ke Dialer se ki thi?"
+            }
+            set { it.copy(recordingSyncing = false, message = msg) }
+            loadCalls(force = true)
         }
     }
 

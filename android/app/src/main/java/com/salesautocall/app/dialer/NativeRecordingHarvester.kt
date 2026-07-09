@@ -48,6 +48,28 @@ object NativeRecordingHarvester {
         return Found(best.name, best.lastModified, best.size)
     }
 
+    /** A file in the configured folder — for the one-tap bulk "Sync recordings". */
+    data class FileRef(val docId: String, val name: String, val lastModified: Long, val size: Long)
+
+    /** Every audio file in the configured folder (root + one nesting level). */
+    fun listAudioFiles(context: Context): List<FileRef> {
+        val folder = AppPrefs.getRecordingFolder(context).ifBlank { return emptyList() }
+        val treeUri = runCatching { Uri.parse(folder) }.getOrNull() ?: return emptyList()
+        val rootId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull() ?: return emptyList()
+        val all = mutableListOf<Candidate>()
+        val subDirs = mutableListOf<String>()
+        collect(context, treeUri, rootId, all, subDirs)
+        for (dir in subDirs.take(12)) collect(context, treeUri, dir, all, null)
+        return all.filter { it.size > 0 }.map { FileRef(it.docId, it.name, it.lastModified, it.size) }
+    }
+
+    /** Reads one file's bytes by the document id from [listAudioFiles]. */
+    fun bytesOf(context: Context, docId: String): ByteArray? {
+        val folder = AppPrefs.getRecordingFolder(context).ifBlank { return null }
+        val treeUri = runCatching { Uri.parse(folder) }.getOrNull() ?: return null
+        return readBytes(context, treeUri, docId)
+    }
+
     /**
      * Waits briefly for the OEM to flush the recording, then returns the bytes of
      * the file that best matches this call, or null if none appeared.

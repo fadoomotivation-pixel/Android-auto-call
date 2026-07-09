@@ -417,7 +417,7 @@ private fun CallOverlayCard(context: android.content.Context) {
  * we pick up the file.
  */
 @Composable
-private fun CallRecordingFolderCard(context: android.content.Context) {
+private fun CallRecordingFolderCard(context: android.content.Context, vm: MainViewModel, syncing: Boolean) {
     var folder by remember { mutableStateOf(com.salesautocall.app.data.AppPrefs.getRecordingFolder(context)) }
     // Auto-detect where the phone saves call recordings so the rep doesn't hunt.
     val detected by androidx.compose.runtime.produceState<String?>(initialValue = null) {
@@ -501,6 +501,20 @@ private fun CallRecordingFolderCard(context: android.content.Context) {
                             color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(12.dp))
                     }
+                }
+                // Backfill: attach recordings the dialer already made for past calls.
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Recordings har ghante (10 AM–7 PM) apne aap sync hoti hain aur AI summary khud ban jaati hai. Abhi ek saath attach karni ho to:",
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = { vm.syncRecordings() }, enabled = !syncing, modifier = Modifier.fillMaxWidth()) {
+                    if (syncing) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Syncing…")
+                    } else Text("Sync recordings from folder")
                 }
             } else {
                 // Detected suggestion: one tap opens the picker right on the folder.
@@ -1049,7 +1063,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         CallOverlayCard(context)
 
         Spacer(Modifier.height(16.dp))
-        CallRecordingFolderCard(context)
+        CallRecordingFolderCard(context, vm, app.recordingSyncing)
 
         Spacer(Modifier.height(16.dp))
         Card(Modifier.fillMaxWidth()) {
