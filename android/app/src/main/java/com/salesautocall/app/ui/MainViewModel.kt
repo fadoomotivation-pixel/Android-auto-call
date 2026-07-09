@@ -35,6 +35,10 @@ import kotlinx.coroutines.withContext
 
 data class AppState(
     val loading: Boolean = false,
+    // False until the saved session (and, if signed in, profile + company) has
+    // been restored. Gates the UI on a splash so cold start never flashes the
+    // login → join-company → app sequence.
+    val authResolved: Boolean = false,
     val signedIn: Boolean = false,
     val profile: Profile? = null,
     val company: Company? = null,
@@ -251,14 +255,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             Repository.awaitSession()
             val uid = Repository.currentUserId()
             if (uid == null) {
-                set { it.copy(signedIn = false, profile = null) }
+                set { it.copy(signedIn = false, profile = null, authResolved = true) }
                 return@launch
             }
-            runCatching { Repository.myProfile() }
-                .onSuccess { p -> set { it.copy(signedIn = true, profile = p) } }
-                .onFailure { set { it.copy(signedIn = true) } }
-            runCatching { Repository.myCompany() }
-                .onSuccess { c -> set { it.copy(company = c) } }
+            // Fetch profile AND company before flipping signedIn, so the shell
+            // never briefly renders "join a company" while the company is still
+            // loading. One atomic state update = no flicker.
+            val profile = runCatching { Repository.myProfile() }.getOrNull()
+            val company = runCatching { Repository.myCompany() }.getOrNull()
+            set { it.copy(signedIn = true, profile = profile, company = company, authResolved = true) }
             registerPushToken()
             checkForUpdate()
         }
@@ -368,7 +373,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { Repository.signOut() }
             invalidateCaches() // next user starts with fresh data, not cached TTLs
-            set { AppState(breakSeconds = it.breakSeconds) }
+            // Keep authResolved so we land straight on the login screen (not the
+            // boot splash) after signing out.
+            set { AppState(breakSeconds = it.breakSeconds, authResolved = true) }
         }
     }
 
