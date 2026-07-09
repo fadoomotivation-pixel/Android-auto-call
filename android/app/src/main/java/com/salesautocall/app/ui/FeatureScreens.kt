@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -440,14 +441,33 @@ private fun CallRecordingFolderCard(context: android.content.Context) {
         com.salesautocall.app.dialer.RecordingFolders.initialPickerUri(path),
     )
     val connected = folder.isNotBlank()
+    // "Test" state: scan the connected folder and show the newest recording found.
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+    fun runTest() {
+        testing = true; testResult = null
+        scope.launch {
+            val f = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { com.salesautocall.app.dialer.NativeRecordingHarvester.latest(context) }.getOrNull()
+            }
+            testing = false
+            testResult = if (f != null) {
+                val ago = android.text.format.DateUtils.getRelativeTimeSpanString(f.lastModified).toString()
+                "✓ Recording mil gayi: ${f.name} · $ago. Ab har call ke baad ye apne aap upload hogi."
+            } else {
+                "Is folder me abhi koi recording nahi mili. Pehle ek test call karo (app ke Dialer se), phir dobara Test dabao. Agar phir bhi na mile to sahi folder chuno jahan tumhara dialer recordings save karta hai."
+            }
+        }
+    }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Call recording (both sides)", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Modern phones block apps from recording the other person directly. " +
-                    "Turn ON your phone's built-in call recording (Phone app → Settings → " +
-                    "Call recording), then pick that folder here — we'll attach each " +
-                    "recording to the lead and back it up automatically.",
+                "Aaj ke phone apps ko seedhe doosre banda record karne se rokte hain. Lekin agar " +
+                    "tumhara dialer (oDialer, Truecaller, ya phone ka apna Phone app) calls record " +
+                    "karta hai, to uska folder yahan jodo — hum har call ki recording (dono awaazein) " +
+                    "apne aap lead se attach aur backup kar denge.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
@@ -456,11 +476,31 @@ private fun CallRecordingFolderCard(context: android.content.Context) {
                 Text(android.net.Uri.decode(folder.substringAfterLast('/').substringAfterLast("%3A")),
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { launchAt(detected) }) { Text("Change folder") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = { runTest() }, enabled = !testing) {
+                        if (testing) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Checking…")
+                        } else Text("Test recording setup")
+                    }
+                    OutlinedButton(onClick = { launchAt(detected) }) { Text("Change") }
                     TextButton(onClick = {
-                        com.salesautocall.app.data.AppPrefs.clearRecordingFolder(context); folder = ""
+                        com.salesautocall.app.data.AppPrefs.clearRecordingFolder(context); folder = ""; testResult = null
                     }) { Text("Disconnect") }
+                }
+                testResult?.let {
+                    Spacer(Modifier.height(10.dp))
+                    val ok = it.startsWith("✓")
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = (if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error).copy(alpha = 0.10f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(it, style = MaterialTheme.typography.bodySmall,
+                            color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(12.dp))
+                    }
                 }
             } else {
                 // Detected suggestion: one tap opens the picker right on the folder.
