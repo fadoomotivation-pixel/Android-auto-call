@@ -33,6 +33,21 @@ object NativeRecordingHarvester {
 
     private data class Candidate(val docId: String, val name: String, val lastModified: Long, val size: Long)
 
+    /** A recording found in the configured folder — for the setup "Test" button. */
+    data class Found(val name: String, val lastModified: Long, val size: Long)
+
+    /**
+     * The newest audio file currently sitting in the configured folder, or null.
+     * Lets the setup screen prove — before any call — that we can actually see the
+     * dialer's recordings (oDialer / Truecaller / OEM), so the rep isn't guessing.
+     */
+    fun latest(context: Context): Found? {
+        val folder = AppPrefs.getRecordingFolder(context).ifBlank { return null }
+        val treeUri = runCatching { Uri.parse(folder) }.getOrNull() ?: return null
+        val best = newestMatch(context, treeUri, 0L, "") ?: return null
+        return Found(best.name, best.lastModified, best.size)
+    }
+
     /**
      * Waits briefly for the OEM to flush the recording, then returns the bytes of
      * the file that best matches this call, or null if none appeared.
@@ -44,12 +59,13 @@ object NativeRecordingHarvester {
         val folder = AppPrefs.getRecordingFolder(context).ifBlank { return null }
         val treeUri = runCatching { Uri.parse(folder) }.getOrNull() ?: return null
         val phoneDigits = phone.filter { it.isDigit() }.takeLast(10)
-        // Allow the file to have started a hair before we armed, and to land a few
-        // seconds after hang-up (OEMs flush lazily).
-        val windowStart = startedAtMillis - 15_000L
+        // Allow the file to have started a hair before we armed, and to land a
+        // while after hang-up (third-party dialers like oDialer flush lazily).
+        val windowStart = startedAtMillis - 20_000L
 
-        // Poll: some phones write the file 2-6s after the call ends.
-        repeat(6) { attempt ->
+        // Poll for ~18s: some dialers write the file several seconds after the
+        // call ends (finalising the MP4/M4A container).
+        repeat(12) { attempt ->
             if (attempt > 0) delay(1_500L)
             val best = newestMatch(context, treeUri, windowStart, phoneDigits)
             if (best != null) {
