@@ -3,6 +3,7 @@ package com.salesautocall.app.dialer
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaRecorder
 import android.os.Build
@@ -36,6 +37,7 @@ object SimRecorder {
     private var outputPath: String? = null
     private var audioManager: AudioManager? = null
     private var prevSpeaker = false
+    private var forcedCommDevice = false
 
     /** True when the last successful start had to force the loudspeaker on. */
     @Volatile
@@ -74,7 +76,7 @@ object SimRecorder {
         for ((source, speakerphone, verify) in ATTEMPTS) {
             // Only force the loudspeaker for the mic-based fallbacks; the native
             // VOICE_CALL source captures both sides without disturbing the call.
-            runCatching { am.isSpeakerphoneOn = speakerphone }
+            setSpeaker(am, speakerphone)
             val r = runCatching {
                 newRecorder(context).apply {
                     setAudioSource(source)
@@ -105,8 +107,40 @@ object SimRecorder {
             usedSpeaker = speakerphone
             return true
         }
-        runCatching { am.isSpeakerphoneOn = prevSpeaker }
+        restoreSpeaker(am)
         return false
+    }
+
+    /**
+     * Routes call audio to the loudspeaker so the mic can hear the remote party.
+     * On Android 12+ (S) the old [AudioManager.setSpeakerphoneOn] is deprecated
+     * and silently ignored on many OEMs (OnePlus/Oppo/ColorOS especially), which
+     * left the "speaker" fallback recording near-silence. Use the modern
+     * setCommunicationDevice API there and fall back to the legacy flag below it.
+     */
+    private fun setSpeaker(am: AudioManager, on: Boolean) {
+        if (!on) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val speaker = runCatching {
+                am.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            }.getOrNull()
+            if (speaker != null && runCatching { am.setCommunicationDevice(speaker) }.getOrDefault(false)) {
+                forcedCommDevice = true
+                return
+            }
+        }
+        @Suppress("DEPRECATION")
+        runCatching { am.isSpeakerphoneOn = true }
+    }
+
+    /** Puts audio routing back the way we found it. */
+    private fun restoreSpeaker(am: AudioManager) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && forcedCommDevice) {
+            runCatching { am.clearCommunicationDevice() }
+        }
+        forcedCommDevice = false
+        @Suppress("DEPRECATION")
+        runCatching { am.isSpeakerphoneOn = prevSpeaker }
     }
 
     /**
@@ -135,7 +169,7 @@ object SimRecorder {
         runCatching { recorder?.stop() }
         runCatching { recorder?.release() }
         recorder = null
-        runCatching { audioManager?.isSpeakerphoneOn = prevSpeaker }
+        audioManager?.let { restoreSpeaker(it) }
         audioManager = null
         outputPath = null
         val f = path?.let { File(it) }
