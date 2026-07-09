@@ -124,7 +124,13 @@ fun AppRoot(vm: MainViewModel) {
         }
     }
 
-    if (state.signedIn) MainShell(vm) else LoginScreen(vm)
+    when {
+        // Still restoring the saved session → hold on a calm splash so cold
+        // start never flashes login → join-company → app.
+        !state.authResolved -> BootSplash()
+        state.signedIn -> MainShell(vm)
+        else -> LoginScreen(vm)
+    }
 
     // In-app softphone call overlay.
     if (state.signedIn && state.cloudCallNumber != null) {
@@ -211,6 +217,28 @@ private fun AddLeadSheet(vm: MainViewModel) {
                     ) { Text(if (app.addingLead) "Adding…" else "Add lead") }
                 }
             }
+        }
+    }
+}
+
+/** Calm branded splash shown while the saved session is being restored. */
+@Composable
+private fun BootSplash() {
+    Box(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(64.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(34.dp))
+            }
+            Spacer(Modifier.height(20.dp))
+            Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(18.dp))
+            CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 2.5.dp)
         }
     }
 }
