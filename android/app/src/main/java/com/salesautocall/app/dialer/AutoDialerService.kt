@@ -144,17 +144,8 @@ class AutoDialerService : Service() {
                         recStarted = runCatching { SimRecorder.start(this) }.getOrDefault(false)
                     }
                     SimCallMonitor.onActive(recording = recStarted, speakerForced = recStarted && SimRecorder.usedSpeaker)
-                    // With the overlay permission the call cockpit floats above the
-                    // dialer on its own; without it, fall back to reclaiming the
-                    // screen (twice — some phones re-raise their own screen once).
-                    if (!CallOverlay.canDraw(this)) {
-                        scope.launch {
-                            delay(1500)
-                            bringAppToFront()
-                            delay(2500)
-                            if (SimCallMonitor.state.value != null) bringAppToFront()
-                        }
-                    }
+                    // The phone's native in-call screen stays in front — we no longer
+                    // float a cockpit over it or yank the CRM forward (that was laggy).
                     // Now wait for it to return to idle = call ended.
                     awaitState(TelephonyManager.CALL_STATE_IDLE)
                     durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()
@@ -213,15 +204,6 @@ class AutoDialerService : Service() {
         }
         updateNotification("Auto-dial finished — ${queue.size} calls")
         stopForeground(STOP_FOREGROUND_DETACH)
-    }
-
-    /** Best-effort: reopen the app over the system dialer once the call is off-hook. */
-    private fun bringAppToFront() {
-        runCatching {
-            val i = Intent(this, com.salesautocall.app.MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            startActivity(i)
-        }
     }
 
     /** Pulls the OEM's native recording for the just-ended call and stages it as a

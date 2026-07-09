@@ -376,41 +376,6 @@ private fun CompanyCard(vm: MainViewModel, app: AppState) {
 }
 
 /**
- * Grants the "Display over other apps" permission so the in-app call cockpit can
- * float ABOVE the phone's own dialer during a call — the way Truecaller / O-Dialer
- * stay in their app without being the default phone app.
- */
-@Composable
-private fun CallOverlayCard(context: android.content.Context) {
-    // Read fresh each recomposition so it reflects a just-granted permission.
-    val granted = com.salesautocall.app.dialer.CallOverlay.canDraw(context)
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text("Call screen over the dialer", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Show Call Pro AI's call screen (timer, REC, notes) on top of your phone's " +
-                    "dialer during a call — no need to make this the default phone app. " +
-                    "Turn on \"Display over other apps\".",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            if (granted) {
-                Text("✓ Enabled", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-            } else {
-                OutlinedButton(onClick = {
-                    runCatching {
-                        context.startActivity(
-                            com.salesautocall.app.dialer.CallOverlay.permissionIntent(context)
-                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-                        )
-                    }
-                }) { Text("Turn on") }
-            }
-        }
-    }
-}
-
-/**
  * Points the app at the phone's own call-recording folder so we can harvest the
  * OEM's both-sides recording (native quality) instead of a mic-only capture.
  * This is how reliable call recorders work on modern Android — the OS records,
@@ -1072,8 +1037,6 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         CloudCallingCard(vm, app)
 
-        Spacer(Modifier.height(16.dp))
-        CallOverlayCard(context)
 
         Spacer(Modifier.height(16.dp))
         CallRecordingFolderCard(context, vm, app.recordingSyncing, app.recordingSyncMsg)

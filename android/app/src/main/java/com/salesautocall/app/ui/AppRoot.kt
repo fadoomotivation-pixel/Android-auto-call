@@ -152,12 +152,9 @@ fun AppRoot(vm: MainViewModel) {
         AddLeadSheet(vm)
     }
 
-    // In-app SIM call cockpit (timer / REC / mute / speaker / end) — the system
-    // dialer keeps the call; the telecaller keeps the CRM. Minimizes to a chip.
-    val simCall by com.salesautocall.app.dialer.SimCallMonitor.state.collectAsState()
-    if (state.signedIn && simCall != null) {
-        SimCallScreen()
-    }
+    // The in-app SIM call cockpit was removed — it floated over the phone's own
+    // in-call screen and was laggy without adding value (the native dialer handles
+    // mute/speaker/end, and recordings are harvested automatically after the call).
 
     crash?.let { text ->
         AlertDialog(
