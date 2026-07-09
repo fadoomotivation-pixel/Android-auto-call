@@ -112,19 +112,13 @@ serve(async (req) => {
                 continue;
               }
 
-              // Find a default rep or assign to admin
-              // For now, just insert without salesperson_id, or pick an admin
-              // We'll leave salesperson_id null so it shows up in "Unassigned" pool,
-              // or let's find the first active salesperson for the company to avoid unassigned purgatory.
-              const { data: reps } = await supabaseAdmin
-                .from("profiles")
-                .select("id")
-                .eq("company_id", integration.company_id)
-                .eq("role", "salesperson")
-                .eq("is_active", true)
-                .limit(1);
-
-              const assignedRep = reps && reps.length > 0 ? reps[0].id : null;
+              // Fair routing: the least-loaded active telecaller today gets the
+              // lead (was: always the FIRST active rep, which buried one person
+              // under every Meta lead while the rest sat idle).
+              const { data: nextRep } = await supabaseAdmin.rpc("pick_next_rep", {
+                p_company: integration.company_id,
+              });
+              const assignedRep = (nextRep as string | null) ?? null;
 
               // Clean phone (remove spaces, etc)
               const cleanPhone = phone.replace(/[^0-9+]/g, "");

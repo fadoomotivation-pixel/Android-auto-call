@@ -153,6 +153,25 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
     setTimeout(() => setMsg(null), 2500);
   }
 
+  /** Round-robin every unassigned lead across ACTIVE telecallers (server-side
+   *  RPC) — each rep gets a fair share, stamped fresh + pushed with the chime. */
+  async function distributeFairly() {
+    if (!confirm(`Distribute all ${stats.unassigned} unassigned leads EQUALLY among your active telecallers?`)) return;
+    setBusy(true);
+    const { data, error } = await supabase.rpc("distribute_unassigned_leads");
+    setBusy(false);
+    const r = data as { ok?: boolean; assigned?: number; reps?: number; error?: string } | null;
+    if (error || !r?.ok) {
+      setMsg(`Distribute failed: ${r?.error || error?.message || "unknown error"}`);
+    } else {
+      setMsg(`⚖️ Distributed ${r.assigned} leads across ${r.reps} telecallers.`);
+    }
+    setSelected(new Set());
+    await load(true);
+    await refreshStats();
+    setTimeout(() => setMsg(null), 4000);
+  }
+
   async function unassignSelected() {
     if (selected.size === 0) return;
     setBusy(true);
@@ -297,6 +316,9 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
             </button>
             <button className="link" style={{ color: "var(--success)" }} disabled={busy || stats.unassigned === 0} onClick={autoAssignByTerritory}>
               ✨ Auto-assign by Territory
+            </button>
+            <button className="link" style={{ color: "var(--accent)", fontWeight: 600 }} disabled={busy || stats.unassigned === 0} onClick={distributeFairly}>
+              ⚖️ Distribute equally
             </button>
           </>
         )}
