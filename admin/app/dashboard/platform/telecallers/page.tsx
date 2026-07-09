@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { TelecallerOverview } from "@/lib/types";
 import Link from "next/link";
+import TelecallerRowActions from "./TelecallerRowActions";
 
 export default async function PlatformTelecallersPage() {
   const supabase = await createClient();
@@ -52,6 +53,7 @@ export default async function PlatformTelecallersPage() {
               <th>Connected</th>
               <th>Last call</th>
               <th>Status</th>
+              <th style={{ textAlign: "right" }}>Manage</th>
             </tr>
           </thead>
           <tbody>
@@ -69,6 +71,7 @@ export default async function PlatformTelecallersPage() {
                     {t.is_active ? "active" : "inactive"}
                   </span>
                 </td>
+                <td><TelecallerRowActions userId={t.salesperson_id} name={t.full_name || "this telecaller"} /></td>
               </tr>
             ))}
           </tbody>
