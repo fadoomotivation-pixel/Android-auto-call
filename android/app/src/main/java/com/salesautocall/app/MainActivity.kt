@@ -32,6 +32,7 @@ import androidx.work.ExistingWorkPolicy
 import java.util.concurrent.TimeUnit
 import com.salesautocall.app.data.AppPrefs
 import com.salesautocall.app.data.CallLogSyncWorker
+import com.salesautocall.app.data.RecordingSyncWorker
 
 class MainActivity : ComponentActivity() {
 
@@ -52,6 +53,13 @@ class MainActivity : ComponentActivity() {
             .setConstraints(syncConstraints)
             .build()
         workManager.enqueueUniquePeriodicWork("CallLogSync", ExistingPeriodicWorkPolicy.KEEP, periodicWork)
+
+        // Hourly recording sync — pulls the dialer's new call recordings into the
+        // CRM (and auto-summarises them). The worker itself only does work 10 AM–7 PM.
+        val recordingWork = PeriodicWorkRequestBuilder<RecordingSyncWorker>(1, TimeUnit.HOURS)
+            .setConstraints(syncConstraints)
+            .build()
+        workManager.enqueueUniquePeriodicWork("RecordingSync", ExistingPeriodicWorkPolicy.KEEP, recordingWork)
 
         setContent {
             AppTheme {

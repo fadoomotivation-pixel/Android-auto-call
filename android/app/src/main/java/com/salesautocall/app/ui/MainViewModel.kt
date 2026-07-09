@@ -835,36 +835,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch(Dispatchers.IO) {
             set { it.copy(recordingSyncing = true, message = "Recordings sync ho rahi hain…") }
-            val files = runCatching {
-                com.salesautocall.app.dialer.NativeRecordingHarvester.listAudioFiles(ctx)
-            }.getOrDefault(emptyList()).toMutableList()
-            // Newest calls first so, when two calls share a number, each grabs the
-            // nearest file and we remove it from the pool (no double-attach).
-            val calls = _state.value.callList.sortedByDescending { parseIsoMs(it.startedAt) ?: 0L }
-            var attached = 0
-            var failed = 0
-            var firstError: String? = null
-            for (c in calls) {
-                val id = c.id ?: continue
-                if (c.recordingStatus == "ready") continue
-                val startMs = parseIsoMs(c.startedAt) ?: continue
-                val digits = c.phone.filter { it.isDigit() }.takeLast(10)
-                val byName = if (digits.length >= 7)
-                    files.filter { f -> f.name.filter { it.isDigit() }.contains(digits) } else emptyList()
-                val pick = byName.ifEmpty { files.filter { kotlin.math.abs(it.lastModified - startMs) < 300_000L } }
-                    .minByOrNull { kotlin.math.abs(it.lastModified - startMs) } ?: continue
-                // Guard against a phone-only match to a wildly different day.
-                if (kotlin.math.abs(pick.lastModified - startMs) > 12L * 3600_000L) continue
-                val bytes = runCatching {
-                    com.salesautocall.app.dialer.NativeRecordingHarvester.bytesOf(ctx, pick.docId)
-                }.getOrNull()
-                if (bytes == null || bytes.isEmpty()) continue
-                runCatching { Repository.uploadRecording(id, "sim", c.durationSeconds, bytes) }
-                    .onSuccess { attached++; files.remove(pick) }
-                    .onFailure { e -> failed++; if (firstError == null) firstError = e.message }
-            }
+            val (attached, failed, firstError) = runCatching { Repository.syncRecordings(ctx, null) }
+                .getOrDefault(Triple(0, 0, "error"))
             val msg = when {
-                attached > 0 && failed == 0 -> "✓ $attached recording attach ho gayi. Refresh karo, ▶ dikh jayega."
+                attached > 0 && failed == 0 -> "✓ $attached recording attach ho gayi (AI summary bhi ban rahi hai). Refresh karo."
                 attached > 0 -> "✓ $attached attach hui, $failed fail. ${firstError ?: ""}"
                 failed > 0 -> "Upload fail ho raha hai: ${firstError ?: "unknown"}. (Company ki Drive connected hai?)"
                 else -> "Koi recording match nahi hui. Folder sahi hai aur calls app ke Dialer se ki thi?"
@@ -872,11 +846,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             set { it.copy(recordingSyncing = false, message = msg) }
             loadCalls(force = true)
         }
-    }
-
-    private fun parseIsoMs(iso: String?): Long? = iso?.let {
-        runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
-            ?: runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
     }
 
     /**

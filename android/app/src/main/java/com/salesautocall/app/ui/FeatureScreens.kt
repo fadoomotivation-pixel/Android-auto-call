@@ -505,7 +505,7 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
                 // Backfill: attach recordings the dialer already made for past calls.
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "Purani calls ki recordings ek saath attach karo (jo folder connect karne se pehle hui thi):",
+                    "Recordings har ghante (10 AM–7 PM) apne aap sync hoti hain aur AI summary khud ban jaati hai. Abhi ek saath attach karni ho to:",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(6.dp))

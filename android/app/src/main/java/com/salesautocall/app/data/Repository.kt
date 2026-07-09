@@ -257,6 +257,60 @@ object Repository {
         return resp.bodyAsText()
     }
 
+    /**
+     * Backfills recordings for logged calls by matching the dialer's files
+     * (oDialer/Truecaller name them "<phone>-<time>.<ext>") to each call by the
+     * phone number in the filename, then the closest timestamp. Each matched file
+     * is uploaded (which marks the call ready) and the AI summary is kicked off
+     * automatically — so recordings AND their AI insights appear on their own.
+     *
+     * Shared by the manual "Sync" button and the hourly RecordingSyncWorker.
+     * Returns (attached, failed, firstErrorMessage).
+     */
+    suspend fun syncRecordings(context: android.content.Context, sinceIso: String?): Triple<Int, Int, String?> {
+        awaitSession()
+        if (currentUserId() == null) return Triple(0, 0, "not signed in")
+        if (!com.salesautocall.app.dialer.NativeRecordingHarvester.isConfigured(context)) return Triple(0, 0, "no folder")
+        val files = runCatching {
+            com.salesautocall.app.dialer.NativeRecordingHarvester.listAudioFiles(context)
+        }.getOrDefault(emptyList()).toMutableList()
+        if (files.isEmpty()) return Triple(0, 0, null)
+        val calls = runCatching { fetchCalls(sinceIso) }.getOrDefault(emptyList())
+            .sortedByDescending { recIsoMs(it.startedAt) ?: 0L }
+        var attached = 0
+        var failed = 0
+        var firstError: String? = null
+        for (c in calls) {
+            val id = c.id ?: continue
+            if (c.recordingStatus == "ready") continue
+            val startMs = recIsoMs(c.startedAt) ?: continue
+            val digits = c.phone.filter { it.isDigit() }.takeLast(10)
+            val byName = if (digits.length >= 7)
+                files.filter { f -> f.name.filter { it.isDigit() }.contains(digits) } else emptyList()
+            val pick = byName.ifEmpty { files.filter { kotlin.math.abs(it.lastModified - startMs) < 300_000L } }
+                .minByOrNull { kotlin.math.abs(it.lastModified - startMs) } ?: continue
+            if (kotlin.math.abs(pick.lastModified - startMs) > 12L * 3600_000L) continue
+            val bytes = runCatching {
+                com.salesautocall.app.dialer.NativeRecordingHarvester.bytesOf(context, pick.docId)
+            }.getOrNull()
+            if (bytes == null || bytes.isEmpty()) continue
+            runCatching { uploadRecording(id, "sim", c.durationSeconds, bytes) }
+                .onSuccess {
+                    attached++
+                    files.remove(pick)
+                    // Fire the AI summary/disposition for the freshly-attached recording.
+                    runCatching { generateSummary(id) }
+                }
+                .onFailure { e -> failed++; if (firstError == null) firstError = e.message }
+        }
+        return Triple(attached, failed, firstError)
+    }
+
+    private fun recIsoMs(iso: String?): Long? = iso?.let {
+        runCatching { Instant.parse(it).toEpochMilli() }.getOrNull()
+            ?: runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+    }
+
     /** Downloads a recording's audio bytes (RLS-gated) for in-app playback. */
     suspend fun fetchRecording(callLogId: String): ByteArray? {
         val resp = client.functions.invoke(
