@@ -86,6 +86,7 @@ data class AppState(
     val callList: List<CallLog> = emptyList(),
     val callsLoading: Boolean = false,
     val recordingSyncing: Boolean = false,
+    val recordingSyncMsg: String? = null,
     // Phone's own system call log (every call, in/out/missed) for the fast recents tab.
     val deviceRecents: List<com.salesautocall.app.data.DeviceCall> = emptyList(),
     val callSummary: CallSummary = CallSummary(),
@@ -830,20 +831,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.recordingSyncing) return
         val ctx = getApplication<Application>()
         if (!com.salesautocall.app.dialer.NativeRecordingHarvester.isConfigured(ctx)) {
-            set { it.copy(error = "Pehle recording folder connect karo (Settings → Call recording).") }
+            set { it.copy(recordingSyncMsg = "Pehle recording folder connect karo.") }
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            set { it.copy(recordingSyncing = true, message = "Recordings sync ho rahi hain…") }
+            set { it.copy(recordingSyncing = true, recordingSyncMsg = "Sync ho raha hai…") }
             val (attached, failed, firstError) = runCatching { Repository.syncRecordings(ctx, null) }
-                .getOrDefault(Triple(0, 0, "error"))
+                .getOrElse { Triple(0, 0, it.message ?: "error") }
             val msg = when {
-                attached > 0 && failed == 0 -> "✓ $attached recording attach ho gayi (AI summary bhi ban rahi hai). Refresh karo."
+                attached > 0 && failed == 0 -> "✓ $attached recording attach ho gayi (AI summary bhi ban rahi hai). Calls tab kholo."
                 attached > 0 -> "✓ $attached attach hui, $failed fail. ${firstError ?: ""}"
-                failed > 0 -> "Upload fail ho raha hai: ${firstError ?: "unknown"}. (Company ki Drive connected hai?)"
+                failed > 0 -> "Upload fail: ${firstError ?: "unknown"}. (Company ki Google Drive connected hai?)"
                 else -> "Koi recording match nahi hui. Folder sahi hai aur calls app ke Dialer se ki thi?"
             }
-            set { it.copy(recordingSyncing = false, message = msg) }
+            set { it.copy(recordingSyncing = false, recordingSyncMsg = msg) }
             loadCalls(force = true)
         }
     }

@@ -417,7 +417,7 @@ private fun CallOverlayCard(context: android.content.Context) {
  * we pick up the file.
  */
 @Composable
-private fun CallRecordingFolderCard(context: android.content.Context, vm: MainViewModel, syncing: Boolean) {
+private fun CallRecordingFolderCard(context: android.content.Context, vm: MainViewModel, syncing: Boolean, syncMsg: String?) {
     var folder by remember { mutableStateOf(com.salesautocall.app.data.AppPrefs.getRecordingFolder(context)) }
     // Auto-detect where the phone saves call recordings so the rep doesn't hunt.
     val detected by androidx.compose.runtime.produceState<String?>(initialValue = null) {
@@ -515,6 +515,19 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
                         Spacer(Modifier.width(8.dp))
                         Text("Syncing…")
                     } else Text("Sync recordings from folder")
+                }
+                syncMsg?.let {
+                    Spacer(Modifier.height(10.dp))
+                    val ok = it.startsWith("✓")
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = (if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error).copy(alpha = 0.10f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(it, style = MaterialTheme.typography.bodySmall,
+                            color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(12.dp))
+                    }
                 }
             } else {
                 // Detected suggestion: one tap opens the picker right on the folder.
@@ -1063,7 +1076,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         CallOverlayCard(context)
 
         Spacer(Modifier.height(16.dp))
-        CallRecordingFolderCard(context, vm, app.recordingSyncing)
+        CallRecordingFolderCard(context, vm, app.recordingSyncing, app.recordingSyncMsg)
 
         Spacer(Modifier.height(16.dp))
         Card(Modifier.fillMaxWidth()) {
