@@ -1312,6 +1312,7 @@ private fun LeadMiniChip(label: String, color: Color) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LeadCard(
     c: Contact,
