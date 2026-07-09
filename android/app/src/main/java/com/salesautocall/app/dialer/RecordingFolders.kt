@@ -22,14 +22,20 @@ import java.io.File
  */
 object RecordingFolders {
 
-    /** Common relative paths OEM call recorders use (label → path under shared storage). */
+    /** Common relative paths OEM & third-party call recorders use
+     *  (label → path under shared storage), best-known first. */
     val KNOWN = listOf(
+        "oDialer / Music" to "Music/Recordings/Call Recording",
+        "oDialer (plural)" to "Music/Recordings/Call Recordings",
+        "Music / Call Recording" to "Music/Call Recording",
+        "Recordings/Call Recording" to "Recordings/Call Recording",
         "Samsung" to "Recordings/Call",
         "Xiaomi / MIUI" to "MIUI/sound_recorder/call_rec",
         "Xiaomi (new)" to "Recordings/call_rec",
         "Realme / Oppo" to "Recordings/Call Recordings",
         "Vivo" to "Record/Call",
         "OnePlus" to "Recordings/Call",
+        "Truecaller" to "Truecaller",
         "Android 13+ stock" to "Recordings/Call",
     )
 
