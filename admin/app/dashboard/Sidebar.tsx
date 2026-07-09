@@ -39,7 +39,9 @@ export function Sidebar({
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/capture" label="🪝 Lead Capture" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/content" label="📚 Content Library" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/projects" label="🏢 Buyer Projects" />}
-        <NavLink href="/dashboard/contacts" label="Contacts" />
+        {/* Admins manage contacts in Lead Management — the read-only Contacts
+            list was a duplicate for them; it stays for non-admin viewers. */}
+        {profile?.role !== "admin" && <NavLink href="/dashboard/contacts" label="Contacts" />}
         <NavLink href="/dashboard/calls" label="Call logs" />
         <NavLink href="/dashboard/recordings" label="Recordings" />
         {profile?.role === "admin" && <NavLink href="/dashboard/reports" label="📊 Reports" />}
