@@ -142,6 +142,12 @@ fun AppRoot(vm: MainViewModel) {
         PostCallDispositionSheet(vm)
     }
 
+    // Full-screen Settings overlay (below lead detail, so a lead opened from
+    // settings shows on top and settings is dismissed cleanly).
+    if (state.signedIn && state.showSettings) {
+        SettingsScreen(vm, onBack = { vm.closeSettings() })
+    }
+
     // Full-screen lead detail overlay.
     if (state.signedIn && state.leadDetailId != null) {
         LeadDetailScreen(vm)
@@ -152,12 +158,9 @@ fun AppRoot(vm: MainViewModel) {
         AddLeadSheet(vm)
     }
 
-    // In-app SIM call cockpit (timer / REC / mute / speaker / end) — the system
-    // dialer keeps the call; the telecaller keeps the CRM. Minimizes to a chip.
-    val simCall by com.salesautocall.app.dialer.SimCallMonitor.state.collectAsState()
-    if (state.signedIn && simCall != null) {
-        SimCallScreen()
-    }
+    // The in-app SIM call cockpit was removed — it floated over the phone's own
+    // in-call screen and was laggy without adding value (the native dialer handles
+    // mute/speaker/end, and recordings are harvested automatically after the call).
 
     crash?.let { text ->
         AlertDialog(
@@ -424,13 +427,6 @@ private fun MainShell(vm: MainViewModel) {
 
     val nav = rememberNavController()
 
-    // Opening a lead (full-screen overlay) while Settings is on the nav stack
-    // left Settings visible again after the lead closed — pop it out first.
-    LaunchedEffect(state.leadDetailId) {
-        if (state.leadDetailId != null && nav.currentBackStackEntry?.destination?.route == "settings") {
-            nav.popBackStack()
-        }
-    }
     // Call history sits on the bottom bar; Reports stays one tap away in the drawer.
     val tabs = listOf(Tab.Home, Tab.Leads, Tab.Dialer, Tab.Campaign, Tab.Calls)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -491,7 +487,7 @@ private fun MainShell(vm: MainViewModel) {
                 },
                 onSettings = {
                     scope.launch { drawerState.close() }
-                    nav.navigate("settings") { launchSingleTop = true }
+                    vm.openSettings()
                 },
                 onSignOut = {
                     scope.launch { drawerState.close() }
@@ -516,7 +512,7 @@ private fun MainShell(vm: MainViewModel) {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { nav.navigate("settings") { launchSingleTop = true } }) {
+                        IconButton(onClick = { vm.openSettings() }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
                     },
@@ -647,7 +643,6 @@ private fun MainShell(vm: MainViewModel) {
                             },
                         )
                     }
-                    composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
                 }
             }
         }

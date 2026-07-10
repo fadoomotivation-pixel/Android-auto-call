@@ -95,18 +95,8 @@ class ManualCallService : Service() {
                     recStarted = runCatching { SimRecorder.start(this) }.getOrDefault(false)
                 }
                 SimCallMonitor.onActive(recording = recStarted, speakerForced = recStarted && SimRecorder.usedSpeaker)
-                // Present our call cockpit over the phone's in-call UI. With the
-                // overlay permission we float above the dialer (reliable); without
-                // it we fall back to bringing the CRM activity forward (best-effort,
-                // the system dialer may re-raise once, so we retry).
-                if (!CallOverlay.canDraw(this)) {
-                    scope.launch {
-                        kotlinx.coroutines.delay(1500)
-                        bringAppToFront()
-                        kotlinx.coroutines.delay(2500)
-                        if (SimCallMonitor.state.value != null) bringAppToFront()
-                    }
-                }
+                // The phone's native in-call screen stays in front — no floating
+                // cockpit or forced bring-to-front (that was the laggy part).
                 awaitState(TelephonyManager.CALL_STATE_IDLE)
                 durationSec = (Instant.now().epochSecond - startedAt.epochSecond).toInt()
                 outcome = if (durationSec >= CONNECTED_THRESHOLD_SEC) "connected" else "no_answer"
@@ -130,15 +120,6 @@ class ManualCallService : Service() {
         persist(phone, companyId, salespersonId, startedAt, durationSec, outcome, recordingPath)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
-    }
-
-    /** Best-effort: reopen the app over the system dialer once the call is off-hook. */
-    private fun bringAppToFront() {
-        runCatching {
-            val i = Intent(this, com.salesautocall.app.MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            startActivity(i)
-        }
     }
 
     /** Stages the OEM's native recording as a cache file for the shared uploader. */

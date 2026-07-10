@@ -8,6 +8,7 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.storage.storage
 import io.ktor.client.call.body
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -248,6 +249,13 @@ object Repository {
      *  it to the company's Google Drive and marks the call log ready. */
     suspend fun uploadRecording(callLogId: String, source: String, durationSeconds: Int, bytes: ByteArray): String {
         val resp = client.functions.invoke("recording-upload") {
+            // A recording upload streams the whole file up AND the function then
+            // streams it into Drive, which easily blows past the default 10s Ktor
+            // request timeout on longer calls. Give it a generous 2-minute window.
+            timeout {
+                requestTimeoutMillis = 120_000
+                socketTimeoutMillis = 120_000
+            }
             header("x-call-id", callLogId)
             header("x-source", source)
             header("x-duration", durationSeconds.toString())

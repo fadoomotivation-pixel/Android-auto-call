@@ -824,7 +824,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var query by remember { mutableStateOf("") }
     // One simple question on screen: "which bucket?" — the fine-grained stage /
     // temperature / sort controls live in the Filters sheet, not the page.
-    var bucket by remember { mutableStateOf("all") }              // all | new | working | pipeline | booked
+    var bucket by remember { mutableStateOf("new") }              // all | new | working | pipeline | booked — default to New
     var stageFilter by remember { mutableStateOf<String?>(null) } // exact stage from the sheet
     var quick by remember { mutableStateOf<String?>(null) }       // "today" | "retry"
     var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
