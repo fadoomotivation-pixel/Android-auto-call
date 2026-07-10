@@ -743,11 +743,22 @@ private fun HorizontalFunnel(contact: Contact, onTap: (String) -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Text(step.label.removeSuffix(" 🏆") + if (step.key == "booked") " 🏆" else "",
+                // Short single-word labels: the full names ("Contacted",
+                // "Negotiation") hyphen-broke mid-word at 1/7th screen width.
+                val short = when (step.key) {
+                    "new" -> "New"
+                    "contacted" -> "Contact"
+                    "interested" -> "Interest"
+                    "site_visit" -> "Visit"
+                    "negotiation" -> "Nego."
+                    "token_paid" -> "Token"
+                    else -> "Booked"
+                }
+                Text(short,
                     style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, lineHeight = 12.sp,
                     color = if (current) PurpleL else if (done) Ink else SubInk,
                     fontWeight = if (current) FontWeight.Bold else FontWeight.Medium,
-                    textAlign = TextAlign.Center, maxLines = 2,
+                    textAlign = TextAlign.Center, maxLines = 1,
                     modifier = Modifier.padding(horizontal = 2.dp))
             }
         }
