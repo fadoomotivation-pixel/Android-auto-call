@@ -2,7 +2,9 @@ package com.salesautocall.app.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -427,14 +429,7 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Call recording (both sides)", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Aaj ke phone apps ko seedhe doosre banda record karne se rokte hain. Lekin agar " +
-                    "tumhara dialer (oDialer, Truecaller, ya phone ka apna Phone app) calls record " +
-                    "karta hai, to uska folder yahan jodo — hum har call ki recording (dono awaazein) " +
-                    "apne aap lead se attach aur backup kar denge.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text("Call recording", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
             if (connected) {
                 Text("✓ Folder connected", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
@@ -974,9 +969,20 @@ private fun Stat(label: String, value: String) {
 fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val app by vm.state.collectAsState()
     val context = LocalContext.current
-    Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
-        Text("Settings", style = MaterialTheme.typography.headlineSmall)
-        Text("Your changes are saved automatically. Tap Save when you're done.",
+    // System back closes the settings overlay (not the app).
+    BackHandler { onBack() }
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState()).padding(20.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Spacer(Modifier.width(4.dp))
+            Text("Settings", style = MaterialTheme.typography.headlineSmall)
+        }
+        Text("Your changes are saved automatically.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
 

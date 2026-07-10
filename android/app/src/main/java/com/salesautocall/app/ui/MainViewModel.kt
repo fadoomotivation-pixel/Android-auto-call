@@ -109,6 +109,9 @@ data class AppState(
     /** Drives the quick "Add lead" sheet + its in-flight saving state. */
     val showAddLead: Boolean = false,
     val addingLead: Boolean = false,
+    /** Settings is a full-screen overlay (like lead detail), not a nav route, so
+     *  it never lingers behind another screen. */
+    val showSettings: Boolean = false,
     // in-app WhatsApp chat (tracked via the company number)
     val waChatContact: Contact? = null,
     val waThread: List<WhatsAppMessage> = emptyList(),
@@ -1484,6 +1487,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun openAddLead() = set { it.copy(showAddLead = true) }
     fun closeAddLead() = set { it.copy(showAddLead = false) }
 
+    fun openSettings() = set { it.copy(showSettings = true) }
+    fun closeSettings() = set { it.copy(showSettings = false) }
+
     /** Creates one lead from the quick-add sheet, then refreshes the list. */
     fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?) {
         val cleanPhone = phone.filter { it.isDigit() || it == '+' }
@@ -1862,7 +1868,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
-        set { it.copy(leadDetailId = contactId, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true) }
+        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true) }
         viewModelScope.launch {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())
