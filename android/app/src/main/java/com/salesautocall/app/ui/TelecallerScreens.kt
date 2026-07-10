@@ -341,7 +341,7 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 private fun PrimaryCallButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(
         modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary)
-            .clickable { onClick() }.padding(vertical = 12.dp),
+            .clickable { onClick() }.padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
@@ -354,7 +354,7 @@ private fun PrimaryCallButton(label: String, modifier: Modifier = Modifier, onCl
 @Composable
 private fun GhostIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(46.dp).clip(RoundedCornerShape(12.dp))
+        Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
@@ -1342,9 +1342,9 @@ private fun LeadCard(
         // Stage rail: the pipeline stage as a slim colour spine — the list reads
         // like a kanban at a glance (blue New, amber Interested, purple Visit …).
         Box(Modifier.width(4.dp).fillMaxHeight().background(stage.color))
-        Column(Modifier.weight(1f).padding(16.dp)) {
+        Column(Modifier.weight(1f).padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(c.name ?: c.phone, tint = stage.color)
+                Avatar(c.name ?: c.phone, tint = stage.color, size = 40)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium,
@@ -1468,7 +1468,7 @@ private fun LeadCard(
             }
 
             if (!selectMode) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(12.dp))
                 // One primary action (Call); WhatsApp + Schedule are quiet secondaries.
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     PrimaryCallButton("Call Now", Modifier.weight(1f)) { if (cloudOn) onCloudCall() else onCall() }
