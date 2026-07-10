@@ -104,6 +104,7 @@ private val Purple = Color(0xFF7C3AED)
 private val Cyan = Color(0xFF0891B2)
 private val Indigo = Color(0xFF4F46E5)
 private val Slate = Color(0xFF64748B)
+private val WaGreen = Color(0xFF25D366)
 
 private data class Stage(val key: String, val label: String, val statuses: Set<String>, val color: Color)
 
@@ -336,30 +337,16 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
     }
 }
 
-/** The single filled primary action on a card. Everything else is secondary. */
-@Composable
-private fun PrimaryCallButton(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Row(
-        modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary)
-            .clickable { onClick() }.padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(7.dp))
-        Text(label, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-    }
-}
-
 /** A quiet, neutral icon button — secondary action, no fill colour competing for attention. */
 @Composable
-private fun GhostIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, onClick: () -> Unit) {
+private fun GhostIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String, size: Int = 42, onClick: () -> Unit) {
     Box(
-        Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
+        Modifier.size(size.dp).clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = contentDescription, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = contentDescription, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size((size * 0.45).dp))
     }
 }
 
@@ -982,6 +969,16 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
+            // One quiet line teaching the two gestures that make the list fast.
+            if (!selectMode) {
+                item {
+                    Text(
+                        "Swipe right to call  ·  swipe left for WhatsApp",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                }
+            }
             // Active sheet-filters show as dismissible chips — tap ✕ to clear.
             run {
                 val active = buildList {
@@ -1329,6 +1326,39 @@ private fun LeadCard(
     val container = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
     val cardMod = Modifier.fillMaxWidth()
         .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
+    // Speed-first gestures: swipe right → call, swipe left → WhatsApp. The state
+    // never actually dismisses (confirmValueChange returns false → snaps back).
+    val swipeState = androidx.compose.material3.rememberSwipeToDismissBoxState(
+        confirmValueChange = { v ->
+            when (v) {
+                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> if (cloudOn) onCloudCall() else onCall()
+                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> onWhatsApp()
+                else -> {}
+            }
+            false
+        },
+    )
+    androidx.compose.material3.SwipeToDismissBox(
+        state = swipeState,
+        enableDismissFromStartToEnd = !selectMode,
+        enableDismissFromEndToStart = !selectMode,
+        backgroundContent = {
+            val toCall = swipeState.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd
+            val bg = if (toCall) Green else WaGreen
+            Row(
+                Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(bg.copy(alpha = 0.90f))
+                    .padding(horizontal = 22.dp),
+                horizontalArrangement = if (toCall) Arrangement.Start else Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    if (toCall) Icons.Default.Call else Icons.Default.Chat,
+                    contentDescription = if (toCall) "Call" else "WhatsApp",
+                    tint = Color.White, modifier = Modifier.size(24.dp),
+                )
+            }
+        },
+    ) {
     Card(
         modifier = cardMod,
         shape = RoundedCornerShape(20.dp),
@@ -1374,8 +1404,19 @@ private fun LeadCard(
                         if (isSelected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
                     }
                 } else {
-                    Icon(Icons.Default.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(22.dp).clip(CircleShape).clickable { onMore() })
+                    // Compact trailing cluster: schedule (quiet) · call (filled) · more.
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        GhostIconButton(Icons.Default.CalendarMonth, "Schedule", size = 36) { onSchedule() }
+                        Box(
+                            Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)
+                                .clickable { if (cloudOn) onCloudCall() else onCall() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Default.Call, contentDescription = "Call", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(17.dp))
+                        }
+                        Icon(Icons.Default.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp).clip(CircleShape).clickable { onMore() })
+                    }
                 }
             }
 
@@ -1467,17 +1508,9 @@ private fun LeadCard(
                 }
             }
 
-            if (!selectMode) {
-                Spacer(Modifier.height(12.dp))
-                // One primary action (Call); WhatsApp + Schedule are quiet secondaries.
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    PrimaryCallButton("Call Now", Modifier.weight(1f)) { if (cloudOn) onCloudCall() else onCall() }
-                    GhostIconButton(Icons.Default.Chat, "WhatsApp") { onWhatsApp() }
-                    GhostIconButton(Icons.Default.CalendarMonth, "Schedule") { onSchedule() }
-                }
-            }
         }
         }
+    }
     }
 }
 
