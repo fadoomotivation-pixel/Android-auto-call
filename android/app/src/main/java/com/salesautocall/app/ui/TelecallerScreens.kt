@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -244,8 +245,10 @@ private fun waTemplate(name: String?, project: String?, agent: String?, company:
 }
 
 @Composable
-private fun Avatar(name: String, size: Int = 44) {
-    val c = colorFor(name)
+private fun Avatar(name: String, size: Int = 44, tint: Color? = null) {
+    // With a [tint] the avatar carries the lead's stage colour (colour =
+    // information); without one it falls back to the name-hash palette.
+    val c = tint ?: colorFor(name)
     Box(
         Modifier.size(size.dp).clip(CircleShape).background(c.copy(alpha = 0.15f)),
         contentAlignment = Alignment.Center,
@@ -1322,21 +1325,26 @@ private fun LeadCard(
     onMore: () -> Unit,
     onOpen: () -> Unit = {},
 ) {
+    val stage = stageOf(c.status)
     val container = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
     val cardMod = Modifier.fillMaxWidth()
         .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
     Card(
         modifier = cardMod,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = container),
-        // Flat + hairline border instead of a per-row shadow — shadow rasterization
-        // on every visible card was the fling jank. Border is basically free.
+        // Flat, borderless white on the soft-gray screen — the stage rail on the
+        // left edge is the card's identity. (No shadow: rasterizing one per row
+        // was the fling jank; the rail is a plain fill, basically free.)
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Row(Modifier.height(IntrinsicSize.Min)) {
+        // Stage rail: the pipeline stage as a slim colour spine — the list reads
+        // like a kanban at a glance (blue New, amber Interested, purple Visit …).
+        Box(Modifier.width(4.dp).fillMaxHeight().background(stage.color))
+        Column(Modifier.weight(1f).padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(c.name ?: c.phone)
+                Avatar(c.name ?: c.phone, tint = stage.color)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium,
@@ -1375,7 +1383,6 @@ private fun LeadCard(
             // budget. Three max — the timestamp lives on the meta line above.
             Spacer(Modifier.height(10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                val stage = stageOf(c.status)
                 LeadMiniChip(stage.label, stage.color)
                 c.temperature?.takeIf { it.isNotBlank() }?.let { t ->
                     val (label, col) = when (t) {
@@ -1469,6 +1476,7 @@ private fun LeadCard(
                     GhostIconButton(Icons.Default.CalendarMonth, "Schedule") { onSchedule() }
                 }
             }
+        }
         }
     }
 }
