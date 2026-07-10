@@ -556,8 +556,8 @@ fun LeadDetailScreen(vm: MainViewModel) {
 @Composable
 private fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
-            .background(CardBg).border(1.dp, Hair, RoundedCornerShape(18.dp)).padding(16.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(20.dp))
+            .background(CardBg).border(1.dp, Hair, RoundedCornerShape(20.dp)).padding(18.dp),
         content = content,
     )
 }
@@ -588,12 +588,16 @@ private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
 private fun ActionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier.clip(RoundedCornerShape(16.dp)).background(CardBg).border(1.dp, Hair, RoundedCornerShape(16.dp))
-            .clickable { onClick() }.padding(vertical = 14.dp),
+            .clickable { onClick() }.padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(22.dp))
+        // Icon in a soft tinted circle; the label stays neutral ink — the tint
+        // draws the eye without turning the row into a rainbow.
+        Box(Modifier.size(36.dp).clip(CircleShape).background(tint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = tint, modifier = Modifier.size(19.dp))
+        }
         Spacer(Modifier.height(6.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = tint,
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = Ink,
             maxLines = 1, textAlign = TextAlign.Center)
     }
 }
@@ -618,7 +622,11 @@ private fun HeroCard(contact: Contact, onCopy: () -> Unit, onNextTap: () -> Unit
             .padding(18.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
-            Box(Modifier.size(56.dp).clip(CircleShape).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier.size(56.dp).clip(CircleShape).background(Color(0x33FFFFFF))
+                    .border(1.5.dp, Color(0x59FFFFFF), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
                 Text((contact.name ?: contact.phone).firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "#",
                     color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
             }
@@ -712,7 +720,7 @@ private fun HorizontalFunnel(contact: Contact, onTap: (String) -> Unit) {
                 Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { onTap(step.key) },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(Modifier.fillMaxWidth().height(30.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().height(36.dp), contentAlignment = Alignment.Center) {
                     // Rail behind the circle: left + right halves.
                     Row(Modifier.fillMaxWidth().height(3.dp)) {
                         Box(Modifier.weight(1f).fillMaxHeight().background(
@@ -720,9 +728,18 @@ private fun HorizontalFunnel(contact: Contact, onTap: (String) -> Unit) {
                         Box(Modifier.weight(1f).fillMaxHeight().background(
                             if (i == FUNNEL.lastIndex) Color.Transparent else if (i < idx) GreenL else Hair))
                     }
-                    Box(Modifier.size(28.dp).clip(CircleShape).background(circleColor), contentAlignment = Alignment.Center) {
-                        Text(if (done) "✓" else "${i + 1}", color = textOnCircle,
-                            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    // Current step gets a soft halo so "where we are" pops instantly.
+                    if (current) {
+                        Box(Modifier.size(36.dp).clip(CircleShape).background(PurpleL.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(28.dp).clip(CircleShape).background(circleColor), contentAlignment = Alignment.Center) {
+                                Text("${i + 1}", color = textOnCircle, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        Box(Modifier.size(28.dp).clip(CircleShape).background(circleColor), contentAlignment = Alignment.Center) {
+                            Text(if (done) "✓" else "${i + 1}", color = textOnCircle,
+                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
                 Spacer(Modifier.height(6.dp))

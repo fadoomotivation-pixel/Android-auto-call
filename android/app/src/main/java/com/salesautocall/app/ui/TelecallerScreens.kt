@@ -293,20 +293,26 @@ private fun Pill(text: String, fg: Color, bg: Color) {
 
 @Composable
 private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Color, onClick: () -> Unit) {
-    // One accent only: selected = filled primary, unselected = quiet neutral. No
-    // borders, no per-stage colours — the count rides inline in muted text.
-    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    // Selected = filled with the bucket's own accent; unselected = quiet neutral.
+    // The count rides in a tiny counter chip so it reads as a badge, not text.
+    val bg = if (selected) accent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val fg = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         Modifier.clip(RoundedCornerShape(50)).background(bg).clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, color = fg, style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
         if (count > 0) {
             Spacer(Modifier.width(6.dp))
-            Text("$count", color = fg.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
+            Box(
+                Modifier.clip(RoundedCornerShape(50))
+                    .background(if (selected) Color(0x33FFFFFF) else MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 7.dp, vertical = 1.dp),
+            ) {
+                Text("$count", color = fg, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -325,18 +331,6 @@ private fun ActionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
         Spacer(Modifier.width(6.dp))
         Text(label, style = MaterialTheme.typography.labelLarge, color = tint, fontWeight = FontWeight.SemiBold)
     }
-}
-
-/** A small temperature dot — the only colour on a lead card. Quiet, not a pill. */
-@Composable
-private fun TempDot(t: String?) {
-    val color = when (t) {
-        "hot" -> Red
-        "warm" -> Amber
-        "cold" -> Color(0xFF2563EB)
-        else -> return
-    }
-    Box(Modifier.size(8.dp).clip(CircleShape).background(color))
 }
 
 /** The single filled primary action on a card. Everything else is secondary. */
@@ -1345,19 +1339,20 @@ private fun LeadCard(
                 Avatar(c.name ?: c.phone)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                        if (!c.temperature.isNullOrBlank()) {
-                            Spacer(Modifier.width(8.dp))
-                            TempDot(c.temperature)
-                        }
-                    }
+                    Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1)
                     Spacer(Modifier.height(3.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(13.dp))
                         Spacer(Modifier.width(5.dp))
                         Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+                        // When the lead arrived, quietly at the end of the meta line —
+                        // no pill needed for a timestamp.
+                        c.createdAt?.let {
+                            Text("  ·  ${dayLabel(it)}", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f), maxLines = 1)
+                        }
                     }
                 }
                 if (selectMode) {
@@ -1377,7 +1372,7 @@ private fun LeadCard(
             }
 
             // Status chips a rep reads at a glance: stage (coloured), temperature,
-            // and when the lead came in — plus budget/project if we have them.
+            // budget. Three max — the timestamp lives on the meta line above.
             Spacer(Modifier.height(10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val stage = stageOf(c.status)
@@ -1390,21 +1385,25 @@ private fun LeadCard(
                     }
                     LeadMiniChip(label, col)
                 }
-                c.createdAt?.let { LeadMiniChip("📅 ${dayLabel(it)} ${timeOnly(it)}", Slate) }
-                c.budget?.takeIf { it.isNotBlank() }?.let { LeadMiniChip("💰 $it", Green) }
+                c.budget?.takeIf { it.isNotBlank() }?.let { LeadMiniChip("₹ $it", Green) }
             }
 
             // Last note, right on the card — "Not pic", "Vrindavan mai chaiye" —
-            // so a rep scanning the list remembers the conversation instantly.
+            // a quiet quoted line so a rep scanning remembers the conversation.
             c.notes?.takeIf { it.isNotBlank() }?.let { n ->
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "📝 $n",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.outlineVariant))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        n,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
             }
 
             // WHAT THE CUSTOMER SAID — the one line the rep actually needs:
