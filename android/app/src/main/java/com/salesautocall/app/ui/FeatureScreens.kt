@@ -966,9 +966,10 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
     // System back closes the settings overlay (not the app).
     BackHandler { onBack() }
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Column(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState()).padding(20.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 96.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
@@ -1106,6 +1107,12 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             Text("Signed in as ${it.fullName ?: "—"}", style = MaterialTheme.typography.bodySmall)
         }
         OutlinedButton(onClick = { vm.signOut() }) { Text("Sign out") }
+    }
+        // The app's real bottom navigation, pinned — Settings is an overlay, so it
+        // no longer loses the bottom menu.
+        Box(Modifier.align(Alignment.BottomCenter)) {
+            AppBottomNav(current = null) { route -> vm.goToTab(route) }
+        }
     }
 }
 

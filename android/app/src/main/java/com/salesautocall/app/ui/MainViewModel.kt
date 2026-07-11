@@ -112,6 +112,9 @@ data class AppState(
     /** Settings is a full-screen overlay (like lead detail), not a nav route, so
      *  it never lingers behind another screen. */
     val showSettings: Boolean = false,
+    /** A bottom-nav tap from inside an overlay (lead detail / settings): the
+     *  overlay closes and MainShell switches to this route, then clears it. */
+    val pendingTab: String? = null,
     // in-app WhatsApp chat (tracked via the company number)
     val waChatContact: Contact? = null,
     val waThread: List<WhatsAppMessage> = emptyList(),
@@ -1489,6 +1492,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openSettings() = set { it.copy(showSettings = true) }
     fun closeSettings() = set { it.copy(showSettings = false) }
+
+    /** From an overlay's bottom nav: close overlays and ask MainShell to switch tab. */
+    fun goToTab(route: String) = set { it.copy(showSettings = false, leadDetailId = null, pendingTab = route) }
+    fun consumeTab() = set { it.copy(pendingTab = null) }
 
     /** Creates one lead from the quick-add sheet, then refreshes the list. */
     fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?) {

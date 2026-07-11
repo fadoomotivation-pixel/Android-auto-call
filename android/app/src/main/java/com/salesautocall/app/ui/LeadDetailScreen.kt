@@ -299,6 +299,40 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
+                // ---- Buyer touch: one-tap professional site-visit confirmation ----
+                // When a visit is fixed, let the rep send the customer a clean
+                // WhatsApp confirmation (date, time, project) — the kind of polish
+                // big brands do and small builders never get around to.
+                run {
+                    val visitMs = isoMs(contact.siteVisitAt)
+                    if (visitMs != null && visitMs >= System.currentTimeMillis()) {
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                                    .clip(RoundedCornerShape(16.dp)).background(WhatsGreen.copy(alpha = 0.10f))
+                                    .clickable {
+                                        openWhatsAppLocal(context, contact.phone,
+                                            visitConfirmationMessage(contact, fmtWhen(visitMs), app.profile?.fullName, app.company?.name))
+                                    }
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(Modifier.size(38.dp).clip(CircleShape).background(WhatsGreen), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Chat, null, tint = Color.White, modifier = Modifier.size(19.dp))
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text("Send visit confirmation", style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold, color = Color(0xFF128C4B))
+                                    Text("WhatsApp the buyer a clean date/time/project confirmation",
+                                        style = MaterialTheme.typography.labelSmall, color = SubInk, maxLines = 2)
+                                }
+                                Icon(Icons.Default.KeyboardArrowRight, null, tint = Color(0xFF128C4B), modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+
                 // ---- Sales funnel ----
                 item {
                     SectionCard {
@@ -490,18 +524,9 @@ fun LeadDetailScreen(vm: MainViewModel) {
             }
         }
 
-        // ---- Fixed bottom action bar ----
-        Row(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(CardBg)
-                .border(width = 1.dp, color = Hair, shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                .padding(vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BottomAction(Icons.Default.Call, "Call Now", BlueL) { doCall() }
-            BottomAction(Icons.Default.Chat, "WhatsApp", WhatsGreen) { doWhats() }
-            BottomAction(Icons.Default.CalendarMonth, "Set Reminder", PurpleL) { scheduleOpen = true }
-            BottomAction(Icons.Default.MoreHoriz, "More", SubInk) { moreOpen = true }
+        // ---- The app's real bottom navigation (not a duplicate action bar) ----
+        Box(Modifier.align(Alignment.BottomCenter)) {
+            AppBottomNav(current = "leads") { route -> vm.goToTab(route) }
         }
     }
 
@@ -599,18 +624,6 @@ private fun ActionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, la
         Spacer(Modifier.height(6.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = Ink,
             maxLines = 1, textAlign = TextAlign.Center)
-    }
-}
-
-@Composable
-private fun BottomAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color, onClick: () -> Unit) {
-    Column(
-        Modifier.clip(RoundedCornerShape(12.dp)).clickable { onClick() }.padding(horizontal = 8.dp, vertical = 2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.height(3.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = tint, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -1107,4 +1120,20 @@ private fun waTemplateLocal(name: String?, project: String?, agent: String?, com
     val co = company?.trim()?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
     val ref = project?.trim()?.takeIf { it.isNotBlank() }?.let { " Aapne $it ke liye enquiry ki thi." } ?: " Aapki property enquiry ke regarding."
     return "$hi main $who$co se baat kar raha hoon.$ref Property ki details aur best offer share karna chahta hoon — kya abhi baat kar sakte hain?"
+}
+
+/** A clean, professional site-visit confirmation for the buyer's WhatsApp. */
+private fun visitConfirmationMessage(contact: Contact, whenLabel: String, agent: String?, company: String?): String {
+    val hi = contact.name?.trim()?.takeIf { it.isNotBlank() }?.let { "Namaste $it ji 🙏" } ?: "Namaste 🙏"
+    val project = contact.siteVisitProject?.trim()?.takeIf { it.isNotBlank() }
+    val sign = listOfNotNull(agent?.trim()?.takeIf { it.isNotBlank() }, company?.trim()?.takeIf { it.isNotBlank() })
+        .joinToString(" · ").ifBlank { "Your property advisor" }
+    return buildString {
+        append("$hi\n\n")
+        append("Aapki *site visit confirm* ho gayi hai:\n")
+        project?.let { append("🏠 $it\n") }
+        append("📅 $whenLabel\n\n")
+        append("Hum aapka wahan intezaar karenge. Koi badlav ho to please bata dijiyega.\n\n")
+        append("— $sign")
+    }
 }
