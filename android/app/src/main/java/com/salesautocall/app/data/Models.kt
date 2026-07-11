@@ -73,6 +73,8 @@ data class Contact(
     @SerialName("campaign_id") val campaignId: String? = null,
     val name: String? = null,
     val phone: String,
+    /** Optional second number the rep captured for this lead. */
+    @SerialName("alt_phone") val altPhone: String? = null,
     val email: String? = null,
     @SerialName("company_name") val companyName: String? = null,
     val notes: String? = null,

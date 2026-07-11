@@ -1607,6 +1607,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Edits the lead's name and/or second number from the lead page. */
+    fun updateLeadIdentity(contactId: String, name: String?, altPhone: String?) {
+        val cleanName = name?.trim()?.ifBlank { null }
+        val cleanAlt = altPhone?.filter { it.isDigit() || it == '+' }?.ifBlank { null }
+        viewModelScope.launch {
+            runCatching { Repository.updateLeadIdentity(contactId, cleanName, cleanAlt) }
+                .onSuccess {
+                    set { st ->
+                        st.copy(leads = st.leads.map { c ->
+                            if (c.id == contactId) c.copy(name = cleanName, altPhone = cleanAlt) else c
+                        })
+                    }
+                }
+                .onFailure { e -> set { it.copy(error = e.message ?: "Couldn't save changes") } }
+        }
+    }
+
     // ---------- follow-up scheduler ----------
 
     fun loadFollowUps(force: Boolean = false) {
