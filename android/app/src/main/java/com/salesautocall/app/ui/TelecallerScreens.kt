@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
@@ -797,7 +798,7 @@ private fun PlanBucket(
 // ════════════════════════════════════════════════════════════
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
+fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onStartFlow: () -> Unit = {}) {
     val app by vm.state.collectAsState()
     val context = LocalContext.current
     LaunchedEffect(Unit) { vm.loadLeads(); vm.loadFollowUps() }
@@ -877,6 +878,28 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // FLOW — one button, one lead at a time, zero thinking. The fastest way
+            // through the day; the app picks who to call next and what to say.
+            if (!selectMode) {
+                item {
+                    val flowJade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66)
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(flowJade)
+                            .clickable { onStartFlow() }.padding(horizontal = 16.dp, vertical = 15.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(38.dp).clip(CircleShape).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                        }
+                        Spacer(Modifier.width(13.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Start Calling", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("Flow mode — one lead at a time, we pick who's next", color = Color(0xCCFFFFFF), style = MaterialTheme.typography.labelMedium)
+                        }
+                        Icon(Icons.Default.KeyboardArrowRight, null, tint = Color.White, modifier = Modifier.size(22.dp))
+                    }
+                }
+            }
             item {
                 if (!selectMode) {
                     // Jobs rule: a title, a count, and nothing shouting. Utilities

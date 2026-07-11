@@ -591,14 +591,19 @@ private fun MainShell(vm: MainViewModel) {
                         )
                     }
                     composable(Tab.Leads.route) {
-                        LeadsScreen(vm, onStartCampaign = {
-                            nav.navigate(Tab.Campaign.route) {
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        })
+                        LeadsScreen(
+                            vm,
+                            onStartCampaign = {
+                                nav.navigate(Tab.Campaign.route) {
+                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            onStartFlow = { nav.navigate("flow") },
+                        )
                     }
+                    composable("flow") { FlowScreen(vm, onClose = { nav.popBackStack() }) }
                     composable(Tab.Dialer.route) { DialerScreen(vm) }
                     composable(Tab.Campaign.route) {
                         CampaignScreen(vm, onPickLeads = {
