@@ -115,6 +115,8 @@ data class AppState(
     /** A bottom-nav tap from inside an overlay (lead detail / settings): the
      *  overlay closes and MainShell switches to this route, then clears it. */
     val pendingTab: String? = null,
+    /** "More" tapped from an overlay's bottom bar: close overlays, open the drawer. */
+    val pendingDrawer: Boolean = false,
     // in-app WhatsApp chat (tracked via the company number)
     val waChatContact: Contact? = null,
     val waThread: List<WhatsAppMessage> = emptyList(),
@@ -1496,6 +1498,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** From an overlay's bottom nav: close overlays and ask MainShell to switch tab. */
     fun goToTab(route: String) = set { it.copy(showSettings = false, leadDetailId = null, pendingTab = route) }
     fun consumeTab() = set { it.copy(pendingTab = null) }
+
+    /** From an overlay's "More": close overlays and open the app drawer. */
+    fun openDrawerFromOverlay() = set { it.copy(showSettings = false, leadDetailId = null, pendingDrawer = true) }
+    fun consumeDrawer() = set { it.copy(pendingDrawer = false) }
 
     /** Creates one lead from the quick-add sheet, then refreshes the list. */
     fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?) {

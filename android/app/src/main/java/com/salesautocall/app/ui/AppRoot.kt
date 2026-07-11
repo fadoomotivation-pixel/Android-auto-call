@@ -8,6 +8,7 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -429,7 +430,6 @@ private fun MainShell(vm: MainViewModel) {
     val nav = rememberNavController()
 
     // Call history sits on the bottom bar; Reports stays one tap away in the drawer.
-    val tabs = listOf(Tab.Home, Tab.Leads, Tab.Dialer, Tab.Campaign, Tab.Calls)
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val currentRoute = nav.currentBackStackEntryAsState().value?.destination?.route
@@ -453,6 +453,13 @@ private fun MainShell(vm: MainViewModel) {
                 restoreState = true
             }
             vm.consumeTab()
+        }
+    }
+    // "More" tapped from an overlay's bottom bar → open the drawer.
+    LaunchedEffect(state.pendingDrawer) {
+        if (state.pendingDrawer) {
+            drawerState.open()
+            vm.consumeDrawer()
         }
     }
 
@@ -539,44 +546,21 @@ private fun MainShell(vm: MainViewModel) {
                 )
             },
             bottomBar = {
-                NavigationBar {
-                    val current by nav.currentBackStackEntryAsState()
-                    val route = current?.destination?.route
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = route == tab.route,
-                            onClick = {
-                                vm.clearMessage()
-                                // Standard bottom-nav behaviour: don't stack tabs and keep
-                                // each tab's state so switching back doesn't reload everything.
-                                nav.navigate(tab.route) {
-                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    when (tab) {
-                                        is Tab.Home -> Icons.Default.Home
-                                        is Tab.Leads -> Icons.Default.People
-                                        is Tab.Dialer -> Icons.Default.Dialpad
-                                        is Tab.Campaign -> Icons.Default.Campaign
-                                        is Tab.Calls -> Icons.Default.History
-                                        else -> Icons.Default.Leaderboard
-                                    },
-                                    contentDescription = tab.label,
-                                )
-                            },
-                            label = { Text(tab.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                indicatorColor = MaterialTheme.colorScheme.primary,
-                            ),
-                        )
+                val route = nav.currentBackStackEntryAsState().value?.destination?.route
+                fun go(r: String) {
+                    vm.clearMessage()
+                    nav.navigate(r) {
+                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
                     }
                 }
+                FloatingCallBar(
+                    current = route,
+                    onTab = { go(it) },
+                    onDial = { go(Tab.Dialer.route) },
+                    onMore = { scope.launch { drawerState.open() } },
+                )
             },
         ) { padding ->
             Column(Modifier.padding(padding)) {
@@ -662,44 +646,65 @@ private fun MainShell(vm: MainViewModel) {
     }
 }
 
-/** The app's five destinations, shared by MainShell's bar and the overlays. */
-private val APP_TABS = listOf(
-    Triple("home", "Dashboard", Icons.Default.Home),
-    Triple("leads", "Leads", Icons.Default.People),
-    Triple("dialer", "Dialer", Icons.Default.Dialpad),
-    Triple("campaign", "Call List", Icons.Default.Campaign),
-    Triple("calls", "Calls", Icons.Default.History),
-)
+// ---- The app's one jade accent, theme-aware. ----
+internal fun jadeAccent(dark: Boolean) = if (dark) Color(0xFF2BB894) else Color(0xFF0E7C66)
 
 /**
- * The app bottom navigation, reusable inside full-screen overlays (lead detail,
- * settings) so those screens keep the same five destinations instead of a
- * one-off action bar. Light surface to match the overlays; [current] highlights
- * a tab (or none). Tapping routes via [onTab].
+ * The floating call bar — the app's bottom navigation, shared by MainShell and
+ * the full-screen overlays (lead detail / settings). Four quiet destinations and
+ * a raised centre **Dial** button: the telecaller's whole day is one thumb-tap
+ * from anywhere. [current] highlights home/leads/calls; [onDial] opens the
+ * dialer, [onMore] the drawer.
  */
 @Composable
-internal fun AppBottomNav(current: String?, onTab: (String) -> Unit) {
-    val sel = Color(0xFF2563EB)
-    val unsel = Color(0xFF64748B)
-    Row(
-        Modifier.fillMaxWidth().background(Color.White)
-            .border(width = 1.dp, color = Color(0xFFE7E9F0), shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically,
-    ) {
-        APP_TABS.forEach { (route, label, icon) ->
-            val on = current == route
-            Column(
-                Modifier.clip(RoundedCornerShape(12.dp)).clickable { onTab(route) }.padding(horizontal = 6.dp, vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(icon, contentDescription = label, tint = if (on) sel else unsel, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.height(3.dp))
-                Text(label, style = MaterialTheme.typography.labelSmall,
-                    color = if (on) sel else unsel, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
-            }
+internal fun FloatingCallBar(
+    current: String?,
+    onTab: (String) -> Unit,
+    onDial: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val dark = isSystemInDarkTheme()
+    val jade = jadeAccent(dark)
+    val pill = if (dark) Color(0xFF16181C) else Color.White
+    val hair = if (dark) Color(0xFF24272C) else Color(0xFFE7E9E4)
+    val unsel = if (dark) Color(0xFF8A9099) else Color(0xFF6C737C)
+    val ring = MaterialTheme.colorScheme.background
+    Box(Modifier.fillMaxWidth().height(84.dp).padding(horizontal = 14.dp), contentAlignment = Alignment.BottomCenter) {
+        Row(
+            Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(22.dp))
+                .background(pill).border(1.dp, hair, RoundedCornerShape(22.dp)),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            NavSlot("Home", Icons.Default.Home, current == "home", jade, unsel, Modifier.weight(1f)) { onTab("home") }
+            NavSlot("Leads", Icons.Default.People, current == "leads", jade, unsel, Modifier.weight(1f)) { onTab("leads") }
+            Spacer(Modifier.width(66.dp)) // room for the raised dial
+            NavSlot("Calls", Icons.Default.History, current == "calls", jade, unsel, Modifier.weight(1f)) { onTab("calls") }
+            NavSlot("More", Icons.Default.Menu, false, jade, unsel, Modifier.weight(1f)) { onMore() }
         }
+        // Raised centre Dial — the primary job, straddling the bar's top edge. A
+        // ring in the surrounding colour "cuts" it out of the bar.
+        Box(
+            Modifier.align(Alignment.TopCenter).size(66.dp).clip(CircleShape).background(ring),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier.size(56.dp).clip(RoundedCornerShape(19.dp)).background(jade).clickable { onDial() },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Default.Call, contentDescription = "Dial", tint = Color.White, modifier = Modifier.size(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun NavSlot(label: String, icon: ImageVector, on: Boolean, jade: Color, unsel: Color, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(14.dp)).clickable { onClick() }.padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = label, tint = if (on) jade else unsel, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(3.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall,
+            color = if (on) jade else unsel, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
     }
 }
 

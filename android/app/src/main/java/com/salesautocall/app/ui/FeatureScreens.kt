@@ -1111,7 +1111,12 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // The app's real bottom navigation, pinned — Settings is an overlay, so it
         // no longer loses the bottom menu.
         Box(Modifier.align(Alignment.BottomCenter)) {
-            AppBottomNav(current = null) { route -> vm.goToTab(route) }
+            FloatingCallBar(
+                current = null,
+                onTab = { vm.goToTab(it) },
+                onDial = { vm.goToTab("dialer") },
+                onMore = { vm.openDrawerFromOverlay() },
+            )
         }
     }
 }

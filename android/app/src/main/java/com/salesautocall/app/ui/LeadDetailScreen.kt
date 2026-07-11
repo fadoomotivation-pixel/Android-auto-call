@@ -526,7 +526,12 @@ fun LeadDetailScreen(vm: MainViewModel) {
 
         // ---- The app's real bottom navigation (not a duplicate action bar) ----
         Box(Modifier.align(Alignment.BottomCenter)) {
-            AppBottomNav(current = "leads") { route -> vm.goToTab(route) }
+            FloatingCallBar(
+                current = "leads",
+                onTab = { vm.goToTab(it) },
+                onDial = { vm.goToTab("dialer") },
+                onMore = { vm.openDrawerFromOverlay() },
+            )
         }
     }
 
