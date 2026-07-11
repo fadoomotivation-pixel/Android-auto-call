@@ -874,8 +874,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         Refreshable(onRefresh = { vm.loadLeads(force = true) }, modifier = Modifier.weight(1f)) {
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
                 if (!selectMode) {
@@ -1324,8 +1324,9 @@ private fun LeadCard(
 ) {
     val stage = stageOf(c.status)
     val container = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
-    val cardMod = Modifier.fillMaxWidth()
-        .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
+    val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66)
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+
     // Speed-first gestures: swipe right → call, swipe left → WhatsApp. The state
     // never actually dismisses (confirmValueChange returns false → snaps back).
     val swipeState = androidx.compose.material3.rememberSwipeToDismissBoxState(
@@ -1338,179 +1339,103 @@ private fun LeadCard(
             false
         },
     )
+
+    // The one line the rep actually needs — what the customer said / promised.
+    val now = System.currentTimeMillis()
+    val visitMs = c.siteVisitAt?.let { instantMillis(it) }
+    val intent: Pair<String, Color>? = when {
+        followUp != null -> {
+            val late = (instantMillis(followUp.dueAt) ?: Long.MAX_VALUE) <= now
+            (if (late) "↻ Call back · ${relativeDue(followUp.dueAt)}"
+             else "↻ Call back · ${dayLabel(followUp.dueAt)} ${timeOnly(followUp.dueAt)}") to (if (late) Red else jade)
+        }
+        visitMs != null && visitMs >= now -> "🏠 Site visit · ${dayLabel(c.siteVisitAt)}" to Purple
+        visitMs != null && c.status !in setOf("booked", "lost", "not_interested", "dnc") -> "✅ Visit done — close them" to Teal
+        !c.aiNextAction.isNullOrBlank() -> "✦ ${c.aiNextAction}" to Indigo
+        !c.notes.isNullOrBlank() -> c.notes!! to muted
+        !c.budget.isNullOrBlank() -> "₹ ${c.budget}" to jade
+        else -> null
+    }
+    val (tempLabel, tempColor) = when (c.temperature) {
+        "hot" -> "🔥 Hot" to Red
+        "warm" -> "☀ Warm" to Amber
+        "cold" -> "❄ Cold" to Slate
+        else -> "" to Slate
+    }
+
     androidx.compose.material3.SwipeToDismissBox(
         state = swipeState,
         enableDismissFromStartToEnd = !selectMode,
         enableDismissFromEndToStart = !selectMode,
         backgroundContent = {
             val toCall = swipeState.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd
-            val bg = if (toCall) Green else WaGreen
+            val bg = if (toCall) jade else WaGreen
             Row(
-                Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(bg.copy(alpha = 0.90f))
-                    .padding(horizontal = 22.dp),
+                Modifier.fillMaxSize().clip(RoundedCornerShape(18.dp)).background(bg.copy(alpha = 0.92f))
+                    .padding(horizontal = 24.dp),
                 horizontalArrangement = if (toCall) Arrangement.Start else Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    if (toCall) Icons.Default.Call else Icons.Default.Chat,
-                    contentDescription = if (toCall) "Call" else "WhatsApp",
-                    tint = Color.White, modifier = Modifier.size(24.dp),
-                )
+                Icon(if (toCall) Icons.Default.Call else Icons.Default.Chat, contentDescription = if (toCall) "Call" else "WhatsApp",
+                    tint = Color.White, modifier = Modifier.size(24.dp))
             }
         },
     ) {
-    Card(
-        modifier = cardMod,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = container),
-        // Flat, borderless white on the soft-gray screen — the stage rail on the
-        // left edge is the card's identity. (No shadow: rasterizing one per row
-        // was the fling jank; the rail is a plain fill, basically free.)
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Row(Modifier.height(IntrinsicSize.Min)) {
-        // Stage rail: the pipeline stage as a slim colour spine — the list reads
-        // like a kanban at a glance (blue New, amber Interested, purple Visit …).
-        Box(Modifier.width(4.dp).fillMaxHeight().background(stage.color))
-        Column(Modifier.weight(1f).padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(c.name ?: c.phone, tint = stage.color, size = 40)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Spacer(Modifier.height(3.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Call, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
-                        // When the lead arrived, quietly at the end of the meta line —
-                        // no pill needed for a timestamp.
-                        c.createdAt?.let {
-                            Text("  ·  ${dayLabel(it)}", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f), maxLines = 1)
-                        }
-                    }
-                }
-                if (selectMode) {
-                    val ring = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                    Box(
-                        Modifier.size(26.dp).clip(CircleShape)
-                            .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
-                            .border(2.dp, ring, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (isSelected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
-                    }
-                } else {
-                    // Compact trailing cluster: schedule (quiet) · call (filled) · more.
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        GhostIconButton(Icons.Default.CalendarMonth, "Schedule", size = 36) { onSchedule() }
-                        Box(
-                            Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)
-                                .clickable { if (cloudOn) onCloudCall() else onCall() },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Default.Call, contentDescription = "Call", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(17.dp))
-                        }
-                        Icon(Icons.Default.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp).clip(CircleShape).clickable { onMore() })
-                    }
-                }
+        // A calm paper row — a stage dot, the name, the phone, one intent line, a
+        // jade call button. Dense: 5–6 leads to a screen, no boxed-in cards.
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(container)
+                .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
+                .padding(horizontal = 15.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Stage dot + soft halo — colour is information, used once.
+            Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.matchParentSize().clip(CircleShape).background(stage.color.copy(alpha = 0.16f)))
+                Box(Modifier.size(9.dp).clip(CircleShape).background(stage.color))
             }
+            Spacer(Modifier.width(13.dp))
 
-            // Status chips a rep reads at a glance: stage (coloured), temperature,
-            // budget. Three max — the timestamp lives on the meta line above.
-            Spacer(Modifier.height(10.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                LeadMiniChip(stage.label, stage.color)
-                c.temperature?.takeIf { it.isNotBlank() }?.let { t ->
-                    val (label, col) = when (t) {
-                        "hot" -> "🔥 Hot" to Red
-                        "warm" -> "🌤 Warm" to Amber
-                        else -> "❄️ Cold" to Cyan
-                    }
-                    LeadMiniChip(label, col)
-                }
-                c.budget?.takeIf { it.isNotBlank() }?.let { LeadMiniChip("₹ $it", Green) }
-            }
-
-            // Last note, right on the card — "Not pic", "Vrindavan mai chaiye" —
-            // a quiet quoted line so a rep scanning remembers the conversation.
-            c.notes?.takeIf { it.isNotBlank() }?.let { n ->
-                Spacer(Modifier.height(8.dp))
+            Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.outlineVariant))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        n,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
+                    Text(c.name ?: prettyPhone(c.phone), style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                    Spacer(Modifier.width(7.dp))
+                    Text("· ${stage.label}", style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted, letterSpacing = 0.3.sp)
+                intent?.let { (label, color) ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }
+            Spacer(Modifier.width(10.dp))
 
-            // WHAT THE CUSTOMER SAID — the one line the rep actually needs:
-            // "call back Today 4 PM", "site visit fixed Tomorrow", "visit done —
-            // close them". Never buried in a status word again.
-            run {
-                val visitMs = c.siteVisitAt?.let { instantMillis(it) }
-                val now = System.currentTimeMillis()
-                val intent: Triple<String, Color, String?>? = when {
-                    followUp != null -> {
-                        val late = (instantMillis(followUp.dueAt) ?: Long.MAX_VALUE) <= now
-                        Triple(
-                            // Show HOW late ("Overdue 12d"), not just that it's due —
-                            // a 90-day-old promise reads very differently from a 5-minute one.
-                            if (late) "↻ Call back · ${relativeDue(followUp.dueAt)}" else "↻ Call back · ${dayLabel(followUp.dueAt)} ${timeOnly(followUp.dueAt)}",
-                            if (late) Red else Indigo,
-                            followUp.note?.takeIf { it.isNotBlank() },
-                        )
-                    }
-                    visitMs != null && visitMs >= now ->
-                        Triple("🏠 Site visit fixed · ${dayLabel(c.siteVisitAt)}", Purple, c.siteVisitProject?.takeIf { it.isNotBlank() })
-                    visitMs != null && c.status !in setOf("booked", "lost", "not_interested", "dnc") ->
-                        Triple("✅ Visit done ${dayLabel(c.siteVisitAt)} — close them", Teal, c.siteVisitProject?.takeIf { it.isNotBlank() })
-                    else -> null
-                }
-                intent?.let { (label, color, detail) ->
-                    Spacer(Modifier.height(10.dp))
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                            .background(color.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Bold)
-                        detail?.let {
-                            Spacer(Modifier.width(6.dp))
-                            Text("· $it", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                        }
-                    }
-                }
-            }
-
-            // AI next-best-action (from the AI lead-scoring run)
-            c.aiNextAction?.takeIf { it.isNotBlank() }?.let { action ->
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                        .background(Indigo.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+            if (selectMode) {
+                val ring = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                Box(
+                    Modifier.size(26.dp).clip(CircleShape)
+                        .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                        .border(2.dp, ring, CircleShape),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Indigo, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(action, style = MaterialTheme.typography.bodySmall, color = Indigo, fontWeight = FontWeight.Medium)
+                    if (isSelected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+                }
+            } else {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (tempLabel.isNotEmpty())
+                        Text(tempLabel, style = MaterialTheme.typography.labelSmall, color = tempColor, fontWeight = FontWeight.SemiBold)
+                    else c.createdAt?.let { Text(dayLabel(it), style = MaterialTheme.typography.labelSmall, color = muted) }
+                    Box(
+                        Modifier.size(38.dp).clip(CircleShape).background(jade)
+                            .clickable { if (cloudOn) onCloudCall() else onCall() },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(17.dp)) }
                 }
             }
-
         }
-        }
-    }
     }
 }
 
