@@ -72,20 +72,24 @@ import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.Contact
 
-// ---- Palette (light, premium — matches the reference design exactly) ----
-private val ScreenBg = Color(0xFFF2F3F7)
+// ---- Palette: paper & ink, ONE jade accent — same language as the Leads page.
+// The old rainbow constants keep their names but now resolve to ink/jade (with
+// muted terracotta/amber reserved for genuine heat & warnings), so every
+// call-site collapses to the calm palette without structural edits.
+private val ScreenBg = Color(0xFFF3F4F1)
 private val CardBg = Color.White
-private val Ink = Color(0xFF0F172A)
-private val SubInk = Color(0xFF64748B)
-private val Hair = Color(0xFFE7E9F0)
-private val GreenL = Color(0xFF16A34A)
-private val AmberL = Color(0xFFF59E0B)
-private val IndigoL = Color(0xFF4F46E5)
-private val PurpleL = Color(0xFF7C3AED)
-private val RedL = Color(0xFFEF4444)
-private val BlueL = Color(0xFF2563EB)
+private val Ink = Color(0xFF15171A)
+private val SubInk = Color(0xFF5A6068)
+private val Hair = Color(0xFFE6E8E3)
 private val JadeL = Color(0xFF0E7C66)
-private val WhatsGreen = Color(0xFF25D366)
+private val GreenL = JadeL          // success = jade
+private val IndigoL = JadeL         // primary accent = jade
+private val PurpleL = JadeL         // "current step" = jade
+private val BlueL = JadeL           // call actions = jade
+private val AmberL = Color(0xFFB8860B)   // muted amber: warnings + "warm"
+private val RedL = Color(0xFFC0452C)     // muted terracotta: overdue, "hot", destructive
+private val ColdL = Color(0xFF6B7A8F)    // quiet slate: "cold" temperature
+private val WhatsGreen = Color(0xFF25D366) // brand — recognisable, kept
 
 private val SETTABLE = listOf(
     "interested" to "Interested", "site_visit" to "Site Visit", "negotiation" to "Negotiation",
@@ -335,11 +339,11 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text("Send visit confirmation", style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold, color = Color(0xFF128C4B))
+                                        fontWeight = FontWeight.Bold, color = JadeL)
                                     Text("WhatsApp the buyer a clean date/time/project confirmation",
                                         style = MaterialTheme.typography.labelSmall, color = SubInk, maxLines = 2)
                                 }
-                                Icon(Icons.Default.KeyboardArrowRight, null, tint = Color(0xFF128C4B), modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.KeyboardArrowRight, null, tint = JadeL, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -664,7 +668,7 @@ private fun prettyNum(raw: String): String {
 }
 
 private fun tempRing(t: String?): Color = when (t) {
-    "hot" -> RedL; "warm" -> AmberL; "cold" -> BlueL; else -> Color(0xFF5B6B8C)
+    "hot" -> RedL; "warm" -> AmberL; "cold" -> ColdL; else -> SubInk
 }
 
 /**
@@ -737,7 +741,7 @@ private fun IdentityBlock(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             LeadChip(stageLabel(contact.status), tempRing(null))
             contact.temperature?.takeIf { it.isNotBlank() }?.let { t ->
-                val (label, col) = when (t) { "hot" -> "🔥 Hot" to RedL; "warm" -> "☀ Warm" to AmberL; else -> "❄ Cold" to BlueL }
+                val (label, col) = when (t) { "hot" -> "🔥 Hot" to RedL; "warm" -> "☀ Warm" to AmberL; else -> "❄ Cold" to ColdL }
                 LeadChip(label, col)
             }
             isoMs(contact.createdAt)?.let { LeadChip("Added ${fmtWhen(it)}", SubInk) }
@@ -828,7 +832,7 @@ private fun HorizontalFunnel(contact: Contact, onTap: (String) -> Unit) {
         FUNNEL.forEachIndexed { i, step ->
             val done = i < idx
             val current = i == idx
-            val circleColor = when { done -> GreenL; current -> PurpleL; else -> Color(0xFFE2E8F0) }
+            val circleColor = when { done -> GreenL; current -> PurpleL; else -> Hair }
             val textOnCircle = if (done || current) Color.White else SubInk
             Column(
                 Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { onTap(step.key) },
@@ -923,7 +927,7 @@ private fun FlowRowTemps(selected: String, onPick: (String) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         TEMPS.forEach { (key, label) ->
             val on = selected == key
-            val tint = when (key) { "hot" -> RedL; "warm" -> AmberL; else -> BlueL }
+            val tint = when (key) { "hot" -> RedL; "warm" -> AmberL; else -> ColdL }
             Box(
                 Modifier.clip(RoundedCornerShape(50)).background(if (on) tint else tint.copy(alpha = 0.10f))
                     .clickable { key?.let(onPick) }.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1005,7 +1009,7 @@ private fun FunnelStepper(contact: Contact, onSet: (String) -> Unit, onMoveBack:
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.size(26.dp).clip(CircleShape).background(if (done || current) stepColor else Color(0xFFE2E8F0)), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(26.dp).clip(CircleShape).background(if (done || current) stepColor else Hair), contentAlignment = Alignment.Center) {
                         Text(if (done) "✓" else "${i + 1}", color = if (done || current) Color.White else SubInk, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     }
                     if (i < FUNNEL.lastIndex) Box(Modifier.width(2.dp).height(14.dp).background(if (done) GreenL else Hair))
@@ -1139,7 +1143,7 @@ private fun JourneyRow(atIso: String?, type: String, text: String, last: Boolean
         "note" -> "📝" to SubInk
         "budget" -> "💰" to GreenL
         "site_visit" -> "📍" to PurpleL
-        "follow_up" -> "⏰" to Color(0xFF0891B2)
+        "follow_up" -> "⏰" to JadeL
         "call" -> "📞" to GreenL
         else -> "✏️" to SubInk
     }
