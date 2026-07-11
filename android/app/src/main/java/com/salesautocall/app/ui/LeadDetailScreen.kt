@@ -29,8 +29,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -82,6 +84,7 @@ private val IndigoL = Color(0xFF4F46E5)
 private val PurpleL = Color(0xFF7C3AED)
 private val RedL = Color(0xFFEF4444)
 private val BlueL = Color(0xFF2563EB)
+private val JadeL = Color(0xFF0E7C66)
 private val WhatsGreen = Color(0xFF25D366)
 
 private val SETTABLE = listOf(
@@ -163,6 +166,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
     var confirmMoveKey by remember { mutableStateOf<String?>(null) }
     var confirmClearVisit by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
+    var editIdentityOpen by remember { mutableStateOf(false) }
     var funnelExpanded by remember { mutableStateOf(false) }
     var journeyExpanded by remember { mutableStateOf(false) }
     var callsExpanded by remember { mutableStateOf(false) }
@@ -189,10 +193,10 @@ fun LeadDetailScreen(vm: MainViewModel) {
             .onFailure { android.widget.Toast.makeText(context, "Voice typing not available on this phone", android.widget.Toast.LENGTH_SHORT).show() }
     }
 
-    fun doCall() {
-        val id = contact.id
-        if (app.callerdeskCalling) vm.cloudCall(contact.phone, id, contact.campaignId) else vm.dialManual(contact.phone)
+    fun doCallNumber(number: String) {
+        if (app.callerdeskCalling) vm.cloudCall(number, contact.id, contact.campaignId) else vm.dialManual(number)
     }
+    fun doCall() = doCallNumber(contact.phone)
     fun doWhats() = openWhatsAppLocal(
         context, contact.phone,
         waTemplateLocal(contact.name, contact.companyName, app.profile?.fullName, app.company?.name),
@@ -246,7 +250,15 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
 
                 // ---- Hero ----
-                item { HeroCard(contact, onCopy = { copyNumber() }, onNextTap = { scheduleOpen = true }) }
+                item {
+                    IdentityBlock(
+                        contact,
+                        onCopy = { copyNumber() },
+                        onNextTap = { scheduleOpen = true },
+                        onEdit = { editIdentityOpen = true },
+                        onCallAlt = { contact.altPhone?.let { doCallNumber(it) } },
+                    )
+                }
 
                 // ---- Voice note ----
                 item { VoiceNoteCard(vm, recording = app.voiceRecording, uploading = app.voiceUploading) }
@@ -579,6 +591,15 @@ fun LeadDetailScreen(vm: MainViewModel) {
         },
         dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmClearVisit = false }) { Text("Keep it") } },
     )
+
+    if (editIdentityOpen) EditIdentityDialog(
+        contact = contact,
+        onDismiss = { editIdentityOpen = false },
+        onSave = { name, alt ->
+            editIdentityOpen = false
+            contact.id?.let { vm.updateLeadIdentity(it, name, alt) }
+        },
+    )
 }
 
 // ---------------- Building blocks ----------------
@@ -632,68 +653,143 @@ private fun ActionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, la
     }
 }
 
+/** Groups an Indian 10-digit number as "92680 96331" for calm reading. */
+private fun prettyNum(raw: String): String {
+    val d = raw.filter { it.isDigit() }
+    return when {
+        d.length == 10 -> "${d.substring(0, 5)} ${d.substring(5)}"
+        d.length == 12 && d.startsWith("91") -> "+91 ${d.substring(2, 7)} ${d.substring(7)}"
+        else -> raw
+    }
+}
+
+private fun tempRing(t: String?): Color = when (t) {
+    "hot" -> RedL; "warm" -> AmberL; "cold" -> BlueL; else -> Color(0xFF5B6B8C)
+}
+
+/**
+ * The lead's identity — a big typographic block on paper (no gradient box). The
+ * name is editable (pencil), the number taps to copy, and a second number can be
+ * added right here; the monogram ring is tinted by the lead's temperature.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun HeroCard(contact: Contact, onCopy: () -> Unit, onNextTap: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(22.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF1D4ED8), Color(0xFF7C3AED))))
-            .padding(18.dp),
-    ) {
+private fun IdentityBlock(
+    contact: Contact,
+    onCopy: () -> Unit,
+    onNextTap: () -> Unit,
+    onEdit: () -> Unit,
+    onCallAlt: () -> Unit,
+) {
+    val ring = tempRing(contact.temperature)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         Row(verticalAlignment = Alignment.Top) {
             Box(
-                Modifier.size(56.dp).clip(CircleShape).background(Color(0x33FFFFFF))
-                    .border(1.5.dp, Color(0x59FFFFFF), CircleShape),
+                Modifier.size(64.dp).clip(CircleShape).border(2.dp, ring.copy(alpha = 0.55f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text((contact.name ?: contact.phone).firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "#",
-                    color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    color = ring, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.headlineSmall)
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(contact.name ?: contact.phone, style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
+                    Text(contact.name ?: prettyNum(contact.phone), style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold, color = Ink, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(8.dp))
-                    Box(Modifier.clip(RoundedCornerShape(50)).background(Color.White).padding(horizontal = 10.dp, vertical = 3.dp)) {
-                        Text(stageLabel(contact.status), style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF1D4ED8), fontWeight = FontWeight.Bold)
-                    }
+                    Box(
+                        Modifier.size(30.dp).clip(CircleShape).border(1.dp, Hair, CircleShape).clickable { onEdit() },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Default.Edit, "Edit name", tint = SubInk, modifier = Modifier.size(15.dp)) }
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(contact.phone, style = MaterialTheme.typography.titleMedium, color = Color(0xE6FFFFFF))
-                    Spacer(Modifier.width(6.dp))
-                    Icon(Icons.Default.ContentCopy, "Copy", tint = Color(0xCCFFFFFF),
-                        modifier = Modifier.size(15.dp).clip(CircleShape).clickable { onCopy() })
+                    Text(prettyNum(contact.phone), style = MaterialTheme.typography.titleMedium, color = SubInk)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.ContentCopy, "Copy", tint = Color(0xFF9AA0A8),
+                        modifier = Modifier.size(16.dp).clip(CircleShape).clickable { onCopy() })
                 }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                contact.temperature?.takeIf { it.isNotBlank() }?.let { t ->
-                    val emoji = when (t) { "hot" -> "🔥"; "warm" -> "🌤"; else -> "❄️" }
-                    Box(Modifier.clip(RoundedCornerShape(50)).background(Color(0x33000000)).padding(horizontal = 10.dp, vertical = 5.dp)) {
-                        Text("$emoji ${t.replaceFirstChar { it.uppercase() }}", style = MaterialTheme.typography.labelMedium,
-                            color = Color.White, fontWeight = FontWeight.SemiBold)
+                contact.altPhone?.takeIf { it.isNotBlank() }?.let { alt ->
+                    Spacer(Modifier.height(5.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(prettyNum(alt), style = MaterialTheme.typography.bodyMedium, color = SubInk)
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.size(28.dp).clip(CircleShape).background(JadeL).clickable { onCallAlt() },
+                            contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Call, "Call second number", tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
                     }
                 }
-                isoMs(contact.createdAt)?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text("Added: ${fmtWhen(it)}", style = MaterialTheme.typography.labelSmall, color = Color(0xB3FFFFFF))
+                if (contact.altPhone.isNullOrBlank()) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        Modifier.clip(RoundedCornerShape(8.dp)).clickable { onEdit() }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Add, null, tint = JadeL, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Add another number", color = JadeL, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
+        }
+        Spacer(Modifier.height(14.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LeadChip(stageLabel(contact.status), tempRing(null))
+            contact.temperature?.takeIf { it.isNotBlank() }?.let { t ->
+                val (label, col) = when (t) { "hot" -> "🔥 Hot" to RedL; "warm" -> "☀ Warm" to AmberL; else -> "❄ Cold" to BlueL }
+                LeadChip(label, col)
+            }
+            isoMs(contact.createdAt)?.let { LeadChip("Added ${fmtWhen(it)}", SubInk) }
         }
         contact.aiNextAction?.takeIf { it.isNotBlank() }?.let { tip ->
             Spacer(Modifier.height(14.dp))
             Row(
-                Modifier.clip(RoundedCornerShape(50)).background(Color(0x24FFFFFF)).clickable { onNextTap() }
-                    .padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(JadeL.copy(alpha = 0.10f))
+                    .clickable { onNextTap() }.padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("👉  $tip", style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.width(6.dp))
-                Icon(Icons.Default.KeyboardArrowRight, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Text("👉  $tip", style = MaterialTheme.typography.bodyMedium, color = JadeL, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Icon(Icons.Default.KeyboardArrowRight, null, tint = JadeL, modifier = Modifier.size(18.dp))
             }
         }
     }
+}
+
+/** A quiet outlined chip for the identity block. */
+@Composable
+private fun LeadChip(label: String, color: Color) {
+    Box(
+        Modifier.clip(RoundedCornerShape(50)).border(1.dp, color.copy(alpha = 0.35f), RoundedCornerShape(50))
+            .padding(horizontal = 11.dp, vertical = 5.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = color, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+/** Edit the lead's name and optional second number. */
+@Composable
+private fun EditIdentityDialog(contact: Contact, onDismiss: () -> Unit, onSave: (String?, String?) -> Unit) {
+    var name by remember { mutableStateOf(contact.name ?: "") }
+    var alt by remember { mutableStateOf(contact.altPhone ?: "") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit lead") },
+        text = {
+            Column {
+                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    alt, { v -> alt = v.filter { it.isDigit() || it == '+' } },
+                    label = { Text("Second number (optional)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { onSave(name, alt) }) { Text("Save") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

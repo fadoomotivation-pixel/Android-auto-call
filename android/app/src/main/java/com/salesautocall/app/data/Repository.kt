@@ -642,6 +642,13 @@ object Repository {
         client.from("contacts").update(mapOf("notes" to note)) { filter { eq("id", contactId) } }
     }
 
+    /** Edits the lead's name and/or optional second number, right from the lead page. */
+    suspend fun updateLeadIdentity(contactId: String, name: String?, altPhone: String?) {
+        client.from("contacts").update(
+            mapOf<String, String?>("name" to name, "alt_phone" to altPhone),
+        ) { filter { eq("id", contactId) } }
+    }
+
     // ---------- team ----------
 
     /** Triggers a cloud click-to-call via the Edge Function. Returns the raw JSON response. */
