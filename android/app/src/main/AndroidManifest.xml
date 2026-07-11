@@ -128,6 +128,17 @@
             android:name=".notify.FollowUpAlarmReceiver"
             android:exported="false" />
 
+        <!-- Lead Ring: names the caller when a LEAD rings the SIM line, catches
+             missed lead calls, and asks for the outcome after an answered one.
+             Notifications only — no overlay windows. -->
+        <receiver
+            android:name=".notify.LeadRingReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PHONE_STATE" />
+            </intent-filter>
+        </receiver>
+
         <!-- Re-registers SIP after a reboot / app update so inbound calls keep ringing -->
         <receiver
             android:name=".sip.BootReceiver"

@@ -97,23 +97,26 @@ import kotlin.math.abs
 //  Design system — colours, helpers, atoms
 // ════════════════════════════════════════════════════════════
 
-private val Green = Color(0xFF16A34A)
-private val Amber = Color(0xFFF59E0B)
-private val Red = Color(0xFFEF4444)
-private val Purple = Color(0xFF7C3AED)
-private val Cyan = Color(0xFF0891B2)
-private val Indigo = Color(0xFF4F46E5)
-private val Slate = Color(0xFF64748B)
-private val WaGreen = Color(0xFF25D366)
+// Paper & ink discipline: every hue keeps its identity (buckets stay
+// recognisable at a glance) but sits close to ink — muted, never neon.
+// Jade is the one true accent; money stages resolve to it.
+private val Green = Color(0xFF0E7C66)   // success = jade
+private val Amber = Color(0xFFB8860B)   // muted amber
+private val Red = Color(0xFFC0452C)     // muted terracotta
+private val Purple = Color(0xFF7D5BA6)  // muted plum
+private val Cyan = Color(0xFF3E7F8A)    // muted sea
+private val Indigo = Color(0xFF5E5E9E)  // muted indigo
+private val Slate = Color(0xFF5A6068)
+private val WaGreen = Color(0xFF25D366) // WhatsApp brand — kept recognisable
 
 private data class Stage(val key: String, val label: String, val statuses: Set<String>, val color: Color)
 
-private val Teal = Color(0xFF0D9488)
+private val Teal = Color(0xFF2E8B74)    // jade-adjacent: token money
 
 /** Real-estate pipeline, in order. "Negotiation" folds in the older "proposal"
  *  status; "Token Paid" is the booking-token money milestone before a full booking. */
 private val STAGES = listOf(
-    Stage("new", "New", setOf("new", "queued"), Color(0xFF3B82F6)),
+    Stage("new", "New", setOf("new", "queued"), Color(0xFF4A6FA5)),
     Stage("contacted", "Contacted", setOf("called", "no_answer", "busy", "callback", "follow_up"), Indigo),
     Stage("interested", "Interested", setOf("interested"), Amber),
     Stage("site_visit", "Site Visit", setOf("site_visit"), Purple),
@@ -219,8 +222,8 @@ private fun initials(name: String): String =
     name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("").ifBlank { "?" }
 
 private val avatarColors = listOf(
-    Color(0xFF2563EB), Color(0xFF7C3AED), Color(0xFF0891B2), Color(0xFF16A34A),
-    Color(0xFFEA580C), Color(0xFFDB2777), Color(0xFF4F46E5), Color(0xFF0D9488),
+    Color(0xFF4A6FA5), Color(0xFF7D5BA6), Color(0xFF3E7F8A), Color(0xFF0E7C66),
+    Color(0xFFB06A3B), Color(0xFFA65475), Color(0xFF5E5E9E), Color(0xFF2E8B74),
 )
 
 private fun colorFor(seed: String): Color = avatarColors[abs(seed.hashCode()) % avatarColors.size]

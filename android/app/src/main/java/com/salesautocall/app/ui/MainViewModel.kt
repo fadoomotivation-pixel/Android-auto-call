@@ -1183,7 +1183,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             set { it.copy(leadsLoading = true) }
             runCatching { Repository.fetchLeads() }
-                .onSuccess { list -> set { it.copy(leads = list, leadsLoading = false) } }
+                .onSuccess { list ->
+                    set { it.copy(leads = list, leadsLoading = false) }
+                    // Keep the on-device phone → lead map fresh so Lead Ring can
+                    // name an inbound caller instantly, even offline.
+                    runCatching { com.salesautocall.app.notify.LeadRing.cache(getApplication(), list) }
+                }
                 // Keep whatever leads are already on screen on a network failure
                 // (don't blank the list) and show a friendly, non-technical message.
                 .onFailure { set { it.copy(leadsLoading = false, error = "Couldn't refresh leads — check your connection and try again.") } }
