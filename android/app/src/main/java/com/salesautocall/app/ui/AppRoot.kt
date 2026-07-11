@@ -600,10 +600,8 @@ private fun MainShell(vm: MainViewModel) {
                                     restoreState = true
                                 }
                             },
-                            onStartFlow = { nav.navigate("flow") },
                         )
                     }
-                    composable("flow") { FlowScreen(vm, onClose = { nav.popBackStack() }) }
                     composable(Tab.Dialer.route) { DialerScreen(vm) }
                     composable(Tab.Campaign.route) {
                         CampaignScreen(vm, onPickLeads = {
