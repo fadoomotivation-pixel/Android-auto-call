@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -443,6 +444,18 @@ private fun MainShell(vm: MainViewModel) {
         }
     }
 
+    // A bottom-nav tap from inside an overlay (lead detail / settings) routes here.
+    LaunchedEffect(state.pendingTab) {
+        state.pendingTab?.let { route ->
+            nav.navigate(route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+            vm.consumeTab()
+        }
+    }
+
     // A newer build was published → offer a one-tap in-app update.
     state.update?.let { rel ->
         AlertDialog(
@@ -644,6 +657,47 @@ private fun MainShell(vm: MainViewModel) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/** The app's five destinations, shared by MainShell's bar and the overlays. */
+private val APP_TABS = listOf(
+    Triple("home", "Dashboard", Icons.Default.Home),
+    Triple("leads", "Leads", Icons.Default.People),
+    Triple("dialer", "Dialer", Icons.Default.Dialpad),
+    Triple("campaign", "Call List", Icons.Default.Campaign),
+    Triple("calls", "Calls", Icons.Default.History),
+)
+
+/**
+ * The app bottom navigation, reusable inside full-screen overlays (lead detail,
+ * settings) so those screens keep the same five destinations instead of a
+ * one-off action bar. Light surface to match the overlays; [current] highlights
+ * a tab (or none). Tapping routes via [onTab].
+ */
+@Composable
+internal fun AppBottomNav(current: String?, onTab: (String) -> Unit) {
+    val sel = Color(0xFF2563EB)
+    val unsel = Color(0xFF64748B)
+    Row(
+        Modifier.fillMaxWidth().background(Color.White)
+            .border(width = 1.dp, color = Color(0xFFE7E9F0), shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+            .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically,
+    ) {
+        APP_TABS.forEach { (route, label, icon) ->
+            val on = current == route
+            Column(
+                Modifier.clip(RoundedCornerShape(12.dp)).clickable { onTab(route) }.padding(horizontal = 6.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(icon, contentDescription = label, tint = if (on) sel else unsel, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.height(3.dp))
+                Text(label, style = MaterialTheme.typography.labelSmall,
+                    color = if (on) sel else unsel, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
             }
         }
     }
