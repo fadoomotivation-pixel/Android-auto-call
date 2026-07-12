@@ -845,16 +845,29 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
 
     // Buckets a rep actually thinks in. Sheet filters (exact stage / quick views)
     // override the bucket when active.
-    val newSet = setOf("new", "queued")
-    val workingSet = setOf("called", "no_answer", "busy", "wrong_person", "callback", "follow_up", "interested")
+    //
+    // NEW = "aaj kiska number lagana hai". A lead nobody reached yet (fresh,
+    // no-answer, busy, wrong person) or one that said "kal call karna"
+    // (callback) belongs here — but only when its time has COME. A lead whose
+    // retry/callback is booked for later is asleep in Working; the moment the
+    // due time passes it wakes up back in New, pinned to the top, wearing its
+    // attempt tag. The rep never plans this — the list breathes on its own.
+    val newSet = setOf("new", "queued", "no_answer", "busy", "wrong_person", "callback")
+    val workingSet = setOf("called", "follow_up", "interested")
     val pipelineSet = setOf("site_visit", "negotiation", "proposal", "token_paid")
+    val nowMs = System.currentTimeMillis()
+    fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
+    fun sleeping(c: Contact): Boolean {
+        val due = fuOf(c)?.let { instantMillis(it.dueAt) } ?: return false
+        return due > nowMs
+    }
     val base = when {
         stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
         quick == "retry" -> app.leads.filter { it.status in setOf("no_answer", "busy", "wrong_person", "callback", "follow_up") }
         else -> when (bucket) {
-            "new" -> app.leads.filter { it.status in newSet }
-            "working" -> app.leads.filter { it.status in workingSet }
+            "new" -> app.leads.filter { it.status in newSet && !sleeping(it) }
+            "working" -> app.leads.filter { it.status in workingSet || (it.status in newSet && sleeping(it)) }
             "pipeline" -> app.leads.filter { it.status in pipelineSet }
             "booked" -> app.leads.filter { it.status == "booked" }
             else -> app.leads
@@ -867,7 +880,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val filtered = when (sortBy) {
         "score" -> searched.sortedByDescending { leadScore(it) }
         "recent" -> searched.sortedByDescending { it.createdAt ?: "" }
-        else -> searched
+        // Default order in New: woken-up retries/callbacks first (their time is
+        // NOW), then everything else in its usual order.
+        else -> if (bucket == "new" && stageFilter == null && quick == null) {
+            searched.sortedByDescending { c ->
+                val due = fuOf(c)?.let { instantMillis(it.dueAt) }
+                if (due != null && due <= nowMs) 1 else 0
+            }
+        } else searched
     }
     val filteredIds = filtered.mapNotNull { it.id }.toSet()
     val allSelected = filteredIds.isNotEmpty() && selectedIds.containsAll(filteredIds)
@@ -961,8 +981,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val segments = listOf(
                         "all" to Triple("All", app.leads.size, MaterialTheme.colorScheme.primary),
-                        "new" to Triple("New", app.leads.count { it.status in newSet }, MaterialTheme.colorScheme.primary),
-                        "working" to Triple("Working", app.leads.count { it.status in workingSet }, Indigo),
+                        "new" to Triple("New", app.leads.count { it.status in newSet && !sleeping(it) }, MaterialTheme.colorScheme.primary),
+                        "working" to Triple("Working", app.leads.count { it.status in workingSet || (it.status in newSet && sleeping(it)) }, Indigo),
                         "pipeline" to Triple("Pipeline", app.leads.count { it.status in pipelineSet }, Purple),
                         "booked" to Triple("Booked", app.leads.count { it.status == "booked" }, Green),
                     )
@@ -1417,7 +1437,15 @@ private fun LeadCard(
                         Text("  ·  ₹ $it", style = MaterialTheme.typography.bodySmall, color = jade, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                     if (c.attempts > 0) {
-                        Text("  ·  ${c.attempts}× try", style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 1)
+                        // "Attempt 2/3" — which try comes NEXT, loud when its time is due.
+                        val due = followUp?.let { instantMillis(it.dueAt) }
+                        val dueNow = due != null && due <= now
+                        Text(
+                            "  ·  🔁 Attempt ${c.attempts + 1}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (dueNow) Red else Amber,
+                            fontWeight = FontWeight.SemiBold, maxLines = 1,
+                        )
                     }
                 }
                 intent?.let { (label, color) ->
