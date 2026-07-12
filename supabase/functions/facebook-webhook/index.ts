@@ -6,6 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Hardening: when FACEBOOK_APP_SECRET is set as an Edge Function secret, every
+// POST must carry Meta's X-Hub-Signature-256 (HMAC-SHA256 of the raw body) so
+// fake leads from anyone who merely knows the URL are rejected. Unset =
+// verification skipped, so nothing breaks before the secret is added.
+const APP_SECRET = Deno.env.get("FACEBOOK_APP_SECRET") ?? "";
+async function signatureValid(rawBody: string, header: string | null): Promise<boolean> {
+  if (!APP_SECRET) return true;
+  const expected = (header ?? "").replace(/^sha256=/, "");
+  if (!expected) return false;
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(APP_SECRET),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
+  const hex = Array.from(new Uint8Array(mac)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hex === expected;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -42,7 +60,12 @@ serve(async (req) => {
 
     // Handle incoming leads (POST)
     if (req.method === "POST") {
-      const body = await req.json();
+      const rawBody = await req.text();
+      if (!(await signatureValid(rawBody, req.headers.get("x-hub-signature-256")))) {
+        console.error("X-Hub-Signature-256 verification failed — dropping payload.");
+        return new Response("Invalid signature", { status: 403, headers: corsHeaders });
+      }
+      const body = JSON.parse(rawBody);
 
       if (body.object === "page") {
         for (const entry of body.entry) {
@@ -130,11 +153,14 @@ serve(async (req) => {
               // Returning buyer? A new ad response from a phone we already have is
               // a re-engagement, not a fresh lead — reactivate the existing contact
               // (wakes it if it had gone cold) instead of creating a duplicate.
+              // Match on the LAST 10 DIGITS so "+9198765..." meets "98765..." —
+              // country-code / formatting differences never slip a duplicate in.
+              const tail10 = cleanPhone.replace(/[^0-9]/g, "").slice(-10);
               const { data: dupe } = await supabaseAdmin
                 .from("contacts")
                 .select("id")
                 .eq("company_id", integration.company_id)
-                .eq("phone", cleanPhone)
+                .like("phone", `%${tail10}`)
                 .limit(1)
                 .maybeSingle();
               if (dupe) {
