@@ -900,6 +900,47 @@ object Repository {
         }) { filter { eq("id", contactId) } }
     }
 
+    // ---------- wada (AI-extracted call commitments) ----------
+
+    /** Marks a call's wada as "applied" or "dismissed" after the rep's one tap. */
+    suspend fun setWadaState(callLogId: String, state: String) {
+        client.from("call_logs").update(mapOf("wada_state" to state)) { filter { eq("id", callLogId) } }
+    }
+
+    /**
+     * Writes the facts the AI heard onto the lead: budget fills the budget field
+     * (only if the rep hasn't already typed one), everything else lands as one
+     * appended note line — never overwriting human input.
+     */
+    suspend fun applyWadaFacts(contact: Contact, wada: Wada) {
+        val contactId = contact.id ?: return
+        val updates = mutableMapOf<String, String>()
+        if (!wada.budget.isNullOrBlank() && contact.budget.isNullOrBlank()) {
+            updates["budget"] = wada.budget
+        }
+        val factLine = buildString {
+            wada.preferences?.let { append("Chahiye: $it") }
+            if (wada.objections.isNotEmpty()) {
+                if (isNotEmpty()) append(" · ")
+                append("Atka: ${wada.objections.joinToString(", ")}")
+            }
+            wada.timeline?.let {
+                if (isNotEmpty()) append(" · ")
+                append("Kab tak: $it")
+            }
+        }
+        if (factLine.isNotBlank()) {
+            val existing = contact.notes.orEmpty()
+            // Don't stack the same auto-line on every re-confirm.
+            if (!existing.contains(factLine)) {
+                updates["notes"] = if (existing.isBlank()) "🤖 $factLine" else "$existing\n🤖 $factLine"
+            }
+        }
+        if (updates.isNotEmpty()) {
+            client.from("contacts").update(updates.toMap()) { filter { eq("id", contactId) } }
+        }
+    }
+
     // ---------- follow-ups ----------
 
     /** Schedules a callback for a lead at [dueAtIso]. Returns the stored row (with id). */

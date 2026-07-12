@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.Contact
+import com.salesautocall.app.data.Wada
 
 // ---- Palette: paper & ink, ONE jade accent — same language as the Leads page.
 // The old rainbow constants keep their names but now resolve to ink/jade (with
@@ -286,6 +287,21 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         ActionTile(Icons.Default.Chat, "WhatsApp", WhatsGreen, Modifier.weight(1f)) { doWhats() }
                         ActionTile(Icons.Default.CalendarMonth, "Set Reminder", PurpleL, Modifier.weight(1f)) { scheduleOpen = true }
                         ActionTile(Icons.Default.MoreHoriz, "More", SubInk, Modifier.weight(1f)) { moreOpen = true }
+                    }
+                }
+
+                // ---- Wada: the AI heard commitments on the last call — one tap
+                // keeps every promise (follow-up + facts), zero typing. ----
+                run {
+                    val wadaCall = app.leadDetailCalls.firstOrNull { it.wadaState == "pending" && it.aiActions != null }
+                    if (wadaCall != null) {
+                        item {
+                            WadaCard(
+                                call = wadaCall,
+                                onApply = { vm.applyWada(wadaCall) },
+                                onDismiss = { vm.dismissWada(wadaCall) },
+                            )
+                        }
                     }
                 }
 
@@ -821,6 +837,73 @@ private fun NextStepBanner(color: Color, title: String, detail: String, cta: Str
                 Text("✕", color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             }
         }
+    }
+}
+
+/**
+ * "Wada" — what the AI heard on the last call, waiting for one tap. The call
+ * itself was the data entry; this card is just the confirmation.
+ */
+@Composable
+private fun WadaCard(call: CallLog, onApply: () -> Unit, onDismiss: () -> Unit) {
+    val wada = call.aiActions ?: return
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
+            .background(CardBg).border(1.5.dp, JadeL.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🤝", fontSize = 20.sp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("WADA — AI ne call se pakda", style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                Text("Ek tap — sab save, wada set", style = MaterialTheme.typography.labelSmall, color = SubInk)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
+        Spacer(Modifier.height(10.dp))
+
+        val promiseMs = isoMs(wada.promiseAt)
+        promiseMs?.let { WadaRow("📅", "Wada", fmtWhen(it) + (wada.promiseNote?.let { n -> " — $n" } ?: "")) }
+        wada.budget?.let { WadaRow("💰", "Budget", it) }
+        wada.preferences?.let { WadaRow("🏠", "Chahiye", it) }
+        if (wada.objections.isNotEmpty()) WadaRow("⚠️", "Atka", wada.objections.joinToString(", "))
+        wada.timeline?.let { WadaRow("⏳", "Kab tak", it) }
+
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(50)).background(JadeL)
+                    .clickable { onApply() }.padding(vertical = 11.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (promiseMs != null) "✓ Sahi hai — wada set karo" else "✓ Sahi hai — save karo",
+                    color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                )
+            }
+            Box(
+                Modifier.clip(RoundedCornerShape(50)).border(1.dp, Hair, RoundedCornerShape(50))
+                    .clickable { onDismiss() }.padding(horizontal = 16.dp, vertical = 11.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("Galat hai", color = SubInk, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun WadaRow(emoji: String, label: String, value: String) {
+    Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
+        Text(emoji, fontSize = 14.sp)
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = SubInk,
+            modifier = Modifier.width(64.dp), fontWeight = FontWeight.SemiBold)
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = Ink,
+            fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
     }
 }
 
