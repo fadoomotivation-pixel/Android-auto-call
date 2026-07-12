@@ -177,7 +177,7 @@ enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), AL
 
 /** Lead-pipeline filters shown on the Leads tab. */
 enum class LeadFilter(val key: String, val label: String, val statuses: Set<String>) {
-    OPEN("open", "Open", setOf("new", "queued", "callback", "follow_up", "no_answer", "busy")),
+    OPEN("open", "Open", setOf("new", "queued", "callback", "follow_up", "no_answer", "busy", "wrong_person")),
     HOT("hot", "Hot", emptySet()),           // filtered by temperature, not status
     INTERESTED("interested", "Interested", setOf("interested")),
     BOOKED("booked", "Booked", setOf("booked")),
@@ -1011,7 +1011,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Starts auto-dialing an existing campaign (e.g. a follow-up) from its loaded contacts. */
     fun startExistingCampaign(campaignId: String, campaignName: String, contacts: List<Contact>) {
         val callable = contacts.filter {
-            it.status in setOf("new", "queued", "callback", "no_answer", "busy")
+            it.status in setOf("new", "queued", "callback", "no_answer", "busy", "wrong_person")
         }
         if (callable.isEmpty()) {
             set { it.copy(error = "No contacts left to call in this campaign.") }
@@ -1639,16 +1639,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             set { it.copy(followUpsLoading = true) }
             runCatching { Repository.fetchFollowUps() }
-                .onSuccess { list -> set { it.copy(followUpList = list, followUpsLoading = false) } }
+                .onSuccess { list ->
+                    set { it.copy(followUpList = list, followUpsLoading = false) }
+                    // Arm the on-device alarm for every upcoming follow-up —
+                    // including ones the SERVER created (Wada auto-apply), which
+                    // this phone has never seen. Re-arming is idempotent: the
+                    // PendingIntent id is the follow-up id.
+                    val now = System.currentTimeMillis()
+                    list.forEach { f ->
+                        val ms = runCatching { java.time.OffsetDateTime.parse(f.dueAt).toInstant().toEpochMilli() }
+                            .recoverCatching { java.time.Instant.parse(f.dueAt).toEpochMilli() }
+                            .getOrNull()
+                        if (ms != null && ms > now) {
+                            FollowUpReminder.schedule(getApplication(), f.id ?: f.phone, f.name, f.phone, f.note, ms)
+                        }
+                    }
+                }
                 .onFailure { e -> set { it.copy(followUpsLoading = false, error = e.message) } }
         }
     }
 
-    /** Schedules a callback [dueAtMillis] from now and arms an on-device reminder. */
-    fun scheduleFollowUp(contactId: String?, phone: String, name: String?, dueAtMillis: Long, note: String?) {
+    /** Schedules a callback [dueAtMillis] from now and arms an on-device reminder.
+     *  [mirrorStatus] false = auto-retry: the lead stays in its current bucket. */
+    fun scheduleFollowUp(contactId: String?, phone: String, name: String?, dueAtMillis: Long, note: String?, mirrorStatus: Boolean = true) {
         viewModelScope.launch {
             val iso = java.time.Instant.ofEpochMilli(dueAtMillis).toString()
-            runCatching { Repository.scheduleFollowUp(contactId, phone, name, iso, note) }
+            runCatching { Repository.scheduleFollowUp(contactId, phone, name, iso, note, mirrorStatus) }
                 .onSuccess { saved ->
                     FollowUpReminder.schedule(
                         getApplication(),
@@ -1661,7 +1677,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     set { it.copy(message = "⏰ Follow-up set for ${shortWhen(dueAtMillis)}") }
                     loadFollowUps()
                     if (contactId != null) {
-                        set { st ->
+                        if (mirrorStatus) set { st ->
                             st.copy(leads = st.leads.map { c ->
                                 if (c.id == contactId) c.copy(status = "follow_up") else c
                             })
@@ -1737,12 +1753,46 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
-        // Auto-retry: a number that didn't connect bounces back in 2 hours.
-        if (status in setOf("no_answer", "busy") && !phone.isNullOrBlank()) {
-            val due = System.currentTimeMillis() + 2 * 3600_000L
-            scheduleFollowUp(contactId, phone, name, due, if (status == "busy") "Auto-retry — line was busy" else "Auto-retry — no answer")
+        // Attempt ladder: nobody answered (or the wrong person did) → the lead
+        // STAYS in New, the next attempt books itself for the next day in the
+        // OPPOSITE half of the day (morning miss → evening try, and vice
+        // versa — people who miss at 11 AM often pick up at 5 PM). After 3
+        // straight misses the lead goes cold and the ladder stops: persistence,
+        // not harassment.
+        if (status in setOf("no_answer", "busy", "wrong_person") && !phone.isNullOrBlank()) {
+            val tries = (_state.value.leads.find { it.id == contactId }?.attempts ?: 0) + 1
+            viewModelScope.launch { runCatching { Repository.setAttempts(contactId, tries) } }
+            set { st -> st.copy(leads = st.leads.map { if (it.id == contactId) it.copy(attempts = tries) else it }) }
+            if (tries >= 3) {
+                viewModelScope.launch { runCatching { Repository.setTemperature(contactId, "cold") } }
+                set { st ->
+                    st.copy(
+                        leads = st.leads.map { if (it.id == contactId) it.copy(temperature = "cold") else it },
+                        message = "3 attempts, koi jawab nahi — lead cold. Auto-retry band.",
+                    )
+                }
+            } else {
+                scheduleFollowUp(
+                    contactId, phone, name,
+                    dueAtMillis = nextAttemptMillis(tries),
+                    note = "Attempt ${tries + 1} — pichhli baar nahi uthaya",
+                    mirrorStatus = false,
+                )
+            }
         }
         dismissPostCall()
+    }
+
+    /** When to try a no-answer lead again: attempt 2 = next day, attempt 3 =
+     *  two days later; always the opposite half of the day from right now. */
+    private fun nextAttemptMillis(triesSoFar: Int): Long {
+        val cal = java.util.Calendar.getInstance()
+        val morningNow = cal.get(java.util.Calendar.HOUR_OF_DAY) < 14
+        cal.add(java.util.Calendar.DAY_OF_YEAR, if (triesSoFar >= 2) 2 else 1)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, if (morningNow) 17 else 11)
+        cal.set(java.util.Calendar.MINUTE, if (morningNow) 0 else 15)
+        cal.set(java.util.Calendar.SECOND, 0)
+        return cal.timeInMillis
     }
 
     /** Dismiss the post-call popup without logging any disposition. */
@@ -1916,6 +1966,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(leadDetailCalls = calls, leadDetailActivities = acts, voiceNotes = notes, leadDetailLoading = false)
                 else it
             }
+            // Wada auto-apply: normally the server applies it the moment the
+            // summary lands; this catches any leftover pending one (e.g. the
+            // server couldn't match a contact at the time). Zero taps.
+            calls.firstOrNull { it.wadaState == "pending" && it.aiActions != null }?.let { applyWada(it) }
         }
     }
 
@@ -2126,6 +2180,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun stageDisplay(status: String): String = when (status) {
         "new", "queued" -> "New enquiry"
         "called", "no_answer", "busy" -> "Contacted"
+        "wrong_person" -> "Wrong person"
         "callback" -> "Callback"
         "follow_up" -> "Follow-up"
         "interested" -> "Interested"

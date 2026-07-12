@@ -143,10 +143,61 @@ export async function summarizeAndStore(
       wada = cleanWada(parsed.wada, callTimeMs);
     } catch { /* keep raw as summary, no disposition */ }
 
+    // AUTO-APPLY the wada: the promise becomes a real follow-up and the heard
+    // facts land on the lead — no taps. Falls back to 'pending' (the app shows
+    // a confirm card) only when the call isn't linked to a contact.
+    let wadaState: string | null = null;
+    if (wada) {
+      wadaState = "pending";
+      try {
+        const { data: call } = await admin.from("call_logs")
+          .select("company_id, salesperson_id, contact_id, phone").eq("id", callId).maybeSingle();
+        if (call?.contact_id) {
+          const { data: contact } = await admin.from("contacts")
+            .select("id, name, phone, budget, notes").eq("id", call.contact_id).maybeSingle();
+          if (contact) {
+            const updates: Record<string, unknown> = {};
+            if (wada.budget && !contact.budget) updates.budget = wada.budget;
+            const factLine = [
+              wada.preferences ? `Chahiye: ${wada.preferences}` : null,
+              wada.objections.length ? `Atka: ${wada.objections.join(", ")}` : null,
+              wada.timeline ? `Kab tak: ${wada.timeline}` : null,
+            ].filter(Boolean).join(" · ");
+            if (factLine && !(contact.notes ?? "").includes(factLine)) {
+              updates.notes = contact.notes ? `${contact.notes}\n🤖 ${factLine}` : `🤖 ${factLine}`;
+            }
+            if (Object.keys(updates).length) {
+              await admin.from("contacts").update(updates).eq("id", contact.id);
+            }
+            if (wada.promise_at) {
+              // Latest promise wins: move the existing pending follow-up
+              // instead of stacking a second one.
+              const note = wada.promise_note ?? "Wada — call pe promise kiya tha";
+              const { data: existing } = await admin.from("follow_ups")
+                .select("id").eq("contact_id", contact.id).eq("status", "pending")
+                .order("created_at", { ascending: false }).limit(1).maybeSingle();
+              if (existing?.id) {
+                await admin.from("follow_ups").update({ due_at: wada.promise_at, note }).eq("id", existing.id);
+              } else {
+                await admin.from("follow_ups").insert({
+                  company_id: call.company_id, salesperson_id: call.salesperson_id,
+                  contact_id: contact.id, phone: contact.phone, name: contact.name,
+                  due_at: wada.promise_at, note, status: "pending",
+                });
+              }
+            }
+            wadaState = "applied";
+          }
+        }
+      } catch (e) {
+        console.error(`wada auto-apply failed for ${callId}: ${e}`);
+      }
+    }
+
     await admin.from("call_logs")
       .update({
         transcript, summary, suggested_disposition: disposition, summary_status: "ready",
-        ai_actions: wada, wada_state: wada ? "pending" : null,
+        ai_actions: wada, wada_state: wadaState,
       })
       .eq("id", callId);
     return { ok: true, summary, disposition: disposition ?? undefined };

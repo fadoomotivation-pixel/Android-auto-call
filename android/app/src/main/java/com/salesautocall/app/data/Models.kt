@@ -83,6 +83,9 @@ data class Contact(
     val temperature: String? = null,
     /** Free-text budget the rep captured (e.g. "₹45L", "1.2 Cr"). */
     val budget: String? = null,
+    /** No-connect tries so far (no answer / busy / wrong person). Drives the
+     *  attempt ladder: next-day retries, cold after 3 straight misses. */
+    val attempts: Int = 0,
     /** AI-suggested next step for this lead (one short line); null = not scored. */
     @SerialName("ai_next_action") val aiNextAction: String? = null,
     @SerialName("ai_scored_at") val aiScoredAt: String? = null,

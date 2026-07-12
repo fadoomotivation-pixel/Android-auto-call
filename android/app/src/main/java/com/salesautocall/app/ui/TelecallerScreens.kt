@@ -116,8 +116,10 @@ private val Teal = Color(0xFF2E8B74)    // jade-adjacent: token money
 /** Real-estate pipeline, in order. "Negotiation" folds in the older "proposal"
  *  status; "Token Paid" is the booking-token money milestone before a full booking. */
 private val STAGES = listOf(
-    Stage("new", "New", setOf("new", "queued"), Color(0xFF4A6FA5)),
-    Stage("contacted", "Contacted", setOf("called", "no_answer", "busy", "callback", "follow_up"), Indigo),
+    // No-answer / busy live in NEW: nobody actually spoke to them yet, so they
+    // come straight back into the calling pile (the attempt ladder re-books them).
+    Stage("new", "New", setOf("new", "queued", "no_answer", "busy", "wrong_person"), Color(0xFF4A6FA5)),
+    Stage("contacted", "Contacted", setOf("called", "callback", "follow_up"), Indigo),
     Stage("interested", "Interested", setOf("interested"), Amber),
     Stage("site_visit", "Site Visit", setOf("site_visit"), Purple),
     Stage("negotiation", "Negotiation", setOf("negotiation", "proposal"), Cyan),
@@ -155,7 +157,7 @@ private fun leadScore(c: Contact): Int {
         "site_visit" -> 85
         "interested" -> 72
         "callback", "follow_up" -> 60
-        "called", "no_answer", "busy" -> 48
+        "called", "no_answer", "busy", "wrong_person" -> 48
         "not_interested", "lost", "dnc" -> 8
         else -> 32
     }
@@ -844,12 +846,12 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // Buckets a rep actually thinks in. Sheet filters (exact stage / quick views)
     // override the bucket when active.
     val newSet = setOf("new", "queued")
-    val workingSet = setOf("called", "no_answer", "busy", "callback", "follow_up", "interested")
+    val workingSet = setOf("called", "no_answer", "busy", "wrong_person", "callback", "follow_up", "interested")
     val pipelineSet = setOf("site_visit", "negotiation", "proposal", "token_paid")
     val base = when {
         stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
-        quick == "retry" -> app.leads.filter { it.status in setOf("no_answer", "busy", "callback", "follow_up") }
+        quick == "retry" -> app.leads.filter { it.status in setOf("no_answer", "busy", "wrong_person", "callback", "follow_up") }
         else -> when (bucket) {
             "new" -> app.leads.filter { it.status in newSet }
             "working" -> app.leads.filter { it.status in workingSet }
@@ -1407,7 +1409,17 @@ private fun LeadCard(
                     Text("· ${stage.label}", style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
                 }
                 Spacer(Modifier.height(2.dp))
-                Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted, letterSpacing = 0.3.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted, letterSpacing = 0.3.sp)
+                    // Budget rides on the phone line so it's ALWAYS visible —
+                    // especially on New leads where the intent line is busy.
+                    c.budget?.takeIf { it.isNotBlank() }?.let {
+                        Text("  ·  ₹ $it", style = MaterialTheme.typography.bodySmall, color = jade, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+                    if (c.attempts > 0) {
+                        Text("  ·  ${c.attempts}× try", style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 1)
+                    }
+                }
                 intent?.let { (label, color) ->
                     Spacer(Modifier.height(4.dp))
                     Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium,
@@ -1737,6 +1749,9 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         DispoButton("Switched off", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { dispose("no_answer") }
+                        // Kid / family member picked up — the LEAD is still unreached,
+                        // so it rides the same retry ladder as a no-answer.
+                        DispoButton("Wrong person", Amber.copy(alpha = 0.12f), Amber, Modifier.weight(1f)) { dispose("wrong_person") }
                         DispoButton("Wrong number", Red.copy(alpha = 0.12f), Red, Modifier.weight(1f)) { dispose("dnc") }
                     }
                     Spacer(Modifier.height(8.dp))

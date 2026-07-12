@@ -900,6 +900,11 @@ object Repository {
         }) { filter { eq("id", contactId) } }
     }
 
+    /** Records how many times this lead was tried without a real conversation. */
+    suspend fun setAttempts(contactId: String, attempts: Int) {
+        client.from("contacts").update(mapOf("attempts" to attempts)) { filter { eq("id", contactId) } }
+    }
+
     // ---------- wada (AI-extracted call commitments) ----------
 
     /** Marks a call's wada as "applied" or "dismissed" after the rep's one tap. */
@@ -950,6 +955,9 @@ object Repository {
         name: String?,
         dueAtIso: String,
         note: String?,
+        /** false = auto-retry for a lead nobody answered: it must STAY in the
+         *  New bucket, so don't stamp the "follow_up" status on the contact. */
+        mirrorStatus: Boolean = true,
     ): FollowUp? {
         val profile = myProfile() ?: error("No profile. Ask your admin to add you to a company.")
         val companyId = profile.companyId ?: error("You are not linked to a company yet.")
@@ -963,7 +971,7 @@ object Repository {
             note = note,
         )
         // Mirror the lead's stage so the pipeline shows it as a scheduled follow-up.
-        if (contactId != null) runCatching { setDisposition(contactId, "follow_up", null) }
+        if (mirrorStatus && contactId != null) runCatching { setDisposition(contactId, "follow_up", null) }
         return client.from("follow_ups").insert(fu) { select() }.decodeSingleOrNull<FollowUp>()
     }
 
