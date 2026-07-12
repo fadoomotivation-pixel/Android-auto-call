@@ -290,15 +290,17 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                // ---- Wada: the AI heard commitments on the last call — one tap
-                // keeps every promise (follow-up + facts), zero typing. ----
+                // ---- Wada: what the AI heard on the latest call. It applies
+                // ITSELF (server-side, or on open) — the card just shows the
+                // receipt: promise set, facts saved, zero typing. ----
                 run {
-                    val wadaCall = app.leadDetailCalls.firstOrNull { it.wadaState == "pending" && it.aiActions != null }
+                    val wadaCall = app.leadDetailCalls.firstOrNull {
+                        it.aiActions != null && it.wadaState in setOf("pending", "applied")
+                    }
                     if (wadaCall != null) {
                         item {
                             WadaCard(
                                 call = wadaCall,
-                                onApply = { vm.applyWada(wadaCall) },
                                 onDismiss = { vm.dismissWada(wadaCall) },
                             )
                         }
@@ -841,12 +843,14 @@ private fun NextStepBanner(color: Color, title: String, detail: String, cta: Str
 }
 
 /**
- * "Wada" — what the AI heard on the last call, waiting for one tap. The call
- * itself was the data entry; this card is just the confirmation.
+ * "Wada" — what the AI heard on the latest call. It has already applied
+ * itself (follow-up scheduled, facts saved); this card is the receipt.
+ * The only affordance is "hatao" for when the AI misheard.
  */
 @Composable
-private fun WadaCard(call: CallLog, onApply: () -> Unit, onDismiss: () -> Unit) {
+private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
     val wada = call.aiActions ?: return
+    val applied = call.wadaState == "applied"
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
             .background(CardBg).border(1.5.dp, JadeL.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
@@ -858,7 +862,15 @@ private fun WadaCard(call: CallLog, onApply: () -> Unit, onDismiss: () -> Unit) 
             Column(Modifier.weight(1f)) {
                 Text("WADA — AI ne call se pakda", style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
-                Text("Ek tap — sab save, wada set", style = MaterialTheme.typography.labelSmall, color = SubInk)
+                Text(
+                    if (applied) "Sab apne aap save + set ho gaya" else "Set ho raha hai…",
+                    style = MaterialTheme.typography.labelSmall, color = SubInk,
+                )
+            }
+            if (applied) {
+                Box(Modifier.clip(RoundedCornerShape(50)).background(JadeL.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 5.dp)) {
+                    Text("✓ Done", color = JadeL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -872,24 +884,14 @@ private fun WadaCard(call: CallLog, onApply: () -> Unit, onDismiss: () -> Unit) 
         if (wada.objections.isNotEmpty()) WadaRow("⚠️", "Atka", wada.objections.joinToString(", "))
         wada.timeline?.let { WadaRow("⏳", "Kab tak", it) }
 
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(50)).background(JadeL)
-                    .clickable { onApply() }.padding(vertical = 11.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (promiseMs != null) "✓ Sahi hai — wada set karo" else "✓ Sahi hai — save karo",
-                    color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
-                )
-            }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Box(
                 Modifier.clip(RoundedCornerShape(50)).border(1.dp, Hair, RoundedCornerShape(50))
-                    .clickable { onDismiss() }.padding(horizontal = 16.dp, vertical = 11.dp),
+                    .clickable { onDismiss() }.padding(horizontal = 14.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Galat hai", color = SubInk, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Text("Galat suna — hatao", color = SubInk, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             }
         }
     }
