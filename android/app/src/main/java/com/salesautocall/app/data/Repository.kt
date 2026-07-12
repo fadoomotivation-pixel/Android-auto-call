@@ -178,7 +178,7 @@ object Repository {
             "${AndroidCallLog.Calls.DATE} ASC" // Ascending to process oldest first
         ) ?: return
 
-        data class NativeCall(val num: String, val cleanNum: String, val contactId: String, val startedAt: Instant, val durationSec: Int)
+        data class NativeCall(val num: String, val cleanNum: String, val contactId: String, val startedAt: Instant, val durationSec: Int, val type: Int)
         val nativeCalls = mutableListOf<NativeCall>()
 
         cursor.use { c ->
@@ -194,12 +194,20 @@ object Repository {
                 val dateMillis = c.getLong(dateIdx)
                 val durationSec = c.getInt(durIdx)
 
-                if (type != AndroidCallLog.Calls.OUTGOING_TYPE) continue
+                // Sync EVERY direction of a lead call — outgoing, incoming AND
+                // missed — so the admin sees the whole story, not just dials.
+                val known = type in setOf(
+                    AndroidCallLog.Calls.OUTGOING_TYPE,
+                    AndroidCallLog.Calls.INCOMING_TYPE,
+                    AndroidCallLog.Calls.MISSED_TYPE,
+                    AndroidCallLog.Calls.REJECTED_TYPE,
+                )
+                if (!known) continue
 
                 val contactId = contactMap[cleanNum] ?: contactMap.entries.firstOrNull { cleanNum.endsWith(it.key) || it.key.endsWith(cleanNum) }?.value
                 if (contactId == null) continue
 
-                nativeCalls.add(NativeCall(num, cleanNum, contactId, Instant.ofEpochMilli(dateMillis), durationSec))
+                nativeCalls.add(NativeCall(num, cleanNum, contactId, Instant.ofEpochMilli(dateMillis), durationSec, type))
             }
         }
 
@@ -227,13 +235,20 @@ object Repository {
                 matchedSupabaseIds.add(closestLog.id!!)
             } else {
                 // Unmatched: Backfill to Supabase
-                val outcome = if (nativeCall.durationSec > 0) "connected" else "no_answer"
+                val incoming = nativeCall.type == AndroidCallLog.Calls.INCOMING_TYPE
+                val missed = nativeCall.type == AndroidCallLog.Calls.MISSED_TYPE ||
+                    nativeCall.type == AndroidCallLog.Calls.REJECTED_TYPE
+                val outcome = when {
+                    missed -> "missed"
+                    nativeCall.durationSec > 0 -> "connected"
+                    else -> "no_answer"
+                }
                 val newLog = CallLog(
                     companyId = companyId,
                     salespersonId = salesId,
                     contactId = nativeCall.contactId,
                     phone = nativeCall.num,
-                    direction = "outgoing",
+                    direction = if (incoming || missed) "incoming" else "outgoing",
                     outcome = outcome,
                     startedAt = nativeCall.startedAt.toString(),
                     endedAt = nativeCall.startedAt.plusSeconds(nativeCall.durationSec.toLong()).toString(),

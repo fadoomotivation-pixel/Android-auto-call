@@ -11,8 +11,16 @@ function fmt(seconds: number | null) {
   return `${m}m ${s.toString().padStart(2, "0")}s`;
 }
 
-export default async function RecordingsPage() {
+const tail10 = (p: string | null | undefined) => (p ?? "").replace(/\D/g, "").slice(-10);
+
+export default async function RecordingsPage({
+  searchParams,
+}: {
+  searchParams: { rep?: string; q?: string };
+}) {
   const supabase = await createClient();
+  const repFilter = searchParams.rep || "";
+  const q = (searchParams.q || "").trim().toLowerCase();
 
   const {
     data: { user },
@@ -36,19 +44,36 @@ export default async function RecordingsPage() {
   }
 
   // RLS scopes this automatically: telecaller = own, admin = company, super = all.
-  const [{ data: calls, error }, { data: people }] = await Promise.all([
-    supabase
-      .from("call_logs")
-      .select("*")
-      .eq("recording_status", "ready")
-      .order("created_at", { ascending: false })
-      .limit(500)
-      .returns<CallLog[]>(),
+  let recQuery = supabase
+    .from("call_logs")
+    .select("*")
+    .eq("recording_status", "ready")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (repFilter) recQuery = recQuery.eq("salesperson_id", repFilter);
+
+  const [{ data: calls, error }, { data: people }, { data: contacts }] = await Promise.all([
+    recQuery.returns<CallLog[]>(),
     supabase.from("profiles").select("id, full_name").returns<Profile[]>(),
+    supabase.from("contacts").select("id, name, phone").limit(5000).returns<{ id: string; name: string | null; phone: string }[]>(),
   ]);
 
   const nameById = new Map((people ?? []).map((p) => [p.id, p.full_name]));
-  const rows = calls ?? [];
+  const leadById = new Map((contacts ?? []).map((c) => [c.id, c.name]));
+  const leadByPhone = new Map(
+    (contacts ?? []).filter((c) => c.name).map((c) => [tail10(c.phone), c.name] as const),
+  );
+  const leadName = (c: CallLog) =>
+    (c.contact_id && leadById.get(c.contact_id)) || leadByPhone.get(tail10(c.phone)) || null;
+
+  let rows = calls ?? [];
+  if (q) {
+    rows = rows.filter((c) => {
+      const n = (leadName(c) ?? "").toLowerCase();
+      return n.includes(q) || c.phone.includes(q) || tail10(c.phone).includes(q.replace(/\D/g, ""));
+    });
+  }
+  const totalRecSecs = rows.reduce((a, c) => a + (c.recording_seconds || 0), 0);
 
   return (
     <>
@@ -60,6 +85,22 @@ export default async function RecordingsPage() {
 
       {company && <RecordingSetup companyId={company.id} enabled={company.recording_enabled} />}
 
+      <form method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0" }}>
+        <select name="rep" defaultValue={repFilter}>
+          <option value="">All telecallers</option>
+          {(people ?? []).map((p) => (
+            <option key={p.id} value={p.id}>{p.full_name}</option>
+          ))}
+        </select>
+        <input name="q" defaultValue={searchParams.q || ""} placeholder="Search lead name or phone" />
+        <button type="submit">Apply</button>
+      </form>
+
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", margin: "4px 0 16px" }}>
+        <span><strong>{rows.length}</strong> recordings</span>
+        <span><strong>{fmt(totalRecSecs)}</strong> total audio</span>
+      </div>
+
       {error && <div className="error">{error.message}</div>}
 
       {rows.length === 0 ? (
@@ -70,8 +111,8 @@ export default async function RecordingsPage() {
           <thead>
             <tr>
               <th>When</th>
-              <th>Salesperson</th>
-              <th>Phone</th>
+              <th>Telecaller</th>
+              <th>Lead</th>
               <th>Length</th>
               <th>Source</th>
               <th>Recording</th>
@@ -83,7 +124,10 @@ export default async function RecordingsPage() {
               <tr key={c.id}>
                 <td>{new Date(c.started_at ?? c.created_at).toLocaleString()}</td>
                 <td>{nameById.get(c.salesperson_id) || "—"}</td>
-                <td>{c.phone}</td>
+                <td>
+                  <strong>{leadName(c) || "Unknown"}</strong>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>{c.phone}</div>
+                </td>
                 <td>{fmt(c.recording_seconds)}</td>
                 <td>{c.recording_source === "sim" ? "SIM" : "Cloud"}</td>
                 <td>
