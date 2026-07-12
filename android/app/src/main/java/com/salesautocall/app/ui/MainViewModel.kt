@@ -1812,7 +1812,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val contactId = s.postCallContactId
         val phone = s.postCallPhone ?: return
         val name = s.postCallName
-        scheduleFollowUp(contactId, phone, name, dueAtMillis, note)
+        // postCallDispose (below) stamps the real status; don't let the
+        // follow-up mirror overwrite it. A "callback" lead must STAY callback
+        // so it sleeps in Working and wakes back up in New at its due time.
+        scheduleFollowUp(contactId, phone, name, dueAtMillis, note, mirrorStatus = false)
+        // "Kal call karna" is still an unfinished attempt — count it, so the
+        // lead resurfaces tomorrow wearing "Attempt 2/3" like the no-answers.
+        if (status == "callback" && contactId != null) {
+            val tries = (_state.value.leads.find { it.id == contactId }?.attempts ?: 0) + 1
+            viewModelScope.launch { runCatching { Repository.setAttempts(contactId, tries) } }
+            set { st -> st.copy(leads = st.leads.map { if (it.id == contactId) it.copy(attempts = tries) else it }) }
+        }
         postCallDispose(status, temperature, note)
     }
 
