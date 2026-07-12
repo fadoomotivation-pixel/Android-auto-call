@@ -877,6 +877,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     error = if (text == null) "Couldn't summarize this call yet." else st.error,
                 )
             }
+            // The summary run may also have extracted a wada — reload the open
+            // lead so its confirm card appears right away.
+            if (text != null && _state.value.leadDetailId != null) refreshLeadDetail()
         }
     }
 
@@ -1917,6 +1920,61 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshLeadDetail() { _state.value.leadDetailId?.let { openLeadDetail(it) } }
+
+    // ---------- wada (AI-heard commitments, one-tap confirm) ----------
+
+    /**
+     * One tap = every promise kept: schedules the promised callback (with the
+     * on-device alarm), writes the heard facts onto the lead, and marks the
+     * call's wada applied.
+     */
+    fun applyWada(call: com.salesautocall.app.data.CallLog) {
+        val wada = call.aiActions ?: return
+        val callId = call.id ?: return
+        viewModelScope.launch {
+            val contact = _state.value.leads.find { it.id == call.contactId }
+            // 1. The promise → a real follow-up + alarm.
+            val dueMs = wada.promiseAt?.let { iso ->
+                runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }
+                    .recoverCatching { java.time.Instant.parse(iso).toEpochMilli() }
+                    .getOrNull()
+            }
+            if (dueMs != null && dueMs > System.currentTimeMillis()) {
+                scheduleFollowUp(
+                    contactId = call.contactId,
+                    phone = contact?.phone ?: call.phone,
+                    name = contact?.name,
+                    dueAtMillis = dueMs,
+                    note = wada.promiseNote ?: "Wada — call pe promise kiya tha",
+                )
+            }
+            // 2. The facts → the lead card (never overwriting human input).
+            if (contact != null) runCatching { Repository.applyWadaFacts(contact, wada) }
+            // 3. Mark done + reflect locally.
+            runCatching { Repository.setWadaState(callId, "applied") }
+            set { st ->
+                st.copy(leadDetailCalls = st.leadDetailCalls.map {
+                    if (it.id == callId) it.copy(wadaState = "applied") else it
+                })
+            }
+            // scheduleFollowUp announces the ⏰ itself; only speak when there was no promise.
+            if (dueMs == null) set { it.copy(message = "🤝 Wada saved — lead update ho gayi") }
+            if (call.contactId != null) loadLeads(force = true)
+        }
+    }
+
+    /** The AI misheard — drop this call's wada quietly. */
+    fun dismissWada(call: com.salesautocall.app.data.CallLog) {
+        val callId = call.id ?: return
+        viewModelScope.launch {
+            runCatching { Repository.setWadaState(callId, "dismissed") }
+            set { st ->
+                st.copy(leadDetailCalls = st.leadDetailCalls.map {
+                    if (it.id == callId) it.copy(wadaState = "dismissed") else it
+                })
+            }
+        }
+    }
 
     fun closeLeadDetail() {
         stopVoiceNotePlayback()

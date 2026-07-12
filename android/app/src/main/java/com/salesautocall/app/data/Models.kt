@@ -222,6 +222,22 @@ data class CallLog(
     val summary: String? = null,
     @SerialName("summary_status") val summaryStatus: String? = null,
     @SerialName("suggested_disposition") val suggestedDisposition: String? = null,
+    /** "Wada": commitments/facts the AI heard on this call (null = none found). */
+    @SerialName("ai_actions") val aiActions: Wada? = null,
+    /** null | "pending" (awaiting the rep's one-tap confirm) | "applied" | "dismissed" */
+    @SerialName("wada_state") val wadaState: String? = null,
+)
+
+/** Spoken commitments/facts the AI extracted from one call recording. */
+@Serializable
+data class Wada(
+    /** ISO datetime the telecaller promised to call back (validated server-side). */
+    @SerialName("promise_at") val promiseAt: String? = null,
+    @SerialName("promise_note") val promiseNote: String? = null,
+    val budget: String? = null,
+    val preferences: String? = null,
+    val objections: List<String> = emptyList(),
+    val timeline: String? = null,
 )
 
 /** A shareable trust asset (brochure / video / review / testimonial) the rep can
