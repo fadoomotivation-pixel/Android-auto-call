@@ -972,6 +972,24 @@ object Repository {
         )
         // Mirror the lead's stage so the pipeline shows it as a scheduled follow-up.
         if (mirrorStatus && contactId != null) runCatching { setDisposition(contactId, "follow_up", null) }
+        // One lead = one pending follow-up: re-scheduling moves the existing
+        // reminder instead of stacking a second row (auto-retries included).
+        if (contactId != null) {
+            val existing = runCatching {
+                client.from("follow_ups").select {
+                    filter { eq("contact_id", contactId); eq("status", "pending") }
+                    order("created_at", Order.DESCENDING)
+                    limit(1)
+                }.decodeList<FollowUp>().firstOrNull()
+            }.getOrNull()
+            val existingId = existing?.id
+            if (existingId != null) {
+                client.from("follow_ups").update(mapOf("due_at" to dueAtIso, "note" to note)) {
+                    filter { eq("id", existingId) }
+                }
+                return existing.copy(dueAt = dueAtIso, note = note)
+            }
+        }
         return client.from("follow_ups").insert(fu) { select() }.decodeSingleOrNull<FollowUp>()
     }
 
