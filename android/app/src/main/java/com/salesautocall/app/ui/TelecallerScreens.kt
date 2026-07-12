@@ -1358,7 +1358,7 @@ private fun LeadCard(
         visitMs != null && c.status !in setOf("booked", "lost", "not_interested", "dnc") -> "✅ Visit done — close them" to Teal
         !c.aiNextAction.isNullOrBlank() -> "✦ ${c.aiNextAction}" to Indigo
         !c.notes.isNullOrBlank() -> c.notes!! to muted
-        !c.budget.isNullOrBlank() -> "₹ ${c.budget}" to jade
+        // (budget lives on the phone line now — never repeated here)
         else -> null
     }
     val (tempLabel, tempColor) = when (c.temperature) {

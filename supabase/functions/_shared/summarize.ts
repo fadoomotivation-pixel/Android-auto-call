@@ -170,14 +170,19 @@ export async function summarizeAndStore(
               await admin.from("contacts").update(updates).eq("id", contact.id);
             }
             if (wada.promise_at) {
-              // Latest promise wins: move the existing pending follow-up
-              // instead of stacking a second one.
+              // One lead = one pending follow-up. Move the existing one rather
+              // than stacking a second — UNLESS it was set AFTER this call
+              // started (the rep, the post-call sheet or the voice-note AI
+              // already owns the next touch for this call; don't fight them).
               const note = wada.promise_note ?? "Wada — call pe promise kiya tha";
               const { data: existing } = await admin.from("follow_ups")
-                .select("id").eq("contact_id", contact.id).eq("status", "pending")
+                .select("id, created_at").eq("contact_id", contact.id).eq("status", "pending")
                 .order("created_at", { ascending: false }).limit(1).maybeSingle();
               if (existing?.id) {
-                await admin.from("follow_ups").update({ due_at: wada.promise_at, note }).eq("id", existing.id);
+                const setAfterCall = Date.parse(existing.created_at ?? "") > callTimeMs;
+                if (!setAfterCall) {
+                  await admin.from("follow_ups").update({ due_at: wada.promise_at, note }).eq("id", existing.id);
+                }
               } else {
                 await admin.from("follow_ups").insert({
                   company_id: call.company_id, salesperson_id: call.salesperson_id,

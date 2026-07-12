@@ -307,11 +307,22 @@ Deno.serve(async (req) => {
     if (contact && cbDate && cbDate >= today && rep) {
       const dueAt = istIso(cbDate, cbTime ?? "10:00");
       if (new Date(dueAt).getTime() > Date.now()) {
-        await admin.from("follow_ups").insert({
-          company_id: note.company_id, salesperson_id: rep, contact_id: contact.id,
-          phone: contact.phone, name: contact.name, due_at: dueAt,
-          note: "AI: voice note se scheduled",
-        });
+        // One lead = one pending follow-up: move the existing one (e.g. the
+        // recording-wada's) to the spoken time instead of stacking a second.
+        const { data: existingFu } = await admin.from("follow_ups")
+          .select("id").eq("contact_id", contact.id).eq("status", "pending")
+          .order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (existingFu?.id) {
+          await admin.from("follow_ups")
+            .update({ due_at: dueAt, note: "AI: voice note se scheduled" })
+            .eq("id", existingFu.id);
+        } else {
+          await admin.from("follow_ups").insert({
+            company_id: note.company_id, salesperson_id: rep, contact_id: contact.id,
+            phone: contact.phone, name: contact.name, due_at: dueAt,
+            note: "AI: voice note se scheduled",
+          });
+        }
         const pretty = prettyIst(cbDate, cbTime ?? "10:00");
         actions.push(`Callback scheduled for ${pretty}`);
         await logAct("follow_up", `Callback scheduled for ${pretty} (from voice note)`);
