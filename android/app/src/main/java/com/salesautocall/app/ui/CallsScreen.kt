@@ -58,7 +58,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.salesautocall.app.data.CallLog
 
-private val WhatsAppGreen = Color(0xFF25D366)
+// Paper & ink: jade is the only accent; heat/warnings stay muted, never neon.
+private val WhatsAppGreen = Color(0xFF25D366) // brand — kept recognisable
+private val CJade = Color(0xFF0E7C66)
+private val CTerra = Color(0xFFC0452C)   // missed / failed
+private val CAmberM = Color(0xFFB8860B)  // no answer
+private val CSlate = Color(0xFF5A6068)   // outgoing / neutral
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -213,9 +218,9 @@ private fun PhoneRecentRow(
     onAddLead: () -> Unit,
 ) {
     val accent = when (dc.direction) {
-        "missed" -> Color(0xFFEF4444)
-        "in" -> Color(0xFF16A34A)
-        else -> Color(0xFF2563EB)
+        "missed" -> CTerra
+        "in" -> CJade
+        else -> CSlate
     }
     Card(
         Modifier.fillMaxWidth().clickable { if (isKnown) onOpenLead() },
@@ -293,7 +298,7 @@ private fun prettyClock(ms: Long): String {
 private fun CallAvatar(label: String, c: CallLog) {
     val initial = label.firstOrNull { it.isLetter() }?.uppercaseChar()?.toString()
         ?: label.firstOrNull { it.isDigit() }?.toString() ?: "#"
-    val tint = if (c.direction == "incoming") Color(0xFF16A34A) else MaterialTheme.colorScheme.primary
+    val tint = if (c.direction == "incoming") CJade else MaterialTheme.colorScheme.primary
     Box(
         Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center,
@@ -314,8 +319,8 @@ private fun SummaryCard(s: CallSummary) {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 SummaryStat("Total", s.total.toString())
-                SummaryStat("Connected", s.connected.toString(), Color(0xFF2E7D32))
-                SummaryStat("No answer", s.noAnswer.toString(), Color(0xFFEF6C00))
+                SummaryStat("Connected", s.connected.toString(), CJade)
+                SummaryStat("No answer", s.noAnswer.toString(), CAmberM)
                 SummaryStat("Failed", s.failed.toString(), MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.height(12.dp))
@@ -435,7 +440,7 @@ private fun dispositionLabel(status: String): String = when (status) {
 private fun DispositionSuggestion(c: CallLog, onApply: (String) -> Unit, onDismiss: () -> Unit) {
     val status = c.suggestedDisposition ?: return
     val canApply = c.contactId != null
-    val accent = Color(0xFF6D4DF2)
+    val accent = CJade
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -473,7 +478,7 @@ private fun AiSummarySection(
     onToggle: () -> Unit,
     onSummarize: () -> Unit,
 ) {
-    val accent = Color(0xFF6D4DF2)
+    val accent = CJade
     val processing = summarizing || c.summaryStatus == "processing"
     val hasSummary = !c.summary.isNullOrBlank()
     // Nothing to show unless there's a recording to summarize.
@@ -519,7 +524,7 @@ private fun DirectionIcon(c: CallLog) {
     val missed = c.direction == "incoming" && c.outcome != "connected"
     val (icon, tint) = when {
         missed -> Icons.Default.CallMissed to MaterialTheme.colorScheme.error
-        c.direction == "incoming" -> Icons.Default.CallReceived to Color(0xFF2E7D32)
+        c.direction == "incoming" -> Icons.Default.CallReceived to CJade
         else -> Icons.Default.CallMade to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Icon(icon, contentDescription = c.direction, tint = tint, modifier = Modifier.size(18.dp))
@@ -528,8 +533,8 @@ private fun DirectionIcon(c: CallLog) {
 @Composable
 private fun OutcomeBadge(outcome: String?) {
     val (text, color) = when (outcome) {
-        "connected" -> "Connected" to Color(0xFF2E7D32)
-        "no_answer" -> "No answer" to Color(0xFFEF6C00)
+        "connected" -> "Connected" to CJade
+        "no_answer" -> "No answer" to CAmberM
         "failed" -> "Failed" to MaterialTheme.colorScheme.error
         else -> (outcome ?: "—") to MaterialTheme.colorScheme.onSurfaceVariant
     }

@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
@@ -909,8 +910,13 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Leads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Text("${app.leads.size} total · ${app.leads.count { it.status in setOf("new", "queued") }} new",
-                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row {
+                                Text("${app.leads.size} total",
+                                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("  ·  ${app.leads.count { it.status in setOf("new", "queued") }} new",
+                                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                                    color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66))
+                            }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(
@@ -958,20 +964,33 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // Search + Filters: one slim row. Everything fine-grained hides in the sheet.
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // A soft borderless pill, not a boxed form field — search
+                    // should feel like part of the paper, not a fence on it.
                     OutlinedTextField(
                         query, { query = it }, placeholder = { Text("Search name or phone") },
-                        singleLine = true, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp),
+                        singleLine = true, modifier = Modifier.weight(1f), shape = RoundedCornerShape(50),
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        },
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            focusedBorderColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66),
+                        ),
                     )
                     val filtersOn = stageFilter != null || tempFilter != null || quick != null || sortBy != "default"
+                    val jadeBtn = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66)
                     Box(
-                        Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
-                            .background(if (filtersOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
-                            .border(1.dp, if (filtersOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                        Modifier.size(48.dp).clip(CircleShape)
+                            .background(if (filtersOn) jadeBtn else MaterialTheme.colorScheme.surface)
+                            .border(1.dp, if (filtersOn) jadeBtn else MaterialTheme.colorScheme.outlineVariant, CircleShape)
                             .clickable { sheetOpen = true },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(Icons.Default.Sort, contentDescription = "Filters",
-                            tint = if (filtersOn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (filtersOn) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp))
                     }
                 }

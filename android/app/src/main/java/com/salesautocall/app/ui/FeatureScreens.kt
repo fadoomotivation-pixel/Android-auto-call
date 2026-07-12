@@ -26,8 +26,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -240,7 +247,7 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState, onPickLeads: ()
 @Composable
 private fun CloudDialCard(vm: MainViewModel, app: AppState) {
     var number by remember { mutableStateOf("") }
-    Card(Modifier.fillMaxWidth()) {
+    PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("📞 Cloud dial", style = MaterialTheme.typography.titleMedium)
             Text("Call any number through your office phone system — your phone rings first, then the customer connects.",
@@ -266,7 +273,7 @@ private fun CloudDialCard(vm: MainViewModel, app: AppState) {
 
 @Composable
 private fun TodayCard(app: AppState) {
-    Card(Modifier.fillMaxWidth()) {
+    PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Today", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(10.dp))
@@ -291,7 +298,7 @@ private fun TodayCard(app: AppState) {
 @Composable
 private fun JoinCompanyCard(vm: MainViewModel, app: AppState) {
     var code by remember { mutableStateOf("") }
-    Card(Modifier.fillMaxWidth()) {
+    PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Join your company", style = MaterialTheme.typography.titleMedium)
             Text("Ask your admin for the company code, then enter it to start calling.",
@@ -320,7 +327,7 @@ private fun CompanyCard(vm: MainViewModel, app: AppState) {
     val isAdmin = app.profile?.role == "admin"
     var code by remember { mutableStateOf("") }
 
-    Card(Modifier.fillMaxWidth()) {
+    PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Your company", style = MaterialTheme.typography.titleMedium)
             if (company != null) {
@@ -427,7 +434,7 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
             }
         }
     }
-    Card(Modifier.fillMaxWidth()) {
+    PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Call recording", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
@@ -511,7 +518,7 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
 
 @Composable
 private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
-    Card(Modifier.fillMaxWidth()) {
+    PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -727,7 +734,7 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
         Text("${dial.completed} / ${dial.total} done", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(16.dp))
 
-        Card(Modifier.fillMaxWidth()) {
+        PaperCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Avatar(name)
@@ -829,7 +836,7 @@ private fun SessionSummaryView(vm: MainViewModel, onNew: () -> Unit) {
         Text("Session Complete!", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(20.dp))
 
-        Card(Modifier.fillMaxWidth()) {
+        PaperCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("Call Statistics", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(10.dp))
@@ -838,7 +845,7 @@ private fun SessionSummaryView(vm: MainViewModel, onNew: () -> Unit) {
             }
         }
         Spacer(Modifier.height(12.dp))
-        Card(Modifier.fillMaxWidth()) {
+        PaperCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("Time Statistics", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(10.dp))
@@ -849,7 +856,7 @@ private fun SessionSummaryView(vm: MainViewModel, onNew: () -> Unit) {
         }
         app.followUpInfo?.let {
             Spacer(Modifier.height(16.dp))
-            Card(Modifier.fillMaxWidth()) {
+            PaperCard(Modifier.fillMaxWidth()) {
                 Text("📅 $it", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.primary)
             }
         }
@@ -960,6 +967,43 @@ private fun Stat(label: String, value: String) {
 // ============================================================
 // Settings — break time between calls
 // ============================================================
+
+/** Paper & ink: a flat white card with a hairline — the one card style
+ *  every settings block shares. No shadows, no tinted surfaces. */
+@Composable
+private fun PaperCard(
+    modifier: Modifier = Modifier,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        content = content,
+    )
+}
+
+/** Section header: one quiet jade-tinted icon + title + one-line subtitle.
+ *  Jade is the app's ONLY accent — every icon wears the same colour. */
+@Composable
+private fun SettingHeader(icon: ImageVector, title: String, subtitle: String? = null) {
+    val jade = jadeAccent(androidx.compose.foundation.isSystemInDarkTheme())
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(36.dp).clip(CircleShape).background(jade.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, contentDescription = null, tint = jade, modifier = Modifier.size(18.dp)) }
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            subtitle?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
 @Composable
 fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val app by vm.state.collectAsState()
@@ -986,14 +1030,13 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         CompanyCard(vm, app)
         Spacer(Modifier.height(16.dp))
 
-        Card(Modifier.fillMaxWidth()) {
+        PaperCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Text("Break Time Between Calls", style = MaterialTheme.typography.titleMedium)
-                Text("Waiting time after each call ends", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SettingHeader(Icons.Default.Timer, "Break between calls", "Waiting time after each call ends")
                 Spacer(Modifier.height(16.dp))
                 Text("${app.breakSeconds} seconds", style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.fillMaxWidth(), fontWeight = FontWeight.Bold)
+                    modifier = Modifier.fillMaxWidth(), fontWeight = FontWeight.Bold,
+                    color = jadeAccent(androidx.compose.foundation.isSystemInDarkTheme()))
                 Slider(
                     value = app.breakSeconds.toFloat(),
                     onValueChange = { vm.setBreakSeconds(it.toInt()) },
@@ -1006,26 +1049,23 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
         }
         Spacer(Modifier.height(16.dp))
-        Card(Modifier.fillMaxWidth()) {
+        PaperCard(Modifier.fillMaxWidth()) {
             Row(
                 Modifier.fillMaxWidth().padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Pause after each call", style = MaterialTheme.typography.titleMedium)
-                    Text("Review the call, set an outcome, or WhatsApp before the next number.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(Modifier.weight(1f)) {
+                    SettingHeader(Icons.Default.Pause, "Pause after each call",
+                        "Review the call, set an outcome, or WhatsApp before the next number.")
                 }
                 Switch(checked = app.reviewAfterCall, onCheckedChange = { vm.setReviewAfterCall(it) })
             }
         }
         Spacer(Modifier.height(16.dp))
-        Card(Modifier.fillMaxWidth()) {
+        PaperCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Text("Daily call goal", style = MaterialTheme.typography.titleMedium)
-                Text("Target calls per day, shown on your Today card.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SettingHeader(Icons.Default.Flag, "Daily call goal", "Target calls per day, shown on your Today card.")
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically) {
@@ -1044,12 +1084,11 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         CallRecordingFolderCard(context, vm, app.recordingSyncing, app.recordingSyncMsg)
 
         Spacer(Modifier.height(16.dp))
-        Card(Modifier.fillMaxWidth()) {
+        PaperCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Text("App version & updates", style = MaterialTheme.typography.titleMedium)
-                Text(
+                SettingHeader(
+                    Icons.Default.Download, "App version & updates",
                     "You're on v${com.salesautocall.app.BuildConfig.VERSION_NAME} (build ${com.salesautocall.app.BuildConfig.VERSION_CODE})",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(4.dp))
                 app.update?.let { rel ->
@@ -1078,20 +1117,6 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text("How It Works", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "• The app places each call through your SIM.\n" +
-                        "• It detects when a call ends automatically.\n" +
-                        "• After hanging up, it waits the break time.\n" +
-                        "• Then it dials the next contact in the campaign.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
         Spacer(Modifier.height(24.dp))
         Button(
             onClick = {
@@ -1168,7 +1193,7 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
             val interested = app.campaignContacts.count { it.status == "interested" }
             val callbacks = app.campaignContacts.count { it.status == "callback" }
             val notInterested = app.campaignContacts.count { it.status == "not_interested" }
-            Card(Modifier.fillMaxWidth()) {
+            PaperCard(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Stat("Interested", interested.toString())
                     Stat("Callback", callbacks.toString())
@@ -1197,7 +1222,7 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(filtered, key = { it.id ?: it.phone }) { c ->
-                    Card(Modifier.fillMaxWidth()) {
+                    PaperCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp)) {
                             Text(c.name ?: c.phone, style = MaterialTheme.typography.titleMedium)
                             Text(c.phone, style = MaterialTheme.typography.bodySmall,
