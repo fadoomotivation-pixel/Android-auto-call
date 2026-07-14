@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { AskConsole } from "./AskConsole";
 
 type Stat = {
   company_id: string;
@@ -63,6 +64,8 @@ export default async function RagPage() {
       </p>
 
       {error && <div className="error" style={{ marginTop: 8 }}>{error.message}</div>}
+
+      <AskConsole />
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "16px 0" }}>
         <div style={stat}>
