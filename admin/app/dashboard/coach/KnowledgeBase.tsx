@@ -23,6 +23,7 @@ export function KnowledgeBase() {
   const [kind, setKind] = useState("price");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [items, setItems] = useState<Chunk[]>([]);
   const [count, setCount] = useState(0);
@@ -62,6 +63,22 @@ export function KnowledgeBase() {
     void load();
   }
 
+  // RAG v2 — the base builds itself from the company's OWN proven material:
+  // won-deal call transcripts + the content library. One tap, no typing.
+  async function learnFromData() {
+    setSyncing(true);
+    setMsg(null);
+    const { data, error } = await supabase.functions.invoke("knowledge-sync", { body: {} });
+    setSyncing(false);
+    if (error || (data && (data as { ok?: boolean }).ok === false)) {
+      setMsg(`Sync failed: ${error?.message ?? (data as { error?: string })?.error ?? "unknown"}`);
+      return;
+    }
+    const d = data as { sources?: number; stored?: number };
+    setMsg(`✓ Learned from ${d.sources ?? 0} source${d.sources === 1 ? "" : "s"} (${d.stored ?? 0} chunks) — your won calls & library.`);
+    void load();
+  }
+
   const card: React.CSSProperties = { background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", borderRadius: 16, padding: 20, marginBottom: 20 };
   const input: React.CSSProperties = { padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none" };
 
@@ -74,6 +91,20 @@ export function KnowledgeBase() {
       <p className="subtitle" style={{ marginTop: 4 }}>
         Paste your real prices, project details and FAQ answers. The AI Coach will quote these facts to your team instead of guessing.
       </p>
+
+      {/* RAG v2 — knowledge that builds itself from won calls + the library. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+        <button
+          onClick={learnFromData}
+          disabled={syncing}
+          style={{ padding: "9px 16px", borderRadius: 10, border: "1px solid rgba(16,185,129,0.35)", background: "rgba(16,185,129,0.10)", color: "#10b981", fontWeight: 600, cursor: syncing ? "default" : "pointer" }}
+        >
+          {syncing ? "Learning from your data…" : "✨ Learn from my won calls + library"}
+        </button>
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+          Auto-builds knowledge from deals that actually closed — no typing.
+        </span>
+      </div>
 
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <input placeholder="Title (e.g. Sector 150 price list)" value={title} onChange={(e) => setTitle(e.target.value)} style={{ ...input, flex: 1, minWidth: 200 }} />
