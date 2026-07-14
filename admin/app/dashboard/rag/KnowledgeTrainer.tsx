@@ -55,10 +55,9 @@ export function KnowledgeTrainer({ isSuper, companies }: { isSuper: boolean; com
     setReading(true);
     try {
       const pdfjs = await import("pdfjs-dist");
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-        "pdfjs-dist/build/pdf.worker.min.mjs",
-        import.meta.url,
-      ).toString();
+      // The worker is copied into /public by the copy-pdf-worker script, so it's
+      // served from our own origin — webpack never has to bundle/parse the .mjs.
+      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
       const buf = await file.arrayBuffer();
       const doc = await pdfjs.getDocument({ data: buf }).promise;
       let out = "";
