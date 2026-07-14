@@ -163,6 +163,9 @@ data class AppState(
     /** "Who did what, when" timeline entries for the open lead. */
     val leadDetailActivities: List<com.salesautocall.app.data.LeadActivity> = emptyList(),
     val leadDetailLoading: Boolean = false,
+    // RAG v4: proactive "before you call" AI brief for the open lead.
+    val leadBrief: String? = null,
+    val leadBriefLoading: Boolean = false,
     // Voice notes on the open lead ("kya baat hui" in the rep's own voice).
     val voiceNotes: List<com.salesautocall.app.data.LeadVoiceNote> = emptyList(),
     /** True while the mic is capturing a new voice note. */
@@ -1964,9 +1967,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- lead detail page ----------
 
+    /** RAG v4: fetch the proactive "before you call" brief for the open lead. */
+    fun loadLeadBrief(contactId: String) {
+        if (_state.value.leadBriefLoading) return
+        set { it.copy(leadBriefLoading = true) }
+        viewModelScope.launch {
+            val brief = runCatching { Repository.leadBrief(contactId) }.getOrNull()
+            set {
+                if (it.leadDetailId == contactId) it.copy(leadBrief = brief, leadBriefLoading = false)
+                else it.copy(leadBriefLoading = false)
+            }
+        }
+    }
+
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
-        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true) }
+        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadBrief = null, leadBriefLoading = false) }
         viewModelScope.launch {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())
