@@ -45,6 +45,12 @@ object DeviceRecents {
                 val dateIdx = c.getColumnIndex(AndroidCallLog.Calls.DATE)
                 val durIdx = c.getColumnIndex(AndroidCallLog.Calls.DURATION)
                 var lastDigits = ""
+                // The Phone-tab list keys each row on number+timeMillis, so those
+                // pairs MUST be unique or Compose crashes ("key already used").
+                // Dual-SIM / VoLTE handsets (common in this market) log a single
+                // call twice with the identical number and timestamp, so we drop
+                // any exact repeat — not just consecutive ones.
+                val seen = HashSet<String>()
                 while (c.moveToNext() && out.size < limit) {
                     val num = c.getString(numIdx)?.takeIf { it.isNotBlank() } ?: continue
                     val direction = when (c.getInt(typeIdx)) {
@@ -52,11 +58,13 @@ object DeviceRecents {
                         AndroidCallLog.Calls.MISSED_TYPE, AndroidCallLog.Calls.REJECTED_TYPE -> "missed"
                         else -> "in"
                     }
+                    val time = c.getLong(dateIdx)
+                    if (!seen.add("$num|$time")) continue // exact duplicate row → skip
                     val d = num.filter { it.isDigit() }.takeLast(10)
                     // Collapse consecutive rows for the same number (retry bursts).
                     if (d == lastDigits) continue
                     lastDigits = d
-                    out.add(DeviceCall(num, direction, c.getLong(dateIdx), c.getInt(durIdx)))
+                    out.add(DeviceCall(num, direction, time, c.getInt(durIdx)))
                 }
             }
         }
