@@ -16,6 +16,24 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const GROQ = Deno.env.get("GROQ_API_KEY") ?? "";
 
+// Supabase Edge's built-in embedding model (gte-small, 384-dim) — used to
+// retrieve the company's own knowledge for the coach (RAG). Free, no key.
+declare const Supabase: { ai: { Session: new (m: string) => { run(input: string, opts: { mean_pool: boolean; normalize: boolean }): Promise<number[]> } } };
+
+/** Retrieve the most relevant company-knowledge chunks for a question. */
+async function retrieveKnowledge(u: ReturnType<typeof createClient>, companyId: string, question: string): Promise<string[]> {
+  try {
+    const model = new Supabase.ai.Session("gte-small");
+    const embedding = await model.run(question, { mean_pool: true, normalize: true });
+    const { data } = await u.rpc("match_knowledge", {
+      p_company: companyId, p_embedding: embedding, p_match_count: 5, p_min_similarity: 0.3,
+    });
+    return Array.isArray(data) ? data.map((d: { title?: string; content: string }) => (d.title ? `[${d.title}] ` : "") + d.content) : [];
+  } catch (_e) {
+    return [];
+  }
+}
+
 const SYSTEM = `You are a sharp, friendly sales coach for telecallers at an Indian company (real estate / services CRM).
 Help the rep close more deals. Be concise and practical — short answers, ready to use on a live call or in a WhatsApp reply.
 When the rep faces an objection, give 2-3 specific lines they can say. Indian English, simple words.
@@ -46,6 +64,19 @@ Deno.serve(async (req) => {
       lead.notes && `Notes: ${lead.notes}`,
     ].filter(Boolean).join("; ");
     if (parts) sys += `\n\nCurrent lead — ${parts}`;
+  }
+
+  // RAG — pull the company's own facts for the rep's latest question and give
+  // them to the model as ground truth, so the coach quotes real prices /
+  // project details instead of guessing.
+  const { data: prof } = await u.from("profiles").select("company_id").eq("id", ud.user.id).maybeSingle();
+  const lastUser = [...history].reverse().find((m) => m.role !== "assistant");
+  if (prof?.company_id && lastUser?.content) {
+    const facts = await retrieveKnowledge(u, prof.company_id, String(lastUser.content).slice(0, 500));
+    if (facts.length > 0) {
+      sys += "\n\nCOMPANY KNOWLEDGE (use these real facts; prefer them over any guess; if the answer isn't here, say you'll confirm):\n"
+        + facts.map((f, i) => `${i + 1}. ${f}`).join("\n");
+    }
   }
 
   try {

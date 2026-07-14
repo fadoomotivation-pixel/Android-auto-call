@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { CoachPanel } from "./CoachPanel";
+import { KnowledgeBase } from "./KnowledgeBase";
 
 type Digest = {
   id: string;
@@ -56,6 +57,8 @@ export default async function CoachPage() {
       </p>
 
       <CoachPanel />
+
+      <KnowledgeBase />
 
       {rows.length === 0 ? (
         <div className="empty">No digests yet. Click &ldquo;Generate today&apos;s digest&rdquo; to create your first one.</div>
