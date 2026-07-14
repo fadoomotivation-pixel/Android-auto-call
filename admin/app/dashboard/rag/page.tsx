@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/server";
 
 type Stat = {
@@ -41,16 +42,16 @@ export default async function RagPage() {
     return <><h2>RAG</h2><div className="empty">Managers only.</div></>;
   }
 
-  const { data, error } = await supabase.rpc("rag_stats").returns<Stat[]>();
-  const rows = data ?? [];
+  const { data, error } = await supabase.rpc("rag_stats");
+  const rows = (data as Stat[] | null) ?? [];
 
   const totalChunks = rows.reduce((a, r) => a + Number(r.chunks), 0);
   const totalGaps = rows.reduce((a, r) => a + Number(r.open_gaps), 0);
   const liveCompanies = rows.filter((r) => Number(r.chunks) > 0).length;
 
-  const stat: React.CSSProperties = { background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 20px", flex: 1, minWidth: 150 };
-  const th: React.CSSProperties = { textAlign: "left", padding: "10px 12px", fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)" };
-  const td: React.CSSProperties = { padding: "10px 12px", borderTop: "1px solid var(--border)" };
+  const stat: CSSProperties = { background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 20px", flex: 1, minWidth: 150 };
+  const th: CSSProperties = { textAlign: "left", padding: "10px 12px", fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)" };
+  const td: CSSProperties = { padding: "10px 12px", borderTop: "1px solid var(--border)" };
 
   return (
     <>
