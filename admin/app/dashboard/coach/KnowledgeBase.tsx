@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Chunk = { id: string; title: string | null; source_kind: string; created_at: string };
+type Gap = { id: string; question: string; ask_count: number };
 
 const KINDS = [
   { key: "brochure", label: "Brochure" },
@@ -27,17 +28,33 @@ export function KnowledgeBase() {
   const [msg, setMsg] = useState<string | null>(null);
   const [items, setItems] = useState<Chunk[]>([]);
   const [count, setCount] = useState(0);
+  const [gaps, setGaps] = useState<Gap[]>([]);
 
   async function load() {
-    const { data, count: c } = await supabase
-      .from("knowledge_chunks")
-      .select("id, title, source_kind, created_at", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const [{ data, count: c }, { data: g }] = await Promise.all([
+      supabase.from("knowledge_chunks")
+        .select("id, title, source_kind, created_at", { count: "exact" })
+        .order("created_at", { ascending: false }).limit(20),
+      supabase.from("knowledge_gaps")
+        .select("id, question, ask_count").eq("resolved", false)
+        .order("ask_count", { ascending: false }).limit(10),
+    ]);
     setItems((data as Chunk[]) ?? []);
     setCount(c ?? 0);
+    setGaps((g as Gap[]) ?? []);
   }
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function dismissGap(id: string) {
+    await supabase.from("knowledge_gaps").update({ resolved: true }).eq("id", id);
+    void load();
+  }
+  function answerGap(g: Gap) {
+    setTitle(g.question.slice(0, 80));
+    setKind("faq");
+    setText((t) => (t ? t : `Q: ${g.question}\nA: `));
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   async function ingest() {
     if (!text.trim()) return;
@@ -92,8 +109,27 @@ export function KnowledgeBase() {
         Paste your real prices, project details and FAQ answers. The AI Coach will quote these facts to your team instead of guessing.
       </p>
 
+      {/* RAG v3 — active learning: questions the AI COULDN'T answer, ranked by
+          how often the team asked. Answer one and the coach knows it forever. */}
+      {gaps.length > 0 && (
+        <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.25)" }}>
+          <strong style={{ color: "#f59e0b", fontSize: 14 }}>🧩 Your team asked — the AI didn&apos;t know</strong>
+          <p className="subtitle" style={{ marginTop: 2 }}>Answer these and the coach will have them forever.</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+            {gaps.map((g) => (
+              <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", minWidth: 34 }}>{g.ask_count}×</span>
+                <span style={{ flex: 1, fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.question}</span>
+                <button className="link" style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }} onClick={() => answerGap(g)}>Answer</button>
+                <button className="link" style={{ fontSize: 12, color: "var(--muted)" }} onClick={() => dismissGap(g.id)}>Dismiss</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* RAG v2 — knowledge that builds itself from won calls + the library. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, flexWrap: "wrap" }}>
         <button
           onClick={learnFromData}
           disabled={syncing}
