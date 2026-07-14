@@ -79,6 +79,12 @@ Deno.serve(async (req) => {
         + "guess. When you use one, name its source in brackets like the label shown. If the "
         + "answer isn't in here, say clearly that the rep should confirm — do NOT invent it:\n"
         + facts.map((f, i) => `${i + 1}. ${f}`).join("\n");
+    } else {
+      // Active learning (RAG v3): the coach had no company knowledge for this
+      // question. Record the gap so the admin can fill it — the knowledge base
+      // grows toward what the team actually asks. Fire-and-forget.
+      u.rpc("log_knowledge_gap", { p_company: prof.company_id, p_question: String(lastUser.content).slice(0, 300) })
+        .then(() => {}, () => {});
     }
   }
 
