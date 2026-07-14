@@ -1,5 +1,10 @@
-// RAG ingest — turns a company's material into retrievable knowledge.
-// Body: { title?, source_kind?, source_id?, text }  (admin/super-admin only)
+// RAG ingest — turns material into retrievable knowledge.
+// Body: { title?, source_kind?, source_id?, text, scope?, company_id? }
+//   scope 'global'  → shared brain for ALL companies (company_id = null).
+//                     Platform super-admin ONLY.
+//   scope 'company' → a single company's private brain (default).
+//                     Company admins use their own; super-admin may target any
+//                     company via company_id.
 // Splits the text into ~overlapping chunks, embeds each with Supabase Edge's
 // built-in gte-small model (384-dim, free — no external embedding API), and
 // stores them in knowledge_chunks for the coach to retrieve.
@@ -58,12 +63,22 @@ Deno.serve(async (req) => {
   const bodyIn = await req.json().catch(() => ({}));
   const text: string = String(bodyIn.text ?? "").trim();
   const title: string | null = bodyIn.title ? String(bodyIn.title).slice(0, 200) : null;
-  const sourceKind: string = ["brochure", "price", "faq", "call", "note"].includes(bodyIn.source_kind) ? bodyIn.source_kind : "note";
+  const sourceKind: string = ["brochure", "price", "faq", "call", "note", "guide", "offer"].includes(bodyIn.source_kind) ? bodyIn.source_kind : "note";
   const sourceId: string | null = bodyIn.source_id ? String(bodyIn.source_id).slice(0, 100) : null;
-  // Super admins may target a company explicitly; company admins use their own.
-  const companyId: string | null = (pa && bodyIn.company_id) ? String(bodyIn.company_id) : (prof?.company_id ?? null);
-  if (!companyId) return json({ ok: false, error: "No company." }, 400);
   if (!text) return json({ ok: false, error: "Empty text." }, 400);
+
+  // GLOBAL scope trains the shared brain for every company — platform super-admin
+  // only. COMPANY scope stays isolated: super-admin may target any company;
+  // company admins are pinned to their own.
+  const isGlobal = bodyIn.scope === "global";
+  let companyId: string | null;
+  if (isGlobal) {
+    if (!pa) return json({ ok: false, error: "Global training is super-admin only." }, 403);
+    companyId = null;
+  } else {
+    companyId = (pa && bodyIn.company_id) ? String(bodyIn.company_id) : (prof?.company_id ?? null);
+    if (!companyId) return json({ ok: false, error: "No company." }, 400);
+  }
 
   const chunks = chunk(text);
   if (chunks.length === 0) return json({ ok: false, error: "Nothing to ingest." }, 400);
@@ -71,7 +86,8 @@ Deno.serve(async (req) => {
   const admin = createClient(SUPABASE_URL, SERVICE);
   // Re-ingesting the same source replaces its old chunks (idempotent).
   if (sourceId) {
-    await admin.from("knowledge_chunks").delete().eq("company_id", companyId).eq("source_id", sourceId);
+    const del = admin.from("knowledge_chunks").delete().eq("source_id", sourceId);
+    await (companyId === null ? del.is("company_id", null) : del.eq("company_id", companyId));
   }
 
   const model = new Supabase.ai.Session("gte-small");
