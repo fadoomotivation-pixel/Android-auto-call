@@ -30,6 +30,7 @@ export function ImportLeads({
   const [paste, setPaste] = useState("");
   const [parsed, setParsed] = useState<ParsedLead[]>([]);
   const [skipped, setSkipped] = useState(0);
+  const [mappedFields, setMappedFields] = useState<string[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const [assignTo, setAssignTo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,6 +38,7 @@ export function ImportLeads({
   const [dragging, setDragging] = useState(false);
   const [duplicateConflicts, setDuplicateConflicts] = useState<ParsedLead[]>([]);
   const [freshLeads, setFreshLeads] = useState<ParsedLead[]>([]);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   async function onFile(file: File) {
     setError(null);
@@ -64,6 +66,7 @@ export function ImportLeads({
       const res = parseRows(rows);
       setParsed(res.leads);
       setSkipped(res.skipped);
+      setMappedFields(res.mappedFields ?? []);
       if (res.leads.length === 0) setError("No valid phone numbers found in that file.");
     } catch (e) {
       setError(`Couldn't read file: ${String(e)}`);
@@ -75,6 +78,7 @@ export function ImportLeads({
     const res = parsePasted(text);
     setParsed(res.leads);
     setSkipped(res.skipped);
+    setMappedFields(res.mappedFields ?? []);
   }
 
   async function doImport() {
@@ -134,17 +138,21 @@ export function ImportLeads({
       notes: l.notes,
       status: "new",
     }));
+    setProgress({ done: 0, total: rows.length });
     let inserted = 0;
     for (const part of chunk(rows, 500)) {
       const { error } = await supabase.from("contacts").insert(part);
       if (error) {
         setBusy(false);
+        setProgress(null);
         setError(`Import failed after ${inserted}: ${error.message}`);
         return;
       }
       inserted += part.length;
+      setProgress({ done: inserted, total: rows.length });
     }
     setBusy(false);
+    setProgress(null);
     onDone(inserted);
   }
 
@@ -157,6 +165,8 @@ export function ImportLeads({
     outline: "none",
     backdropFilter: "blur(12px)",
   };
+  const thCell: React.CSSProperties = { textAlign: "left", padding: "8px 10px", fontSize: 11, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 };
+  const tdCell: React.CSSProperties = { padding: "7px 10px", color: "var(--text)" };
 
   return (
     <div
@@ -224,16 +234,69 @@ export function ImportLeads({
           />
         )}
 
-        <p className="subtitle" style={{ marginTop: 10 }}>
-          Detected columns: <strong>phone</strong> (required), and optionally name, email, project, budget, notes. Duplicates in the file are skipped.
-        </p>
+        {parsed.length === 0 && (
+          <p className="subtitle" style={{ marginTop: 10 }}>
+            Detected columns: <strong>phone</strong> (required), and optionally name, email, project, budget, notes. Duplicates in the file are skipped.
+          </p>
+        )}
 
         {parsed.length > 0 && (
-          <div className="card" style={{ marginTop: 12, background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
-            <strong>{parsed.length}</strong> lead(s) ready{skipped > 0 ? `, ${skipped} skipped` : ""}.
-            <div style={{ marginTop: 6, fontSize: 13, color: "var(--muted)" }}>
-              Preview: {parsed.slice(0, 3).map((l) => l.name || l.phone).join(", ")}
-              {parsed.length > 3 ? "…" : ""}
+          <div style={{ marginTop: 14 }}>
+            {/* Stat strip — ready vs skipped, at a glance. */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+              <span style={{ padding: "4px 12px", borderRadius: 999, background: "rgba(16,185,129,0.12)", color: "#10b981", fontWeight: 700, fontSize: 14 }}>
+                ✓ {parsed.length} ready
+              </span>
+              {skipped > 0 && (
+                <span style={{ padding: "4px 12px", borderRadius: 999, background: "rgba(148,163,184,0.12)", color: "var(--muted)", fontSize: 13 }}>
+                  {skipped} skipped (no phone / duplicate)
+                </span>
+              )}
+            </div>
+
+            {/* Which fields we understood — trust signal. */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+              <span style={{ fontSize: 12, color: "var(--muted)", alignSelf: "center" }}>We read:</span>
+              {mappedFields.map((f) => (
+                <span key={f} style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12, background: "rgba(99,102,241,0.12)", color: "#a5b4fc", textTransform: "capitalize", fontWeight: 600 }}>
+                  {f}
+                </span>
+              ))}
+            </div>
+
+            {/* Live preview table — the admin SEES exactly what's coming in. */}
+            <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ maxHeight: 220, overflow: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ position: "sticky", top: 0, background: "rgba(20,20,24,0.98)", backdropFilter: "blur(8px)" }}>
+                      <th style={thCell}>#</th>
+                      <th style={thCell}>Name</th>
+                      <th style={thCell}>Phone</th>
+                      {mappedFields.includes("budget") && <th style={thCell}>Budget</th>}
+                      {mappedFields.includes("project") && <th style={thCell}>Project</th>}
+                      {mappedFields.includes("notes") && <th style={thCell}>Notes</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsed.slice(0, 50).map((l, i) => (
+                      <tr key={i} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                        <td style={{ ...tdCell, color: "var(--muted)" }}>{i + 1}</td>
+                        <td style={tdCell}>{l.name || <span style={{ color: "var(--muted)" }}>—</span>}</td>
+                        <td style={{ ...tdCell, fontFamily: "monospace" }}>{l.phone}</td>
+                        {mappedFields.includes("budget") && <td style={tdCell}>{l.budget || "—"}</td>}
+                        {mappedFields.includes("project") && <td style={tdCell}>{l.project || "—"}</td>}
+                        {mappedFields.includes("notes") && <td style={{ ...tdCell, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.notes || "—"}</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {parsed.length > 50 && (
+                <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--muted)", background: "rgba(255,255,255,0.02)", borderTop: "1px solid var(--border)" }}>
+                  Showing first 50 of {parsed.length} — all {parsed.length} will import.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -280,6 +343,23 @@ export function ImportLeads({
             <button className="primary" style={{ width: "auto", padding: "9px 18px" }} disabled={busy || parsed.length === 0} onClick={doImport}>
               {busy ? "Importing…" : `Import ${parsed.length || ""}`}
             </button>
+          </div>
+        )}
+
+        {progress && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
+              <span>Importing…</span>
+              <span>{progress.done} / {progress.total}</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+              <div style={{
+                height: "100%",
+                width: `${progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0}%`,
+                background: "linear-gradient(90deg, #6366f1, #10b981)",
+                transition: "width 0.3s ease",
+              }} />
+            </div>
           </div>
         )}
       </div>

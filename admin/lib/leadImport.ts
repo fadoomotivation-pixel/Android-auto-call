@@ -16,6 +16,19 @@ export interface ParseResult {
   leads: ParsedLead[];
   skipped: number;
   total: number;
+  /** Which lead fields actually got data (for the "we understood your file" chips). */
+  mappedFields?: string[];
+}
+
+/** Optional lead fields, in display order — used to report what mapped. */
+const FIELD_ORDER: (keyof ParsedLead)[] = [
+  "phone", "name", "email", "project", "budget", "territory", "notes",
+];
+
+/** The fields that ended up with at least one value across the parsed leads —
+ *  an honest "here's what we pulled out" signal for both header and dump files. */
+function mappedFieldsOf(leads: ParsedLead[]): string[] {
+  return FIELD_ORDER.filter((f) => leads.some((l) => l[f] != null && String(l[f]).trim() !== ""));
 }
 
 const PHONE_KEYS = ["phone", "mobile", "number", "contact", "whatsapp", "tel", "ph", "msisdn"];
@@ -134,7 +147,7 @@ export function parseRows(rows: string[][]): ParseResult {
           notes: text.length > extractedPhone.length + 10 ? text : null,
         });
       }
-      return { leads: newLeads, skipped, total: dataRows.length };
+      return { leads: newLeads, skipped, total: dataRows.length, mappedFields: mappedFieldsOf(newLeads) };
     }
     
     // Otherwise fallback to column with most digits
@@ -177,7 +190,7 @@ export function parseRows(rows: string[][]): ParseResult {
       notes: val(noteCol) || null,
     });
   }
-  return { leads, skipped, total: dataRows.length };
+  return { leads, skipped, total: dataRows.length, mappedFields: mappedFieldsOf(leads) };
 }
 
 /**
