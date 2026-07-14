@@ -74,7 +74,10 @@ Deno.serve(async (req) => {
   if (prof?.company_id && lastUser?.content) {
     const facts = await retrieveKnowledge(u, prof.company_id, String(lastUser.content).slice(0, 500));
     if (facts.length > 0) {
-      sys += "\n\nCOMPANY KNOWLEDGE (use these real facts; prefer them over any guess; if the answer isn't here, say you'll confirm):\n"
+      sys += "\n\nCOMPANY KNOWLEDGE — these are the company's OWN verified facts (price lists, "
+        + "brochures, and transcripts of calls that actually closed). Prefer them over any "
+        + "guess. When you use one, name its source in brackets like the label shown. If the "
+        + "answer isn't in here, say clearly that the rep should confirm — do NOT invent it:\n"
         + facts.map((f, i) => `${i + 1}. ${f}`).join("\n");
     }
   }
