@@ -366,6 +366,19 @@ object Repository {
         }.getOrNull()
     }
 
+    /** RAG v4: a proactive "before you call" brief for one lead — grounded in
+     *  the company's own knowledge (company-isolated server-side). */
+    suspend fun leadBrief(contactId: String): String? {
+        val resp = client.functions.invoke(
+            function = "lead-brief",
+            body = buildJsonObject { put("contact_id", contactId) },
+        )
+        if (resp.status.value !in 200..299) return null
+        return runCatching {
+            resp.body<JsonObject>()["brief"]?.jsonPrimitive?.contentOrNull
+        }.getOrNull()
+    }
+
     /**
      * Runs AI scoring over the rep's open leads (one Groq call). Writes
      * hot/warm/cold + a next action back to the leads. Returns how many scored.

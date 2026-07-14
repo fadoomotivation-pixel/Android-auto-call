@@ -290,6 +290,17 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
+                // ---- RAG v4: proactive "before you call" brief, grounded in
+                // the company's own knowledge. On-demand (one tap) so it's free
+                // until the rep wants it. ----
+                item {
+                    LeadBriefCard(
+                        brief = app.leadBrief,
+                        loading = app.leadBriefLoading,
+                        onGenerate = { contact.id?.let { vm.loadLeadBrief(it) } },
+                    )
+                }
+
                 // ---- Wada: what the AI heard on the latest call. It applies
                 // ITSELF (server-side, or on open) — the card just shows the
                 // receipt: promise set, facts saved, zero typing. ----
@@ -838,6 +849,54 @@ private fun NextStepBanner(color: Color, title: String, detail: String, cta: Str
             Box(Modifier.size(30.dp).clip(CircleShape).background(color.copy(alpha = 0.14f)).clickable { it() }, contentAlignment = Alignment.Center) {
                 Text("✕", color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             }
+        }
+    }
+}
+
+/**
+ * RAG v4 — the "before you call" brief. One tap builds a short, lead-specific
+ * pitch + likely-objection answer + next step, grounded in the company's own
+ * knowledge (server-side, company-isolated). Off until the rep asks, so it
+ * never spends AI budget on leads they don't open.
+ */
+@Composable
+private fun LeadBriefCard(brief: String?, loading: Boolean, onGenerate: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
+            .background(CardBg).border(1.dp, Hair, RoundedCornerShape(18.dp)).padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🎯", fontSize = 18.sp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("PITCH FOR THIS LEAD", style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                Text("AI brief from your company's knowledge", style = MaterialTheme.typography.labelSmall, color = SubInk)
+            }
+            if (brief == null && !loading) {
+                Box(
+                    Modifier.clip(RoundedCornerShape(50)).background(JadeL).clickable { onGenerate() }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text("Get brief", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+            }
+        }
+        if (loading) {
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JadeL)
+                Spacer(Modifier.width(10.dp))
+                Text("Reading this lead + your knowledge…", style = MaterialTheme.typography.bodySmall, color = SubInk)
+            }
+        }
+        brief?.let {
+            Spacer(Modifier.height(10.dp))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
+            Spacer(Modifier.height(10.dp))
+            Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 20.sp)
+            Spacer(Modifier.height(8.dp))
+            Text("Regenerate", style = MaterialTheme.typography.labelMedium, color = JadeL,
+                fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onGenerate() })
         }
     }
 }
