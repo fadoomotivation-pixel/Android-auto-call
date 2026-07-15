@@ -440,6 +440,27 @@ object Repository {
         } else null
     }
 
+    /**
+     * RAG v9 — the "objection coach". The customer just said no; this returns
+     * the EXACT words to say back, grounded in the company's own playbook (price
+     * facts + lines from calls that actually closed). Reuses the assistant-chat
+     * RAG brain (company-isolated, Groq — no extra key), so it's a fresh single
+     * shot, not part of the coach chat history. Returns the rebuttal, or null.
+     */
+    suspend fun objectionRebuttal(contact: Contact, objection: String): String? {
+        val prompt = buildString {
+            append("On the call, the customer just objected: \"")
+            append(objection.trim().take(300))
+            append("\".\n")
+            append("Give me the EXACT words to say back — a warm, confident counter in Hinglish ")
+            append("(Roman script, how an Indian telecaller actually speaks). 2-3 short lines, ready to say out loud. ")
+            append("Ground it in our company's real facts (a price, an offer, a project USP, or a line from a call that closed) — ")
+            append("quote the fact if we have it; if we don't, give the best honest counter and tell me in one line what to confirm. ")
+            append("Finish with one question that nudges the customer to the next step. No preamble — just the lines to say.")
+        }
+        return assistantChat(listOf(ChatMsg("user", prompt)), lead = contact)
+    }
+
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {
         val uid = currentUserId() ?: return emptyList()
         return client.from("call_logs").select {
