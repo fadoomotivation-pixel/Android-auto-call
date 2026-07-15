@@ -36,6 +36,13 @@ data class Company(
     @SerialName("logo_url") val logoUrl: String? = null,
 )
 
+/** Per-channel update policy set by the super-admin (web): force everyone to update. */
+@Serializable
+data class UpdatePolicy(
+    val force: Boolean = false,
+    @SerialName("min_version_code") val minVersionCode: Int = 0,
+)
+
 @Serializable
 data class Profile(
     val id: String,

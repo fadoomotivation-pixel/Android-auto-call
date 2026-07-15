@@ -122,6 +122,16 @@ export async function setCompanyBrandingAction(_prev: ActionResult, formData: Fo
 
   const { error } = await db.from("companies").update(update).eq("id", companyId);
   if (error) return { ok: false, error: error.message };
+
+  // One-click "force update" for this company's app channel (affects everyone on
+  // that channel). When on, the app makes the next update mandatory.
+  const channel = appChannel || "android-latest";
+  const force = String(formData.get("force") || "") === "1";
+  await db.from("app_update_policy").upsert(
+    { channel, force, updated_at: new Date().toISOString() },
+    { onConflict: "channel" },
+  );
+
   revalidatePath("/dashboard/platform");
   return { ok: true, message: "Branding saved" };
 }

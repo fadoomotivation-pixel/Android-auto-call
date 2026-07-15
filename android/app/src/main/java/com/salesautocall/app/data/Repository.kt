@@ -674,6 +674,14 @@ object Repository {
         }.decodeSingleOrNull<Company>()
     }
 
+    /** This app channel's update policy (super-admin "force update" toggle). */
+    suspend fun fetchUpdatePolicy(channel: String): UpdatePolicy =
+        runCatching {
+            client.from("app_update_policy").select {
+                filter { eq("channel", channel) }
+            }.decodeSingleOrNull<UpdatePolicy>()
+        }.getOrNull() ?: UpdatePolicy()
+
     suspend fun fetchCampaignContacts(campaignId: String): List<Contact> {
         return client.from("contacts").select {
             filter { eq("campaign_id", campaignId) }

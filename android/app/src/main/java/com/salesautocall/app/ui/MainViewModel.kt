@@ -159,8 +159,10 @@ data class AppState(
     // In-app update: set when a newer build is published; drives the update prompt.
     val update: AppUpdater.Release? = null,
     val checkingUpdate: Boolean = false,
-    /** True once the user starts the update download (keeps the prompt in a downloading state). */
+    /** True once the update download starts (keeps the prompt in a downloading state). */
     val updateDownloading: Boolean = false,
+    /** Download progress 0f..1f while an update is being fetched. */
+    val updateProgress: Float = 0f,
     // Lead detail page (full-screen overlay): which lead is open + its call history.
     val leadDetailId: String? = null,
     val leadDetailCalls: List<CallLog> = emptyList(),
@@ -293,7 +295,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun checkForUpdate(manual: Boolean = false) {
         viewModelScope.launch {
             if (manual) set { it.copy(checkingUpdate = true) }
-            val rel = runCatching { AppUpdater.checkForUpdate() }.getOrNull()
+            var rel = runCatching { AppUpdater.checkForUpdate() }.getOrNull()
+            if (rel != null) {
+                // Super-admin can force everyone on this channel to update (web toggle).
+                val policy = runCatching {
+                    Repository.fetchUpdatePolicy(com.salesautocall.app.BuildConfig.UPDATE_TAG)
+                }.getOrNull()
+                val forced = rel.forced || (policy?.force == true) ||
+                    (com.salesautocall.app.BuildConfig.VERSION_CODE < (policy?.minVersionCode ?: 0))
+                rel = rel.copy(forced = forced)
+            }
             set {
                 it.copy(
                     update = rel,
@@ -301,18 +312,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     message = if (manual && rel == null) "You're on the latest version ✓" else it.message,
                 )
             }
+            // Makkhan: as soon as an update is found, download it in the background
+            // so it's ready to install with a single tap — no waiting.
+            if (rel != null) installUpdate()
         }
     }
 
-    /** Downloads the newer APK and hands it to the system installer. */
+    /** Downloads the newer APK in the background (with progress) then opens the installer. */
     fun installUpdate() {
         val rel = _state.value.update ?: return
         if (_state.value.updateDownloading) return
-        AppUpdater.downloadAndInstall(getApplication(), rel)
-        set { it.copy(updateDownloading = true, message = "Downloading update… you'll be asked to install when it's ready.") }
+        set { it.copy(updateDownloading = true, updateProgress = 0f) }
+        viewModelScope.launch {
+            val ctx = getApplication<android.app.Application>()
+            val file = runCatching {
+                AppUpdater.download(ctx, rel) { p -> set { it.copy(updateProgress = p) } }
+            }.getOrNull()
+            if (file != null) {
+                AppUpdater.install(ctx, file)
+                set { it.copy(message = "Update ready — tap Install.") }
+            } else {
+                set { it.copy(updateDownloading = false, message = "Update download failed — will retry next time.") }
+            }
+        }
     }
 
-    fun dismissUpdate() = set { it.copy(update = null, updateDownloading = false) }
+    fun dismissUpdate() = set { it.copy(update = null, updateDownloading = false, updateProgress = 0f) }
 
     /** Registers this device's FCM token so the backend can push hot-lead alerts.
      *  Also re-sends any token captured before the rep signed in. */

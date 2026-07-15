@@ -32,10 +32,13 @@ export default async function PlatformCompaniesPage() {
   // Per-company branding + each company's admin logins (service role —
   // super-admin already verified above).
   const svc = getServiceSupabase();
-  const [{ data: brandRows }, { data: adminRows }] = await Promise.all([
+  const [{ data: brandRows }, { data: adminRows }, { data: policyRows }] = await Promise.all([
     svc.from("companies").select("id, brand_color, logo_url, app_channel").returns<Brand[]>(),
     svc.from("profiles").select("id, full_name, company_id").eq("role", "admin").returns<CompanyAdmin[]>(),
+    svc.from("app_update_policy").select("channel, force").returns<{ channel: string; force: boolean }[]>(),
   ]);
+  const policyForce: Record<string, boolean> = {};
+  for (const p of policyRows ?? []) policyForce[p.channel] = p.force;
   const brands = new Map<string, Brand>((brandRows ?? []).map((b) => [b.id, b]));
   const adminsByCompany = new Map<string, CompanyAdmin[]>();
   for (const a of adminRows ?? []) {
@@ -109,6 +112,7 @@ export default async function PlatformCompaniesPage() {
                       brandColor={brands.get(c.company_id)?.brand_color ?? null}
                       logoUrl={brands.get(c.company_id)?.logo_url ?? null}
                       appChannel={brands.get(c.company_id)?.app_channel ?? null}
+                      policyForce={policyForce}
                     />
                     <CompanyLogins name={c.name} admins={adminsByCompany.get(c.company_id) ?? []} />
                     <CompanyRowActions companyId={c.company_id} name={c.name} />
