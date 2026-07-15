@@ -159,6 +159,8 @@ data class AppState(
     // In-app update: set when a newer build is published; drives the update prompt.
     val update: AppUpdater.Release? = null,
     val checkingUpdate: Boolean = false,
+    /** True once the user starts the update download (keeps the prompt in a downloading state). */
+    val updateDownloading: Boolean = false,
     // Lead detail page (full-screen overlay): which lead is open + its call history.
     val leadDetailId: String? = null,
     val leadDetailCalls: List<CallLog> = emptyList(),
@@ -305,11 +307,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Downloads the newer APK and hands it to the system installer. */
     fun installUpdate() {
         val rel = _state.value.update ?: return
+        if (_state.value.updateDownloading) return
         AppUpdater.downloadAndInstall(getApplication(), rel)
-        set { it.copy(message = "Downloading update… you'll be asked to install when it's ready.") }
+        set { it.copy(updateDownloading = true, message = "Downloading update… you'll be asked to install when it's ready.") }
     }
 
-    fun dismissUpdate() = set { it.copy(update = null) }
+    fun dismissUpdate() = set { it.copy(update = null, updateDownloading = false) }
 
     /** Registers this device's FCM token so the backend can push hot-lead alerts.
      *  Also re-sends any token captured before the rep signed in. */

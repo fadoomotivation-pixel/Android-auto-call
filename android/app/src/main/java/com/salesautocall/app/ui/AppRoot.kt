@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -463,24 +464,45 @@ private fun MainShell(vm: MainViewModel) {
         }
     }
 
-    // A newer build was published → offer a one-tap in-app update.
+    // A newer build was published → offer a one-tap in-app update. Forced updates
+    // can't be dismissed; once started, the prompt shows a downloading state.
     state.update?.let { rel ->
+        val downloading = state.updateDownloading
         AlertDialog(
-            onDismissRequest = { vm.dismissUpdate() },
-            title = { Text("🚀 Update available") },
+            onDismissRequest = { if (!rel.forced && !downloading) vm.dismissUpdate() },
+            title = { Text(if (rel.forced) "🔒 Update required" else "🚀 Update available") },
             text = {
                 Column {
                     Text("Version ${rel.versionName} is ready to install.")
                     Spacer(Modifier.height(8.dp))
                     // Always a generic, customer-safe line — never raw release
                     // notes, which could carry repo/branch/PR internals.
-                    Text("Includes the latest features, speed improvements and fixes.",
+                    Text(
+                        if (rel.forced) "This is an important update — please install it to keep using the app."
+                        else "Includes the latest features, speed improvements and fixes.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (downloading) {
+                        Spacer(Modifier.height(14.dp))
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(6.dp))
+                        Text("Downloading… you'll be asked to install when it's ready.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             },
-            confirmButton = { TextButton(onClick = { vm.installUpdate(); vm.dismissUpdate() }) { Text("Update now") } },
-            dismissButton = { TextButton(onClick = { vm.dismissUpdate() }) { Text("Later") } },
+            confirmButton = {
+                if (!downloading) {
+                    TextButton(onClick = { vm.installUpdate() }) { Text("Update now") }
+                }
+            },
+            dismissButton = {
+                if (!rel.forced && !downloading) {
+                    TextButton(onClick = { vm.dismissUpdate() }) { Text("Later") }
+                }
+            },
         )
     }
 

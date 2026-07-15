@@ -1,7 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { getServiceSupabase } from "@/lib/supabase/service";
 import type { CompanyOverview } from "@/lib/types";
 import Link from "next/link";
 import CompanyRowActions from "./CompanyRowActions";
+import CompanyBranding from "./CompanyBranding";
+import CompanyLogins, { type CompanyAdmin } from "./CompanyLogins";
+
+type Brand = { id: string; brand_color: string | null; logo_url: string | null; app_channel: string | null };
 
 export default async function PlatformCompaniesPage() {
   const supabase = await createClient();
@@ -23,6 +28,22 @@ export default async function PlatformCompaniesPage() {
     .returns<CompanyOverview[]>();
 
   const rows = data ?? [];
+
+  // Per-company branding + each company's admin logins (service role —
+  // super-admin already verified above).
+  const svc = getServiceSupabase();
+  const [{ data: brandRows }, { data: adminRows }] = await Promise.all([
+    svc.from("companies").select("id, brand_color, logo_url, app_channel").returns<Brand[]>(),
+    svc.from("profiles").select("id, full_name, company_id").eq("role", "admin").returns<CompanyAdmin[]>(),
+  ]);
+  const brands = new Map<string, Brand>((brandRows ?? []).map((b) => [b.id, b]));
+  const adminsByCompany = new Map<string, CompanyAdmin[]>();
+  for (const a of adminRows ?? []) {
+    if (!a.company_id) continue;
+    const list = adminsByCompany.get(a.company_id) ?? [];
+    list.push(a);
+    adminsByCompany.set(a.company_id, list);
+  }
   const totals = rows.reduce(
     (a, r) => ({
       companies: a.companies + 1,
@@ -80,7 +101,19 @@ export default async function PlatformCompaniesPage() {
                 <td>{c.calls}</td>
                 <td>{c.last_call_at ? new Date(c.last_call_at).toLocaleString() : "—"}</td>
                 <td>{new Date(c.created_at).toLocaleDateString()}</td>
-                <td><CompanyRowActions companyId={c.company_id} name={c.name} /></td>
+                <td>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+                    <CompanyBranding
+                      companyId={c.company_id}
+                      name={c.name}
+                      brandColor={brands.get(c.company_id)?.brand_color ?? null}
+                      logoUrl={brands.get(c.company_id)?.logo_url ?? null}
+                      appChannel={brands.get(c.company_id)?.app_channel ?? null}
+                    />
+                    <CompanyLogins name={c.name} admins={adminsByCompany.get(c.company_id) ?? []} />
+                    <CompanyRowActions companyId={c.company_id} name={c.name} />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

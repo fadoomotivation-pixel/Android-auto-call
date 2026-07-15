@@ -131,6 +131,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 
+    // Remote images (company logo on the branded home hero).
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.auth)
