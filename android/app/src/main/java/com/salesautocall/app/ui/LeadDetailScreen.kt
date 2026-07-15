@@ -292,23 +292,17 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                // ---- RAG v4: proactive "before you call" brief, grounded in
-                // the company's own knowledge. On-demand (one tap) so it's free
-                // until the rep wants it. ----
+                // ---- ONE AI on the lead — a single "AI Coach" card with two moves:
+                // 🎯 Pitch (before the call, RAG v4) and 🛡️ Jawab (customer said
+                // no, RAG v9). Merged so the rep never wonders which AI to use;
+                // collapsed by default, one section open at a time. ----
                 item {
-                    LeadBriefCard(
+                    AiCoachCard(
                         brief = app.leadBrief,
-                        loading = app.leadBriefLoading,
+                        briefLoading = app.leadBriefLoading,
                         onGenerate = { contact.id?.let { vm.loadLeadBrief(it) } },
-                    )
-                }
-
-                // ---- RAG v9: "customer ne mana kiya" — speak or type the exact
-                // objection, get the perfect counter from your playbook, instantly. ----
-                item {
-                    RebuttalCoachCard(
                         answer = app.rebuttal,
-                        loading = app.rebuttalLoading,
+                        rebuttalLoading = app.rebuttalLoading,
                         onAsk = { objection -> vm.getRebuttal(contact, objection) },
                         onClear = { vm.clearRebuttal() },
                     )
@@ -867,70 +861,34 @@ private fun NextStepBanner(color: Color, title: String, detail: String, cta: Str
 }
 
 /**
- * RAG v4 — the "before you call" brief. One tap builds a short, lead-specific
- * pitch + likely-objection answer + next step, grounded in the company's own
- * knowledge (server-side, company-isolated). Off until the rep asks, so it
- * never spends AI budget on leads they don't open.
- */
-@Composable
-private fun LeadBriefCard(brief: String?, loading: Boolean, onGenerate: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
-            .background(CardBg).border(1.dp, Hair, RoundedCornerShape(18.dp)).padding(16.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("🎯", fontSize = 18.sp)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text("PITCH FOR THIS LEAD", style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
-                Text("AI brief from your company's knowledge", style = MaterialTheme.typography.labelSmall, color = SubInk)
-            }
-            if (brief == null && !loading) {
-                Box(
-                    Modifier.clip(RoundedCornerShape(50)).background(JadeL).clickable { onGenerate() }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Text("Get brief", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
-            }
-        }
-        if (loading) {
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JadeL)
-                Spacer(Modifier.width(10.dp))
-                Text("Reading this lead + your knowledge…", style = MaterialTheme.typography.bodySmall, color = SubInk)
-            }
-        }
-        brief?.let {
-            Spacer(Modifier.height(10.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
-            Spacer(Modifier.height(10.dp))
-            Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 20.sp)
-            Spacer(Modifier.height(8.dp))
-            Text("Regenerate", style = MaterialTheme.typography.labelMedium, color = JadeL,
-                fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onGenerate() })
-        }
-    }
-}
-
-/**
- * RAG v9 — the "objection coach". The customer just said no on the call; the rep
- * speaks or types what they heard and gets the exact counter to say back,
- * grounded in the company's own playbook (prices + lines from calls that closed).
- * Voice via the phone's speech-to-text; answer via the same company-isolated RAG
- * brain the coach uses — no extra keys. Zero typing when they use the mic.
+ * ONE AI on the lead — "AI Coach", a single card with two moves so the rep never
+ * wonders which AI to tap:
+ *   🎯 Pitch — the "before you call" brief from the company's knowledge (RAG v4)
+ *   🛡️ Jawab — customer said no; speak/type it, get the exact counter (RAG v9)
+ * Collapsed by default (just two buttons); one section open at a time. Same name
+ * as the AI Coach screen, so reps learn ONE assistant that helps everywhere.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RebuttalCoachCard(
+private fun AiCoachCard(
+    brief: String?,
+    briefLoading: Boolean,
+    onGenerate: () -> Unit,
     answer: String?,
-    loading: Boolean,
+    rebuttalLoading: Boolean,
     onAsk: (String) -> Unit,
     onClear: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     var text by remember { mutableStateOf("") }
+    // Which section is open. The rep's tap wins; otherwise derive from live state
+    // so the open section survives LazyColumn recycling.
+    var chosen by remember { mutableStateOf<String?>(null) }
+    val mode = chosen ?: when {
+        rebuttalLoading || answer != null -> "jawab"
+        briefLoading || brief != null -> "pitch"
+        else -> null
+    }
 
     // Phone's built-in speech-to-text — fills the box, hands-free.
     val voiceLauncher = rememberLauncherForActivityResult(
@@ -951,7 +909,7 @@ private fun RebuttalCoachCard(
     }
     fun ask(objection: String) {
         val q = objection.trim()
-        if (q.isBlank() || loading) return
+        if (q.isBlank() || rebuttalLoading) return
         text = q
         onAsk(q)
     }
@@ -966,89 +924,141 @@ private fun RebuttalCoachCard(
             .background(CardBg).border(1.dp, Hair, RoundedCornerShape(18.dp)).padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("🛡️", fontSize = 18.sp)
+            Text("🤖", fontSize = 18.sp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("CUSTOMER NE MANA KIYA?", style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold, color = RedL, letterSpacing = 0.5.sp)
-                Text("Bol ya likh — turant jawab, tumhari playbook se", style = MaterialTheme.typography.labelSmall, color = SubInk)
+                Text("AI COACH", style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                Text("Call se pehle pitch — ya customer ne mana kiya to jawab",
+                    style = MaterialTheme.typography.labelSmall, color = SubInk)
             }
         }
 
         Spacer(Modifier.height(12.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            chips.forEach { c ->
-                Box(
-                    Modifier.clip(RoundedCornerShape(50)).background(AmberL.copy(alpha = 0.10f))
-                        .border(1.dp, AmberL.copy(alpha = 0.35f), RoundedCornerShape(50))
-                        .clickable(enabled = !loading) { ask(c) }
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
-                ) { Text(c, style = MaterialTheme.typography.labelMedium, color = AmberL, fontWeight = FontWeight.SemiBold) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AiModePill("🎯 Pitch batao", selected = mode == "pitch", color = JadeL, modifier = Modifier.weight(1f)) {
+                chosen = "pitch"
+                if (brief == null && !briefLoading) onGenerate()
+            }
+            AiModePill("🛡️ Mana kiya?", selected = mode == "jawab", color = RedL, modifier = Modifier.weight(1f)) {
+                chosen = "jawab"
             }
         }
 
-        Spacer(Modifier.height(10.dp))
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Customer ne kya kaha?", color = SubInk) },
-            maxLines = 3,
-            trailingIcon = {
-                Icon(Icons.Default.Mic, contentDescription = "Bol ke batao",
-                    tint = RedL, modifier = Modifier.clickable { startVoice() }.padding(6.dp))
-            },
-        )
-
-        Spacer(Modifier.height(10.dp))
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                .background(if (text.isBlank() || loading) SubInk.copy(alpha = 0.25f) else JadeL)
-                .clickable(enabled = text.isNotBlank() && !loading) { ask(text) }
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(if (loading) "Soch raha hoon…" else "Jawab do 👉", color = Color.White,
-                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-        }
-
-        if (loading) {
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JadeL)
-                Spacer(Modifier.width(10.dp))
-                Text("Playbook + prices padh raha hoon…", style = MaterialTheme.typography.bodySmall, color = SubInk)
-            }
-        }
-
-        answer?.let {
-            Spacer(Modifier.height(12.dp))
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                    .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
-                    .padding(14.dp),
-            ) {
-                Text("BOLO YEH 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp)
-                Spacer(Modifier.height(10.dp))
+        // ---- 🎯 Pitch section ----
+        if (mode == "pitch") {
+            if (briefLoading) {
+                Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Row(
-                        Modifier.clip(RoundedCornerShape(50)).clickable {
-                            clipboard.setText(AnnotatedString(it.trim()))
-                        }.padding(horizontal = 4.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, tint = JadeL, modifier = Modifier.size(15.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Copy", style = MaterialTheme.typography.labelMedium, color = JadeL, fontWeight = FontWeight.SemiBold)
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JadeL)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Is lead + company knowledge padh raha hoon…", style = MaterialTheme.typography.bodySmall, color = SubInk)
+                }
+            }
+            brief?.let {
+                Spacer(Modifier.height(10.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
+                Spacer(Modifier.height(10.dp))
+                Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 20.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("Dobara banao", style = MaterialTheme.typography.labelMedium, color = JadeL,
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onGenerate() })
+            }
+        }
+
+        // ---- 🛡️ Jawab (objection) section ----
+        if (mode == "jawab") {
+            Spacer(Modifier.height(12.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                chips.forEach { c ->
+                    Box(
+                        Modifier.clip(RoundedCornerShape(50)).background(AmberL.copy(alpha = 0.10f))
+                            .border(1.dp, AmberL.copy(alpha = 0.35f), RoundedCornerShape(50))
+                            .clickable(enabled = !rebuttalLoading) { ask(c) }
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                    ) { Text(c, style = MaterialTheme.typography.labelMedium, color = AmberL, fontWeight = FontWeight.SemiBold) }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Customer ne kya kaha?", color = SubInk) },
+                maxLines = 3,
+                trailingIcon = {
+                    Icon(Icons.Default.Mic, contentDescription = "Bol ke batao",
+                        tint = RedL, modifier = Modifier.clickable { startVoice() }.padding(6.dp))
+                },
+            )
+
+            Spacer(Modifier.height(10.dp))
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(if (text.isBlank() || rebuttalLoading) SubInk.copy(alpha = 0.25f) else JadeL)
+                    .clickable(enabled = text.isNotBlank() && !rebuttalLoading) { ask(text) }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (rebuttalLoading) "Soch raha hoon…" else "Jawab do 👉", color = Color.White,
+                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            }
+
+            if (rebuttalLoading) {
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JadeL)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Playbook + prices padh raha hoon…", style = MaterialTheme.typography.bodySmall, color = SubInk)
+                }
+            }
+
+            answer?.let {
+                Spacer(Modifier.height(12.dp))
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                ) {
+                    Text("BOLO YEH 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.clip(RoundedCornerShape(50)).clickable {
+                                clipboard.setText(AnnotatedString(it.trim()))
+                            }.padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = JadeL, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Copy", style = MaterialTheme.typography.labelMedium, color = JadeL, fontWeight = FontWeight.SemiBold)
+                        }
+                        Spacer(Modifier.width(18.dp))
+                        Text("Naya sawaal", style = MaterialTheme.typography.labelMedium, color = SubInk,
+                            fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { text = ""; onClear() })
                     }
-                    Spacer(Modifier.width(18.dp))
-                    Text("Naya sawaal", style = MaterialTheme.typography.labelMedium, color = SubInk,
-                        fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { text = ""; onClear() })
                 }
             }
         }
+    }
+}
+
+/** One of the AI Coach card's two mode buttons (Pitch / Jawab). */
+@Composable
+private fun AiModePill(label: String, selected: Boolean, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.clip(RoundedCornerShape(12.dp))
+            .background(if (selected) color else color.copy(alpha = 0.10f))
+            .border(1.dp, color.copy(alpha = if (selected) 0f else 0.35f), RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(vertical = 11.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+            color = if (selected) Color.White else color)
     }
 }
 
