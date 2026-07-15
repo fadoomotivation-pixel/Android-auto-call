@@ -14,7 +14,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Monotonic version so the in-app updater can tell builds apart.
+    # Monotonic version so each brand's in-app updater can tell builds apart.
     env:
       VERSION_CODE: ${{ github.run_number }}
       VERSION_NAME: 1.0.${{ github.run_number }}
@@ -40,44 +40,86 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build debug APK
+      # One build produces every brand's debug APK (all share applicationId +
+      # the committed debug keystore, so each installs cleanly over its own line).
+      - name: Build debug APKs (all brand flavors)
         working-directory: android
-        run: gradle assembleDebug --stacktrace --no-daemon
+        run: gradle assembleStandardDebug assembleSndeveloperDebug assembleManaspropertyDebug --stacktrace --no-daemon
 
-      - name: Upload APK artifact
+      # Flatten every flavor's APK into one folder for a simple artifact/publish.
+      - name: Collect APKs
+        if: always()
+        working-directory: android
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/*/debug/*.apk dist/ 2>/dev/null || true
+          ls -la dist || true
+
+      - name: Upload APK artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SalesAutoCall-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: brand-apks
+          path: android/dist/*.apk
           if-no-files-found: ignore
 
-      - name: Generate version manifest
-        if: success() && github.ref == 'refs/heads/main'
+  # Each brand publishes to its OWN rolling release, so its app self-updates only
+  # from its own line. Only on main. `standard` = Call Pro AI (android-latest,
+  # asset app-debug.apk) — unchanged, so existing installs keep updating.
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - flavor: standard
+            brand: "Call Pro AI"
+            tag: android-latest
+            src: app-standard-debug.apk
+            asset: app-debug.apk
+          - flavor: sndeveloper
+            brand: "SN Developer"
+            tag: android-sndeveloper
+            src: app-sndeveloper-debug.apk
+            asset: app-sndeveloper-debug.apk
+          - flavor: manasproperty
+            brand: "Manas Property"
+            tag: android-manasproperty
+            src: app-manasproperty-debug.apk
+            asset: app-manasproperty-debug.apk
+    steps:
+      - name: Download APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: brand-apks
+          path: dist
+
+      - name: Prepare release files
         run: |
-          # Generic, user-facing note only — never the commit/PR/branch text,
-          # so the in-app "Update available" dialog can't leak repo internals.
+          mkdir -p out
+          cp "dist/${{ matrix.src }}" "out/${{ matrix.asset }}"
+          # User-facing note only — never commit/PR/branch text.
           NOTES="New features, speed improvements and bug fixes."
           jq -n \
             --argjson vc ${{ github.run_number }} \
             --arg vn "1.0.${{ github.run_number }}" \
-            --arg url "https://github.com/${{ github.repository }}/releases/download/android-latest/app-debug.apk" \
+            --arg url "https://github.com/${{ github.repository }}/releases/download/${{ matrix.tag }}/${{ matrix.asset }}" \
             --arg notes "$NOTES" \
-            '{versionCode: $vc, versionName: $vn, apkUrl: $url, notes: $notes}' > version.json
-          cat version.json
+            '{versionCode: $vc, versionName: $vn, apkUrl: $url, notes: $notes}' > out/version.json
+          cat out/version.json
 
-      - name: Publish APK + manifest to "android-latest" release
-        if: success() && github.ref == 'refs/heads/main'
+      - name: Publish ${{ matrix.brand }} APK + manifest
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: android-latest
-          name: Call Pro AI (latest build)
+          tag_name: ${{ matrix.tag }}
+          name: ${{ matrix.brand }} (latest build)
           body: |
-            Latest build of the Call Pro AI salesperson app (v1.0.${{ github.run_number }}).
+            Latest build of the ${{ matrix.brand }} app (v1.0.${{ github.run_number }}).
             The app updates itself in-app — reps only install manually once.
-            First-time install: download `app-debug.apk` and open it
+            First-time install: download the APK and open it
             (enable "Install unknown apps" if prompted).
           prerelease: true
           files: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            version.json
+            out/${{ matrix.asset }}
+            out/version.json

@@ -30,6 +30,10 @@ data class Company(
     val name: String,
     @SerialName("join_code") val joinCode: String? = null,
     @SerialName("recording_enabled") val recordingEnabled: Boolean = true,
+    // White-label branding — the app wears the company's colours (name always;
+    // colour/logo when the company has set them).
+    @SerialName("brand_color") val brandColor: String? = null,
+    @SerialName("logo_url") val logoUrl: String? = null,
 )
 
 @Serializable

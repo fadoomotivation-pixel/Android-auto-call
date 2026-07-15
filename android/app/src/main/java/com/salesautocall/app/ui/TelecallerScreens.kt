@@ -688,17 +688,42 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     }
 }
 
+/** Parse an optional "#RRGGBB" brand colour into a Compose Color (null if unset/invalid). */
+private fun brandColorOf(hex: String?): Color? {
+    val h = hex?.trim()?.removePrefix("#") ?: return null
+    if (h.length != 6) return null
+    return runCatching {
+        val v = h.toLong(16)
+        Color(
+            red = ((v shr 16) and 0xFF).toInt() / 255f,
+            green = ((v shr 8) and 0xFF).toInt() / 255f,
+            blue = (v and 0xFF).toInt() / 255f,
+        )
+    }.getOrNull()
+}
+private fun darken(c: Color, f: Float): Color = Color(c.red * f, c.green * f, c.blue * f, c.alpha)
+
 @Composable
 private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () -> Unit) {
     val a = app.attendance
     val onShift = a?.punchInAt != null && a.punchOutAt == null
     val done = a?.punchOutAt != null
+    // White-label: the hero wears the company's brand colour + name.
+    val brand = brandColorOf(app.company?.brandColor)
+    val g0 = brand ?: Color(0xFF2563EB)
+    val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF1D4ED8)
+    val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF1D4ED8)
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF1D4ED8))))
+            .background(Brush.linearGradient(listOf(g0, g1)))
             .padding(20.dp),
     ) {
         Column {
+            app.company?.name?.takeIf { it.isNotBlank() }?.let { company ->
+                Text(company.uppercase(), style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Spacer(Modifier.height(6.dp))
+            }
             Text("Good day, $firstName 👋", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
             Text("Real estate sales, simplified. Let's close some deals.",
                 style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.85f))
@@ -711,7 +736,7 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
                         .clickable { onOpenAttendance() }
                         .padding(horizontal = 16.dp, vertical = 9.dp),
                 ) {
-                    Text(label, color = Color(0xFF1D4ED8), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                    Text(label, color = chipInk, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                 }
                 Spacer(Modifier.width(12.dp))
                 if (onShift) {
