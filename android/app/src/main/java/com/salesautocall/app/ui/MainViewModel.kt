@@ -175,6 +175,9 @@ data class AppState(
     // RAG v9: on-the-spot objection rebuttal for the open lead ("customer ne mana kiya").
     val rebuttal: String? = null,
     val rebuttalLoading: Boolean = false,
+    // RAG v12: a ready-to-send WhatsApp follow-up drafted for the open lead.
+    val messageDraft: String? = null,
+    val messageDraftLoading: Boolean = false,
     // RAG v11 — "Aaj ke 5": the AI's five winnable leads for today (Leads page strip).
     val focusFive: List<com.salesautocall.app.data.Repository.FocusPick> = emptyList(),
     val focusFiveLoading: Boolean = false,
@@ -2054,13 +2057,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val reply = runCatching { Repository.objectionRebuttal(contact, q) }.getOrNull()
             set {
                 if (it.leadDetailId == contact.id)
-                    it.copy(rebuttal = reply ?: "Abhi jawab nahi aaya — dobara koshish karein.", rebuttalLoading = false)
+                    it.copy(rebuttal = reply ?: "No reply came through — please try again.", rebuttalLoading = false)
                 else it.copy(rebuttalLoading = false)
             }
         }
     }
 
     fun clearRebuttal() = set { it.copy(rebuttal = null) }
+
+    /**
+     * RAG v12 — the "after the call" move. Drafts a ready-to-send WhatsApp
+     * follow-up for the open lead, grounded in the company's playbook. One-shot,
+     * tied to the lead so a stale reply never lands on the wrong lead.
+     */
+    fun draftMessage(contact: Contact) {
+        if (_state.value.messageDraftLoading) return
+        set { it.copy(messageDraftLoading = true, messageDraft = null) }
+        viewModelScope.launch {
+            val reply = runCatching { Repository.draftFollowUp(contact) }.getOrNull()
+            set {
+                if (it.leadDetailId == contact.id)
+                    it.copy(messageDraft = reply ?: "Couldn't draft a message — please try again.", messageDraftLoading = false)
+                else it.copy(messageDraftLoading = false)
+            }
+        }
+    }
+
+    fun clearMessageDraft() = set { it.copy(messageDraft = null) }
 
     /**
      * RAG v11 — "Aaj ke 5". One tap: the AI picks the five leads most likely to
@@ -2078,7 +2101,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
-        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false) }
+        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false) }
         viewModelScope.launch {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())

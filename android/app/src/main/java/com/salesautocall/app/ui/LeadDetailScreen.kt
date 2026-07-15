@@ -121,9 +121,9 @@ private val EXITS = listOf(
 )
 
 private val QUICK_NOTES = listOf(
-    "Phone nahi uthaya", "Baad me call karna", "Site visit fix", "Budget kam hai",
-    "Loan chahiye", "Family se discuss karega", "Location pasand aayi", "Price zyada lagi",
-    "Ready to book", "Abhi interested nahi", "WhatsApp pe details bheji", "Dobara mat call karna",
+    "Didn't pick up", "Call back later", "Site visit fixed", "Budget too low",
+    "Needs a loan", "Will discuss with family", "Liked the location", "Found price high",
+    "Ready to book", "Not interested right now", "Sent details on WhatsApp", "Do not call again",
 )
 
 private fun isoMs(iso: String?): Long? = iso?.let {
@@ -292,10 +292,13 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                // ---- ONE AI on the lead — a single "AI Coach" card with two moves:
-                // 🎯 Pitch (before the call, RAG v4) and 🛡️ Jawab (customer said
-                // no, RAG v9). Merged so the rep never wonders which AI to use;
-                // collapsed by default, one section open at a time. ----
+                // ---- ONE AI on the lead — a single "AI Coach" card that covers
+                // the whole call, before → during → after (RAG v12):
+                //   🎯 Pitch    — the pre-call brief (RAG v4)
+                //   🛡️ Objection — customer said no; get the exact counter (RAG v9)
+                //   💬 Message   — a ready-to-send WhatsApp follow-up (RAG v12)
+                // Merged so the rep never wonders which AI to use; collapsed by
+                // default, one section open at a time. ----
                 item {
                     AiCoachCard(
                         brief = app.leadBrief,
@@ -305,6 +308,11 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         rebuttalLoading = app.rebuttalLoading,
                         onAsk = { objection -> vm.getRebuttal(contact, objection) },
                         onClear = { vm.clearRebuttal() },
+                        draft = app.messageDraft,
+                        draftLoading = app.messageDraftLoading,
+                        onDraft = { vm.draftMessage(contact) },
+                        onSend = { msg -> openWhatsAppLocal(context, contact.phone, msg) },
+                        onClearDraft = { vm.clearMessageDraft() },
                     )
                 }
 
@@ -861,12 +869,14 @@ private fun NextStepBanner(color: Color, title: String, detail: String, cta: Str
 }
 
 /**
- * ONE AI on the lead — "AI Coach", a single card with two moves so the rep never
- * wonders which AI to tap:
- *   🎯 Pitch — the "before you call" brief from the company's knowledge (RAG v4)
- *   🛡️ Jawab — customer said no; speak/type it, get the exact counter (RAG v9)
- * Collapsed by default (just two buttons); one section open at a time. Same name
- * as the AI Coach screen, so reps learn ONE assistant that helps everywhere.
+ * ONE AI on the lead — "AI Coach", a single card that covers the whole call so
+ * the rep never wonders which AI to tap (RAG v12):
+ *   🎯 Pitch     — the "before you call" brief from company knowledge (RAG v4)
+ *   🛡️ Objection — customer said no; speak/type it, get the exact counter (RAG v9)
+ *   💬 Message    — a ready-to-send WhatsApp follow-up, drafted from the playbook (RAG v12)
+ * A segmented control chooses the move; one section is open at a time. The
+ * chrome is clean English; the AI's spoken/written output stays natural Hinglish
+ * (aap-form) because that's what the rep actually says to the customer.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -878,6 +888,11 @@ private fun AiCoachCard(
     rebuttalLoading: Boolean,
     onAsk: (String) -> Unit,
     onClear: () -> Unit,
+    draft: String?,
+    draftLoading: Boolean,
+    onDraft: () -> Unit,
+    onSend: (String) -> Unit,
+    onClearDraft: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     var text by remember { mutableStateOf("") }
@@ -885,7 +900,8 @@ private fun AiCoachCard(
     // so the open section survives LazyColumn recycling.
     var chosen by remember { mutableStateOf<String?>(null) }
     val mode = chosen ?: when {
-        rebuttalLoading || answer != null -> "jawab"
+        rebuttalLoading || answer != null -> "objection"
+        draftLoading || draft != null -> "message"
         briefLoading || brief != null -> "pitch"
         else -> null
     }
@@ -903,7 +919,7 @@ private fun AiCoachCard(
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Customer ne kya bola?")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "What did the customer say?")
         }
         runCatching { voiceLauncher.launch(intent) }
     }
@@ -915,8 +931,8 @@ private fun AiCoachCard(
     }
 
     val chips = listOf(
-        "Mehenga hai", "Location door hai", "Ghar me baat karni hai",
-        "Sochenge", "Loan me dikkat", "Dusri jagah sasta mil raha",
+        "Too expensive", "Location too far", "Need to discuss at home",
+        "Just thinking about it", "Loan problem", "Cheaper elsewhere",
     )
 
     Column(
@@ -929,19 +945,28 @@ private fun AiCoachCard(
             Column(Modifier.weight(1f)) {
                 Text("AI COACH", style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
-                Text("Call se pehle pitch — ya customer ne mana kiya to jawab",
+                Text("Your assistant for the whole call — before, during, after",
                     style = MaterialTheme.typography.labelSmall, color = SubInk)
             }
         }
 
+        // ---- Segmented control: Pitch · Objection · Message ----
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AiModePill("🎯 Pitch batao", selected = mode == "pitch", color = JadeL, modifier = Modifier.weight(1f)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(SubInk.copy(alpha = 0.08f)).padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            AiModeSegment("🎯 Pitch", selected = mode == "pitch", modifier = Modifier.weight(1f)) {
                 chosen = "pitch"
                 if (brief == null && !briefLoading) onGenerate()
             }
-            AiModePill("🛡️ Mana kiya?", selected = mode == "jawab", color = RedL, modifier = Modifier.weight(1f)) {
-                chosen = "jawab"
+            AiModeSegment("🛡️ Objection", selected = mode == "objection", modifier = Modifier.weight(1f)) {
+                chosen = "objection"
+            }
+            AiModeSegment("💬 Message", selected = mode == "message", modifier = Modifier.weight(1f)) {
+                chosen = "message"
+                if (draft == null && !draftLoading) onDraft()
             }
         }
 
@@ -949,11 +974,7 @@ private fun AiCoachCard(
         if (mode == "pitch") {
             if (briefLoading) {
                 Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JadeL)
-                    Spacer(Modifier.width(10.dp))
-                    Text("Is lead + company knowledge padh raha hoon…", style = MaterialTheme.typography.bodySmall, color = SubInk)
-                }
+                CoachLoadingRow("Reading this lead and your company knowledge…")
             }
             brief?.let {
                 Spacer(Modifier.height(10.dp))
@@ -961,13 +982,13 @@ private fun AiCoachCard(
                 Spacer(Modifier.height(10.dp))
                 Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 20.sp)
                 Spacer(Modifier.height(8.dp))
-                Text("Dobara banayein", style = MaterialTheme.typography.labelMedium, color = JadeL,
+                Text("Regenerate", style = MaterialTheme.typography.labelMedium, color = JadeL,
                     fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onGenerate() })
             }
         }
 
-        // ---- 🛡️ Jawab (objection) section ----
-        if (mode == "jawab") {
+        // ---- 🛡️ Objection section ----
+        if (mode == "objection") {
             Spacer(Modifier.height(12.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 chips.forEach { c ->
@@ -985,10 +1006,10 @@ private fun AiCoachCard(
                 value = text,
                 onValueChange = { text = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Customer ne kya kaha?", color = SubInk) },
+                placeholder = { Text("What did the customer say?", color = SubInk) },
                 maxLines = 3,
                 trailingIcon = {
-                    Icon(Icons.Default.Mic, contentDescription = "Bol kar bataiye",
+                    Icon(Icons.Default.Mic, contentDescription = "Speak instead of typing",
                         tint = RedL, modifier = Modifier.clickable { startVoice() }.padding(6.dp))
                 },
             )
@@ -1001,17 +1022,13 @@ private fun AiCoachCard(
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (rebuttalLoading) "Soch raha hoon…" else "Jawab paayein 👉", color = Color.White,
+                Text(if (rebuttalLoading) "Thinking…" else "Get reply →", color = Color.White,
                     style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             }
 
             if (rebuttalLoading) {
                 Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JadeL)
-                    Spacer(Modifier.width(10.dp))
-                    Text("Playbook + prices padh raha hoon…", style = MaterialTheme.typography.bodySmall, color = SubInk)
-                }
+                CoachLoadingRow("Reading the playbook and prices…")
             }
 
             answer?.let {
@@ -1021,24 +1038,67 @@ private fun AiCoachCard(
                         .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
                         .padding(14.dp),
                 ) {
-                    Text("YEH BOLIYE 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                    Text("SAY THIS 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
                     Spacer(Modifier.height(6.dp))
                     Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp)
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Row(
-                            Modifier.clip(RoundedCornerShape(50)).clickable {
-                                clipboard.setText(AnnotatedString(it.trim()))
-                            }.padding(horizontal = 4.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = JadeL, modifier = Modifier.size(15.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Copy", style = MaterialTheme.typography.labelMedium, color = JadeL, fontWeight = FontWeight.SemiBold)
-                        }
+                        CoachTextAction(Icons.Default.ContentCopy, "Copy") { clipboard.setText(AnnotatedString(it.trim())) }
                         Spacer(Modifier.width(18.dp))
-                        Text("Naya sawaal", style = MaterialTheme.typography.labelMedium, color = SubInk,
+                        Text("New question", style = MaterialTheme.typography.labelMedium, color = SubInk,
                             fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { text = ""; onClear() })
+                    }
+                }
+            }
+        }
+
+        // ---- 💬 Message section (ready-to-send WhatsApp follow-up) ----
+        if (mode == "message") {
+            if (draftLoading) {
+                Spacer(Modifier.height(12.dp))
+                CoachLoadingRow("Writing a follow-up from your playbook…")
+            }
+            if (!draftLoading && draft == null) {
+                Spacer(Modifier.height(12.dp))
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(JadeL)
+                        .clickable { onDraft() }.padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("Draft a follow-up →", color = Color.White,
+                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                }
+            }
+            draft?.let {
+                Spacer(Modifier.height(12.dp))
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                ) {
+                    Text("READY TO SEND 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp)
+                    Spacer(Modifier.height(12.dp))
+                    // Send opens WhatsApp pre-filled so the rep can review before hitting send.
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(WhatsGreen)
+                            .clickable { onSend(it.trim()) }.padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Send on WhatsApp", color = Color.White,
+                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CoachTextAction(Icons.Default.ContentCopy, "Copy") { clipboard.setText(AnnotatedString(it.trim())) }
+                        Spacer(Modifier.width(18.dp))
+                        Text("Rewrite", style = MaterialTheme.typography.labelMedium, color = SubInk,
+                            fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onClearDraft(); onDraft() })
                     }
                 }
             }
@@ -1046,19 +1106,41 @@ private fun AiCoachCard(
     }
 }
 
-/** One of the AI Coach card's two mode buttons (Pitch / Jawab). */
+/** One segment of the AI Coach card's segmented control (Pitch · Objection · Message). */
 @Composable
-private fun AiModePill(label: String, selected: Boolean, color: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun AiModeSegment(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
-        modifier.clip(RoundedCornerShape(12.dp))
-            .background(if (selected) color else color.copy(alpha = 0.10f))
-            .border(1.dp, color.copy(alpha = if (selected) 0f else 0.35f), RoundedCornerShape(12.dp))
+        modifier.clip(RoundedCornerShape(10.dp))
+            .background(if (selected) JadeL else Color.Transparent)
             .clickable { onClick() }
-            .padding(vertical = 11.dp),
+            .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
-            color = if (selected) Color.White else color)
+        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
+            maxLines = 1, color = if (selected) Color.White else SubInk)
+    }
+}
+
+/** A spinner + one line of "AI is working…" copy — shared by all three moves. */
+@Composable
+private fun CoachLoadingRow(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JadeL)
+        Spacer(Modifier.width(10.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = SubInk)
+    }
+}
+
+/** A small icon + label tap target (Copy) used inside the AI result cards. */
+@Composable
+private fun CoachTextAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(50)).clickable { onClick() }.padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = JadeL, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = JadeL, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -1080,10 +1162,10 @@ private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
             Text("🤝", fontSize = 20.sp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("WADA — AI ne call se pakda", style = MaterialTheme.typography.labelLarge,
+                Text("COMMITMENT — caught by AI on the call", style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
                 Text(
-                    if (applied) "Sab apne aap save + set ho gaya" else "Set ho raha hai…",
+                    if (applied) "Saved and set up automatically" else "Setting up…",
                     style = MaterialTheme.typography.labelSmall, color = SubInk,
                 )
             }
@@ -1098,11 +1180,11 @@ private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
         Spacer(Modifier.height(10.dp))
 
         val promiseMs = isoMs(wada.promiseAt)
-        promiseMs?.let { WadaRow("📅", "Wada", fmtWhen(it) + (wada.promiseNote?.let { n -> " — $n" } ?: "")) }
+        promiseMs?.let { WadaRow("📅", "Promise", fmtWhen(it) + (wada.promiseNote?.let { n -> " — $n" } ?: "")) }
         wada.budget?.let { WadaRow("💰", "Budget", it) }
-        wada.preferences?.let { WadaRow("🏠", "Chahiye", it) }
-        if (wada.objections.isNotEmpty()) WadaRow("⚠️", "Atka", wada.objections.joinToString(", "))
-        wada.timeline?.let { WadaRow("⏳", "Kab tak", it) }
+        wada.preferences?.let { WadaRow("🏠", "Wants", it) }
+        if (wada.objections.isNotEmpty()) WadaRow("⚠️", "Blocker", wada.objections.joinToString(", "))
+        wada.timeline?.let { WadaRow("⏳", "Timeline", it) }
 
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -1111,7 +1193,7 @@ private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
                     .clickable { onDismiss() }.padding(horizontal = 14.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Galat suna — hatao", color = SubInk, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Text("Misheard — remove", color = SubInk, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -1123,7 +1205,7 @@ private fun WadaRow(emoji: String, label: String, value: String) {
         Text(emoji, fontSize = 14.sp)
         Spacer(Modifier.width(8.dp))
         Text(label, style = MaterialTheme.typography.labelMedium, color = SubInk,
-            modifier = Modifier.width(64.dp), fontWeight = FontWeight.SemiBold)
+            modifier = Modifier.width(76.dp), fontWeight = FontWeight.SemiBold, maxLines = 1)
         Text(value, style = MaterialTheme.typography.bodyMedium, color = Ink,
             fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
     }
@@ -1279,7 +1361,7 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Record voice note", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = IndigoL)
-                    Text("Call ke baad boliye kya baat hui — AI summary khud ban jayegi",
+                    Text("After the call, just speak what happened — AI writes the summary",
                         style = MaterialTheme.typography.labelSmall, color = SubInk, maxLines = 2)
                 }
                 Spacer(Modifier.width(10.dp))

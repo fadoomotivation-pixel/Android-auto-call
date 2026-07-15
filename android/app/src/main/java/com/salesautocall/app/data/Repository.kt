@@ -467,6 +467,25 @@ object Repository {
         return assistantChat(listOf(ChatMsg("user", prompt)), lead = contact)
     }
 
+    /**
+     * RAG v12 — the "after the call" move. Drafts a ready-to-send WhatsApp
+     * follow-up for this lead, grounded in the company's own playbook: warm,
+     * professional, respectful (aap-form), never inventing prices. Reuses the
+     * assistant-chat RAG brain (company-isolated, Groq — no extra key). Returns
+     * the message text, or null.
+     */
+    suspend fun draftFollowUp(contact: Contact): String? {
+        val prompt = buildString {
+            append("Write a short, ready-to-send WhatsApp follow-up message to this lead after a call. ")
+            append("Warm and professional Hinglish (Roman script, the way an Indian property advisor actually writes on WhatsApp). ")
+            append("Address the customer respectfully with 'aap' — never tu/tum. Keep it to 2-4 short lines, WhatsApp-friendly (one or two emojis are fine). ")
+            append("Ground it in our company's real facts (a price, an offer, a project USP, or the next step like a site visit) — ")
+            append("quote a real fact if we have it; never invent a price. ")
+            append("End by nudging one clear next step (site visit / call back / sharing details). No preamble — just the message to send.")
+        }
+        return assistantChat(listOf(ChatMsg("user", prompt)), lead = contact)
+    }
+
     /** RAG v11 — one of "Aaj ke 5": a lead the AI picked for today + why + what to say first. */
     data class FocusPick(val id: String, val reason: String, val opener: String)
 
