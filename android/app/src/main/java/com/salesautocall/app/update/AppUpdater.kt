@@ -43,6 +43,8 @@ object AppUpdater {
         val versionName: String,
         val notes: String,
         val apkUrl: String,
+        /** True when this update must be installed (critical fix / min-version). */
+        val forced: Boolean = false,
     )
 
     /** The latest published release if it's newer than this build, else null. */
@@ -56,11 +58,16 @@ object AppUpdater {
             val body = conn.inputStream.bufferedReader().use { it.readText() }
             val o = JSONObject(body)
             val vc = o.optInt("versionCode", 0)
+            // Forced when the manifest marks the release mandatory, or when this
+            // build is older than a published minimum supported version.
+            val forced = o.optBoolean("mandatory", false) ||
+                BuildConfig.VERSION_CODE < o.optInt("minVersionCode", 0)
             Release(
                 versionCode = vc,
                 versionName = o.optString("versionName", ""),
                 notes = o.optString("notes", ""),
                 apkUrl = o.optString("apkUrl", DEFAULT_APK_URL).ifBlank { DEFAULT_APK_URL },
+                forced = forced,
             ).takeIf { vc > BuildConfig.VERSION_CODE }
         }.getOrNull()
     }

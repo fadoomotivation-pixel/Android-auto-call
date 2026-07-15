@@ -89,8 +89,16 @@ export async function setCompanyBrandingAction(_prev: ActionResult, formData: Fo
     brandColor = rawColor.toUpperCase();
   }
 
+  // Which branded APK build this company uses (a GitHub release channel).
+  const rawChannel = String(formData.get("app_channel") || "").trim();
+  const CHANNELS = ["android-latest", "android-sndeveloper", "android-manasproperty"];
+  const appChannel: string | null = rawChannel && CHANNELS.includes(rawChannel) ? rawChannel : null;
+
   const db = getServiceSupabase();
-  const update: { brand_color: string | null; logo_url?: string | null } = { brand_color: brandColor };
+  const update: { brand_color: string | null; app_channel: string | null; logo_url?: string | null } = {
+    brand_color: brandColor,
+    app_channel: appChannel,
+  };
 
   // Optional logo upload → public bucket → store its URL.
   const logo = formData.get("logo");

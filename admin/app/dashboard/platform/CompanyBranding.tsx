@@ -27,9 +27,20 @@ function SaveButton() {
  * company — no code, no SQL. Shows a live preview of the app's home hero so you
  * can see exactly what that company's reps will see.
  */
+const REPO = "fadoomotivation-pixel/Android-auto-call";
+const CHANNELS: { value: string; label: string }[] = [
+  { value: "android-latest", label: "Call Pro AI (standard)" },
+  { value: "android-sndeveloper", label: "SN Developer" },
+  { value: "android-manasproperty", label: "Manas Property" },
+];
+function apkUrlFor(channel: string): string {
+  const asset = channel === "android-latest" ? "app-debug.apk" : `app-${channel.replace("android-", "")}-debug.apk`;
+  return `https://github.com/${REPO}/releases/download/${channel}/${asset}`;
+}
+
 export default function CompanyBranding({
-  companyId, name, brandColor, logoUrl,
-}: { companyId: string; name: string; brandColor: string | null; logoUrl: string | null }) {
+  companyId, name, brandColor, logoUrl, appChannel,
+}: { companyId: string; name: string; brandColor: string | null; logoUrl: string | null; appChannel: string | null }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [state, action] = useFormState(setCompanyBrandingAction, init);
@@ -38,6 +49,8 @@ export default function CompanyBranding({
   const [color, setColor] = useState(brandColor || DEFAULT);
   const [logoPreview, setLogoPreview] = useState<string | null>(logoUrl);
   const [removeLogo, setRemoveLogo] = useState(false);
+  const [channel, setChannel] = useState(appChannel || "android-latest");
+  const [copied, setCopied] = useState(false);
   const objUrl = useRef<string | null>(null);
 
   useEffect(() => {
@@ -84,6 +97,7 @@ export default function CompanyBranding({
               <input type="hidden" name="company_id" value={companyId} />
               <input type="hidden" name="brand_color" value={custom ? color : ""} />
               <input type="hidden" name="remove_logo" value={removeLogo && !logoPreview ? "1" : ""} />
+              <input type="hidden" name="app_channel" value={channel} />
 
               {/* Colour */}
               <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, cursor: "pointer" }}>
@@ -121,6 +135,28 @@ export default function CompanyBranding({
                   </label>
                 )}
                 <span className="subtitle" style={{ fontSize: 12 }}>PNG / JPG / SVG, under 2 MB. Square looks best.</span>
+              </div>
+
+              {/* App build + shareable APK link for this company. */}
+              <div style={{ display: "grid", gap: 6, marginBottom: 18, paddingTop: 14, borderTop: "1px solid var(--border, #333)" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>App build (APK to give this company)</span>
+                <select
+                  value={channel}
+                  onChange={(e) => { setChannel(e.target.value); setCopied(false); }}
+                  style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid var(--border, #333)", background: "rgba(255,255,255,0.03)", color: "var(--text)" }}
+                >
+                  {CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
+                  <a href={apkUrlFor(channel)} target="_blank" rel="noreferrer"
+                    style={{ flex: 1, fontSize: 12.5, color: "#60a5fa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {apkUrlFor(channel)}
+                  </a>
+                  <button type="button" style={btn} onClick={() => {
+                    navigator.clipboard?.writeText(apkUrlFor(channel)); setCopied(true);
+                  }}>{copied ? "Copied ✓" : "Copy link"}</button>
+                </div>
+                <span className="subtitle" style={{ fontSize: 12 }}>Ye link company ko bhejo — install karke app khud update hoti rahegi. (Pick the matching build; Save to remember it.)</span>
               </div>
 
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
