@@ -1,7 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { getServiceSupabase } from "@/lib/supabase/service";
 import type { CompanyOverview } from "@/lib/types";
 import Link from "next/link";
 import CompanyRowActions from "./CompanyRowActions";
+import CompanyBranding from "./CompanyBranding";
+
+type Brand = { id: string; brand_color: string | null; logo_url: string | null };
 
 export default async function PlatformCompaniesPage() {
   const supabase = await createClient();
@@ -23,6 +27,13 @@ export default async function PlatformCompaniesPage() {
     .returns<CompanyOverview[]>();
 
   const rows = data ?? [];
+
+  // Per-company branding (service role — super-admin already verified above).
+  const { data: brandRows } = await getServiceSupabase()
+    .from("companies")
+    .select("id, brand_color, logo_url")
+    .returns<Brand[]>();
+  const brands = new Map<string, Brand>((brandRows ?? []).map((b) => [b.id, b]));
   const totals = rows.reduce(
     (a, r) => ({
       companies: a.companies + 1,
@@ -80,7 +91,17 @@ export default async function PlatformCompaniesPage() {
                 <td>{c.calls}</td>
                 <td>{c.last_call_at ? new Date(c.last_call_at).toLocaleString() : "—"}</td>
                 <td>{new Date(c.created_at).toLocaleDateString()}</td>
-                <td><CompanyRowActions companyId={c.company_id} name={c.name} /></td>
+                <td>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
+                    <CompanyBranding
+                      companyId={c.company_id}
+                      name={c.name}
+                      brandColor={brands.get(c.company_id)?.brand_color ?? null}
+                      logoUrl={brands.get(c.company_id)?.logo_url ?? null}
+                    />
+                    <CompanyRowActions companyId={c.company_id} name={c.name} />
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

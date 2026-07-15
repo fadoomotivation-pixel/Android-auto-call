@@ -69,6 +69,55 @@ export async function deleteCompanyAction(_prev: ActionResult, formData: FormDat
   return { ok: true, message: "Company deleted" };
 }
 
+/**
+ * Set a company's white-label branding — brand colour + logo — with no technical
+ * steps: pick a colour, upload a logo, save. The logo goes to the public
+ * `company-logos` bucket and its URL is stored on the company. Super-admin only.
+ */
+export async function setCompanyBrandingAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  if (!(await superAdminId())) return { ok: false, error: "Super admin only" };
+  const companyId = String(formData.get("company_id") || "");
+  if (!companyId) return { ok: false, error: "Company is required" };
+
+  // Colour: accept #RGB / #RRGGBB, or blank to clear (fall back to default).
+  const rawColor = String(formData.get("brand_color") || "").trim();
+  let brandColor: string | null = null;
+  if (rawColor) {
+    if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(rawColor)) {
+      return { ok: false, error: "Colour must be a hex like #0E7C66" };
+    }
+    brandColor = rawColor.toUpperCase();
+  }
+
+  const db = getServiceSupabase();
+  const update: { brand_color: string | null; logo_url?: string | null } = { brand_color: brandColor };
+
+  // Optional logo upload → public bucket → store its URL.
+  const logo = formData.get("logo");
+  if (logo instanceof File && logo.size > 0) {
+    if (logo.size > 2_097_152) return { ok: false, error: "Logo must be under 2 MB" };
+    const ext = logo.type === "image/png" ? "png"
+      : logo.type === "image/webp" ? "webp"
+      : logo.type === "image/svg+xml" ? "svg"
+      : logo.type === "image/jpeg" ? "jpg" : "";
+    if (!ext) return { ok: false, error: "Logo must be PNG, JPG, WEBP or SVG" };
+    const path = `${companyId}/logo-${Date.now()}.${ext}`;
+    const bytes = new Uint8Array(await logo.arrayBuffer());
+    const { error: upErr } = await db.storage.from("company-logos").upload(path, bytes, {
+      contentType: logo.type, upsert: true,
+    });
+    if (upErr) return { ok: false, error: `Logo upload failed: ${upErr.message}` };
+    update.logo_url = db.storage.from("company-logos").getPublicUrl(path).data.publicUrl;
+  } else if (String(formData.get("remove_logo") || "") === "1") {
+    update.logo_url = null;
+  }
+
+  const { error } = await db.from("companies").update(update).eq("id", companyId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/dashboard/platform");
+  return { ok: true, message: "Branding saved" };
+}
+
 /** Reset a telecaller's login password. */
 export async function resetTelecallerPasswordAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   if (!(await superAdminId())) return { ok: false, error: "Super admin only" };

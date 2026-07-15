@@ -720,8 +720,20 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
     ) {
         Column {
             app.company?.name?.takeIf { it.isNotBlank() }?.let { company ->
-                Text(company.uppercase(), style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    app.company?.logoUrl?.takeIf { it.isNotBlank() }?.let { logo ->
+                        coil.compose.AsyncImage(
+                            model = logo,
+                            contentDescription = "$company logo",
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.size(30.dp).clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.15f)),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                    }
+                    Text(company.uppercase(), style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.9f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                }
                 Spacer(Modifier.height(6.dp))
             }
             Text("Good day, $firstName 👋", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
