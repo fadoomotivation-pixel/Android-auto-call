@@ -92,6 +92,12 @@ class MainActivity : ComponentActivity() {
             vm.requestAutoCall(autoCallId)
             intent?.removeExtra("auto_call_contact_id")
         }
+        // Notification deep-link to a bottom tab (e.g. Morning Brief → Leads).
+        val openTab = intent?.getStringExtra("open_tab")
+        if (openTab != null) {
+            if (openTab in setOf("home", "leads", "dialer", "campaign", "calls")) vm.goToTab(openTab)
+            intent?.removeExtra("open_tab")
+        }
     }
 
     override fun onResume() {

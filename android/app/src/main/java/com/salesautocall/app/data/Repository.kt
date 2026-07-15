@@ -12,7 +12,6 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -484,32 +483,6 @@ object Repository {
             append("End by nudging one clear next step (site visit / call back / sharing details). No preamble — just the message to send.")
         }
         return assistantChat(listOf(ChatMsg("user", prompt)), lead = contact)
-    }
-
-    /** RAG v11 — one of "Aaj ke 5": a lead the AI picked for today + why + what to say first. */
-    data class FocusPick(val id: String, val reason: String, val opener: String)
-
-    /**
-     * RAG v11 — "Aaj ke 5". Asks the AI to pick the rep's five most winnable
-     * leads for TODAY, each with a reason and a ready-to-speak opening line
-     * grounded in the company's knowledge. Returns [] on any failure.
-     */
-    suspend fun fetchFocusFive(): List<FocusPick> {
-        val resp = client.functions.invoke(function = "focus-five", body = buildJsonObject { })
-        if (resp.status.value !in 200..299) return emptyList()
-        return runCatching {
-            val obj = resp.body<JsonObject>()
-            if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return@runCatching emptyList()
-            (obj["picks"] as? JsonArray)?.mapNotNull { el ->
-                val p = el as? JsonObject ?: return@mapNotNull null
-                val id = p["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                FocusPick(
-                    id = id,
-                    reason = p["reason"]?.jsonPrimitive?.contentOrNull ?: "",
-                    opener = p["opener"]?.jsonPrimitive?.contentOrNull ?: "",
-                )
-            } ?: emptyList()
-        }.getOrDefault(emptyList())
     }
 
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {
