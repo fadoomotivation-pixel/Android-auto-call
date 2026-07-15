@@ -79,11 +79,11 @@ import com.salesautocall.app.data.Wada
 // The old rainbow constants keep their names but now resolve to ink/jade (with
 // muted terracotta/amber reserved for genuine heat & warnings), so every
 // call-site collapses to the calm palette without structural edits.
-private val ScreenBg = Color(0xFFF3F4F1)
+private val ScreenBg = Color(0xFFF4F5F2)
 private val CardBg = Color.White
-private val Ink = Color(0xFF15171A)
-private val SubInk = Color(0xFF5A6068)
-private val Hair = Color(0xFFE6E8E3)
+private val Ink = Color(0xFF171D1A)
+private val SubInk = Color(0xFF5D6862)
+private val Hair = Color(0xFFE2E7E1)
 private val JadeL = Color(0xFF0E7C66)
 private val GreenL = JadeL          // success = jade
 private val IndigoL = JadeL         // primary accent = jade
@@ -91,7 +91,7 @@ private val PurpleL = JadeL         // "current step" = jade
 private val BlueL = JadeL           // call actions = jade
 private val AmberL = Color(0xFFB8860B)   // muted amber: warnings + "warm"
 private val RedL = Color(0xFFC0452C)     // muted terracotta: overdue, "hot", destructive
-private val ColdL = Color(0xFF6B7A8F)    // quiet slate: "cold" temperature
+private val ColdL = Color(0xFF71817B)    // quiet warm slate: "cold" temperature
 private val WhatsGreen = Color(0xFF25D366) // brand — recognisable, kept
 
 private val SETTABLE = listOf(

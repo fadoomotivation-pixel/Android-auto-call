@@ -106,11 +106,11 @@ class IncomingCallActivity : ComponentActivity() {
                                 }
                             }
                             Spacer(Modifier.height(28.dp))
-                            CallButton("Hang up", Icons.Default.CallEnd, Color(0xFFEF4444)) { decline() }
+                            CallButton("Hang up", Icons.Default.CallEnd, Color(0xFFD64545)) { decline() }
                         } else {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                CallButton("Decline", Icons.Default.CallEnd, Color(0xFFEF4444)) { decline() }
-                                CallButton("Answer", Icons.Default.Call, Color(0xFF16A34A)) {
+                                CallButton("Decline", Icons.Default.CallEnd, Color(0xFFD64545)) { decline() }
+                                CallButton("Answer", Icons.Default.Call, Color(0xFF0E7C66)) {
                                     doAccept(); inCall = true
                                 }
                             }

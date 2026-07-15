@@ -80,9 +80,9 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 // ── shared helpers (file-private copies; intentionally self-contained) ──
-private val OkGreen = Color(0xFF16A34A)
-private val WarnAmber = Color(0xFFF59E0B)
-private val BadRed = Color(0xFFEF4444)
+private val OkGreen = Color(0xFF0E7C66)
+private val WarnAmber = Color(0xFFB8860B)
+private val BadRed = Color(0xFFC0452C)
 
 private fun ms(iso: String?): Long? = iso?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
 
@@ -249,7 +249,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
         item {
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF1D4ED8)))).padding(20.dp),
+                    .background(Brush.linearGradient(listOf(Color(0xFF0E7C66), Color(0xFF0A4A3D)))).padding(20.dp),
             ) {
                 Column {
                     val selfie = decodeSelfie(a?.selfie)
@@ -301,10 +301,10 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (!onShift && !done) { Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF1D4ED8), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
+                            if (!onShift && !done) { Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF0A4A3D), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
                             Text(
                                 when { app.attendanceBusy -> "Please wait…"; done -> "Shift done for today ✓"; onShift -> "Punch out"; else -> "Punch in with selfie" },
-                                color = Color(0xFF1D4ED8), fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0A4A3D), fontWeight = FontWeight.Bold,
                             )
                         }
                     }
@@ -573,7 +573,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
 
         item {
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF7C3AED), Color(0xFF2563EB)))).padding(20.dp)) {
+                .background(Brush.linearGradient(listOf(Color(0xFF0E7C66), Color(0xFF0A4A3D)))).padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(46.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = "AI", tint = Color.White)
@@ -660,7 +660,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
             if (!roleplay) {
                 Box(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                        .background(Brush.linearGradient(listOf(Color(0xFF7C3AED), Color(0xFFDB2777))))
+                        .background(Brush.linearGradient(listOf(Color(0xFF75629B), Color(0xFF52466F))))
                         .clickable(enabled = !app.assistantThinking) { vm.startRoleplay() }
                         .padding(16.dp),
                 ) {
@@ -679,7 +679,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
             } else {
                 Card(
                     Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF7C3AED).copy(alpha = 0.10f)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF75629B).copy(alpha = 0.10f)),
                 ) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("🎭", fontSize = 18.sp)
@@ -687,7 +687,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                         Text("Live practice — AI ek grahak hai. Jab tayyar hon, 'Score me' dabayein.",
                             style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                         Box(
-                            Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF7C3AED))
+                            Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF75629B))
                                 .clickable(enabled = !app.assistantThinking) { vm.askAssistant("score") }
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
                         ) { Text("Score me", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }

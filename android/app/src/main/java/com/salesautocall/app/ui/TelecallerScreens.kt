@@ -98,16 +98,19 @@ import kotlin.math.abs
 //  Design system — colours, helpers, atoms
 // ════════════════════════════════════════════════════════════
 
-// Paper & ink discipline: every hue keeps its identity (buckets stay
-// recognisable at a glance) but sits close to ink — muted, never neon.
-// Jade is the one true accent; money stages resolve to it.
+// Paper & ink discipline: ONE palette, anchored on jade. Neutrals are warm
+// (green-tinted, never blue-cold); the pipeline reads as a single story —
+// slate (unknown) → sea (talking) → amber (interest heating) → plum (visit)
+// → bronze (money forming) → jade (money). Every hue sits in the same muted
+// saturation band, so nothing shouts and nothing looks odd next to anything.
 private val Green = Color(0xFF0E7C66)   // success = jade
-private val Amber = Color(0xFFB8860B)   // muted amber
-private val Red = Color(0xFFC0452C)     // muted terracotta
-private val Purple = Color(0xFF7D5BA6)  // muted plum
-private val Cyan = Color(0xFF3E7F8A)    // muted sea
-private val Indigo = Color(0xFF5E5E9E)  // muted indigo
-private val Slate = Color(0xFF5A6068)
+private val Amber = Color(0xFFB8860B)   // muted brass — attention / "warm"
+private val Red = Color(0xFFC0452C)     // muted terracotta — urgency / "hot"
+private val Purple = Color(0xFF75629B)  // softened plum — site visit
+private val Cyan = Color(0xFF3E7F8A)    // muted sea — conversation flowing
+private val Indigo = Color(0xFF4E7A8C)  // slate-sea — working / in progress
+private val Slate = Color(0xFF5D6862)   // warm slate — neutral / cold
+private val Bronze = Color(0xFF8A6D3B)  // muted bronze — negotiation, value
 private val WaGreen = Color(0xFF25D366) // WhatsApp brand — kept recognisable
 
 private data class Stage(val key: String, val label: String, val statuses: Set<String>, val color: Color)
@@ -119,11 +122,11 @@ private val Teal = Color(0xFF2E8B74)    // jade-adjacent: token money
 private val STAGES = listOf(
     // No-answer / busy live in NEW: nobody actually spoke to them yet, so they
     // come straight back into the calling pile (the attempt ladder re-books them).
-    Stage("new", "New", setOf("new", "queued", "no_answer", "busy", "wrong_person"), Color(0xFF4A6FA5)),
-    Stage("contacted", "Contacted", setOf("called", "callback", "follow_up"), Indigo),
+    Stage("new", "New", setOf("new", "queued", "no_answer", "busy", "wrong_person"), Color(0xFF6A7B85)),
+    Stage("contacted", "Contacted", setOf("called", "callback", "follow_up"), Cyan),
     Stage("interested", "Interested", setOf("interested"), Amber),
     Stage("site_visit", "Site Visit", setOf("site_visit"), Purple),
-    Stage("negotiation", "Negotiation", setOf("negotiation", "proposal"), Cyan),
+    Stage("negotiation", "Negotiation", setOf("negotiation", "proposal"), Bronze),
     Stage("token", "Token Paid", setOf("token_paid"), Teal),
     Stage("closed", "Booked", setOf("booked"), Green),
 )
@@ -224,9 +227,10 @@ private fun relativeDue(iso: String): String {
 private fun initials(name: String): String =
     name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("").ifBlank { "?" }
 
+// One saturation band, hues from the system — avatars vary without shouting.
 private val avatarColors = listOf(
-    Color(0xFF4A6FA5), Color(0xFF7D5BA6), Color(0xFF3E7F8A), Color(0xFF0E7C66),
-    Color(0xFFB06A3B), Color(0xFFA65475), Color(0xFF5E5E9E), Color(0xFF2E8B74),
+    Color(0xFF6A7B85), Color(0xFF75629B), Color(0xFF3E7F8A), Color(0xFF0E7C66),
+    Color(0xFF8A6D3B), Color(0xFF96617A), Color(0xFF4E7A8C), Color(0xFF2E8B74),
 )
 
 private fun colorFor(seed: String): Color = avatarColors[abs(seed.hashCode()) % avatarColors.size]
@@ -720,9 +724,9 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
     val done = a?.punchOutAt != null
     // White-label: the hero wears the company's brand colour + name.
     val brand = brandColorOf(app.company?.brandColor)
-    val g0 = brand ?: Color(0xFF2563EB)
-    val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF1D4ED8)
-    val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF1D4ED8)
+    val g0 = brand ?: Color(0xFF0E7C66)
+    val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF0A4A3D)
+    val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF0A4A3D)
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
             .background(Brush.linearGradient(listOf(g0, g1)))
