@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Manas Property brand — recolours the launcher icon + splash background. -->
+    <color name="ic_launcher_background">#B8860B</color>
+</resources>

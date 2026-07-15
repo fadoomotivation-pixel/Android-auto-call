@@ -41,6 +41,31 @@ android {
 
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+        // Default update channel; each brand flavor overrides it below.
+        buildConfigField("String", "UPDATE_TAG", "\"android-latest\"")
+    }
+
+    // White-label brands. Every flavor keeps the SAME applicationId
+    // (com.callpro.ai) so ONE google-services.json / Firebase project serves all
+    // of them — no per-company Firebase setup. Flavors differ only by their app
+    // NAME, icon/splash colour (@color/ic_launcher_background override in
+    // src/<flavor>/res), and their self-update channel (UPDATE_TAG → its own
+    // GitHub release). Adding a company = one flavor + one res folder, nothing
+    // else. `standard` IS the current Call Pro AI app (unchanged).
+    flavorDimensions += "brand"
+    productFlavors {
+        create("standard") {
+            dimension = "brand"
+            // Uses the base strings.xml ("Call Pro AI") + colors.xml, tag android-latest.
+        }
+        create("sndeveloper") {
+            dimension = "brand"
+            buildConfigField("String", "UPDATE_TAG", "\"android-sndeveloper\"")
+        }
+        create("manasproperty") {
+            dimension = "brand"
+            buildConfigField("String", "UPDATE_TAG", "\"android-manasproperty\"")
+        }
     }
 
     signingConfigs {

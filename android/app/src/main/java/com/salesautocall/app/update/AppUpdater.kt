@@ -31,9 +31,11 @@ import java.net.URL
  */
 object AppUpdater {
     private const val OWNER_REPO = "fadoomotivation-pixel/Android-auto-call"
-    private const val TAG = "android-latest"
-    private const val MANIFEST_URL = "https://github.com/$OWNER_REPO/releases/download/$TAG/version.json"
-    private const val DEFAULT_APK_URL = "https://github.com/$OWNER_REPO/releases/download/$TAG/app-debug.apk"
+    // Each brand flavor updates from its OWN GitHub release channel (UPDATE_TAG),
+    // so an SN Developer install only ever pulls SN Developer builds, etc.
+    private val TAG = BuildConfig.UPDATE_TAG
+    private val MANIFEST_URL = "https://github.com/$OWNER_REPO/releases/download/$TAG/version.json"
+    private val DEFAULT_APK_URL = "https://github.com/$OWNER_REPO/releases/download/$TAG/app-debug.apk"
     private const val APK_FILE = "callpro-update.apk"
 
     data class Release(
