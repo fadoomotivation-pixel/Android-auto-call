@@ -12,6 +12,7 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -458,11 +459,38 @@ object Repository {
             append("\".\n")
             append("Give me the EXACT words to say back — a warm, confident counter in Hinglish ")
             append("(Roman script, how an Indian telecaller actually speaks). 2-3 short lines, ready to say out loud. ")
+            append("Address the customer respectfully with 'aap' — never tu/tum. ")
             append("Ground it in our company's real facts (a price, an offer, a project USP, or a line from a call that closed) — ")
             append("quote the fact if we have it; if we don't, give the best honest counter and tell me in one line what to confirm. ")
             append("Finish with one question that nudges the customer to the next step. No preamble — just the lines to say.")
         }
         return assistantChat(listOf(ChatMsg("user", prompt)), lead = contact)
+    }
+
+    /** RAG v11 — one of "Aaj ke 5": a lead the AI picked for today + why + what to say first. */
+    data class FocusPick(val id: String, val reason: String, val opener: String)
+
+    /**
+     * RAG v11 — "Aaj ke 5". Asks the AI to pick the rep's five most winnable
+     * leads for TODAY, each with a reason and a ready-to-speak opening line
+     * grounded in the company's knowledge. Returns [] on any failure.
+     */
+    suspend fun fetchFocusFive(): List<FocusPick> {
+        val resp = client.functions.invoke(function = "focus-five", body = buildJsonObject { })
+        if (resp.status.value !in 200..299) return emptyList()
+        return runCatching {
+            val obj = resp.body<JsonObject>()
+            if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return@runCatching emptyList()
+            (obj["picks"] as? JsonArray)?.mapNotNull { el ->
+                val p = el as? JsonObject ?: return@mapNotNull null
+                val id = p["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                FocusPick(
+                    id = id,
+                    reason = p["reason"]?.jsonPrimitive?.contentOrNull ?: "",
+                    opener = p["opener"]?.jsonPrimitive?.contentOrNull ?: "",
+                )
+            } ?: emptyList()
+        }.getOrDefault(emptyList())
     }
 
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {
@@ -673,6 +701,14 @@ object Repository {
             filter { eq("id", cid) }
         }.decodeSingleOrNull<Company>()
     }
+
+    /** This app channel's update policy (super-admin "force update" toggle). */
+    suspend fun fetchUpdatePolicy(channel: String): UpdatePolicy =
+        runCatching {
+            client.from("app_update_policy").select {
+                filter { eq("channel", channel) }
+            }.decodeSingleOrNull<UpdatePolicy>()
+        }.getOrNull() ?: UpdatePolicy()
 
     suspend fun fetchCampaignContacts(campaignId: String): List<Contact> {
         return client.from("contacts").select {

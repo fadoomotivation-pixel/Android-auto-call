@@ -1,16 +1,14 @@
 package com.salesautocall.app.update
 
 import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.Uri
 import android.os.Environment
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.salesautocall.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -72,38 +70,49 @@ object AppUpdater {
         }.getOrNull()
     }
 
-    /** Downloads the update APK and, when finished, launches the system installer. */
-    fun downloadAndInstall(context: Context, release: Release) {
+    /**
+     * Downloads the update APK to app storage in the background, reporting
+     * progress (0f..1f). Returns the downloaded file, or null on failure. The
+     * caller then hands it to [install] — that's the one unavoidable system tap
+     * (Android never allows a fully-silent install for side-loaded apps).
+     */
+    suspend fun download(context: Context, release: Release, onProgress: (Float) -> Unit): File? = withContext(Dispatchers.IO) {
         val app = context.applicationContext
         val dest = File(app.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), APK_FILE)
         if (dest.exists()) dest.delete()
 
         val request = DownloadManager.Request(Uri.parse(release.apkUrl))
-            .setTitle("Call Pro AI update")
-            .setDescription("Downloading v${release.versionName}…")
+            .setTitle("Updating…")
             .setMimeType("application/vnd.android.package-archive")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(app, Environment.DIRECTORY_DOWNLOADS, APK_FILE)
 
         val dm = app.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        val downloadId = runCatching { dm.enqueue(request) }.getOrNull() ?: return
+        val id = runCatching { dm.enqueue(request) }.getOrNull() ?: return@withContext null
 
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                if (intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != downloadId) return
-                runCatching { app.unregisterReceiver(this) }
-                install(app, dest)
+        while (true) {
+            val cursor = dm.query(DownloadManager.Query().setFilterById(id)) ?: break
+            var status = -1
+            var downloaded = 0L
+            var total = 0L
+            if (cursor.moveToFirst()) {
+                status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
             }
+            cursor.close()
+            if (total > 0) onProgress((downloaded.toFloat() / total).coerceIn(0f, 1f))
+            when (status) {
+                DownloadManager.STATUS_SUCCESSFUL -> { onProgress(1f); break }
+                DownloadManager.STATUS_FAILED -> return@withContext null
+            }
+            delay(400)
         }
-        // ACTION_DOWNLOAD_COMPLETE is a system broadcast → must be exported on API 33+.
-        ContextCompat.registerReceiver(
-            app, receiver,
-            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            ContextCompat.RECEIVER_EXPORTED,
-        )
+        if (dest.exists() && dest.length() > 0) dest else null
     }
 
-    private fun install(context: Context, apk: File) {
+    /** Launches the system installer for a downloaded APK. */
+    fun install(context: Context, apk: File) {
         if (!apk.exists()) return
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", apk)
         val intent = Intent(Intent.ACTION_VIEW).apply {

@@ -39,17 +39,22 @@ function apkUrlFor(channel: string): string {
 }
 
 export default function CompanyBranding({
-  companyId, name, brandColor, logoUrl, appChannel,
-}: { companyId: string; name: string; brandColor: string | null; logoUrl: string | null; appChannel: string | null }) {
+  companyId, name, brandColor, logoUrl, appChannel, policyForce,
+}: {
+  companyId: string; name: string; brandColor: string | null; logoUrl: string | null;
+  appChannel: string | null; policyForce: Record<string, boolean>;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [state, action] = useFormState(setCompanyBrandingAction, init);
 
+  const initChannel = appChannel || "android-latest";
   const [custom, setCustom] = useState(!!brandColor);
   const [color, setColor] = useState(brandColor || DEFAULT);
   const [logoPreview, setLogoPreview] = useState<string | null>(logoUrl);
   const [removeLogo, setRemoveLogo] = useState(false);
-  const [channel, setChannel] = useState(appChannel || "android-latest");
+  const [channel, setChannel] = useState(initChannel);
+  const [force, setForce] = useState(!!policyForce[initChannel]);
   const [copied, setCopied] = useState(false);
   const objUrl = useRef<string | null>(null);
 
@@ -98,6 +103,7 @@ export default function CompanyBranding({
               <input type="hidden" name="brand_color" value={custom ? color : ""} />
               <input type="hidden" name="remove_logo" value={removeLogo && !logoPreview ? "1" : ""} />
               <input type="hidden" name="app_channel" value={channel} />
+              <input type="hidden" name="force" value={force ? "1" : ""} />
 
               {/* Colour */}
               <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, cursor: "pointer" }}>
@@ -142,11 +148,15 @@ export default function CompanyBranding({
                 <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>App build (APK to give this company)</span>
                 <select
                   value={channel}
-                  onChange={(e) => { setChannel(e.target.value); setCopied(false); }}
+                  onChange={(e) => { const ch = e.target.value; setChannel(ch); setForce(!!policyForce[ch]); setCopied(false); }}
                   style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid var(--border, #333)", background: "rgba(255,255,255,0.03)", color: "var(--text)" }}
                 >
                   {CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, cursor: "pointer" }}>
+                  <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+                  <span>⚡ Force update — everyone on this build must install the latest</span>
+                </label>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
                   <a href={apkUrlFor(channel)} target="_blank" rel="noreferrer"
                     style={{ flex: 1, fontSize: 12.5, color: "#60a5fa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

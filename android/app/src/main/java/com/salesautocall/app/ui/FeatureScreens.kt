@@ -430,7 +430,7 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
                 val ago = android.text.format.DateUtils.getRelativeTimeSpanString(f.lastModified).toString()
                 "✓ Recording mil gayi: ${f.name} · $ago. Ab har call ke baad ye apne aap upload hogi."
             } else {
-                "Is folder me abhi koi recording nahi mili. Pehle ek test call karo (app ke Dialer se), phir dobara Test dabao. Agar phir bhi na mile to sahi folder chuno jahan tumhara dialer recordings save karta hai."
+                "Is folder me abhi koi recording nahi mili. Pehle ek test call karein (app ke Dialer se), phir dobara Test dabayein. Agar phir bhi na mile to woh folder chunein jahan aapka dialer recordings save karta hai."
             }
         }
     }

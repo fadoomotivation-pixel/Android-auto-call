@@ -159,8 +159,10 @@ data class AppState(
     // In-app update: set when a newer build is published; drives the update prompt.
     val update: AppUpdater.Release? = null,
     val checkingUpdate: Boolean = false,
-    /** True once the user starts the update download (keeps the prompt in a downloading state). */
+    /** True once the update download starts (keeps the prompt in a downloading state). */
     val updateDownloading: Boolean = false,
+    /** Download progress 0f..1f while an update is being fetched. */
+    val updateProgress: Float = 0f,
     // Lead detail page (full-screen overlay): which lead is open + its call history.
     val leadDetailId: String? = null,
     val leadDetailCalls: List<CallLog> = emptyList(),
@@ -173,6 +175,11 @@ data class AppState(
     // RAG v9: on-the-spot objection rebuttal for the open lead ("customer ne mana kiya").
     val rebuttal: String? = null,
     val rebuttalLoading: Boolean = false,
+    // RAG v11 — "Aaj ke 5": the AI's five winnable leads for today (Leads page strip).
+    val focusFive: List<com.salesautocall.app.data.Repository.FocusPick> = emptyList(),
+    val focusFiveLoading: Boolean = false,
+    /** True after a fetch that returned nothing, so the strip can say so instead of re-inviting. */
+    val focusFiveEmpty: Boolean = false,
     // Voice notes on the open lead ("kya baat hui" in the rep's own voice).
     val voiceNotes: List<com.salesautocall.app.data.LeadVoiceNote> = emptyList(),
     /** True while the mic is capturing a new voice note. */
@@ -293,7 +300,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun checkForUpdate(manual: Boolean = false) {
         viewModelScope.launch {
             if (manual) set { it.copy(checkingUpdate = true) }
-            val rel = runCatching { AppUpdater.checkForUpdate() }.getOrNull()
+            var rel = runCatching { AppUpdater.checkForUpdate() }.getOrNull()
+            if (rel != null) {
+                // Super-admin can force everyone on this channel to update (web toggle).
+                val policy = runCatching {
+                    Repository.fetchUpdatePolicy(com.salesautocall.app.BuildConfig.UPDATE_TAG)
+                }.getOrNull()
+                val forced = rel.forced || (policy?.force == true) ||
+                    (com.salesautocall.app.BuildConfig.VERSION_CODE < (policy?.minVersionCode ?: 0))
+                rel = rel.copy(forced = forced)
+            }
             set {
                 it.copy(
                     update = rel,
@@ -301,18 +317,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     message = if (manual && rel == null) "You're on the latest version ✓" else it.message,
                 )
             }
+            // Makkhan: as soon as an update is found, download it in the background
+            // so it's ready to install with a single tap — no waiting.
+            if (rel != null) installUpdate()
         }
     }
 
-    /** Downloads the newer APK and hands it to the system installer. */
+    /** Downloads the newer APK in the background (with progress) then opens the installer. */
     fun installUpdate() {
         val rel = _state.value.update ?: return
         if (_state.value.updateDownloading) return
-        AppUpdater.downloadAndInstall(getApplication(), rel)
-        set { it.copy(updateDownloading = true, message = "Downloading update… you'll be asked to install when it's ready.") }
+        set { it.copy(updateDownloading = true, updateProgress = 0f) }
+        viewModelScope.launch {
+            val ctx = getApplication<android.app.Application>()
+            val file = runCatching {
+                AppUpdater.download(ctx, rel) { p -> set { it.copy(updateProgress = p) } }
+            }.getOrNull()
+            if (file != null) {
+                AppUpdater.install(ctx, file)
+                set { it.copy(message = "Update ready — tap Install.") }
+            } else {
+                set { it.copy(updateDownloading = false, message = "Update download failed — will retry next time.") }
+            }
+        }
     }
 
-    fun dismissUpdate() = set { it.copy(update = null, updateDownloading = false) }
+    fun dismissUpdate() = set { it.copy(update = null, updateDownloading = false, updateProgress = 0f) }
 
     /** Registers this device's FCM token so the backend can push hot-lead alerts.
      *  Also re-sends any token captured before the rep signed in. */
@@ -850,7 +880,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.recordingSyncing) return
         val ctx = getApplication<Application>()
         if (!com.salesautocall.app.dialer.NativeRecordingHarvester.isConfigured(ctx)) {
-            set { it.copy(recordingSyncMsg = "Pehle recording folder connect karo.") }
+            set { it.copy(recordingSyncMsg = "Pehle recording folder connect karein.") }
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -2024,13 +2054,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val reply = runCatching { Repository.objectionRebuttal(contact, q) }.getOrNull()
             set {
                 if (it.leadDetailId == contact.id)
-                    it.copy(rebuttal = reply ?: "Abhi jawab nahi aaya — dobara try karo.", rebuttalLoading = false)
+                    it.copy(rebuttal = reply ?: "Abhi jawab nahi aaya — dobara koshish karein.", rebuttalLoading = false)
                 else it.copy(rebuttalLoading = false)
             }
         }
     }
 
     fun clearRebuttal() = set { it.copy(rebuttal = null) }
+
+    /**
+     * RAG v11 — "Aaj ke 5". One tap: the AI picks the five leads most likely to
+     * move today, each with a reason + a ready opening line. Cached in state for
+     * the session so the strip doesn't re-spend AI on every visit.
+     */
+    fun loadFocusFive() {
+        if (_state.value.focusFiveLoading) return
+        set { it.copy(focusFiveLoading = true, focusFiveEmpty = false) }
+        viewModelScope.launch {
+            val picks = runCatching { Repository.fetchFocusFive() }.getOrDefault(emptyList())
+            set { it.copy(focusFive = picks, focusFiveLoading = false, focusFiveEmpty = picks.isEmpty()) }
+        }
+    }
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {

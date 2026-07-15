@@ -485,9 +485,10 @@ private fun MainShell(vm: MainViewModel) {
                     )
                     if (downloading) {
                         Spacer(Modifier.height(14.dp))
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        val pct = (state.updateProgress * 100).toInt().coerceIn(0, 100)
+                        LinearProgressIndicator(progress = state.updateProgress, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(6.dp))
-                        Text("Downloading… you'll be asked to install when it's ready.",
+                        Text("Downloading… $pct% — install ho jayega apne aap.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

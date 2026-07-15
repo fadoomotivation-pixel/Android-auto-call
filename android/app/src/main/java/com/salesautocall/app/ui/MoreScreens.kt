@@ -670,7 +670,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                         Column(Modifier.weight(1f)) {
                             Text("Practice with a tough customer", style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("AI banega grahak — tum pitch karo. Bol ke ya likh ke.",
+                            Text("AI banega grahak — aap pitch karein, bol kar ya likh kar.",
                                 style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f))
                         }
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
@@ -684,7 +684,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("🎭", fontSize = 18.sp)
                         Spacer(Modifier.width(10.dp))
-                        Text("Live practice — AI ek grahak hai. Jab tayyar ho, 'Score me' dabao.",
+                        Text("Live practice — AI ek grahak hai. Jab tayyar hon, 'Score me' dabayein.",
                             style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                         Box(
                             Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF7C3AED))
@@ -755,14 +755,14 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, if (roleplay) "Grahak se kya bologe?" else "Bol ke poochho")
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, if (roleplay) "Grahak se kya bolenge?" else "Bol kar poochhein")
                 }
                 runCatching { voiceLauncher.launch(intent) }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     draft, { draft = it },
-                    placeholder = { Text(if (roleplay) "Grahak ko jawab do…" else "Ask anything — pitch, objection, message…") },
+                    placeholder = { Text(if (roleplay) "Grahak ko jawab dijiye…" else "Ask anything — pitch, objection, message…") },
                     modifier = Modifier.weight(1f), maxLines = 4,
                     trailingIcon = {
                         Icon(Icons.Default.Mic, contentDescription = "Speak",
