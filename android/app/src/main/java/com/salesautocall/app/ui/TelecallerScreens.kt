@@ -357,6 +357,16 @@ private fun GhostIconButton(icon: androidx.compose.ui.graphics.vector.ImageVecto
     }
 }
 
+/** "Rahul Sharma" → "RS", "Priya" → "PR", no name → "#". For lead avatars. */
+private fun initialsOf(name: String?): String {
+    val parts = name?.trim()?.split(Regex("\\s+"))?.filter { it.isNotBlank() } ?: emptyList()
+    return when {
+        parts.size >= 2 -> "${parts[0].first().uppercaseChar()}${parts[1].first().uppercaseChar()}"
+        parts.size == 1 -> parts[0].take(2).uppercase()
+        else -> "#"
+    }
+}
+
 /** Group an Indian 10-digit number as "98765 43210" for easy reading; otherwise return as-is. */
 private fun prettyPhone(raw: String): String {
     val d = raw.filter { it.isDigit() }
@@ -971,6 +981,119 @@ private fun PlanBucket(
 // ════════════════════════════════════════════════════════════
 //  LEADS
 // ════════════════════════════════════════════════════════════
+
+/**
+ * The Leads page hero — a brand-gradient "command deck". One big honest number
+ * (the ₹ value sitting in this rep's pipeline) plus three live counters that are
+ * also one-tap filters: Due now / Hot / New. Wears the company's brand colour,
+ * same visual family as the Home hero, so the whole app reads as one product.
+ */
+@Composable
+private fun LeadsDeck(
+    app: AppState,
+    dueNow: Int,
+    hotCount: Int,
+    newCount: Int,
+    pipelineValue: Double,
+    scoring: Boolean,
+    onRefresh: () -> Unit,
+    onScore: () -> Unit,
+    onSelect: () -> Unit,
+    onDueNow: () -> Unit,
+    onHot: () -> Unit,
+    onNew: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val brand = brandColorOf(app.company?.brandColor)
+    val g0 = brand ?: Color(0xFF0E7C66)
+    val g1 = darken(g0, 0.72f)
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+            .background(Brush.linearGradient(listOf(g0, g1)))
+            .padding(18.dp),
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("PIPELINE  ·  ${app.leads.size} LEADS", style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.75f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                    Spacer(Modifier.height(2.dp))
+                    // The hero number: money on the table. If budgets aren't
+                    // captured yet, the lead count carries the line instead.
+                    Row {
+                        if (pipelineValue > 0) {
+                            Text(formatRupees(pipelineValue), style = MaterialTheme.typography.headlineMedium,
+                                color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
+                            Spacer(Modifier.width(8.dp))
+                            Text("on the table", style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.8f), modifier = Modifier.alignByBaseline())
+                        } else {
+                            Text("${app.leads.size}", style = MaterialTheme.typography.headlineMedium,
+                                color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
+                            Spacer(Modifier.width(8.dp))
+                            Text("leads with you", style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.8f), modifier = Modifier.alignByBaseline())
+                        }
+                    }
+                }
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.16f))
+                        .clickable { onRefresh() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White, modifier = Modifier.size(19.dp)) }
+                Spacer(Modifier.width(8.dp))
+                Box {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.16f))
+                            .clickable { menuOpen = true },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (scoring) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp, color = Color.White)
+                        else Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White, modifier = Modifier.size(19.dp))
+                    }
+                    androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(if (scoring) "Scoring…" else "AI Score leads") },
+                            leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                            onClick = { menuOpen = false; if (!scoring) onScore() },
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Select leads") },
+                            leadingIcon = { Icon(Icons.Default.Checklist, contentDescription = null) },
+                            onClick = { menuOpen = false; onSelect() },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DeckStat("⏰", dueNow, "Due now", highlight = dueNow > 0, modifier = Modifier.weight(1f), onClick = onDueNow)
+                DeckStat("🔥", hotCount, "Hot", highlight = false, modifier = Modifier.weight(1f), onClick = onHot)
+                DeckStat("✨", newCount, "New", highlight = false, modifier = Modifier.weight(1f), onClick = onNew)
+            }
+        }
+    }
+}
+
+/** One glass counter on the deck — a number that is also a one-tap filter. */
+@Composable
+private fun DeckStat(emoji: String, value: Int, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = if (highlight) 0.24f else 0.13f))
+            .clickable { onClick() }
+            .padding(vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(emoji, fontSize = 12.sp)
+            Spacer(Modifier.width(5.dp))
+            Text("$value", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
+        }
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.85f))
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
@@ -990,7 +1113,6 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
     var sortBy by remember { mutableStateOf("default") }          // "default" | "score" | "recent"
     var sheetOpen by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
 
@@ -1075,51 +1197,28 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         ) {
             item {
                 if (!selectMode) {
-                    // Jobs rule: a title, a count, and nothing shouting. Utilities
-                    // (refresh / AI score / select) live behind two quiet circles.
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Leads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                            Row {
-                                Text("${app.leads.size} total",
-                                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("  ·  ${app.leads.count { it.status in setOf("new", "queued") }} new",
-                                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
-                                    color = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66))
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(
-                                Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface)
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                                    .clickable { vm.loadLeads(force = true) },
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
-                            Box {
-                                Box(
-                                    Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface)
-                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                                        .clickable { menuOpen = true },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (app.aiScoringLeads) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    else Icon(Icons.Default.MoreVert, contentDescription = "More", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                                }
-                                androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text(if (app.aiScoringLeads) "Scoring…" else "AI Score leads") },
-                                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
-                                        onClick = { menuOpen = false; if (!app.aiScoringLeads) vm.scoreLeads() },
-                                    )
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Select leads") },
-                                        leadingIcon = { Icon(Icons.Default.Checklist, contentDescription = null) },
-                                        onClick = { menuOpen = false; selectMode = true },
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    // The hero: a brand-gradient command deck — pipeline ₹ value
+                    // plus three live counters that are also one-tap filters.
+                    // Utilities (refresh / AI score / select) ride on the deck.
+                    val dueNow = app.followUpList.count { (instantMillis(it.dueAt) ?: Long.MAX_VALUE) <= nowMs }
+                    val hotCount = app.leads.count { it.temperature == "hot" && it.status !in setOf("lost", "not_interested", "dnc", "booked") }
+                    val pipelineValue = app.leads
+                        .filter { it.status !in setOf("lost", "not_interested", "dnc") }
+                        .sumOf { parseBudgetRupees(it.budget) }
+                    LeadsDeck(
+                        app = app,
+                        dueNow = dueNow,
+                        hotCount = hotCount,
+                        newCount = app.leads.count { it.status in newSet && !sleeping(it) },
+                        pipelineValue = pipelineValue,
+                        scoring = app.aiScoringLeads,
+                        onRefresh = { vm.loadLeads(force = true) },
+                        onScore = { vm.scoreLeads() },
+                        onSelect = { selectMode = true },
+                        onDueNow = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },
+                        onHot = { tempFilter = if (tempFilter == "hot") null else "hot" },
+                        onNew = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },
+                    )
                 } else {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -1259,8 +1358,23 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
                 filtered.isEmpty() ->
                     item {
-                        Text(if (app.leads.isEmpty()) "No leads yet. Ask your admin to upload leads, then select & start calling." else "No leads in this stage.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(
+                            Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(if (app.leads.isEmpty()) "📇" else "🔎", fontSize = 34.sp)
+                            Spacer(Modifier.height(10.dp))
+                            Text(if (app.leads.isEmpty()) "No leads yet" else "Nothing here",
+                                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                if (app.leads.isEmpty()) "Ask your admin to assign leads — they'll appear here, ready to call."
+                                else "No leads match this view. Try another tab or clear the filters.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            )
+                        }
                     }
                 else -> items(filtered, key = { it.id ?: it.phone }) { c ->
                     LeadCard(
@@ -1619,12 +1733,19 @@ private fun LeadCard(
                 .padding(horizontal = 15.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Stage dot + soft halo — colour is information, used once.
-            Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.matchParentSize().clip(CircleShape).background(stage.color.copy(alpha = 0.16f)))
-                Box(Modifier.size(9.dp).clip(CircleShape).background(stage.color))
+            // Initials avatar — the lead becomes a person, not a row. Stage colour
+            // tints the disc; a temperature ring makes hot/warm glanceable.
+            val ring = when (c.temperature) { "hot" -> Red; "warm" -> Amber; else -> null }
+            Box(
+                Modifier.size(44.dp).clip(CircleShape)
+                    .background(stage.color.copy(alpha = 0.14f))
+                    .then(ring?.let { Modifier.border(2.dp, it, CircleShape) } ?: Modifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(initialsOf(c.name), style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold, color = stage.color)
             }
-            Spacer(Modifier.width(13.dp))
+            Spacer(Modifier.width(12.dp))
 
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
