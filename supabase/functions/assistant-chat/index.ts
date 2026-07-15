@@ -39,6 +39,16 @@ Help the rep close more deals. Be concise and practical — short answers, ready
 When the rep faces an objection, give 2-3 specific lines they can say. Indian English, simple words.
 If lead context is given, tailor advice to that lead. Never invent facts about the company or prices; if unknown, tell the rep to confirm. Keep replies under ~120 words unless asked for more.`;
 
+// RAG v10 — "Practice mode". The AI PLAYS a realistic customer so the rep can
+// rehearse. Objections + buying signals are grounded in the company's own
+// playbook so practice mirrors real calls. Breaks character only to score.
+const ROLEPLAY = `You are roleplaying as a realistic, slightly skeptical Indian real-estate customer on a phone call, so a telecaller can PRACTICE. Rules:
+- Stay FULLY in character as the customer. Reply in Hinglish (Roman script), 1-3 short lines, like a real call. Never say you are an AI, never coach mid-call.
+- Raise natural doubts and objections — price, location, loan/EMI, "ghar me baat karni hai", comparing other projects. Use the COMPANY KNOWLEDGE below to make your doubts and buying-signals specific and realistic (mention real projects / prices when it fits).
+- React to the rep: warm up and show interest when they answer well; stay cool if they dodge or bluff. Do NOT make it too easy — but if they genuinely convince you, you may agree to a site visit.
+- If the FIRST user message is "__begin__", open the call in character: a short greeting, then your first doubt.
+- ONLY when the rep says "score", "khatam", "end", or "done": break character and give a short coaching scorecard in Hinglish — "Score: X/10", 2 cheezein jo achhi ki, 2 jo miss ki (agar playbook ki koi winning line thi to batao), aur 1 stronger line for next time.`;
+
 type Msg = { role: string; content: string };
 
 Deno.serve(async (req) => {
@@ -51,12 +61,14 @@ Deno.serve(async (req) => {
 
   if (!GROQ) return json({ ok: false, error: "AI is not configured (GROQ_API_KEY)." }, 200);
 
-  const { messages, lead } = await req.json().catch(() => ({ messages: [] }));
+  const { messages, lead, mode } = await req.json().catch(() => ({ messages: [] }));
   const history: Msg[] = Array.isArray(messages) ? messages.slice(-12) : [];
   if (history.length === 0) return json({ ok: false, error: "empty" }, 400);
 
-  let sys = SYSTEM;
-  if (lead && typeof lead === "object") {
+  const isRoleplay = mode === "roleplay";
+  let sys = isRoleplay ? ROLEPLAY : SYSTEM;
+  // Lead context only tailors the coach; the practice customer stays generic.
+  if (!isRoleplay && lead && typeof lead === "object") {
     const parts = [
       lead.name && `Name: ${lead.name}`,
       lead.status && `Status: ${lead.status}`,
@@ -71,18 +83,26 @@ Deno.serve(async (req) => {
   // project details instead of guessing.
   const { data: prof } = await u.from("profiles").select("company_id").eq("id", ud.user.id).maybeSingle();
   const lastUser = [...history].reverse().find((m) => m.role !== "assistant");
+  const seed = lastUser?.content === "__begin__";
   if (prof?.company_id && lastUser?.content) {
-    const facts = await retrieveKnowledge(u, prof.company_id, String(lastUser.content).slice(0, 500));
+    // For the roleplay opener ("__begin__") retrieve on a generic buyer query so
+    // the AI customer has real projects/prices to reference from turn one.
+    const query = seed ? "flat price project location offer site visit" : String(lastUser.content).slice(0, 500);
+    const facts = await retrieveKnowledge(u, prof.company_id, query);
     if (facts.length > 0) {
-      sys += "\n\nCOMPANY KNOWLEDGE — these are the company's OWN verified facts (price lists, "
-        + "brochures, and transcripts of calls that actually closed). Prefer them over any "
-        + "guess. When you use one, name its source in brackets like the label shown. If the "
-        + "answer isn't in here, say clearly that the rep should confirm — do NOT invent it:\n"
-        + facts.map((f, i) => `${i + 1}. ${f}`).join("\n");
-    } else {
+      sys += isRoleplay
+        ? "\n\nCOMPANY KNOWLEDGE — the company's real projects, prices and offers. Use these to make "
+          + "your doubts and buying-signals specific and believable (name a real project/price when it fits):\n"
+          + facts.map((f, i) => `${i + 1}. ${f}`).join("\n")
+        : "\n\nCOMPANY KNOWLEDGE — these are the company's OWN verified facts (price lists, "
+          + "brochures, and transcripts of calls that actually closed). Prefer them over any "
+          + "guess. When you use one, name its source in brackets like the label shown. If the "
+          + "answer isn't in here, say clearly that the rep should confirm — do NOT invent it:\n"
+          + facts.map((f, i) => `${i + 1}. ${f}`).join("\n");
+    } else if (!isRoleplay && !seed) {
       // Active learning (RAG v3): the coach had no company knowledge for this
       // question. Record the gap so the admin can fill it — the knowledge base
-      // grows toward what the team actually asks. Fire-and-forget.
+      // grows toward what the team actually asks. (Practice turns never log gaps.)
       u.rpc("log_knowledge_gap", { p_company: prof.company_id, p_question: String(lastUser.content).slice(0, 300) })
         .then(() => {}, () => {});
     }
@@ -93,7 +113,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: 0.4, max_tokens: 500,
+        model: "llama-3.3-70b-versatile", temperature: isRoleplay ? 0.7 : 0.4, max_tokens: 500,
         messages: [{ role: "system", content: sys }, ...history.map((m) => ({
           role: m.role === "assistant" ? "assistant" : "user", content: String(m.content ?? "").slice(0, 4000),
         }))],
