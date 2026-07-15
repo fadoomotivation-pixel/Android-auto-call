@@ -1,5 +1,7 @@
 package com.salesautocall.app.ui
 
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -298,6 +300,17 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         brief = app.leadBrief,
                         loading = app.leadBriefLoading,
                         onGenerate = { contact.id?.let { vm.loadLeadBrief(it) } },
+                    )
+                }
+
+                // ---- RAG v9: "customer ne mana kiya" — speak or type the exact
+                // objection, get the perfect counter from your playbook, instantly. ----
+                item {
+                    RebuttalCoachCard(
+                        answer = app.rebuttal,
+                        loading = app.rebuttalLoading,
+                        onAsk = { objection -> vm.getRebuttal(contact, objection) },
+                        onClear = { vm.clearRebuttal() },
                     )
                 }
 
@@ -897,6 +910,144 @@ private fun LeadBriefCard(brief: String?, loading: Boolean, onGenerate: () -> Un
             Spacer(Modifier.height(8.dp))
             Text("Regenerate", style = MaterialTheme.typography.labelMedium, color = JadeL,
                 fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onGenerate() })
+        }
+    }
+}
+
+/**
+ * RAG v9 — the "objection coach". The customer just said no on the call; the rep
+ * speaks or types what they heard and gets the exact counter to say back,
+ * grounded in the company's own playbook (prices + lines from calls that closed).
+ * Voice via the phone's speech-to-text; answer via the same company-isolated RAG
+ * brain the coach uses — no extra keys. Zero typing when they use the mic.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RebuttalCoachCard(
+    answer: String?,
+    loading: Boolean,
+    onAsk: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    val clipboard = LocalClipboardManager.current
+    var text by remember { mutableStateOf("") }
+
+    // Phone's built-in speech-to-text — fills the box, hands-free.
+    val voiceLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val spoken = result.data
+            ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            ?.firstOrNull()
+        if (!spoken.isNullOrBlank()) text = spoken
+    }
+    fun startVoice() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Customer ne kya bola?")
+        }
+        runCatching { voiceLauncher.launch(intent) }
+    }
+    fun ask(objection: String) {
+        val q = objection.trim()
+        if (q.isBlank() || loading) return
+        text = q
+        onAsk(q)
+    }
+
+    val chips = listOf(
+        "Mehenga hai", "Location door hai", "Ghar me baat karni hai",
+        "Sochenge", "Loan me dikkat", "Dusri jagah sasta mil raha",
+    )
+
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
+            .background(CardBg).border(1.dp, Hair, RoundedCornerShape(18.dp)).padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🛡️", fontSize = 18.sp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("CUSTOMER NE MANA KIYA?", style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold, color = RedL, letterSpacing = 0.5.sp)
+                Text("Bol ya likh — turant jawab, tumhari playbook se", style = MaterialTheme.typography.labelSmall, color = SubInk)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            chips.forEach { c ->
+                Box(
+                    Modifier.clip(RoundedCornerShape(50)).background(AmberL.copy(alpha = 0.10f))
+                        .border(1.dp, AmberL.copy(alpha = 0.35f), RoundedCornerShape(50))
+                        .clickable(enabled = !loading) { ask(c) }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                ) { Text(c, style = MaterialTheme.typography.labelMedium, color = AmberL, fontWeight = FontWeight.SemiBold) }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Customer ne kya kaha?", color = SubInk) },
+            maxLines = 3,
+            trailingIcon = {
+                Icon(Icons.Default.Mic, contentDescription = "Bol ke batao",
+                    tint = RedL, modifier = Modifier.clickable { startVoice() }.padding(6.dp))
+            },
+        )
+
+        Spacer(Modifier.height(10.dp))
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(if (text.isBlank() || loading) SubInk.copy(alpha = 0.25f) else JadeL)
+                .clickable(enabled = text.isNotBlank() && !loading) { ask(text) }
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(if (loading) "Soch raha hoon…" else "Jawab do 👉", color = Color.White,
+                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        }
+
+        if (loading) {
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = JadeL)
+                Spacer(Modifier.width(10.dp))
+                Text("Playbook + prices padh raha hoon…", style = MaterialTheme.typography.bodySmall, color = SubInk)
+            }
+        }
+
+        answer?.let {
+            Spacer(Modifier.height(12.dp))
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+            ) {
+                Text("BOLO YEH 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                Spacer(Modifier.height(6.dp))
+                Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.clip(RoundedCornerShape(50)).clickable {
+                            clipboard.setText(AnnotatedString(it.trim()))
+                        }.padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, tint = JadeL, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Copy", style = MaterialTheme.typography.labelMedium, color = JadeL, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.width(18.dp))
+                    Text("Naya sawaal", style = MaterialTheme.typography.labelMedium, color = SubInk,
+                        fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { text = ""; onClear() })
+                }
+            }
         }
     }
 }
