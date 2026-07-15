@@ -2,7 +2,9 @@ package com.salesautocall.app.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -31,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
@@ -640,17 +643,61 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
         }
 
+        val roleplay = app.assistantMode == "roleplay"
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Ask the assistant", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(if (roleplay) "Practice call" else "Ask the assistant",
+                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 if (app.assistantMessages.isNotEmpty()) {
-                    TextButton(onClick = { vm.clearAssistant() }) { Text("Clear") }
+                    TextButton(onClick = { vm.clearAssistant() }) { Text(if (roleplay) "Exit" else "Clear") }
+                }
+            }
+        }
+
+        // RAG v10 — Practice Mode: rehearse against an AI customer whose objections
+        // come from the company's own playbook. Start it, or (mid-call) score it.
+        item {
+            if (!roleplay) {
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFF7C3AED), Color(0xFFDB2777))))
+                        .clickable(enabled = !app.assistantThinking) { vm.startRoleplay() }
+                        .padding(16.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🎭", fontSize = 22.sp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Practice with a tough customer", style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("AI banega grahak — tum pitch karo. Bol ke ya likh ke.",
+                                style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f))
+                        }
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
+                    }
+                }
+            } else {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF7C3AED).copy(alpha = 0.10f)),
+                ) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("🎭", fontSize = 18.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Text("Live practice — AI ek grahak hai. Jab tayyar ho, 'Score me' dabao.",
+                            style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        Box(
+                            Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF7C3AED))
+                                .clickable(enabled = !app.assistantThinking) { vm.askAssistant("score") }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                        ) { Text("Score me", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+                    }
                 }
             }
         }
 
         // Starter prompts — tapping one sends it straight to the AI coach.
-        if (app.assistantMessages.isEmpty()) {
+        if (app.assistantMessages.isEmpty() && !roleplay) {
             item {
                 val prompts = listOf(
                     "Which leads should I call first?",
@@ -694,14 +741,34 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
         }
 
-        // Composer.
+        // Composer — type, or tap the mic to speak (hands-free practice/coach).
         item {
             var draft by remember { mutableStateOf("") }
+            val voiceLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult(),
+            ) { result ->
+                val spoken = result.data
+                    ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+                if (!spoken.isNullOrBlank()) draft = spoken
+            }
+            fun startVoice() {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, if (roleplay) "Grahak se kya bologe?" else "Bol ke poochho")
+                }
+                runCatching { voiceLauncher.launch(intent) }
+            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     draft, { draft = it },
-                    placeholder = { Text("Ask anything — pitch, objection, message…") },
+                    placeholder = { Text(if (roleplay) "Grahak ko jawab do…" else "Ask anything — pitch, objection, message…") },
                     modifier = Modifier.weight(1f), maxLines = 4,
+                    trailingIcon = {
+                        Icon(Icons.Default.Mic, contentDescription = "Speak",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { startVoice() }.padding(6.dp))
+                    },
                 )
                 Button(
                     onClick = { vm.askAssistant(draft); draft = "" },

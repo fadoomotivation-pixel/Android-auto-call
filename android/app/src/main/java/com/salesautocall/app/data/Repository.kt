@@ -416,8 +416,11 @@ object Repository {
 
     // ---------- AI assistant chat ----------
 
-    /** Asks the AI sales coach. Returns the reply text, or null on failure. */
-    suspend fun assistantChat(messages: List<ChatMsg>, lead: Contact? = null): String? {
+    /**
+     * Asks the AI sales coach — or, in "roleplay" mode, the AI plays a customer
+     * for the rep to practice against (RAG v10). Returns the reply, or null.
+     */
+    suspend fun assistantChat(messages: List<ChatMsg>, lead: Contact? = null, mode: String = "coach"): String? {
         val payload = buildJsonObject {
             put(
                 "messages",
@@ -425,6 +428,7 @@ object Repository {
                     messages.forEach { add(buildJsonObject { put("role", it.role); put("content", it.content) }) }
                 },
             )
+            if (mode != "coach") put("mode", mode)
             lead?.let { l ->
                 put("lead", buildJsonObject {
                     put("name", l.name ?: "")

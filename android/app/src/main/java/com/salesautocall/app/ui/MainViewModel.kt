@@ -129,6 +129,8 @@ data class AppState(
     // AI assistant chat
     val assistantMessages: List<ChatMsg> = emptyList(),
     val assistantThinking: Boolean = false,
+    // RAG v10 — "coach" (advice) or "roleplay" (AI plays a customer to practice against).
+    val assistantMode: String = "coach",
     // follow-up / callback scheduler
     val followUpList: List<FollowUp> = emptyList(),
     val followUpsLoading: Boolean = false,
@@ -1408,14 +1410,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- AI assistant chat ----------
 
-    /** Sends a question to the AI sales coach and appends its reply. */
+    /** Sends a question to the AI sales coach (or the practice customer) and appends its reply. */
     fun askAssistant(text: String) {
         val q = text.trim()
         if (q.isBlank() || _state.value.assistantThinking) return
+        val mode = _state.value.assistantMode
         val msgs = _state.value.assistantMessages + ChatMsg("user", q)
         set { it.copy(assistantMessages = msgs, assistantThinking = true) }
         viewModelScope.launch {
-            val reply = runCatching { Repository.assistantChat(msgs) }.getOrNull()
+            val reply = runCatching { Repository.assistantChat(msgs, mode = mode) }.getOrNull()
             set {
                 it.copy(
                     assistantMessages = it.assistantMessages +
@@ -1426,7 +1429,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun clearAssistant() = set { it.copy(assistantMessages = emptyList(), assistantThinking = false) }
+    /**
+     * RAG v10 — starts a live practice call: the AI plays a realistic customer
+     * (objections grounded in the company playbook) and opens the conversation.
+     * The rep replies by voice or text; typing "score" ends it with a scorecard.
+     */
+    fun startRoleplay() {
+        if (_state.value.assistantThinking) return
+        set { it.copy(assistantMode = "roleplay", assistantMessages = emptyList(), assistantThinking = true) }
+        viewModelScope.launch {
+            val reply = runCatching {
+                Repository.assistantChat(listOf(ChatMsg("user", "__begin__")), mode = "roleplay")
+            }.getOrNull()
+            set {
+                it.copy(
+                    assistantMessages = listOf(
+                        ChatMsg("assistant", reply ?: "Haan ji boliye… waise rate thoda zyada nahi lag raha?"),
+                    ),
+                    assistantThinking = false,
+                )
+            }
+        }
+    }
+
+    fun clearAssistant() = set { it.copy(assistantMessages = emptyList(), assistantThinking = false, assistantMode = "coach") }
 
     // ---------- WhatsApp chat ----------
 
