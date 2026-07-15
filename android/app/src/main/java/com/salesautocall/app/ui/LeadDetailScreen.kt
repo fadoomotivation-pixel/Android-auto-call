@@ -961,7 +961,7 @@ private fun AiCoachCard(
                 Spacer(Modifier.height(10.dp))
                 Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 20.sp)
                 Spacer(Modifier.height(8.dp))
-                Text("Dobara banao", style = MaterialTheme.typography.labelMedium, color = JadeL,
+                Text("Dobara banayein", style = MaterialTheme.typography.labelMedium, color = JadeL,
                     fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onGenerate() })
             }
         }
@@ -988,7 +988,7 @@ private fun AiCoachCard(
                 placeholder = { Text("Customer ne kya kaha?", color = SubInk) },
                 maxLines = 3,
                 trailingIcon = {
-                    Icon(Icons.Default.Mic, contentDescription = "Bol ke batao",
+                    Icon(Icons.Default.Mic, contentDescription = "Bol kar bataiye",
                         tint = RedL, modifier = Modifier.clickable { startVoice() }.padding(6.dp))
                 },
             )
@@ -1001,7 +1001,7 @@ private fun AiCoachCard(
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(if (rebuttalLoading) "Soch raha hoon…" else "Jawab do 👉", color = Color.White,
+                Text(if (rebuttalLoading) "Soch raha hoon…" else "Jawab paayein 👉", color = Color.White,
                     style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             }
 
@@ -1021,7 +1021,7 @@ private fun AiCoachCard(
                         .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
                         .padding(14.dp),
                 ) {
-                    Text("BOLO YEH 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                    Text("YEH BOLIYE 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
                     Spacer(Modifier.height(6.dp))
                     Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp)
                     Spacer(Modifier.height(10.dp))
@@ -1279,7 +1279,7 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Record voice note", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = IndigoL)
-                    Text("Call ke baad bolo kya baat hui — AI summary khud ban jayegi",
+                    Text("Call ke baad boliye kya baat hui — AI summary khud ban jayegi",
                         style = MaterialTheme.typography.labelSmall, color = SubInk, maxLines = 2)
                 }
                 Spacer(Modifier.width(10.dp))

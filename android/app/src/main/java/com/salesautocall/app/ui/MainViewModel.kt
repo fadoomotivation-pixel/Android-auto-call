@@ -175,6 +175,11 @@ data class AppState(
     // RAG v9: on-the-spot objection rebuttal for the open lead ("customer ne mana kiya").
     val rebuttal: String? = null,
     val rebuttalLoading: Boolean = false,
+    // RAG v11 — "Aaj ke 5": the AI's five winnable leads for today (Leads page strip).
+    val focusFive: List<com.salesautocall.app.data.Repository.FocusPick> = emptyList(),
+    val focusFiveLoading: Boolean = false,
+    /** True after a fetch that returned nothing, so the strip can say so instead of re-inviting. */
+    val focusFiveEmpty: Boolean = false,
     // Voice notes on the open lead ("kya baat hui" in the rep's own voice).
     val voiceNotes: List<com.salesautocall.app.data.LeadVoiceNote> = emptyList(),
     /** True while the mic is capturing a new voice note. */
@@ -875,7 +880,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.recordingSyncing) return
         val ctx = getApplication<Application>()
         if (!com.salesautocall.app.dialer.NativeRecordingHarvester.isConfigured(ctx)) {
-            set { it.copy(recordingSyncMsg = "Pehle recording folder connect karo.") }
+            set { it.copy(recordingSyncMsg = "Pehle recording folder connect karein.") }
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -2049,13 +2054,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val reply = runCatching { Repository.objectionRebuttal(contact, q) }.getOrNull()
             set {
                 if (it.leadDetailId == contact.id)
-                    it.copy(rebuttal = reply ?: "Abhi jawab nahi aaya — dobara try karo.", rebuttalLoading = false)
+                    it.copy(rebuttal = reply ?: "Abhi jawab nahi aaya — dobara koshish karein.", rebuttalLoading = false)
                 else it.copy(rebuttalLoading = false)
             }
         }
     }
 
     fun clearRebuttal() = set { it.copy(rebuttal = null) }
+
+    /**
+     * RAG v11 — "Aaj ke 5". One tap: the AI picks the five leads most likely to
+     * move today, each with a reason + a ready opening line. Cached in state for
+     * the session so the strip doesn't re-spend AI on every visit.
+     */
+    fun loadFocusFive() {
+        if (_state.value.focusFiveLoading) return
+        set { it.copy(focusFiveLoading = true, focusFiveEmpty = false) }
+        viewModelScope.launch {
+            val picks = runCatching { Repository.fetchFocusFive() }.getOrDefault(emptyList())
+            set { it.copy(focusFive = picks, focusFiveLoading = false, focusFiveEmpty = picks.isEmpty()) }
+        }
+    }
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
