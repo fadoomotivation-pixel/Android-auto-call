@@ -124,7 +124,7 @@ fun SoftphoneScreen(vm: MainViewModel) {
             }
 
             Spacer(Modifier.height(28.dp))
-            RoundCallButton(Icons.Default.CallEnd, Color(0xFFEF4444)) { vm.endCloudCall() }
+            RoundCallButton(Icons.Default.CallEnd, Color(0xFFD64545)) { vm.endCloudCall() }
             Spacer(Modifier.height(8.dp))
             Text("End call", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
             Spacer(Modifier.height(28.dp))
@@ -173,7 +173,7 @@ private fun CallerdeskCallCard(
                 ),
             )
             Spacer(Modifier.height(24.dp))
-            RoundCallButton(Icons.Default.CallEnd, Color(0xFFEF4444)) { onClose() }
+            RoundCallButton(Icons.Default.CallEnd, Color(0xFFD64545)) { onClose() }
             Spacer(Modifier.height(8.dp))
             Text("Close", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
         }

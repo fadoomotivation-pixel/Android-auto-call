@@ -38,7 +38,7 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
         val data = message.data
         val title = message.notification?.title ?: data["title"] ?: "New lead"
         val body = message.notification?.body ?: data["body"] ?: "Tap to open and call."
-        notify(this, title, body, data["contact_id"], data["channel"] ?: CHANNEL_ID)
+        notify(this, title, body, data["contact_id"], data["channel"] ?: CHANNEL_ID, data["open_tab"])
     }
 
     companion object {
@@ -85,7 +85,7 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
                     R.raw.chime_followup, NotificationManager.IMPORTANCE_HIGH,
                 )
                 create(
-                    AGENDA_CHANNEL_ID, "Daily agenda", "Aaj ka plan — your 10 AM day brief",
+                    AGENDA_CHANNEL_ID, "Daily agenda", "Aaj ka plan — your 9:30 AM morning brief",
                     R.raw.chime_agenda, NotificationManager.IMPORTANCE_HIGH,
                 )
                 create(
@@ -95,16 +95,18 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
             }
         }
 
-        fun notify(context: Context, title: String, body: String, contactId: String?, channelId: String = CHANNEL_ID) {
+        fun notify(context: Context, title: String, body: String, contactId: String?, channelId: String = CHANNEL_ID, openTab: String? = null) {
             ensureChannel(context)
             // Only ring on a known channel; fall back to hot_leads otherwise.
             val ch = if (channelId in KNOWN_CHANNELS) channelId else CHANNEL_ID
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 if (contactId != null) putExtra("open_contact_id", contactId)
+                // Server pushes can deep-link a tab (Morning Brief → Leads).
+                if (openTab != null) putExtra("open_tab", openTab)
             }
             val pi = PendingIntent.getActivity(
-                context, contactId?.hashCode() ?: 0, intent,
+                context, (contactId ?: openTab ?: ch).hashCode(), intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 

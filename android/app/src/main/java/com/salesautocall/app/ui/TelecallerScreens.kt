@@ -90,7 +90,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.FollowUp
-import com.salesautocall.app.data.Repository
 import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.data.LeaderboardRow
 import kotlin.math.abs
@@ -99,16 +98,19 @@ import kotlin.math.abs
 //  Design system — colours, helpers, atoms
 // ════════════════════════════════════════════════════════════
 
-// Paper & ink discipline: every hue keeps its identity (buckets stay
-// recognisable at a glance) but sits close to ink — muted, never neon.
-// Jade is the one true accent; money stages resolve to it.
+// Paper & ink discipline: ONE palette, anchored on jade. Neutrals are warm
+// (green-tinted, never blue-cold); the pipeline reads as a single story —
+// slate (unknown) → sea (talking) → amber (interest heating) → plum (visit)
+// → bronze (money forming) → jade (money). Every hue sits in the same muted
+// saturation band, so nothing shouts and nothing looks odd next to anything.
 private val Green = Color(0xFF0E7C66)   // success = jade
-private val Amber = Color(0xFFB8860B)   // muted amber
-private val Red = Color(0xFFC0452C)     // muted terracotta
-private val Purple = Color(0xFF7D5BA6)  // muted plum
-private val Cyan = Color(0xFF3E7F8A)    // muted sea
-private val Indigo = Color(0xFF5E5E9E)  // muted indigo
-private val Slate = Color(0xFF5A6068)
+private val Amber = Color(0xFFB8860B)   // muted brass — attention / "warm"
+private val Red = Color(0xFFC0452C)     // muted terracotta — urgency / "hot"
+private val Purple = Color(0xFF75629B)  // softened plum — site visit
+private val Cyan = Color(0xFF3E7F8A)    // muted sea — conversation flowing
+private val Indigo = Color(0xFF4E7A8C)  // slate-sea — working / in progress
+private val Slate = Color(0xFF5D6862)   // warm slate — neutral / cold
+private val Bronze = Color(0xFF8A6D3B)  // muted bronze — negotiation, value
 private val WaGreen = Color(0xFF25D366) // WhatsApp brand — kept recognisable
 
 private data class Stage(val key: String, val label: String, val statuses: Set<String>, val color: Color)
@@ -120,11 +122,11 @@ private val Teal = Color(0xFF2E8B74)    // jade-adjacent: token money
 private val STAGES = listOf(
     // No-answer / busy live in NEW: nobody actually spoke to them yet, so they
     // come straight back into the calling pile (the attempt ladder re-books them).
-    Stage("new", "New", setOf("new", "queued", "no_answer", "busy", "wrong_person"), Color(0xFF4A6FA5)),
-    Stage("contacted", "Contacted", setOf("called", "callback", "follow_up"), Indigo),
+    Stage("new", "New", setOf("new", "queued", "no_answer", "busy", "wrong_person"), Color(0xFF6A7B85)),
+    Stage("contacted", "Contacted", setOf("called", "callback", "follow_up"), Cyan),
     Stage("interested", "Interested", setOf("interested"), Amber),
     Stage("site_visit", "Site Visit", setOf("site_visit"), Purple),
-    Stage("negotiation", "Negotiation", setOf("negotiation", "proposal"), Cyan),
+    Stage("negotiation", "Negotiation", setOf("negotiation", "proposal"), Bronze),
     Stage("token", "Token Paid", setOf("token_paid"), Teal),
     Stage("closed", "Booked", setOf("booked"), Green),
 )
@@ -225,9 +227,10 @@ private fun relativeDue(iso: String): String {
 private fun initials(name: String): String =
     name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("").ifBlank { "?" }
 
+// One saturation band, hues from the system — avatars vary without shouting.
 private val avatarColors = listOf(
-    Color(0xFF4A6FA5), Color(0xFF7D5BA6), Color(0xFF3E7F8A), Color(0xFF0E7C66),
-    Color(0xFFB06A3B), Color(0xFFA65475), Color(0xFF5E5E9E), Color(0xFF2E8B74),
+    Color(0xFF6A7B85), Color(0xFF75629B), Color(0xFF3E7F8A), Color(0xFF0E7C66),
+    Color(0xFF8A6D3B), Color(0xFF96617A), Color(0xFF4E7A8C), Color(0xFF2E8B74),
 )
 
 private fun colorFor(seed: String): Color = avatarColors[abs(seed.hashCode()) % avatarColors.size]
@@ -699,138 +702,6 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     }
 }
 
-/**
- * RAG v11 — "Aaj ke 5". The Leads page's focus strip: one tap and the AI picks
- * the five leads most likely to move TODAY — each with WHY and the exact first
- * line to say (grounded in the company's playbook, respectful 'aap' Hinglish).
- * Jobs rule: focus — 137 rows become five winnable conversations.
- */
-@Composable
-private fun FocusFiveStrip(
-    picks: List<Repository.FocusPick>,
-    loading: Boolean,
-    cameUpEmpty: Boolean,
-    leadsById: Map<String?, Contact>,
-    onGenerate: () -> Unit,
-    onCall: (String) -> Unit,
-    onOpen: (String) -> Unit,
-) {
-    val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66)
-
-    if (picks.isEmpty()) {
-        // Invitation / loading / honest-empty — one calm card.
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = jade.copy(alpha = 0.08f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        ) {
-            Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("🎯", fontSize = 22.sp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Aaj ke 5", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(
-                        when {
-                            loading -> "Aapke leads + playbook padh raha hoon…"
-                            cameUpEmpty -> "Abhi koi khaas pick nahi mili — thodi der baad koshish karein."
-                            else -> "AI aapke leads me se aaj ke 5 sabse zaroori chunega — wajah aur pehli line ke saath."
-                        },
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
-                if (loading) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = jade)
-                } else {
-                    Box(
-                        Modifier.clip(RoundedCornerShape(50)).background(jade)
-                            .clickable { onGenerate() }.padding(horizontal = 16.dp, vertical = 9.dp),
-                    ) {
-                        Text(if (cameUpEmpty) "Dobara" else "Chunein", color = Color.White,
-                            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    } else {
-        Column {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("🎯 AAJ KE 5", style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold, color = jade, letterSpacing = 0.5.sp)
-                Spacer(Modifier.weight(1f))
-                if (loading) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = jade)
-                } else {
-                    Text("Naye chunein", style = MaterialTheme.typography.labelMedium, color = jade,
-                        fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onGenerate() }.padding(4.dp))
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                picks.forEachIndexed { i, p ->
-                    val c = leadsById[p.id] ?: return@forEachIndexed
-                    Card(
-                        modifier = Modifier.width(290.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    ) {
-                        Column(Modifier.clickable { p.id.let(onOpen) }.padding(14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    Modifier.size(26.dp).clip(CircleShape).background(jade),
-                                    contentAlignment = Alignment.Center,
-                                ) { Text("${i + 1}", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
-                                Spacer(Modifier.width(8.dp))
-                                Text(c.name ?: c.phone, style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold, maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f))
-                                Text(
-                                    when (c.temperature) { "hot" -> "🔥"; "warm" -> "🌤"; "cold" -> "❄️"; else -> "" },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                            if (p.reason.isNotBlank()) {
-                                Spacer(Modifier.height(6.dp))
-                                Text(p.reason, style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
-                            }
-                            if (p.opener.isNotBlank()) {
-                                Spacer(Modifier.height(8.dp))
-                                Column(
-                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-                                        .background(jade.copy(alpha = 0.08f)).padding(10.dp),
-                                ) {
-                                    Text("PEHLI LINE 👇", style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold, color = jade, letterSpacing = 0.5.sp)
-                                    Spacer(Modifier.height(3.dp))
-                                    Text(p.opener, style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface, lineHeight = 18.sp, maxLines = 4)
-                                }
-                            }
-                            Spacer(Modifier.height(10.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    Modifier.clip(RoundedCornerShape(50)).background(jade)
-                                        .clickable { onCall(c.phone) }.padding(horizontal = 18.dp, vertical = 8.dp),
-                                ) { Text("📞 Call", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
-                                Spacer(Modifier.width(12.dp))
-                                Text("Kholein", style = MaterialTheme.typography.labelMedium, color = jade,
-                                    fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { p.id.let(onOpen) }.padding(4.dp))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 /** Parse an optional "#RRGGBB" brand colour into a Compose Color (null if unset/invalid). */
 private fun brandColorOf(hex: String?): Color? {
     val h = hex?.trim()?.removePrefix("#") ?: return null
@@ -853,9 +724,9 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
     val done = a?.punchOutAt != null
     // White-label: the hero wears the company's brand colour + name.
     val brand = brandColorOf(app.company?.brandColor)
-    val g0 = brand ?: Color(0xFF2563EB)
-    val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF1D4ED8)
-    val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF1D4ED8)
+    val g0 = brand ?: Color(0xFF0E7C66)
+    val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF0A4A3D)
+    val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF0A4A3D)
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
             .background(Brush.linearGradient(listOf(g0, g1)))
@@ -1280,22 +1151,6 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             bucket = key; stageFilter = null; quick = null
                         }
                     }
-                }
-            }
-            // RAG v11 — "Aaj ke 5": the AI turns 100+ rows into today's five
-            // winnable conversations, each with a reason + a ready first line.
-            if (!selectMode) {
-                item {
-                    val leadsById = remember(app.leads) { app.leads.associateBy { it.id } }
-                    FocusFiveStrip(
-                        picks = app.focusFive,
-                        loading = app.focusFiveLoading,
-                        cameUpEmpty = app.focusFiveEmpty,
-                        leadsById = leadsById,
-                        onGenerate = { vm.loadFocusFive() },
-                        onCall = { phone -> vm.dialManual(phone) },
-                        onOpen = { id -> vm.openLeadDetail(id) },
-                    )
                 }
             }
             // One quiet line teaching the two gestures that make the list fast.

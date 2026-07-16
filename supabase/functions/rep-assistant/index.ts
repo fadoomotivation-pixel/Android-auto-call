@@ -1,6 +1,7 @@
 // The telecaller's AI assistant pushes, fired by pg_cron (see migration 0048):
-//   task=agenda  (10:00 IST daily)  — "Aaj ka plan": callbacks due today, site
-//                                     visits, overdue follow-ups, hot leads.
+//   task=agenda  (9:30 IST daily)   — "Aaj ka plan" morning brief: callbacks due
+//                                     today, site visits, overdue follow-ups, hot
+//                                     leads. Tap opens the Leads page (open_tab).
 //   task=guard   (12:00 IST daily)  — bhoola-lead guard: interested leads
 //                                     untouched for 3+ days → nudge.
 //   task=quote   (11:00 & 16:00 IST)— ek fresh AI-generated Hinglish sales
@@ -64,11 +65,11 @@ Deno.serve(async (req) => {
     .select("id, full_name, company_id, role").in("id", userIds).eq("role", "salesperson");
   if (!reps?.length) return json({ ok: true, sent: 0, note: "no telecallers" });
 
-  async function push(userId: string, title: string, body: string, channel: string) {
+  async function push(userId: string, title: string, body: string, channel: string, data?: Record<string, string>) {
     await fetch(`${SUPABASE_URL}/functions/v1/notify-rep`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
-      body: JSON.stringify({ user_ids: [userId], title, body, channel }),
+      body: JSON.stringify({ user_ids: [userId], title, body, channel, ...(data ? { data } : {}) }),
     }).catch((e) => console.error("push failed", e));
   }
 
@@ -102,7 +103,8 @@ Deno.serve(async (req) => {
       const body = parts.length
         ? `Aaj: ${parts.join(" · ")}`
         : "Board clean hai — aaj naye leads pe dial start karo 🚀";
-      await push(rep.id, "☀️ Aaj ka plan", body, "agenda");
+      // Tap → straight to the Leads page (open_tab deep-link).
+      await push(rep.id, "☀️ Aaj ka plan", body, "agenda", { open_tab: "leads" });
       sent++;
     }
   } else if (task === "guard") {
@@ -120,6 +122,7 @@ Deno.serve(async (req) => {
         "🕳️ Bhoole hue leads",
         `${stale.length} interested lead${stale.length > 1 ? "s" : ""} ko 3+ din se touch nahi kiya: ${names}${more}. Aaj call karo — warm lead thanda ho jata hai.`,
         "followups",
+        { open_tab: "leads" },
       );
       sent++;
     }
