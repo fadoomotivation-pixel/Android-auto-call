@@ -428,9 +428,9 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
             testing = false
             testResult = if (f != null) {
                 val ago = android.text.format.DateUtils.getRelativeTimeSpanString(f.lastModified).toString()
-                "✓ Recording mil gayi: ${f.name} · $ago. Ab har call ke baad ye apne aap upload hogi."
+                "✓ Recording found: ${f.name} · $ago. Every call will now upload automatically."
             } else {
-                "Is folder me abhi koi recording nahi mili. Pehle ek test call karein (app ke Dialer se), phir dobara Test dabayein. Agar phir bhi na mile to woh folder chunein jahan aapka dialer recordings save karta hai."
+                "No recordings in this folder yet. Make a test call from the app's Dialer, then tap Test again. If it still doesn't appear, pick the folder where your phone's dialer saves recordings."
             }
         }
     }

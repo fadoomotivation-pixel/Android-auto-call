@@ -488,7 +488,7 @@ private fun MainShell(vm: MainViewModel) {
                         val pct = (state.updateProgress * 100).toInt().coerceIn(0, 100)
                         LinearProgressIndicator(progress = state.updateProgress, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(6.dp))
-                        Text("Downloading… $pct% — install ho jayega apne aap.",
+                        Text("Downloading… $pct% — the installer opens automatically.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
