@@ -178,6 +178,9 @@ data class AppState(
     // RAG v12: a ready-to-send WhatsApp follow-up drafted for the open lead.
     val messageDraft: String? = null,
     val messageDraftLoading: Boolean = false,
+    /** One-line failure notice for the AI Coach card (never mixed into results,
+     *  so an error can never be copied or WhatsApp'd to a customer). */
+    val coachError: String? = null,
     // Voice notes on the open lead ("kya baat hui" in the rep's own voice).
     val voiceNotes: List<com.salesautocall.app.data.LeadVoiceNote> = emptyList(),
     /** True while the mic is capturing a new voice note. */
@@ -879,18 +882,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.recordingSyncing) return
         val ctx = getApplication<Application>()
         if (!com.salesautocall.app.dialer.NativeRecordingHarvester.isConfigured(ctx)) {
-            set { it.copy(recordingSyncMsg = "Pehle recording folder connect karein.") }
+            set { it.copy(recordingSyncMsg = "Connect your recording folder first.") }
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
-            set { it.copy(recordingSyncing = true, recordingSyncMsg = "Sync ho raha hai…") }
+            set { it.copy(recordingSyncing = true, recordingSyncMsg = "Syncing…") }
             val (attached, failed, firstError) = runCatching { Repository.syncRecordings(ctx, null) }
                 .getOrElse { Triple(0, 0, it.message ?: "error") }
             val msg = when {
-                attached > 0 && failed == 0 -> "✓ $attached recording attach ho gayi (AI summary bhi ban rahi hai). Calls tab kholo."
-                attached > 0 -> "✓ $attached attach hui, $failed fail. ${firstError ?: ""}"
-                failed > 0 -> "Upload fail: ${firstError ?: "unknown"}. (Company ki Google Drive connected hai?)"
-                else -> "Koi recording match nahi hui. Folder sahi hai aur calls app ke Dialer se ki thi?"
+                attached > 0 && failed == 0 -> "✓ $attached recording(s) attached — AI summaries are on the way. Open the Calls tab."
+                attached > 0 -> "✓ $attached attached, $failed failed. ${firstError ?: ""}"
+                failed > 0 -> "Upload failed: ${firstError ?: "unknown"}."
+                else -> "No recordings matched. Is the folder right, and were the calls made from the app's Dialer?"
             }
             set { it.copy(recordingSyncing = false, recordingSyncMsg = msg) }
             loadCalls(force = true)
@@ -2031,11 +2034,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** RAG v4: fetch the proactive "before you call" brief for the open lead. */
     fun loadLeadBrief(contactId: String) {
         if (_state.value.leadBriefLoading) return
-        set { it.copy(leadBriefLoading = true) }
+        set { it.copy(leadBriefLoading = true, coachError = null) }
         viewModelScope.launch {
             val brief = runCatching { Repository.leadBrief(contactId) }.getOrNull()
             set {
-                if (it.leadDetailId == contactId) it.copy(leadBrief = brief, leadBriefLoading = false)
+                if (it.leadDetailId == contactId) it.copy(
+                    leadBrief = brief, leadBriefLoading = false,
+                    coachError = if (brief == null) "Couldn't build the pitch. Please try again." else null,
+                )
                 else it.copy(leadBriefLoading = false)
             }
         }
@@ -2048,18 +2054,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun getRebuttal(contact: Contact, objection: String) {
         val q = objection.trim()
         if (q.isBlank() || _state.value.rebuttalLoading) return
-        set { it.copy(rebuttalLoading = true, rebuttal = null) }
+        set { it.copy(rebuttalLoading = true, rebuttal = null, coachError = null) }
         viewModelScope.launch {
             val reply = runCatching { Repository.objectionRebuttal(contact, q) }.getOrNull()
             set {
-                if (it.leadDetailId == contact.id)
-                    it.copy(rebuttal = reply ?: "No reply came through — please try again.", rebuttalLoading = false)
+                // A failure NEVER lands in the result field — the rep must not be
+                // able to copy an error message as "the line to say".
+                if (it.leadDetailId == contact.id) it.copy(
+                    rebuttal = reply, rebuttalLoading = false,
+                    coachError = if (reply == null) "Couldn't get a reply. Please try again." else null,
+                )
                 else it.copy(rebuttalLoading = false)
             }
         }
     }
 
-    fun clearRebuttal() = set { it.copy(rebuttal = null) }
+    fun clearRebuttal() = set { it.copy(rebuttal = null, coachError = null) }
 
     /**
      * RAG v12 — the "after the call" move. Drafts a ready-to-send WhatsApp
@@ -2068,22 +2078,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun draftMessage(contact: Contact) {
         if (_state.value.messageDraftLoading) return
-        set { it.copy(messageDraftLoading = true, messageDraft = null) }
+        set { it.copy(messageDraftLoading = true, messageDraft = null, coachError = null) }
         viewModelScope.launch {
             val reply = runCatching { Repository.draftFollowUp(contact) }.getOrNull()
             set {
-                if (it.leadDetailId == contact.id)
-                    it.copy(messageDraft = reply ?: "Couldn't draft a message — please try again.", messageDraftLoading = false)
+                // A failure NEVER becomes the draft — otherwise the error text
+                // shows under "READY TO SEND" and could be WhatsApp'd verbatim.
+                if (it.leadDetailId == contact.id) it.copy(
+                    messageDraft = reply, messageDraftLoading = false,
+                    coachError = if (reply == null) "Couldn't draft the message. Please try again." else null,
+                )
                 else it.copy(messageDraftLoading = false)
             }
         }
     }
 
-    fun clearMessageDraft() = set { it.copy(messageDraft = null) }
+    fun clearMessageDraft() = set { it.copy(messageDraft = null, coachError = null) }
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
-        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false) }
+        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false, coachError = null) }
         viewModelScope.launch {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())

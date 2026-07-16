@@ -313,6 +313,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         onDraft = { vm.draftMessage(contact) },
                         onSend = { msg -> openWhatsAppLocal(context, contact.phone, msg) },
                         onClearDraft = { vm.clearMessageDraft() },
+                        error = app.coachError,
                     )
                 }
 
@@ -893,6 +894,7 @@ private fun AiCoachCard(
     onDraft: () -> Unit,
     onSend: (String) -> Unit,
     onClearDraft: () -> Unit,
+    error: String? = null,
 ) {
     val clipboard = LocalClipboardManager.current
     var text by remember { mutableStateOf("") }
@@ -968,6 +970,13 @@ private fun AiCoachCard(
                 chosen = "message"
                 if (draft == null && !draftLoading) onDraft()
             }
+        }
+
+        // A failure shows as its own quiet line — never inside a result box,
+        // so it can never be copied or sent to a customer by mistake.
+        error?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = RedL)
         }
 
         // ---- 🎯 Pitch section ----
