@@ -310,7 +310,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         onClear = { vm.clearRebuttal() },
                         draft = app.messageDraft,
                         draftLoading = app.messageDraftLoading,
-                        onDraft = { vm.draftMessage(contact) },
+                        onDraft = { purpose -> vm.draftMessage(contact, purpose) },
                         onSend = { msg -> openWhatsAppLocal(context, contact.phone, msg) },
                         onClearDraft = { vm.clearMessageDraft() },
                         error = app.coachError,
@@ -891,7 +891,7 @@ private fun AiCoachCard(
     onClear: () -> Unit,
     draft: String?,
     draftLoading: Boolean,
-    onDraft: () -> Unit,
+    onDraft: (String) -> Unit,
     onSend: (String) -> Unit,
     onClearDraft: () -> Unit,
     error: String? = null,
@@ -968,7 +968,6 @@ private fun AiCoachCard(
             }
             AiModeSegment("💬 Message", selected = mode == "message", modifier = Modifier.weight(1f)) {
                 chosen = "message"
-                if (draft == null && !draftLoading) onDraft()
             }
         }
 
@@ -1061,21 +1060,29 @@ private fun AiCoachCard(
             }
         }
 
-        // ---- 💬 Message section (ready-to-send WhatsApp follow-up) ----
+        // ---- 💬 Message section — WhatsApp Smart Templates (RAG v14) ----
+        // Pick a purpose; the AI writes that exact message, grounded in the
+        // company's own facts, ready to send. Remember the last purpose so
+        // "Rewrite" regenerates the same kind.
+        var lastPurpose by remember { mutableStateOf("follow_up") }
         if (mode == "message") {
             if (draftLoading) {
                 Spacer(Modifier.height(12.dp))
-                CoachLoadingRow("Writing a follow-up from your playbook…")
+                CoachLoadingRow("Writing your message from the playbook…")
             }
             if (!draftLoading && draft == null) {
                 Spacer(Modifier.height(12.dp))
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(JadeL)
-                        .clickable { onDraft() }.padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("Draft a follow-up →", color = Color.White,
-                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Text("Pick a message to send", style = MaterialTheme.typography.labelMedium, color = SubInk)
+                Spacer(Modifier.height(8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MSG_TEMPLATES.forEach { (key, label) ->
+                        Box(
+                            Modifier.clip(RoundedCornerShape(50)).background(JadeL.copy(alpha = 0.10f))
+                                .border(1.dp, JadeL.copy(alpha = 0.35f), RoundedCornerShape(50))
+                                .clickable { lastPurpose = key; onDraft(key) }
+                                .padding(horizontal = 13.dp, vertical = 8.dp),
+                        ) { Text(label, style = MaterialTheme.typography.labelMedium, color = JadeL, fontWeight = FontWeight.SemiBold) }
+                    }
                 }
             }
             draft?.let {
@@ -1106,14 +1113,28 @@ private fun AiCoachCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CoachTextAction(Icons.Default.ContentCopy, "Copy") { clipboard.setText(AnnotatedString(it.trim())) }
                         Spacer(Modifier.width(18.dp))
-                        Text("Rewrite", style = MaterialTheme.typography.labelMedium, color = SubInk,
-                            fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onClearDraft(); onDraft() })
+                        Text("Rewrite", style = MaterialTheme.typography.labelMedium, color = JadeL,
+                            fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onClearDraft(); onDraft(lastPurpose) })
+                        Spacer(Modifier.width(18.dp))
+                        Text("New message", style = MaterialTheme.typography.labelMedium, color = SubInk,
+                            fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onClearDraft() })
                     }
                 }
             }
         }
     }
 }
+
+/** WhatsApp Smart Template purposes (RAG v14) — one tap → an AI-written,
+ *  company-grounded, ready-to-send message for that intent. */
+private val MSG_TEMPLATES = listOf(
+    "intro" to "👋 Intro",
+    "details" to "📄 Details",
+    "price" to "💰 Price & offer",
+    "site_visit" to "🏠 Site visit",
+    "follow_up" to "🔄 Follow-up",
+    "festive" to "🎉 Greeting",
+)
 
 /** One segment of the AI Coach card's segmented control (Pitch · Objection · Message). */
 @Composable

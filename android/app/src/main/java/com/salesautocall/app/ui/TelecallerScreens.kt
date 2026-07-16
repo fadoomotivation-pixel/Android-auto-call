@@ -360,15 +360,17 @@ private fun GhostIconButton(icon: androidx.compose.ui.graphics.vector.ImageVecto
     }
 }
 
-/** Lead age from its created/assigned time: "Today" / "1d" / "12d" / "3mo". */
+/** When the lead came in: "Today" / "Yesterday" / "6 Jul" (year added if older). */
 private fun ageLabel(iso: String?): String? {
     val ms = instantMillis(iso ?: return null) ?: return null
-    val days = ((System.currentTimeMillis() - ms) / 86_400_000L).toInt()
+    val zone = java.time.ZoneId.systemDefault()
+    val d = java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
+    val today = java.time.LocalDate.now(zone)
     return when {
-        days <= 0 -> "Today"
-        days < 30 -> "${days}d"
-        days < 365 -> "${days / 30}mo"
-        else -> "${days / 365}y"
+        d == today -> "Today"
+        d == today.minusDays(1) -> "Yesterday"
+        d.year == today.year -> d.format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
+        else -> d.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy"))
     }
 }
 

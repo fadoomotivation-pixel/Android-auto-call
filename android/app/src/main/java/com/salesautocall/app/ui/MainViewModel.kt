@@ -2081,11 +2081,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * follow-up for the open lead, grounded in the company's playbook. One-shot,
      * tied to the lead so a stale reply never lands on the wrong lead.
      */
-    fun draftMessage(contact: Contact) {
+    fun draftMessage(contact: Contact, purpose: String = "follow_up") {
         if (_state.value.messageDraftLoading) return
         set { it.copy(messageDraftLoading = true, messageDraft = null, coachError = null) }
         viewModelScope.launch {
-            val reply = runCatching { Repository.draftFollowUp(contact) }.getOrNull()
+            val reply = runCatching { Repository.draftFollowUp(contact, purpose) }.getOrNull()
             set {
                 // A failure NEVER becomes the draft — otherwise the error text
                 // shows under "READY TO SEND" and could be WhatsApp'd verbatim.
