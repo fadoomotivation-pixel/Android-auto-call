@@ -827,12 +827,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         loadCalls(force = true) // filter changed → fetch the new range now
     }
 
-    /** Reads the phone's own call log for the fast recents tab (needs READ_CALL_LOG). */
+    /** Reads the phone's own call log for the fast recents tab (needs READ_CALL_LOG).
+     *  The ContentResolver query runs on IO — on Main it froze scrolling. */
     fun loadDeviceRecents() {
         viewModelScope.launch {
-            val list = runCatching {
-                com.salesautocall.app.data.DeviceRecents.read(getApplication())
-            }.getOrDefault(emptyList())
+            val list = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { com.salesautocall.app.data.DeviceRecents.read(getApplication()) }.getOrDefault(emptyList())
+            }
             set { it.copy(deviceRecents = list) }
         }
     }
