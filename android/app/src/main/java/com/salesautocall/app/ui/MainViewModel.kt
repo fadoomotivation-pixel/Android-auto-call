@@ -181,6 +181,11 @@ data class AppState(
     /** One-line failure notice for the AI Coach card (never mixed into results,
      *  so an error can never be copied or WhatsApp'd to a customer). */
     val coachError: String? = null,
+    // RAG v13 — "Second Chance": AI picks from the dead pile worth calling again.
+    val revivePicks: List<com.salesautocall.app.data.Repository.RevivePick> = emptyList(),
+    val reviveLoading: Boolean = false,
+    /** True once a fetch finished this session — empty then means "truly nothing". */
+    val reviveLoaded: Boolean = false,
     // Voice notes on the open lead ("kya baat hui" in the rep's own voice).
     val voiceNotes: List<com.salesautocall.app.data.LeadVoiceNote> = emptyList(),
     /** True while the mic is capturing a new voice note. */
@@ -2094,6 +2099,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearMessageDraft() = set { it.copy(messageDraft = null, coachError = null) }
+
+    /**
+     * RAG v13 — "Second Chance". One tap: the AI mines the rep's dead leads
+     * (lost / not interested / gone-cold — never DNC) for ones a fresh company
+     * offer could revive. Session-cached; pull-to-refresh via force.
+     */
+    fun loadSecondChance(force: Boolean = false) {
+        if (_state.value.reviveLoading) return
+        if (!force && _state.value.reviveLoaded) return
+        set { it.copy(reviveLoading = true) }
+        viewModelScope.launch {
+            val picks = runCatching { Repository.fetchSecondChance() }.getOrDefault(emptyList())
+            set { it.copy(revivePicks = picks, reviveLoading = false, reviveLoaded = true) }
+        }
+    }
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {

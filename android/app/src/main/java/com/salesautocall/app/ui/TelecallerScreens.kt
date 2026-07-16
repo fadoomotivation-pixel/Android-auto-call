@@ -360,6 +360,18 @@ private fun GhostIconButton(icon: androidx.compose.ui.graphics.vector.ImageVecto
     }
 }
 
+/** Lead age from its created/assigned time: "Today" / "1d" / "12d" / "3mo". */
+private fun ageLabel(iso: String?): String? {
+    val ms = instantMillis(iso ?: return null) ?: return null
+    val days = ((System.currentTimeMillis() - ms) / 86_400_000L).toInt()
+    return when {
+        days <= 0 -> "Today"
+        days < 30 -> "${days}d"
+        days < 365 -> "${days / 30}mo"
+        else -> "${days / 365}y"
+    }
+}
+
 /** "Rahul Sharma" → "RS", "Priya" → "PR", no name → "#". For lead avatars. */
 private fun initialsOf(name: String?): String {
     val parts = name?.trim()?.split(Regex("\\s+"))?.filter { it.isNotBlank() } ?: emptyList()
@@ -867,12 +879,14 @@ private fun LeadsDeck(
     newCount: Int,
     pipelineValue: Double,
     scoring: Boolean,
+    reviveCount: Int,
     onRefresh: () -> Unit,
     onScore: () -> Unit,
     onSelect: () -> Unit,
     onDueNow: () -> Unit,
     onHot: () -> Unit,
     onNew: () -> Unit,
+    onRevive: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val brand = brandColorOf(app.company?.brandColor)
@@ -941,6 +955,10 @@ private fun LeadsDeck(
                 DeckStat("⏰", dueNow, "Due now", highlight = dueNow > 0, modifier = Modifier.weight(1f), onClick = onDueNow)
                 DeckStat("🔥", hotCount, "Hot", highlight = false, modifier = Modifier.weight(1f), onClick = onHot)
                 DeckStat("✨", newCount, "New", highlight = false, modifier = Modifier.weight(1f), onClick = onNew)
+                // RAG v13 — the dead pile, mined by AI for revivable deals.
+                if (reviveCount > 0) {
+                    DeckStat("💎", reviveCount, "Revive", highlight = false, modifier = Modifier.weight(1f), onClick = onRevive)
+                }
             }
         }
     }
@@ -984,6 +1002,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
     var sortBy by remember { mutableStateOf("default") }          // "default" | "score" | "recent"
     var sheetOpen by remember { mutableStateOf(false) }
+    var reviveOpen by remember { mutableStateOf(false) } // RAG v13 — Second Chance sheet
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
 
@@ -1076,6 +1095,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     val pipelineValue = app.leads
                         .filter { it.status !in setOf("lost", "not_interested", "dnc") }
                         .sumOf { parseBudgetRupees(it.budget) }
+                    // RAG v13 candidates: said-no + tried-and-gone-cold. Never DNC.
+                    val reviveCount = app.leads.count {
+                        it.status in setOf("lost", "not_interested") ||
+                            (it.temperature == "cold" && it.attempts >= 2 && it.status !in setOf("booked", "dnc"))
+                    }
                     LeadsDeck(
                         app = app,
                         dueNow = dueNow,
@@ -1083,12 +1107,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         newCount = app.leads.count { it.status in newSet && !sleeping(it) },
                         pipelineValue = pipelineValue,
                         scoring = app.aiScoringLeads,
+                        reviveCount = reviveCount,
                         onRefresh = { vm.loadLeads(force = true) },
                         onScore = { vm.scoreLeads() },
                         onSelect = { selectMode = true },
                         onDueNow = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },
                         onHot = { tempFilter = if (tempFilter == "hot") null else "hot" },
                         onNew = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },
+                        onRevive = { reviveOpen = true; vm.loadSecondChance() },
                     )
                 } else {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -1363,6 +1389,92 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         }
     }
 
+    // ── RAG v13 — 💎 Second Chance: AI-mined revivable leads from the dead pile ──
+    if (reviveOpen) {
+        val leadsById = remember(app.leads) { app.leads.associateBy { it.id } }
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { reviveOpen = false }) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("💎", fontSize = 22.sp)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Second Chance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("An old \"no\" + a new offer = today's deal",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (!app.reviveLoading) {
+                        Text("Refresh", style = MaterialTheme.typography.labelMedium, color = Green,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { vm.loadSecondChance(force = true) }.padding(6.dp))
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                when {
+                    app.reviveLoading -> Row(Modifier.padding(vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Green)
+                        Spacer(Modifier.width(10.dp))
+                        Text("Reading your dead leads and fresh offers…",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    app.revivePicks.isEmpty() -> Text(
+                        "Nothing worth reviving right now. As new offers and prices land in your company's knowledge, the AI will find matches here.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 16.dp),
+                    )
+                    else -> Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        app.revivePicks.forEach { p ->
+                            val c = leadsById[p.id] ?: return@forEach
+                            Column(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                                    .padding(12.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(c.name ?: prettyPhone(c.phone), style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                                    c.budget?.takeIf { it.isNotBlank() }?.let {
+                                        Text("₹ $it", style = MaterialTheme.typography.labelMedium, color = Green, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                                if (p.reason.isNotBlank()) {
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(p.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                                }
+                                if (p.opener.isNotBlank()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Column(
+                                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                                            .background(Green.copy(alpha = 0.08f)).padding(10.dp),
+                                    ) {
+                                        Text("SAY THIS 👇", style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold, color = Green, letterSpacing = 0.5.sp)
+                                        Spacer(Modifier.height(3.dp))
+                                        Text(p.opener, style = MaterialTheme.typography.bodySmall, lineHeight = 18.sp)
+                                    }
+                                }
+                                Spacer(Modifier.height(9.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        Modifier.clip(RoundedCornerShape(50)).background(Green)
+                                            .clickable { vm.dialManual(c.phone) }.padding(horizontal = 18.dp, vertical = 8.dp),
+                                    ) { Text("📞 Call", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+                                    Spacer(Modifier.width(12.dp))
+                                    Text("WhatsApp", style = MaterialTheme.typography.labelMedium, color = WaGreen,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.clickable { openWhatsApp(context, c.phone, p.opener.takeIf { it.isNotBlank() }) }.padding(4.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Text("Open", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.clickable { reviveOpen = false; c.id?.let { vm.openLeadDetail(it) } }.padding(4.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     actionFor?.let { c ->
         LeadActionSheet(
             c = c,
@@ -1607,7 +1719,16 @@ private fun LeadCard(
                     Text(c.name ?: prettyPhone(c.phone), style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(7.dp))
+                    // Stage + lead age. A New lead sitting untouched past a day
+                    // turns the age amber — the quiet speed-to-lead nudge.
+                    val age = ageLabel(c.createdAt ?: c.assignedAt)
+                    val stale = age != null && c.status in setOf("new", "queued") && c.attempts == 0 && age != "Today"
                     Text("· ${stage.label}", style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
+                    age?.let {
+                        Text(" · $it", style = MaterialTheme.typography.labelSmall,
+                            color = if (stale) Amber else muted,
+                            fontWeight = if (stale) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
+                    }
                 }
                 Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1627,6 +1748,13 @@ private fun LeadCard(
                             color = if (dueNow) Red else Amber,
                             fontWeight = FontWeight.SemiBold, maxLines = 1,
                         )
+                    }
+                    // Which project they enquired for — the one fact a rep wants
+                    // in hand BEFORE the customer picks up.
+                    c.companyName?.takeIf { it.isNotBlank() }?.let {
+                        Text("  ·  🏢 $it", style = MaterialTheme.typography.bodySmall, color = muted,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false))
                     }
                 }
                 intent?.let { (label, color) ->

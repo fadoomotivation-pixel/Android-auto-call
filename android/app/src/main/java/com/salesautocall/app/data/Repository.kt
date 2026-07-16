@@ -485,6 +485,32 @@ object Repository {
         return assistantChat(listOf(ChatMsg("user", prompt)), lead = contact)
     }
 
+    /** RAG v13 — one "Second Chance" pick: a dead lead worth calling again + why + the re-opening line. */
+    data class RevivePick(val id: String, val reason: String, val opener: String)
+
+    /**
+     * RAG v13 — "Second Chance". Asks the AI to mine the rep's dead pile
+     * (lost / not interested / gone-cold, never DNC) for up to five leads a
+     * fresh company offer could revive. Returns [] on any failure.
+     */
+    suspend fun fetchSecondChance(): List<RevivePick> {
+        val resp = client.functions.invoke(function = "second-chance", body = buildJsonObject { })
+        if (resp.status.value !in 200..299) return emptyList()
+        return runCatching {
+            val obj = resp.body<JsonObject>()
+            if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return@runCatching emptyList()
+            (obj["picks"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { el ->
+                val p = el as? JsonObject ?: return@mapNotNull null
+                val id = p["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                RevivePick(
+                    id = id,
+                    reason = p["reason"]?.jsonPrimitive?.contentOrNull ?: "",
+                    opener = p["opener"]?.jsonPrimitive?.contentOrNull ?: "",
+                )
+            } ?: emptyList()
+        }.getOrDefault(emptyList())
+    }
+
     suspend fun recentCalls(limit: Int = 100): List<CallLog> {
         val uid = currentUserId() ?: return emptyList()
         return client.from("call_logs").select {
