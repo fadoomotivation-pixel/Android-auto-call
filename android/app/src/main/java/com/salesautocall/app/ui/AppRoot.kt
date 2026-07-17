@@ -673,7 +673,7 @@ private fun MainShell(vm: MainViewModel) {
 }
 
 // ---- The app's one jade accent, theme-aware. ----
-internal fun jadeAccent(dark: Boolean) = if (dark) Color(0xFF2BB894) else Color(0xFF0E7C66)
+internal fun jadeAccent(dark: Boolean) = if (dark) Color(0xFF8189E6) else Color(0xFF4353B8)
 
 /**
  * The floating call bar — the app's bottom navigation, shared by MainShell and

@@ -38,7 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val CallGreen = Color(0xFF0E7C66)
+private val CallGreen = Color(0xFF4353B8)
 
 private data class Key(val digit: String, val letters: String = "")
 

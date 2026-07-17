@@ -85,7 +85,7 @@ private val CardBg = Color.White
 private val Ink = Color(0xFF0E1113)
 private val SubInk = Color(0xFF616B66)
 private val Hair = Color(0xFFEBEFED)
-private val JadeL = Color(0xFF0E7C66)
+private val JadeL = Color(0xFF4353B8)
 private val GreenL = JadeL          // success = jade
 private val IndigoL = JadeL         // primary accent = jade
 private val PurpleL = JadeL         // "current step" = jade

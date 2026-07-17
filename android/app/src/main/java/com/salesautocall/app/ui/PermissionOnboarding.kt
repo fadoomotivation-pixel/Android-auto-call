@@ -165,4 +165,4 @@ fun PermissionOnboarding(onDone: () -> Unit) {
     }
 }
 
-private val Color16A34A = androidx.compose.ui.graphics.Color(0xFF0E7C66)
+private val Color16A34A = androidx.compose.ui.graphics.Color(0xFF4353B8)

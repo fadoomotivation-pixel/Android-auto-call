@@ -80,7 +80,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 // ── shared helpers (file-private copies; intentionally self-contained) ──
-private val OkGreen = Color(0xFF0E7C66)
+private val OkGreen = Color(0xFF4353B8)
 private val WarnAmber = Color(0xFFB8860B)
 private val BadRed = Color(0xFFC0452C)
 
@@ -249,7 +249,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
         item {
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF0E7C66), Color(0xFF0A4A3D)))).padding(20.dp),
+                    .background(Brush.linearGradient(listOf(Color(0xFF4353B8), Color(0xFF333A8F)))).padding(20.dp),
             ) {
                 Column {
                     val selfie = decodeSelfie(a?.selfie)
@@ -301,10 +301,10 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (!onShift && !done) { Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF0A4A3D), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
+                            if (!onShift && !done) { Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF333A8F), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
                             Text(
                                 when { app.attendanceBusy -> "Please wait…"; done -> "Shift done for today ✓"; onShift -> "Punch out"; else -> "Punch in with selfie" },
-                                color = Color(0xFF0A4A3D), fontWeight = FontWeight.Bold,
+                                color = Color(0xFF333A8F), fontWeight = FontWeight.Bold,
                             )
                         }
                     }
@@ -573,7 +573,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
 
         item {
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF0E7C66), Color(0xFF0A4A3D)))).padding(20.dp)) {
+                .background(Brush.linearGradient(listOf(Color(0xFF4353B8), Color(0xFF333A8F)))).padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(46.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = "AI", tint = Color.White)

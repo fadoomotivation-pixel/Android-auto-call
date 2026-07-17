@@ -64,7 +64,7 @@ private val CallText = Color(0xFFEDF1FA)
 private val CallMuted = Color(0xFF8A97AE)
 private val EndRed = Color(0xFFD64545)
 private val RecRed = Color(0xFFE05B5B)
-private val OkGreen = Color(0xFF2BB894)
+private val OkGreen = Color(0xFF8189E6)
 private val ChipBg = Color(0x1FFFFFFF)
 
 /**
@@ -134,7 +134,7 @@ fun SimCallScreen() {
             val label = displayName ?: ui.phone
             Box(
                 Modifier.size(100.dp).clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFF2BB894), Color(0xFF0E7C66)))),
+                    .background(Brush.linearGradient(listOf(Color(0xFF8189E6), Color(0xFF4353B8)))),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(label.trim().take(1).uppercase().ifBlank { "#" }, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Color.White)

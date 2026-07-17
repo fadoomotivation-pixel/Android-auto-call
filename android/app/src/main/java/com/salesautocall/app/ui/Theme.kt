@@ -19,20 +19,21 @@ import com.salesautocall.app.R
 // ══════════════════════════════════════════════════════════════
 //  DESIGN SYSTEM — one palette, one voice
 //
-//  Anchor: JADE. Green = money, growth, calm — the right psychology
-//  for a real-estate sales floor someone stares at for 8 hours.
-//  Everything else is a warm neutral (green-tinted greys, never
-//  blue-cold) plus exactly TWO semantic accents used sparingly:
+//  Anchor: INDIGO. Deep, calm blue-indigo — the universal colour of
+//  trust and professional software (finance, enterprise CRMs). It is
+//  community-neutral, low-saturation so it never tires the eye over an
+//  8-hour shift, and premium. Plus exactly TWO semantic accents:
 //    · Amber (muted brass)     = attention — "warm", pending, retry
 //    · Terracotta (muted red)  = urgency  — "hot", overdue, destructive
-//  No decorative purples/blues/pinks. Colour appears only when it
-//  MEANS something; the rest of the canvas stays quiet paper.
+//  Colour appears only when it MEANS something; the rest stays quiet
+//  near-white paper. (WhatsApp's own green stays only on WhatsApp
+//  buttons — that's its global brand, not ours.)
 // ══════════════════════════════════════════════════════════════
-private val Jade = Color(0xFF0E7C66)          // primary — action, success, money
-private val JadeDeep = Color(0xFF0A3D33)      // pressed / on-container ink
-private val JadeBright = Color(0xFF2BB894)    // dark-theme primary (holds contrast)
-private val JadeMist = Color(0xFFD9EBE4)      // light container
-private val Sage = Color(0xFF44615A)          // secondary — quiet supporting green-grey
+private val Jade = Color(0xFF4353B8)          // primary — action, success, money (indigo)
+private val JadeDeep = Color(0xFF2A2E6B)      // pressed / on-container ink
+private val JadeBright = Color(0xFF8189E6)    // dark-theme primary (holds contrast)
+private val JadeMist = Color(0xFFE4E6F6)      // light container
+private val Sage = Color(0xFF565C7A)          // secondary — quiet indigo-grey
 
 private val LightColors = lightColorScheme(
     primary = Jade,
@@ -41,8 +42,8 @@ private val LightColors = lightColorScheme(
     onPrimaryContainer = JadeDeep,
     secondary = Sage,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE9EEEB),
-    onSecondaryContainer = Color(0xFF243B34),
+    secondaryContainer = Color(0xFFEAECF5),
+    onSecondaryContainer = Color(0xFF2A2E52),
     tertiary = Color(0xFF8A6D3B),             // muted bronze — value/pipeline
     onTertiary = Color.White,
     tertiaryContainer = Color(0xFFF0E6D2),
@@ -64,25 +65,25 @@ private val LightColors = lightColorScheme(
 
 private val DarkColors = darkColorScheme(
     primary = JadeBright,
-    onPrimary = Color(0xFF06251E),
+    onPrimary = Color(0xFF1A1E52),
     primaryContainer = JadeDeep,
-    onPrimaryContainer = Color(0xFFBFE8DB),
-    secondary = Color(0xFF9DB8AF),
-    onSecondary = Color(0xFF1C2E28),
-    secondaryContainer = Color(0xFF2C423B),
-    onSecondaryContainer = Color(0xFFD6E5DF),
+    onPrimaryContainer = Color(0xFFD9DCF7),
+    secondary = Color(0xFFAEB2CE),
+    onSecondary = Color(0xFF1B1F3A),
+    secondaryContainer = Color(0xFF2E3352),
+    onSecondaryContainer = Color(0xFFDCDFF2),
     tertiary = Color(0xFFC9A96A),
     onTertiary = Color(0xFF2E2413),
     tertiaryContainer = Color(0xFF4A3A1D),
     onTertiaryContainer = Color(0xFFEBDDBF),
-    background = Color(0xFF0E1513),           // deep green-black, not blue-black
-    onBackground = Color(0xFFE9EFEC),
-    surface = Color(0xFF171F1C),
-    onSurface = Color(0xFFE9EFEC),
-    surfaceVariant = Color(0xFF212B27),
-    onSurfaceVariant = Color(0xFF95A39D),
-    outline = Color(0xFF3A4741),
-    outlineVariant = Color(0xFF27322D),
+    background = Color(0xFF0E1016),           // deep cool graphite (neutral, not green)
+    onBackground = Color(0xFFECEDF2),
+    surface = Color(0xFF171A22),
+    onSurface = Color(0xFFECEDF2),
+    surfaceVariant = Color(0xFF232734),
+    onSurfaceVariant = Color(0xFF9AA0B4),
+    outline = Color(0xFF3A4050),
+    outlineVariant = Color(0xFF272B37),
     error = Color(0xFFE0705A),
     onError = Color(0xFF330E06),
 )

@@ -64,7 +64,7 @@ import com.salesautocall.app.data.DeviceCall
 
 // Paper & ink: jade is the only accent; heat/warnings stay muted, never neon.
 private val WhatsAppGreen = Color(0xFF25D366) // brand — kept recognisable
-private val CJade = Color(0xFF0E7C66)
+private val CJade = Color(0xFF4353B8)
 private val CTerra = Color(0xFFC0452C)   // missed / failed
 private val CAmberM = Color(0xFFB8860B)  // no answer
 private val CSlate = Color(0xFF5D6862)   // outgoing / neutral
