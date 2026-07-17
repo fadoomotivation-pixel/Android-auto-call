@@ -103,7 +103,7 @@ import kotlin.math.abs
 // slate (unknown) → sea (talking) → amber (interest heating) → plum (visit)
 // → bronze (money forming) → jade (money). Every hue sits in the same muted
 // saturation band, so nothing shouts and nothing looks odd next to anything.
-private val Green = Color(0xFF0E7C66)   // success = jade
+private val Green = Color(0xFF4353B8)   // success = jade
 private val Amber = Color(0xFFB8860B)   // muted brass — attention / "warm"
 private val Red = Color(0xFFC0452C)     // muted terracotta — urgency / "hot"
 private val Purple = Color(0xFF75629B)  // softened plum — site visit
@@ -115,7 +115,7 @@ private val WaGreen = Color(0xFF25D366) // WhatsApp brand — kept recognisable
 
 private data class Stage(val key: String, val label: String, val statuses: Set<String>, val color: Color)
 
-private val Teal = Color(0xFF2E8B74)    // jade-adjacent: token money
+private val Teal = Color(0xFF5A62C9)    // jade-adjacent: token money
 
 /** Real-estate pipeline, in order. "Negotiation" folds in the older "proposal"
  *  status; "Token Paid" is the booking-token money milestone before a full booking. */
@@ -229,8 +229,8 @@ private fun initials(name: String): String =
 
 // One saturation band, hues from the system — avatars vary without shouting.
 private val avatarColors = listOf(
-    Color(0xFF6A7B85), Color(0xFF75629B), Color(0xFF3E7F8A), Color(0xFF0E7C66),
-    Color(0xFF8A6D3B), Color(0xFF96617A), Color(0xFF4E7A8C), Color(0xFF2E8B74),
+    Color(0xFF6A7B85), Color(0xFF75629B), Color(0xFF3E7F8A), Color(0xFF4353B8),
+    Color(0xFF8A6D3B), Color(0xFF96617A), Color(0xFF4E7A8C), Color(0xFF5A62C9),
 )
 
 private fun colorFor(seed: String): Color = avatarColors[abs(seed.hashCode()) % avatarColors.size]
@@ -738,9 +738,9 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
     val done = a?.punchOutAt != null
     // White-label: the hero wears the company's brand colour + name.
     val brand = brandColorOf(app.company?.brandColor)
-    val g0 = brand ?: Color(0xFF0E7C66)
-    val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF0A4A3D)
-    val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF0A4A3D)
+    val g0 = brand ?: Color(0xFF4353B8)
+    val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF333A8F)
+    val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF333A8F)
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
             .background(Brush.linearGradient(listOf(g0, g1)))
@@ -892,7 +892,7 @@ private fun LeadsDeck(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val brand = brandColorOf(app.company?.brandColor)
-    val g0 = brand ?: Color(0xFF0E7C66)
+    val g0 = brand ?: Color(0xFF4353B8)
     val g1 = darken(g0, 0.72f)
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
@@ -1145,11 +1145,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                             focusedContainerColor = MaterialTheme.colorScheme.surface,
                             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                            focusedBorderColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66),
+                            focusedBorderColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8),
                         ),
                     )
                     val filtersOn = stageFilter != null || tempFilter != null || quick != null || sortBy != "default"
-                    val jadeBtn = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66)
+                    val jadeBtn = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
                     Box(
                         Modifier.size(48.dp).clip(CircleShape)
                             .background(if (filtersOn) jadeBtn else MaterialTheme.colorScheme.surface)
@@ -1637,7 +1637,7 @@ private fun LeadCard(
 ) {
     val stage = stageOf(c.status)
     val container = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
-    val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF2BB894) else Color(0xFF0E7C66)
+    val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
     // Speed-first gestures: swipe right → call, swipe left → WhatsApp. The state

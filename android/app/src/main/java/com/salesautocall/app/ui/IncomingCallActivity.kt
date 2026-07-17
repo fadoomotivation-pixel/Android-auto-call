@@ -110,7 +110,7 @@ class IncomingCallActivity : ComponentActivity() {
                         } else {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                 CallButton("Decline", Icons.Default.CallEnd, Color(0xFFD64545)) { decline() }
-                                CallButton("Answer", Icons.Default.Call, Color(0xFF0E7C66)) {
+                                CallButton("Answer", Icons.Default.Call, Color(0xFF4353B8)) {
                                     doAccept(); inCall = true
                                 }
                             }
