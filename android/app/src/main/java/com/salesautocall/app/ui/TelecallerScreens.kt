@@ -1702,17 +1702,19 @@ private fun LeadCard(
                 .padding(horizontal = 15.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Initials avatar — the lead becomes a person, not a row. Stage colour
-            // tints the disc; a temperature ring makes hot/warm glanceable.
+            // Initials avatar — calm graphite by default (zero visual noise). The
+            // ONLY colour it can wear is a temperature ring for a hot/warm lead;
+            // otherwise the green Call button is the single accent on the row.
             val ring = when (c.temperature) { "hot" -> Red; "warm" -> Amber; else -> null }
+            val discInk = MaterialTheme.colorScheme.onSurfaceVariant
             Box(
                 Modifier.size(44.dp).clip(CircleShape)
-                    .background(stage.color.copy(alpha = 0.14f))
+                    .background(discInk.copy(alpha = 0.08f))
                     .then(ring?.let { Modifier.border(2.dp, it, CircleShape) } ?: Modifier),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(initialsOf(c.name), style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold, color = stage.color)
+                    fontWeight = FontWeight.Bold, color = ring ?: discInk)
             }
             Spacer(Modifier.width(12.dp))
 

@@ -61,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -79,11 +80,11 @@ import com.salesautocall.app.data.Wada
 // The old rainbow constants keep their names but now resolve to ink/jade (with
 // muted terracotta/amber reserved for genuine heat & warnings), so every
 // call-site collapses to the calm palette without structural edits.
-private val ScreenBg = Color(0xFFF4F5F2)
+private val ScreenBg = Color(0xFFFAFBFB)
 private val CardBg = Color.White
-private val Ink = Color(0xFF171D1A)
-private val SubInk = Color(0xFF5D6862)
-private val Hair = Color(0xFFE2E7E1)
+private val Ink = Color(0xFF0E1113)
+private val SubInk = Color(0xFF616B66)
+private val Hair = Color(0xFFEBEFED)
 private val JadeL = Color(0xFF0E7C66)
 private val GreenL = JadeL          // success = jade
 private val IndigoL = JadeL         // primary accent = jade
@@ -267,6 +268,16 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     )
                 }
 
+                // ---- Primary actions first (guided flow: Call → WhatsApp → …) ----
+                item {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ActionTile(Icons.Default.Call, "Call Now", BlueL, Modifier.weight(1f)) { doCall() }
+                        ActionTile(Icons.Default.Chat, "WhatsApp", WhatsGreen, Modifier.weight(1f)) { doWhats() }
+                        ActionTile(Icons.Default.CalendarMonth, "Set Reminder", PurpleL, Modifier.weight(1f)) { scheduleOpen = true }
+                        ActionTile(Icons.Default.MoreHoriz, "More", SubInk, Modifier.weight(1f)) { moreOpen = true }
+                    }
+                }
+
                 // ---- Voice note ----
                 item { VoiceNoteCard(vm, recording = app.voiceRecording, uploading = app.voiceUploading) }
                 items(app.voiceNotes, key = { it.id ?: it.audioPath }) { n ->
@@ -279,16 +290,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             onRefreshAi = { vm.refreshVoiceNotes() },
                             onApplyDisposition = { key -> contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) } },
                         )
-                    }
-                }
-
-                // ---- Action grid: Call / WhatsApp / Reminder / More ----
-                item {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ActionTile(Icons.Default.Call, "Call Now", BlueL, Modifier.weight(1f)) { doCall() }
-                        ActionTile(Icons.Default.Chat, "WhatsApp", WhatsGreen, Modifier.weight(1f)) { doWhats() }
-                        ActionTile(Icons.Default.CalendarMonth, "Set Reminder", PurpleL, Modifier.weight(1f)) { scheduleOpen = true }
-                        ActionTile(Icons.Default.MoreHoriz, "More", SubInk, Modifier.weight(1f)) { moreOpen = true }
                     }
                 }
 
@@ -653,11 +654,16 @@ fun LeadDetailScreen(vm: MainViewModel) {
 
 // ---------------- Building blocks ----------------
 
+// Soft, Apple-ish depth — a faint ambient shadow instead of a hard hairline, so
+// white cards float a hair above the near-white canvas. Cheap to draw (no blur).
+private val SoftShadow = Color(0x14101820)
+
 @Composable
 private fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(20.dp))
-            .background(CardBg).border(1.dp, Hair, RoundedCornerShape(20.dp)).padding(18.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            .shadow(6.dp, RoundedCornerShape(20.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(RoundedCornerShape(20.dp)).background(CardBg).padding(18.dp),
         content = content,
     )
 }
@@ -665,7 +671,8 @@ private fun SectionCard(content: @Composable androidx.compose.foundation.layout.
 @Composable
 private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
-        modifier.clip(RoundedCornerShape(18.dp)).background(CardBg).border(1.dp, Hair, RoundedCornerShape(18.dp))
+        modifier.shadow(5.dp, RoundedCornerShape(18.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(RoundedCornerShape(18.dp)).background(CardBg)
             .heightIn(min = 96.dp).padding(12.dp),
     ) {
         Text(title, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SubInk,
@@ -678,8 +685,8 @@ private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Com
 @Composable
 private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) {
     Box(
-        Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(CardBg)
-            .border(1.dp, Hair, RoundedCornerShape(12.dp)).clickable { onClick() },
+        Modifier.size(42.dp).shadow(4.dp, RoundedCornerShape(12.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(RoundedCornerShape(12.dp)).background(CardBg).clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp)) }
 }
@@ -687,7 +694,8 @@ private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
 @Composable
 private fun ActionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
     Column(
-        modifier.clip(RoundedCornerShape(16.dp)).background(CardBg).border(1.dp, Hair, RoundedCornerShape(16.dp))
+        modifier.shadow(5.dp, RoundedCornerShape(16.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(RoundedCornerShape(16.dp)).background(CardBg)
             .clickable { onClick() }.padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -938,8 +946,9 @@ private fun AiCoachCard(
     )
 
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
-            .background(CardBg).border(1.dp, Hair, RoundedCornerShape(18.dp)).padding(16.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            .shadow(6.dp, RoundedCornerShape(20.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(RoundedCornerShape(20.dp)).background(CardBg).padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("🤖", fontSize = 18.sp)
