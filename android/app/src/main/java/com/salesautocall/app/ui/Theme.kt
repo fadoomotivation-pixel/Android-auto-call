@@ -41,20 +41,23 @@ private val LightColors = lightColorScheme(
     onPrimaryContainer = JadeDeep,
     secondary = Sage,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFE3EBE7),
+    secondaryContainer = Color(0xFFE9EEEB),
     onSecondaryContainer = Color(0xFF243B34),
     tertiary = Color(0xFF8A6D3B),             // muted bronze — value/pipeline
     onTertiary = Color.White,
     tertiaryContainer = Color(0xFFF0E6D2),
     onTertiaryContainer = Color(0xFF4A3A1D),
-    background = Color(0xFFF4F5F2),           // warm paper — zero glare
-    onBackground = Color(0xFF171D1A),         // warm charcoal, never pure black
+    // Premium pass: a near-white cool canvas (not clinical #FFFFFF — that glares
+    // over an 8-hour shift on cheap screens) with pure-white surfaces that lift
+    // off it, and graphite ink. Green is the ONLY action colour.
+    background = Color(0xFFFAFBFB),
+    onBackground = Color(0xFF0E1113),         // graphite, near-black
     surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF171D1A),
-    surfaceVariant = Color(0xFFECEFEA),
-    onSurfaceVariant = Color(0xFF5D6862),     // muted ink for secondary text
-    outline = Color(0xFFC6CFC9),
-    outlineVariant = Color(0xFFE2E7E1),
+    onSurface = Color(0xFF0E1113),
+    surfaceVariant = Color(0xFFF2F4F3),
+    onSurfaceVariant = Color(0xFF616B66),     // muted ink for secondary text
+    outline = Color(0xFFDCE1DE),
+    outlineVariant = Color(0xFFEBEFED),        // barely-there hairline
     error = Color(0xFFC0452C),                // terracotta — urgent, not alarming
     onError = Color.White,
 )
