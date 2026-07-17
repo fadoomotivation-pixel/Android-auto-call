@@ -492,24 +492,53 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
                     }
                 }
             } else {
+                // No folder connected → the app records CALLS ITSELF (SimRecorder,
+                // speaker fallback). Lead with that so reps — especially on MIUI /
+                // Redmi where no third-party recorder works — know recording is ON
+                // and needs no extra app. The folder is an optional quality upgrade.
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("✓ Built-in recording is ON", style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Every call you make from inside the app is recorded automatically — no extra recorder app needed. " +
+                                "On phones like Redmi / MIUI the call goes on speaker so both sides are captured.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Optional — better quality", style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "If your phone already records calls to a folder (e.g. some OnePlus, Samsung), connect it for clearer, no-speaker recordings.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
                 // Detected suggestion: one tap opens the picker right on the folder.
                 detected?.let { path ->
                     Surface(
                         shape = MaterialTheme.shapes.medium,
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                         modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     ) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("Found your recordings", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text("Found a recordings folder", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                 Text(path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
                             Button(onClick = { launchAt(path) }) { Text("Use this") }
                         }
                     }
                 }
-                Button(onClick = { launchAt(detected) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (detected != null) "Choose a different folder" else "Select recording folder")
+                OutlinedButton(onClick = { launchAt(detected) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (detected != null) "Choose a different folder" else "Connect a recording folder")
                 }
             }
         }
