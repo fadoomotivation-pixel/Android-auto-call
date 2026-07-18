@@ -306,7 +306,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun checkForUpdate(manual: Boolean = false) {
         viewModelScope.launch {
             if (manual) set { it.copy(checkingUpdate = true) }
-            var rel = runCatching { AppUpdater.checkForUpdate() }.getOrNull()
+            val result = runCatching { AppUpdater.check() }.getOrElse {
+                AppUpdater.Result.Failed(it.message ?: "error")
+            }
+            var rel = (result as? AppUpdater.Result.Available)?.release
             if (rel != null) {
                 // Super-admin can force everyone on this channel to update (web toggle).
                 val policy = runCatching {
@@ -316,11 +319,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     (com.salesautocall.app.BuildConfig.VERSION_CODE < (policy?.minVersionCode ?: 0))
                 rel = rel.copy(forced = forced)
             }
+            // Only speak up on a MANUAL check: found → the prompt shows; up-to-date
+            // → confirm; failed → say so honestly (don't pretend it's the latest).
+            val note = when {
+                !manual -> null
+                rel != null -> null
+                result is AppUpdater.Result.Failed ->
+                    "Couldn't check for updates — check your internet and try again."
+                else -> "You're on the latest version ✓ (v${com.salesautocall.app.BuildConfig.VERSION_NAME})"
+            }
             set {
                 it.copy(
                     update = rel,
                     checkingUpdate = false,
-                    message = if (manual && rel == null) "You're on the latest version ✓" else it.message,
+                    message = note ?: it.message,
                 )
             }
             // Makkhan: as soon as an update is found, download it in the background

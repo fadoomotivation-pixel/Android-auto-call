@@ -45,30 +45,49 @@ object AppUpdater {
         val forced: Boolean = false,
     )
 
-    /** The latest published release if it's newer than this build, else null. */
-    suspend fun checkForUpdate(): Release? = withContext(Dispatchers.IO) {
-        runCatching {
+    /** Outcome of an update check, so the UI can tell "no update" apart from
+     *  "couldn't reach the server" instead of lying "you're up to date". */
+    sealed interface Result {
+        data class Available(val release: Release) : Result
+        data object UpToDate : Result
+        /** The manifest couldn't be fetched/parsed (offline, 404, timeout…). */
+        data class Failed(val reason: String) : Result
+    }
+
+    /** Fetches the channel manifest and classifies the result. */
+    suspend fun check(): Result = withContext(Dispatchers.IO) {
+        val body = runCatching {
             val conn = (URL(MANIFEST_URL).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 8000
                 readTimeout = 8000
                 instanceFollowRedirects = true
             }
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            val code = conn.responseCode
+            if (code !in 200..299) throw java.io.IOException("HTTP $code")
+            conn.inputStream.bufferedReader().use { it.readText() }
+        }.getOrElse { e -> return@withContext Result.Failed(e.message ?: "network error") }
+
+        runCatching {
             val o = JSONObject(body)
             val vc = o.optInt("versionCode", 0)
-            // Forced when the manifest marks the release mandatory, or when this
-            // build is older than a published minimum supported version.
+            if (vc <= BuildConfig.VERSION_CODE) return@runCatching Result.UpToDate
             val forced = o.optBoolean("mandatory", false) ||
                 BuildConfig.VERSION_CODE < o.optInt("minVersionCode", 0)
-            Release(
-                versionCode = vc,
-                versionName = o.optString("versionName", ""),
-                notes = o.optString("notes", ""),
-                apkUrl = o.optString("apkUrl", DEFAULT_APK_URL).ifBlank { DEFAULT_APK_URL },
-                forced = forced,
-            ).takeIf { vc > BuildConfig.VERSION_CODE }
-        }.getOrNull()
+            Result.Available(
+                Release(
+                    versionCode = vc,
+                    versionName = o.optString("versionName", ""),
+                    notes = o.optString("notes", ""),
+                    apkUrl = o.optString("apkUrl", DEFAULT_APK_URL).ifBlank { DEFAULT_APK_URL },
+                    forced = forced,
+                ),
+            )
+        }.getOrElse { e -> Result.Failed(e.message ?: "bad manifest") }
     }
+
+    /** The newer release, or null (up-to-date OR failed). Kept for callers that
+     *  don't care why — [check] distinguishes the two. */
+    suspend fun checkForUpdate(): Release? = (check() as? Result.Available)?.release
 
     /**
      * Downloads the update APK to app storage in the background, reporting
