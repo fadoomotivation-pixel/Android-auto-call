@@ -57,6 +57,12 @@ class LeadRingReceiver : BroadcastReceiver() {
                 answered = false
                 NotificationManagerCompat.from(context).cancel(RING_ID)
                 val hit = LeadRing.lookup(context, num) ?: return
+                // A lead's inbound call just ended on this phone — pull it into
+                // the CRM NOW (log within seconds, recording ~2 min later once
+                // the phone's recorder finishes writing the file) instead of
+                // waiting for the hourly sync. The admin sees the call, its
+                // recording and the AI summary almost live.
+                scheduleImmediateSync(context)
                 if (wasAnswered) {
                     notify(context, LOG_ID, logNotification(context, hit))
                 } else {
@@ -148,6 +154,32 @@ class LeadRingReceiver : BroadcastReceiver() {
     private fun notify(context: Context, id: Int, n: android.app.Notification) {
         val nm = NotificationManagerCompat.from(context)
         if (nm.areNotificationsEnabled()) runCatching { nm.notify(id, n) }
+    }
+
+    /** One-shot call-log sync right away + a recording harvest ~2 minutes later
+     *  (the phone's recorder needs a moment to close the file). Unique names
+     *  coalesce bursts, e.g. a missed call followed by an instant retry. */
+    private fun scheduleImmediateSync(context: Context) = runCatching {
+        val net = androidx.work.Constraints.Builder()
+            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build()
+        val wm = androidx.work.WorkManager.getInstance(context)
+        wm.enqueueUniqueWork(
+            "lead_call_ended_log",
+            androidx.work.ExistingWorkPolicy.REPLACE,
+            androidx.work.OneTimeWorkRequestBuilder<com.salesautocall.app.data.CallLogSyncWorker>()
+                .setConstraints(net).build(),
+        )
+        wm.enqueueUniqueWork(
+            "lead_call_ended_recording",
+            androidx.work.ExistingWorkPolicy.REPLACE,
+            androidx.work.OneTimeWorkRequestBuilder<com.salesautocall.app.data.RecordingSyncWorker>()
+                .setConstraints(net)
+                .setInputData(
+                    androidx.work.Data.Builder()
+                        .putBoolean(com.salesautocall.app.data.RecordingSyncWorker.KEY_FORCE, true).build(),
+                )
+                .setInitialDelay(2, java.util.concurrent.TimeUnit.MINUTES).build(),
+        )
     }
 
     companion object {

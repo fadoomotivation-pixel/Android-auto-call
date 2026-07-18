@@ -24,7 +24,10 @@ class RecordingSyncWorker(
     override suspend fun doWork(): Result {
         val hour = LocalTime.now().hour
         // Only 10 AM … 7 PM (19:00). Outside that, do nothing but stay scheduled.
-        if (hour < START_HOUR || hour >= END_HOUR) return Result.success()
+        // A call-ended one-shot (KEY_FORCE) skips the gate: that recording is
+        // fresh and the rep is clearly still working, whatever the clock says.
+        val force = inputData.getBoolean(KEY_FORCE, false)
+        if (!force && (hour < START_HOUR || hour >= END_HOUR)) return Result.success()
         return try {
             // Look back a couple of days so a missed run still catches up.
             val since = Instant.now().minus(2, ChronoUnit.DAYS).toString()
@@ -36,8 +39,11 @@ class RecordingSyncWorker(
         }
     }
 
-    private companion object {
-        const val START_HOUR = 10
-        const val END_HOUR = 19
+    companion object {
+        private const val START_HOUR = 10
+        private const val END_HOUR = 19
+
+        /** Input-data flag: run even outside working hours (call-ended one-shots). */
+        const val KEY_FORCE = "force"
     }
 }
