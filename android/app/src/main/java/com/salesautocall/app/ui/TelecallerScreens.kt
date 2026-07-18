@@ -421,6 +421,14 @@ private fun formatRupees(v: Double): String = when {
     else -> "₹%.0f".format(v)
 }
 
+/** Tidy a raw, human-entered budget for display: drop any leading ₹ (the row
+ *  prints its own), turn underscores into spaces and collapse whitespace so an
+ *  imported "₹5–10_लाख" reads as a clean "5–10 लाख". Ranges and native units
+ *  ("लाख"/"Cr") stay intact. Null/blank in → null out. */
+internal fun budgetLabel(s: String?): String? =
+    s?.replace('_', ' ')?.replace(Regex("\\s+"), " ")?.trim()
+        ?.trimStart('₹', ' ')?.trim()?.takeIf { it.isNotBlank() }
+
 /** 0-100 composite of calls-vs-goal and connect rate for the Today gauge. */
 private fun perfScore(app: AppState): Int {
     val callPart = if (app.dailyGoal > 0) (app.todayCalls.toFloat() / app.dailyGoal).coerceIn(0f, 1f) else 0f
@@ -1434,7 +1442,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(c.name ?: prettyPhone(c.phone), style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
-                                    c.budget?.takeIf { it.isNotBlank() }?.let {
+                                    budgetLabel(c.budget)?.let {
                                         Text("₹ $it", style = MaterialTheme.typography.labelMedium, color = Green, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
@@ -1739,8 +1747,15 @@ private fun LeadCard(
                     Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted, letterSpacing = 0.3.sp)
                     // Budget rides on the phone line so it's ALWAYS visible —
                     // especially on New leads where the intent line is busy.
-                    c.budget?.takeIf { it.isNotBlank() }?.let {
+                    budgetLabel(c.budget)?.let {
                         Text("  ·  ₹ $it", style = MaterialTheme.typography.bodySmall, color = jade, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
+                    // Where the lead is — the city/area the rep asks first. Shown
+                    // right on the row so it's never a tap away.
+                    c.territory?.takeIf { it.isNotBlank() }?.let {
+                        Text("  ·  📍 $it", style = MaterialTheme.typography.bodySmall, color = muted,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false))
                     }
                     if (c.attempts > 0) {
                         // "Attempt 2/3" — which try comes NEXT, loud when its time is due.
@@ -2039,18 +2054,22 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
         text = {
             if (scheduleFor == null) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    // Context strip: last note + budget, always in front of the rep.
+                    // Context strip: budget + place + last note, always in front of the rep.
                     val lastNote = lead?.notes?.takeIf { it.isNotBlank() }
-                    val budget = lead?.budget?.takeIf { it.isNotBlank() }
-                    if (lastNote != null || budget != null) {
+                    val budget = budgetLabel(lead?.budget)
+                    val place = lead?.territory?.takeIf { it.isNotBlank() }
+                    if (lastNote != null || budget != null || place != null) {
                         Column(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
                                 .padding(horizontal = 12.dp, vertical = 9.dp),
                         ) {
-                            budget?.let {
-                                Text("💰 $it", style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (budget != null || place != null) {
+                                Text(
+                                    listOfNotNull(budget?.let { "💰 ₹ $it" }, place?.let { "📍 $it" }).joinToString("   "),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                             lastNote?.let {
                                 Text("📝 $it", style = MaterialTheme.typography.bodySmall, maxLines = 2,
