@@ -1048,6 +1048,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val newSet = setOf("new", "queued", "no_answer", "busy", "wrong_person", "callback")
     val workingSet = setOf("called", "follow_up", "interested")
     val pipelineSet = setOf("site_visit", "negotiation", "proposal", "token_paid")
+    // The graveyard is still data: reps need to SEE their lost/not-interested
+    // leads (to revive one, check history, or answer "kya bola tha?"), they just
+    // must never clutter the working lists.
+    val closedSet = setOf("lost", "not_interested", "dnc")
     val nowMs = System.currentTimeMillis()
     fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
     fun sleeping(c: Contact): Boolean {
@@ -1063,6 +1067,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             "working" -> app.leads.filter { it.status in workingSet || (it.status in newSet && sleeping(it)) }
             "pipeline" -> app.leads.filter { it.status in pipelineSet }
             "booked" -> app.leads.filter { it.status == "booked" }
+            "closed" -> app.leads.filter { it.status in closedSet }
             else -> app.leads
         }
     }
@@ -1180,6 +1185,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         "working" to Triple("Working", app.leads.count { it.status in workingSet || (it.status in newSet && sleeping(it)) }, Indigo),
                         "pipeline" to Triple("Pipeline", app.leads.count { it.status in pipelineSet }, Purple),
                         "booked" to Triple("Booked", app.leads.count { it.status == "booked" }, Green),
+                        "closed" to Triple("Closed", app.leads.count { it.status in closedSet }, Slate),
                     )
                     segments.forEach { (key, seg) ->
                         val (label, n, color) = seg

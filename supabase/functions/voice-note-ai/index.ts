@@ -72,9 +72,13 @@ function systemPrompt(): string {
     `Today is ${weekday}, ${date} (India). ` +
     'Reply ONLY with JSON: {"summary": string, "disposition": string, ' +
     '"site_visit_date": string|null, "site_visit_time": string|null, ' +
+    '"site_visit_cancelled": boolean, ' +
     '"callback_date": string|null, "callback_time": string|null, ' +
+    '"callback_requested": boolean, ' +
     '"budget": string|null, "temperature": string|null, "next_step": string|null, ' +
-    '"phone_invalid": boolean, "requirements": {"bhk": string|null, "size": string|null, ' +
+    '"customer_name": string|null, "token_amount": number|null, ' +
+    '"phone_invalid": boolean, "facts": string[], ' +
+    '"requirements": {"bhk": string|null, "size": string|null, ' +
     '"location": string|null, "purpose": string|null, "timeline": string|null, ' +
     '"loan_needed": boolean|null}}. ' +
     "summary: clear English, max ~80 words — outcome, the customer's intent/" +
@@ -89,8 +93,16 @@ function systemPrompt(): string {
     "site_visit_date: ONLY if a site visit was agreed/planned, resolve phrases " +
     'like "27 tarik", "agle Sunday", "parso" to YYYY-MM-DD (future). ' +
     "site_visit_time: HH:MM 24h if a time was said, else null. " +
+    "site_visit_cancelled: true ONLY if the note says a planned visit is " +
+    "cancelled/postponed indefinitely ('visit cancel ho gayi', 'nahi aa rahe'). " +
     "callback_date/callback_time: ONLY if the lead asked to be called back at " +
-    "a specific day/time. budget: as spoken (e.g. \"45L\", \"1.2 Cr\") or null. " +
+    "a specific day/time. callback_requested: true whenever a call-later was " +
+    "asked EVEN IF no exact time was said ('baad me call karna', 'busy hoon'). " +
+    "budget: as spoken (e.g. \"45L\", \"1.2 Cr\") or null. " +
+    "customer_name: the customer's name if the telecaller SAYS it ('customer ka " +
+    "naam Rakesh hai', 'Sharma ji bole…'), else null — never invent one. " +
+    "token_amount: if a booking token/advance was PAID, the amount in plain " +
+    "rupees as a number ('50 hazar token diya' → 50000, '2 lakh' → 200000); null otherwise. " +
     "temperature: ALWAYS rate the buyer's intent in this call — 'hot' (ready to " +
     "visit/book/negotiating, very keen), 'warm' (interested but needs time / will " +
     "discuss with family / comparing), or 'cold' (not interested, only enquiring, " +
@@ -100,7 +112,11 @@ function systemPrompt(): string {
     "bola — EMI aur payment-plan ka option samjhao\", \"Family se discuss karega — 2 din " +
     "baad follow-up aur brochure WhatsApp karo\"). null only if the call didn't connect. " +
     "phone_invalid: true ONLY if the note says the number is wrong / not in service / " +
-    "does not exist. requirements: fill any the customer stated — bhk (e.g. \"2 BHK\", " +
+    "does not exist. facts: 0-3 SHORT lines (each ≤80 chars, Hinglish OK) for any " +
+    "OTHER update the telecaller spoke that none of the fields above captured — " +
+    "e.g. \"WhatsApp pe brochure bhej diya\", \"Bhai ke saath aayenge\", \"Pehle Noida " +
+    "me flat dekha tha\". Empty array if nothing extra. NEVER repeat what a field " +
+    "already captured. requirements: fill any the customer stated — bhk (e.g. \"2 BHK\", " +
     "\"plot\"), size (e.g. \"1200 sqft\", \"200 gaj\"), location (area/sector), purpose " +
     "('investment' or 'end_use'), timeline (when they want to buy), loan_needed (true if " +
     "they need finance/loan). Use null for anything not mentioned."
@@ -204,9 +220,12 @@ Deno.serve(async (req) => {
     let summary = raw.trim();
     let disposition: string | null = null;
     let svDate: string | null = null, svTime: string | null = null;
+    let svCancelled = false, cbRequested = false;
     let cbDate: string | null = null, cbTime: string | null = null;
     let budget: string | null = null, temp: string | null = null;
     let nextStep: string | null = null, phoneInvalid = false;
+    let custName: string | null = null, tokenAmount: number | null = null;
+    let facts: string[] = [];
     let reqs: Record<string, string> = {};
     try {
       const p = JSON.parse(raw);
@@ -214,12 +233,26 @@ Deno.serve(async (req) => {
       if (typeof p.disposition === "string" && DISPOSITIONS.includes(p.disposition)) disposition = p.disposition;
       if (typeof p.site_visit_date === "string" && DATE_RE.test(p.site_visit_date)) svDate = p.site_visit_date;
       if (typeof p.site_visit_time === "string" && TIME_RE.test(p.site_visit_time)) svTime = p.site_visit_time;
+      if (p.site_visit_cancelled === true) svCancelled = true;
       if (typeof p.callback_date === "string" && DATE_RE.test(p.callback_date)) cbDate = p.callback_date;
       if (typeof p.callback_time === "string" && TIME_RE.test(p.callback_time)) cbTime = p.callback_time;
+      if (p.callback_requested === true) cbRequested = true;
       if (typeof p.budget === "string" && p.budget.trim()) budget = p.budget.trim().slice(0, 40);
       if (typeof p.temperature === "string" && ["hot", "warm", "cold"].includes(p.temperature)) temp = p.temperature;
       if (typeof p.next_step === "string" && p.next_step.trim()) nextStep = p.next_step.trim().slice(0, 200);
+      if (typeof p.customer_name === "string" && p.customer_name.trim().length >= 2) {
+        custName = p.customer_name.trim().slice(0, 60);
+      }
+      if (typeof p.token_amount === "number" && p.token_amount >= 500 && p.token_amount <= 100_000_000) {
+        tokenAmount = Math.round(p.token_amount);
+      }
       if (p.phone_invalid === true) phoneInvalid = true;
+      if (Array.isArray(p.facts)) {
+        facts = p.facts
+          .filter((f: unknown): f is string => typeof f === "string" && f.trim().length >= 4)
+          .map((f: string) => f.trim().slice(0, 80))
+          .slice(0, 3);
+      }
       if (p.requirements && typeof p.requirements === "object") {
         const R = p.requirements as Record<string, unknown>;
         for (const k of ["bhk", "size", "location", "purpose", "timeline"]) {
@@ -240,7 +273,7 @@ Deno.serve(async (req) => {
     // ---------- AUTO-ACTIONS ----------
     const actions: string[] = [];
     const { data: contact } = await admin.from("contacts")
-      .select("id, name, phone, salesperson_id, company_id, status, budget, temperature, extra")
+      .select("id, name, phone, salesperson_id, company_id, status, budget, temperature, extra, notes, site_visit_at, token_amount")
       .eq("id", note.contact_id).maybeSingle();
     const rep: string | null = contact?.salesperson_id ?? note.actor_id ?? null;
     const who = contact?.name ?? contact?.phone ?? "lead";
@@ -274,12 +307,35 @@ Deno.serve(async (req) => {
       await logAct("status", "Wrong / invalid number — moved to Do Not Call (from voice note)");
     }
 
+    // Spoken name → put it on the lead when we only have a number-ish name.
+    // Never overwrite a real existing name with a heard one.
+    if (contact && custName) {
+      const cur = (contact.name ?? "").trim();
+      const nameless = !cur || cur.length < 2 || /^[\d+()\s-]+$/.test(cur);
+      if (nameless) {
+        await admin.from("contacts").update({ name: custName }).eq("id", contact.id);
+        actions.push(`Name: ${custName}`);
+        await logAct("identity", `Customer name heard: ${custName} (from voice note)`);
+      }
+    }
+
+    // Site visit cancelled → clear the planned date so reminders/pipeline don't
+    // keep pointing at a visit that isn't happening. The stage then follows the
+    // spoken disposition below (usually callback/interested).
+    if (contact && svCancelled && !svDate && contact.site_visit_at) {
+      await admin.from("contacts").update({ site_visit_at: null, site_visit_project: null }).eq("id", contact.id);
+      actions.push("Site visit cancelled");
+      await logAct("site_visit", "Site visit cancelled (from voice note)");
+    }
+
     // Site visit agreed → set the stage + date, and arm both reminders.
+    let visitApplied = false;
     if (contact && !phoneInvalid && svDate && svDate >= today) {
       const visitAt = istIso(svDate, svTime ?? "11:00");
       await admin.from("contacts").update({
         status: "site_visit", site_visit_at: visitAt,
       }).eq("id", contact.id);
+      visitApplied = true;
       const pretty = prettyIst(svDate, svTime ?? "11:00");
       actions.push(`Site visit set for ${pretty}`);
       await logAct("site_visit", `Site visit set for ${pretty} (from voice note)`);
@@ -290,10 +346,22 @@ Deno.serve(async (req) => {
       actions.push("Reminders scheduled (day before 10 AM + visit morning)");
     }
 
+    // Token/advance paid → record the money milestone (upgrade-only; a paid
+    // token never downgrades a Booked deal).
+    if (contact && tokenAmount && contact.status !== "booked") {
+      const patch: Record<string, unknown> = { token_amount: tokenAmount, status: "token_paid" };
+      if (!contact.token_amount) patch.token_paid_at = new Date().toISOString();
+      await admin.from("contacts").update(patch).eq("id", contact.id);
+      visitApplied = true; // stage is now settled; don't let disposition move it below
+      actions.push(`Token ₹${tokenAmount.toLocaleString("en-IN")} → Token Paid`);
+      await logAct("token", `Token ₹${tokenAmount.toLocaleString("en-IN")} received (from voice note)`);
+    }
+
     // Move the sales funnel to match what was said — the "tap any stage" that
-    // the rep would otherwise do by hand. Skipped when a site visit already set
-    // the stage above, on no/unknown signal, or when it would undo a won deal.
-    if (contact && !phoneInvalid && disposition && !svDate && disposition !== contact.status) {
+    // the rep would otherwise do by hand. Skipped only when the visit/token
+    // blocks above ALREADY settled the stage (a past-dated visit mention must
+    // not swallow the stage change), on no signal, or when it would undo a win.
+    if (contact && !phoneInvalid && disposition && !visitApplied && disposition !== contact.status) {
       const locked = contact.status === "booked" || contact.status === "token_paid";
       const wouldUndoWin = locked && !["booked", "token_paid"].includes(disposition);
       if (!wouldUndoWin) {
@@ -301,6 +369,15 @@ Deno.serve(async (req) => {
         actions.push(`Stage → ${stageLabel(disposition)}`);
         await logAct("status", `Stage → ${stageLabel(disposition)} (from voice note)`);
       }
+    }
+
+    // "Call later" with NO usable day/time (or a past one) → never lose it:
+    // default the callback to tomorrow 10:30 IST so a spoken "baad me call
+    // karna" always becomes a real follow-up instead of silently vanishing.
+    if (cbRequested && !phoneInvalid) {
+      const cbOk = cbDate && cbDate >= today &&
+        new Date(istIso(cbDate, cbTime ?? "10:00")).getTime() > Date.now();
+      if (!cbOk) { cbDate = addDays(today, 1); cbTime = "10:30"; }
     }
 
     // Lead asked for a callback at a time → follow-up + push at that moment.
@@ -358,6 +435,22 @@ Deno.serve(async (req) => {
       if (reqs.loan_needed) parts.push("needs loan");
       reqLine = parts.join(" · ");
       if (reqLine) { actions.push("Requirements captured"); await logAct("requirement", `Needs: ${reqLine} (from voice note)`); }
+    }
+
+    // Catch-all: anything ELSE the telecaller said that no structured field
+    // captured lands on the lead's notes as "🎙 …" lines — a spoken update must
+    // never just disappear. Deduped by containment so re-runs don't stack.
+    if (contact && facts.length) {
+      const curNotes = contact.notes ?? "";
+      const fresh = facts.filter((f) => !curNotes.includes(f));
+      if (fresh.length) {
+        const lines = fresh.map((f) => `🎙 ${f}`).join("\n");
+        await admin.from("contacts").update({
+          notes: curNotes ? `${curNotes}\n${lines}` : lines,
+        }).eq("id", contact.id);
+        actions.push(`Noted: ${fresh.join(" · ")}`);
+        await logAct("note", `Heard: ${fresh.join(" · ")} (from voice note)`);
+      }
     }
 
     // Coaching: store the "what to say next" tip on the lead so it shows up
