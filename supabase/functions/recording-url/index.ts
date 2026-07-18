@@ -71,6 +71,23 @@ Deno.serve(async (req) => {
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE);
+
+  // Supabase Storage object (default store, no Google needed): recording_path is
+  // "sb://<bucket>/<key>". Download with the service role and stream it back —
+  // access is already gated by the call_logs RLS check on `u` above.
+  if (typeof row.recording_path === "string" && row.recording_path.startsWith("sb://")) {
+    const rest = row.recording_path.slice("sb://".length);
+    const slash = rest.indexOf("/");
+    const bucket = rest.slice(0, slash);
+    const key = rest.slice(slash + 1);
+    const { data: blob, error } = await admin.storage.from(bucket).download(key);
+    if (error || !blob) return err({ ok: false, error: "storage fetch failed" }, 502);
+    return new Response(blob.stream(), {
+      status: 200,
+      headers: { ...cors, "Content-Type": contentType, "Cache-Control": "private, max-age=300" },
+    });
+  }
+
   const { data: ci } = await admin.from("storage_integrations").select("refresh_token").eq("company_id", row.company_id).maybeSingle();
   const { data: ps } = await admin.from("platform_storage").select("refresh_token").eq("id", true).maybeSingle();
 
