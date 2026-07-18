@@ -141,6 +141,11 @@ object Repository {
             return
         }
 
+        // Workplace-monitoring toggle: when the company turns this on, EVERY call
+        // on this work phone is synced — including numbers that aren't CRM leads —
+        // so the admin can see off-CRM calling (the app discloses this to the rep).
+        val recordAll = runCatching { myCompany()?.recordAllCalls }.getOrNull() == true
+
         // 2. Fetch the user's CRM contacts
         val myContacts = client.from("contacts")
             .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("id, phone")) {
@@ -152,7 +157,8 @@ object Repository {
             if (p.isNotEmpty() && it.id != null) p to it.id else null
         }.toMap()
 
-        if (contactMap.isEmpty()) return
+        // With monitoring off and no CRM contacts, there's nothing to match against.
+        if (contactMap.isEmpty() && !recordAll) return
 
         // 3. Fetch recent Supabase call logs to deduplicate
         // Limit to 500 to avoid large memory footprint, enough to catch missing ones.
@@ -178,7 +184,7 @@ object Repository {
             "${AndroidCallLog.Calls.DATE} ASC" // Ascending to process oldest first
         ) ?: return
 
-        data class NativeCall(val num: String, val cleanNum: String, val contactId: String, val startedAt: Instant, val durationSec: Int, val type: Int)
+        data class NativeCall(val num: String, val cleanNum: String, val contactId: String?, val startedAt: Instant, val durationSec: Int, val type: Int)
         val nativeCalls = mutableListOf<NativeCall>()
 
         cursor.use { c ->
@@ -205,7 +211,12 @@ object Repository {
                 if (!known) continue
 
                 val contactId = contactMap[cleanNum] ?: contactMap.entries.firstOrNull { cleanNum.endsWith(it.key) || it.key.endsWith(cleanNum) }?.value
-                if (contactId == null) continue
+                // Not a CRM lead: skip unless the company monitors ALL calls, in
+                // which case log it as an off-CRM call (no contact link).
+                if (contactId == null && !recordAll) continue
+                // Ignore obviously non-dialable rows (blank/short) even under
+                // record-all, so we don't log service codes and voicemails.
+                if (contactId == null && cleanNum.length < 7) continue
 
                 nativeCalls.add(NativeCall(num, cleanNum, contactId, Instant.ofEpochMilli(dateMillis), durationSec, type))
             }
@@ -253,7 +264,9 @@ object Repository {
                     startedAt = nativeCall.startedAt.toString(),
                     endedAt = nativeCall.startedAt.plusSeconds(nativeCall.durationSec.toLong()).toString(),
                     durationSeconds = nativeCall.durationSec,
-                    recordingStatus = "none"
+                    recordingStatus = "none",
+                    // Off-CRM = captured under record-all-calls, number isn't a lead.
+                    offCrm = nativeCall.contactId == null,
                 )
                 runCatching { logCall(newLog) }
             }

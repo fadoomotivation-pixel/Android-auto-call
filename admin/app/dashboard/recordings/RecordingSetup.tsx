@@ -6,9 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 
 type Status = { connected: boolean; account_email: string | null } | null;
 
-export function RecordingSetup({ companyId, enabled }: { companyId: string; enabled: boolean }) {
+export function RecordingSetup({ companyId, enabled, recordAll }: { companyId: string; enabled: boolean; recordAll: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [busyAll, setBusyAll] = useState(false);
   const [status, setStatus] = useState<Status>(null);
 
   useEffect(() => {
@@ -24,6 +25,20 @@ export function RecordingSetup({ companyId, enabled }: { companyId: string; enab
     const supabase = createClient();
     await supabase.from("companies").update({ recording_enabled: !enabled }).eq("id", companyId);
     setBusy(false);
+    router.refresh();
+  }
+
+  async function toggleAll() {
+    // Enabling company-wide call monitoring is a real decision — confirm it,
+    // and remind the admin to disclose it to staff (the app already shows a
+    // notice, but consent is the company's legal responsibility).
+    if (!recordAll && !confirm(
+      "Turn on record-ALL-calls?\n\nEvery call on your telecallers' work phones — including numbers NOT in the CRM — will be synced and recorded. The app shows each telecaller a monitoring notice, but telling your staff and getting their consent is your responsibility.\n\nContinue?",
+    )) return;
+    setBusyAll(true);
+    const supabase = createClient();
+    await supabase.from("companies").update({ record_all_calls: !recordAll }).eq("id", companyId);
+    setBusyAll(false);
     router.refresh();
   }
 
@@ -65,6 +80,22 @@ export function RecordingSetup({ companyId, enabled }: { companyId: string; enab
         <div className="error" style={{ marginTop: 6 }}>
           ⚠ Recording is on but no storage is connected — calls won&apos;t be saved. Tap “Connect Google Drive”.
         </div>
+      )}
+
+      {/* Step 3 — record ALL calls (anti-theft monitoring) */}
+      <div style={row}>
+        <strong style={{ minWidth: 150 }}>3 · Record ALL calls</strong>
+        <span className={`badge ${recordAll ? "connected" : ""}`}>{recordAll ? "On" : "Off"}</span>
+        <button className="link" style={{ color: "var(--accent)" }} onClick={toggleAll} disabled={busyAll}>
+          {busyAll ? "…" : recordAll ? "Turn off" : "Turn on"}
+        </button>
+      </div>
+      {recordAll && (
+        <p className="subtitle" style={{ margin: "4px 0 0" }}>
+          Monitoring is ON: every call on your reps&apos; work phones is synced, including
+          numbers not in the CRM (shown as <strong>Off-CRM</strong>). Each telecaller sees
+          a monitoring notice in their app. Disclose this to your staff.
+        </p>
       )}
 
       <p className="subtitle" style={{ margin: "10px 0 0" }}>

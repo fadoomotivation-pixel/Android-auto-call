@@ -30,6 +30,10 @@ data class Company(
     val name: String,
     @SerialName("join_code") val joinCode: String? = null,
     @SerialName("recording_enabled") val recordingEnabled: Boolean = true,
+    // Workplace monitoring: when on, the work phone syncs EVERY call (even
+    // numbers not in the CRM) so the admin can see off-CRM calling. The app
+    // shows the telecaller a clear notice when this is enabled.
+    @SerialName("record_all_calls") val recordAllCalls: Boolean = false,
     // White-label branding — the app wears the company's colours (name always;
     // colour/logo when the company has set them).
     @SerialName("brand_color") val brandColor: String? = null,
@@ -233,6 +237,8 @@ data class CallLog(
     @SerialName("recording_status") val recordingStatus: String = "none",
     @SerialName("recording_seconds") val recordingSeconds: Int? = null,
     @SerialName("recording_source") val recordingSource: String? = null,
+    /** True when captured by record-all-calls and the number isn't a CRM lead. */
+    @SerialName("off_crm") val offCrm: Boolean = false,
     val summary: String? = null,
     @SerialName("summary_status") val summaryStatus: String? = null,
     @SerialName("suggested_disposition") val suggestedDisposition: String? = null,
