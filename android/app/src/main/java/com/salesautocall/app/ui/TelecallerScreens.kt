@@ -2442,9 +2442,9 @@ private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit
 //  TEAM / REPORTS
 // ════════════════════════════════════════════════════════════
 @Composable
-fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit, onCallHistory: () -> Unit) {
+fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit, onCallHistory: () -> Unit, onPlatformHq: () -> Unit = {}) {
     val app by vm.state.collectAsState()
-    LaunchedEffect(Unit) { vm.loadLeaderboard(app.leaderboardPeriod) }
+    LaunchedEffect(Unit) { vm.loadLeaderboard(app.leaderboardPeriod); vm.checkSuper() }
 
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -2452,6 +2452,29 @@ fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit, onCallHistory: () -> 
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item { Text("Reports & Team", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        // Platform HQ — only the super admin ever sees this card.
+        if (app.isSuper) {
+            item {
+                Card(
+                    Modifier.fillMaxWidth().clickable(onClick = onPlatformHq),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("🛰", style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Platform HQ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Every company, every telecaller, every recording — live",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
         item { LeaderboardCard(vm, app, compact = false) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -288,3 +288,51 @@ data class LeadProjectInterest(
     val notes: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
 )
+
+// ---------- Platform HQ (super admin's phone-first command center) ----------
+
+/** One company's scoreboard row from super_hq(). */
+@Serializable
+data class HqCompany(
+    @SerialName("company_id") val companyId: String,
+    @SerialName("company_name") val companyName: String,
+    val telecallers: Int = 0,
+    @SerialName("leads_total") val leadsTotal: Int = 0,
+    @SerialName("leads_new") val leadsNew: Int = 0,
+    @SerialName("calls_today") val callsToday: Int = 0,
+    @SerialName("connected_today") val connectedToday: Int = 0,
+    @SerialName("talk_today") val talkToday: Int = 0,
+    @SerialName("recordings_today") val recordingsToday: Int = 0,
+    @SerialName("last_call_at") val lastCallAt: String? = null,
+)
+
+/** One telecaller's today-row from super_hq_reps(company). */
+@Serializable
+data class HqRep(
+    @SerialName("rep_id") val repId: String,
+    @SerialName("rep_name") val repName: String? = null,
+    @SerialName("rep_phone") val repPhone: String? = null,
+    @SerialName("is_active") val isActive: Boolean = true,
+    @SerialName("leads_assigned") val leadsAssigned: Int = 0,
+    @SerialName("calls_today") val callsToday: Int = 0,
+    @SerialName("connected_today") val connectedToday: Int = 0,
+    @SerialName("talk_today") val talkToday: Int = 0,
+    @SerialName("recordings_today") val recordingsToday: Int = 0,
+    @SerialName("last_call_at") val lastCallAt: String? = null,
+)
+
+/** One recent call row from super_hq_calls(company) — playable when ready. */
+@Serializable
+data class HqCall(
+    @SerialName("call_id") val callId: String,
+    @SerialName("rep_name") val repName: String? = null,
+    @SerialName("lead_name") val leadName: String? = null,
+    val phone: String? = null,
+    val direction: String? = null,
+    val outcome: String? = null,
+    @SerialName("duration_seconds") val durationSeconds: Int = 0,
+    @SerialName("recording_status") val recordingStatus: String? = null,
+    @SerialName("off_crm") val offCrm: Boolean = false,
+    val summary: String? = null,
+    @SerialName("started_at") val startedAt: String? = null,
+)
