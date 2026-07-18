@@ -14,13 +14,26 @@ export function RecordingPlayer({ callId, canDelete }: { callId: string; canDele
     setBusy(true);
     setErr(null);
     try {
+      // Fetch the edge function directly (with the session token) and read the
+      // response as a Blob — this preserves the SERVER's real Content-Type
+      // (audio/mp4, audio/wav, audio/amr…) so the browser picks the right
+      // decoder. supabase-js invoke would mis-tag the bytes.
       const supabase = createClient();
-      const { data, error } = await supabase.functions.invoke("recording-url", {
-        body: { call_log_id: callId },
-      });
-      if (error) throw error;
-      // The function streams audio bytes; supabase-js returns them as a Blob.
-      const blob = data instanceof Blob ? data : new Blob([data as BlobPart], { type: "audio/x-matroska" });
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/recording-url`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            Authorization: `Bearer ${session?.access_token ?? ""}`,
+          },
+          body: JSON.stringify({ call_log_id: callId }),
+        },
+      );
+      if (!res.ok) throw new Error(`Couldn't load recording (${res.status})`);
+      const blob = await res.blob();
       setSrc(URL.createObjectURL(blob));
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Couldn't load recording");
@@ -48,7 +61,13 @@ export function RecordingPlayer({ callId, canDelete }: { callId: string; canDele
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       {src ? (
-        <audio controls autoPlay src={src} style={{ height: 32 }} />
+        <audio
+          controls
+          autoPlay
+          src={src}
+          style={{ height: 32 }}
+          onError={() => setErr("This recording's format won't play in a browser (e.g. .amr from the phone's recorder). It plays in the app. Tip: record via the app's built-in recorder or cloud calling for m4a/wav.")}
+        />
       ) : (
         <button className="link" onClick={load} disabled={busy}>
           {busy ? "Loading…" : "▶ Play"}
