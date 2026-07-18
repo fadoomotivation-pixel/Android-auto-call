@@ -55,71 +55,89 @@ jobs:
           cp app/build/outputs/apk/*/debug/*.apk dist/ 2>/dev/null || true
           ls -la dist || true
 
+      # Convenience download for branch builds only. Never allowed to fail the
+      # pipeline: the repo's artifact quota filling up once blocked every APK
+      # rollout. Publishing below goes straight to Releases, which don't count
+      # against that quota.
       - name: Upload APK artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: brand-apks
           path: android/dist/*.apk
           if-no-files-found: ignore
+          retention-days: 1
 
-  # Each brand publishes to its OWN rolling release, so its app self-updates only
-  # from its own line. Only on main. `standard` = Call Pro AI (android-latest,
-  # asset app-debug.apk) — unchanged, so existing installs keep updating.
-  publish:
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - flavor: standard
-            brand: "Call Pro AI"
-            tag: android-latest
-            src: app-standard-debug.apk
-            asset: app-debug.apk
-          - flavor: sndeveloper
-            brand: "SN Developer"
-            tag: android-sndeveloper
-            src: app-sndeveloper-debug.apk
-            asset: app-sndeveloper-debug.apk
-          - flavor: manasproperty
-            brand: "Manas Property"
-            tag: android-manasproperty
-            src: app-manasproperty-debug.apk
-            asset: app-manasproperty-debug.apk
-    steps:
-      - name: Download APKs
-        uses: actions/download-artifact@v4
-        with:
-          name: brand-apks
-          path: dist
-
+      # Each brand publishes to its OWN rolling release, so its app self-updates
+      # only from its own line. Only on main. `standard` = Call Pro AI
+      # (android-latest, asset app-debug.apk) — unchanged, so existing installs
+      # keep updating. Published from THIS job (no artifact handoff) so a full
+      # artifact quota can never block a rollout again.
       - name: Prepare release files
+        if: github.ref == 'refs/heads/main'
         run: |
-          mkdir -p out
-          cp "dist/${{ matrix.src }}" "out/${{ matrix.asset }}"
-          # User-facing note only — never commit/PR/branch text.
-          NOTES="New features, speed improvements and bug fixes."
-          jq -n \
-            --argjson vc ${{ github.run_number }} \
-            --arg vn "1.0.${{ github.run_number }}" \
-            --arg url "https://github.com/${{ github.repository }}/releases/download/${{ matrix.tag }}/${{ matrix.asset }}" \
-            --arg notes "$NOTES" \
-            '{versionCode: $vc, versionName: $vn, apkUrl: $url, notes: $notes}' > out/version.json
-          cat out/version.json
+          set -e
+          prep() { # flavor src asset tag
+            mkdir -p "out-$1"
+            cp "android/dist/$2" "out-$1/$3"
+            # User-facing note only — never commit/PR/branch text.
+            jq -n \
+              --argjson vc ${{ github.run_number }} \
+              --arg vn "1.0.${{ github.run_number }}" \
+              --arg url "https://github.com/${{ github.repository }}/releases/download/$4/$3" \
+              --arg notes "New features, speed improvements and bug fixes." \
+              '{versionCode: $vc, versionName: $vn, apkUrl: $url, notes: $notes}' > "out-$1/version.json"
+            cat "out-$1/version.json"
+          }
+          prep standard      app-standard-debug.apk      app-debug.apk              android-latest
+          prep sndeveloper   app-sndeveloper-debug.apk   app-sndeveloper-debug.apk  android-sndeveloper
+          prep manasproperty app-manasproperty-debug.apk app-manasproperty-debug.apk android-manasproperty
 
-      - name: Publish ${{ matrix.brand }} APK + manifest
+      - name: Publish Call Pro AI APK + manifest
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ matrix.tag }}
-          name: ${{ matrix.brand }} (latest build)
+          tag_name: android-latest
+          name: Call Pro AI (latest build)
           body: |
-            Latest build of the ${{ matrix.brand }} app (v1.0.${{ github.run_number }}).
+            Latest build of the Call Pro AI app (v1.0.${{ github.run_number }}).
             The app updates itself in-app — reps only install manually once.
             First-time install: download the APK and open it
             (enable "Install unknown apps" if prompted).
           prerelease: true
           files: |
-            out/${{ matrix.asset }}
-            out/version.json
+            out-standard/app-debug.apk
+            out-standard/version.json
+
+      - name: Publish SN Developer APK + manifest
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-sndeveloper
+          name: SN Developer (latest build)
+          body: |
+            Latest build of the SN Developer app (v1.0.${{ github.run_number }}).
+            The app updates itself in-app — reps only install manually once.
+            First-time install: download the APK and open it
+            (enable "Install unknown apps" if prompted).
+          prerelease: true
+          files: |
+            out-sndeveloper/app-sndeveloper-debug.apk
+            out-sndeveloper/version.json
+
+      - name: Publish Manas Property APK + manifest
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-manasproperty
+          name: Manas Property (latest build)
+          body: |
+            Latest build of the Manas Property app (v1.0.${{ github.run_number }}).
+            The app updates itself in-app — reps only install manually once.
+            First-time install: download the APK and open it
+            (enable "Install unknown apps" if prompted).
+          prerelease: true
+          files: |
+            out-manasproperty/app-manasproperty-debug.apk
+            out-manasproperty/version.json
