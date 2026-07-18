@@ -22,7 +22,7 @@ const tail10 = (p: string | null | undefined) => (p ?? "").replace(/\D/g, "").sl
 export default async function RecordingsPage({
   searchParams,
 }: {
-  searchParams: { rep?: string; q?: string; dir?: string; days?: string; co?: string };
+  searchParams: { rep?: string; q?: string; dir?: string; days?: string; co?: string; kind?: string };
 }) {
   const supabase = await createClient();
   const repFilter = searchParams.rep || "";
@@ -30,6 +30,7 @@ export default async function RecordingsPage({
   const dirFilter = searchParams.dir === "incoming" || searchParams.dir === "outgoing" ? searchParams.dir : "";
   const days = [1, 7, 30].includes(Number(searchParams.days)) ? Number(searchParams.days) : 0;
   const coFilter = searchParams.co || "";
+  const kindFilter = searchParams.kind === "offcrm" || searchParams.kind === "lead" ? searchParams.kind : "";
 
   const {
     data: { user },
@@ -45,11 +46,11 @@ export default async function RecordingsPage({
   const canSummarize = me?.role === "admin" || isSuper;
 
   // Company admins get a recording on/off switch for their company.
-  let company: { id: string; recording_enabled: boolean } | null = null;
+  let company: { id: string; recording_enabled: boolean; record_all_calls: boolean } | null = null;
   if (me?.role === "admin" && me.company_id) {
     const { data } = await supabase
-      .from("companies").select("id, recording_enabled").eq("id", me.company_id)
-      .maybeSingle<{ id: string; recording_enabled: boolean }>();
+      .from("companies").select("id, recording_enabled, record_all_calls").eq("id", me.company_id)
+      .maybeSingle<{ id: string; recording_enabled: boolean; record_all_calls: boolean }>();
     company = data;
   }
 
@@ -63,6 +64,7 @@ export default async function RecordingsPage({
   if (repFilter) recQuery = recQuery.eq("salesperson_id", repFilter);
   if (dirFilter) recQuery = recQuery.eq("direction", dirFilter);
   if (coFilter) recQuery = recQuery.eq("company_id", coFilter);
+  if (kindFilter) recQuery = recQuery.eq("off_crm", kindFilter === "offcrm");
   if (days) recQuery = recQuery.gte("created_at", new Date(Date.now() - days * 864e5).toISOString());
 
   const [{ data: calls, error }, { data: people }, { data: contacts }, { data: companies }] = await Promise.all([
@@ -116,6 +118,7 @@ export default async function RecordingsPage({
     if (dirFilter) p.set("dir", dirFilter);
     if (days) p.set("days", String(days));
     if (coFilter) p.set("co", coFilter);
+    if (kindFilter) p.set("kind", kindFilter);
     for (const [k, v] of Object.entries(patch)) v ? p.set(k, v) : p.delete(k);
     const s = p.toString();
     return s ? `?${s}` : "?";
@@ -139,7 +142,7 @@ export default async function RecordingsPage({
         Telecallers hear their own; admins the whole company{isSuper ? "; you see every company" : ""}.
       </p>
 
-      {company && <RecordingSetup companyId={company.id} enabled={company.recording_enabled} />}
+      {company && <RecordingSetup companyId={company.id} enabled={company.recording_enabled} recordAll={company.record_all_calls} />}
 
       {/* Filter rail: date + direction as one-tap chips, rep/company/search as a form. */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0 4px" }}>
@@ -151,12 +154,17 @@ export default async function RecordingsPage({
         <a href={linkWith({ dir: "" })} style={chip(!dirFilter)}>All calls</a>
         <a href={linkWith({ dir: "outgoing" })} style={chip(dirFilter === "outgoing")}>↗ Outgoing</a>
         <a href={linkWith({ dir: "incoming" })} style={chip(dirFilter === "incoming")}>↙ Incoming</a>
+        <span style={{ opacity: 0.35 }}>|</span>
+        <a href={linkWith({ kind: "" })} style={chip(!kindFilter)}>All numbers</a>
+        <a href={linkWith({ kind: "lead" })} style={chip(kindFilter === "lead")}>CRM leads</a>
+        <a href={linkWith({ kind: "offcrm" })} style={chip(kindFilter === "offcrm")}>⚠ Off-CRM</a>
       </div>
 
       <form method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "8px 0" }}>
         {/* Preserve chip filters across form submits. */}
         {dirFilter && <input type="hidden" name="dir" value={dirFilter} />}
         {days ? <input type="hidden" name="days" value={days} /> : null}
+        {kindFilter && <input type="hidden" name="kind" value={kindFilter} />}
         {isSuper && (
           <select name="co" defaultValue={coFilter}>
             <option value="">All companies</option>
@@ -243,7 +251,16 @@ export default async function RecordingsPage({
                   {isSuper && <td>{companyById.get(c.company_id) || "—"}</td>}
                   <td>{nameById.get(c.salesperson_id) || "—"}</td>
                   <td>
-                    <strong>{leadName(c) || "Unknown"}</strong>
+                    {c.off_crm ? (
+                      <span
+                        title="Not a CRM lead — captured by record-all-calls monitoring"
+                        style={{ color: "var(--danger, #C0452C)", fontWeight: 600 }}
+                      >
+                        ⚠ Off-CRM number
+                      </span>
+                    ) : (
+                      <strong>{leadName(c) || "Unknown"}</strong>
+                    )}
                     <div style={{ fontSize: 12, opacity: 0.7 }}>{c.phone}</div>
                   </td>
                   <td title={c.direction === "incoming" ? "Lead called the telecaller" : "Telecaller dialled the lead"}>

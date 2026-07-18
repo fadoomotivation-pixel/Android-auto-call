@@ -391,7 +391,7 @@ private fun CompanyCard(vm: MainViewModel, app: AppState) {
  * we pick up the file.
  */
 @Composable
-private fun CallRecordingFolderCard(context: android.content.Context, vm: MainViewModel, syncing: Boolean, syncMsg: String?) {
+private fun CallRecordingFolderCard(context: android.content.Context, vm: MainViewModel, syncing: Boolean, syncMsg: String?, recordAllCalls: Boolean = false) {
     var folder by remember { mutableStateOf(com.salesautocall.app.data.AppPrefs.getRecordingFolder(context)) }
     // Auto-detect where the phone saves call recordings so the rep doesn't hunt.
     val detected by androidx.compose.runtime.produceState<String?>(initialValue = null) {
@@ -437,6 +437,24 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
     PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Call recording", style = MaterialTheme.typography.titleMedium)
+            // Transparency: if the company has record-all-calls on, tell the rep
+            // plainly that this WORK phone records every call — no covert capture.
+            if (recordAllCalls) {
+                Spacer(Modifier.height(10.dp))
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.10f),
+                ) {
+                    Text(
+                        "⚠  This is a monitored work phone. Your company records ALL calls made " +
+                            "on it — including numbers not in the CRM — for quality and compliance. " +
+                            "Use a personal phone for personal calls.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
             Spacer(Modifier.height(12.dp))
             if (connected) {
                 Text("✓ Folder connected", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
@@ -1110,7 +1128,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
 
 
         Spacer(Modifier.height(16.dp))
-        CallRecordingFolderCard(context, vm, app.recordingSyncing, app.recordingSyncMsg)
+        CallRecordingFolderCard(context, vm, app.recordingSyncing, app.recordingSyncMsg, app.company?.recordAllCalls == true)
 
         Spacer(Modifier.height(16.dp))
         PaperCard(Modifier.fillMaxWidth()) {
