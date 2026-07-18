@@ -797,6 +797,8 @@ private fun IdentityBlock(
                 val (label, col) = when (t) { "hot" -> "🔥 Hot" to RedL; "warm" -> "☀ Warm" to AmberL; else -> "❄ Cold" to ColdL }
                 LeadChip(label, col)
             }
+            budgetLabel(contact.budget)?.let { LeadChip("💰 ₹ $it", GreenL) }
+            contact.territory?.takeIf { it.isNotBlank() }?.let { LeadChip("📍 $it", SubInk) }
             isoMs(contact.createdAt)?.let { LeadChip("Added ${fmtWhen(it)}", SubInk) }
         }
         contact.aiNextAction?.takeIf { it.isNotBlank() }?.let { tip ->
