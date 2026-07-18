@@ -29,6 +29,19 @@ async function markFailed(admin: SupabaseClient, callId: string, reason: string)
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+// Identify the audio container from its magic bytes → [extension, mime]. Falls
+// back to the source hint (sim = m4a, cloud = wav) when nothing matches.
+function sniffAudio(b: Uint8Array, source: string): [string, string] {
+  const ascii = (i: number, s: string) => s.split("").every((ch, k) => b[i + k] === ch.charCodeAt(0));
+  if (b.length >= 6 && ascii(0, "#!AMR")) return ["amr", "audio/amr"];       // #!AMR
+  if (b.length >= 12 && ascii(0, "RIFF") && ascii(8, "WAVE")) return ["wav", "audio/wav"];
+  if (b.length >= 8 && ascii(4, "ftyp")) return ["m4a", "audio/mp4"];        // mp4/m4a/3gp
+  if (b.length >= 4 && ascii(0, "OggS")) return ["ogg", "audio/ogg"];
+  if (b.length >= 3 && ascii(0, "ID3")) return ["mp3", "audio/mpeg"];
+  if (b.length >= 2 && b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return ["mp3", "audio/mpeg"]; // MPEG frame sync
+  return source === "sim" ? ["m4a", "audio/mp4"] : ["wav", "audio/wav"];
+}
 const G_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID") ?? "";
 const G_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "";
 
@@ -85,14 +98,11 @@ Deno.serve(async (req) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE);
 
-  const ext = source === "sim" ? "m4a" : "wav";
-  const mime = source === "sim" ? "audio/mp4" : "audio/wav";
-
   // Upload the recording to the company's Google Drive when one is configured
   // (bring-your-own storage for scale); returns the Drive file id, or null if
   // Drive isn't set up / the upload fails. We then fall back to Supabase Storage
   // so recording ALWAYS works out of the box — no Google setup required.
-  async function tryDrive(bytes: Uint8Array): Promise<string | null> {
+  async function tryDrive(bytes: Uint8Array, ext: string, mime: string): Promise<string | null> {
     if (!G_CLIENT_ID || !G_CLIENT_SECRET) return null;
     const { data: comp } = await admin.from("companies").select("name").eq("id", row!.company_id).maybeSingle();
     const drive = await resolveDrive(admin, row!.company_id, comp?.name ?? "").catch(() => null);
@@ -120,10 +130,16 @@ Deno.serve(async (req) => {
     const bytes = new Uint8Array(await req.arrayBuffer());
     if (bytes.length === 0) return json({ ok: false, error: "empty body" }, 400);
 
+    // Detect the REAL audio format from the file's magic bytes — the phone's own
+    // recorder may save .amr/.mp3/.ogg, not the m4a we assumed from x-source.
+    // Getting this right makes playback pick the correct decoder and lets Whisper
+    // transcribe (it chooses its decoder from the file extension we give it).
+    const [ext, mime] = sniffAudio(bytes, source);
+
     // Prefer Drive if configured; otherwise (or on Drive failure) store the
     // recording in Supabase Storage. recording_path carries an "sb://" prefix for
     // storage objects so recording-url knows where to read from; a bare id is Drive.
-    const driveId = await tryDrive(bytes);
+    const driveId = await tryDrive(bytes, ext, mime);
     let recordingPath: string;
     if (driveId) {
       recordingPath = driveId;
@@ -145,7 +161,7 @@ Deno.serve(async (req) => {
     // bytes already in memory (no second download) and runs in the background so
     // the phone's upload isn't blocked on Whisper/Llama.
     if (hasGroq() && bytes.length > 0) {
-      const task = summarizeAndStore(admin, callId, bytes, source);
+      const task = summarizeAndStore(admin, callId, bytes, source, ext);
       if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(task);
       else await task;
     }

@@ -77,13 +77,26 @@ function cleanWada(raw: unknown, callTimeMs: number): Wada | null {
 }
 
 /** Transcribe + summarize the given audio bytes and store both on the row. */
+// Audio containers Groq's Whisper endpoint can decode. Anything else (e.g. the
+// .amr many budget-phone recorders produce) can't be transcribed — we skip it
+// gracefully instead of marking the call's summary "failed".
+const WHISPER_OK = new Set(["flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm"]);
+
 export async function summarizeAndStore(
   admin: SupabaseClient,
   callId: string,
   bytes: Uint8Array,
   source: string,
+  extHint?: string,
 ): Promise<{ ok: boolean; summary?: string; disposition?: string; error?: string }> {
   if (!GROQ) return { ok: false, error: "GROQ_API_KEY is not configured." };
+  // Skip transcription for formats Whisper can't read — the recording still
+  // uploads and plays; only the AI summary is unavailable for it.
+  const hintExt = (extHint ?? "").toLowerCase();
+  if (hintExt && !WHISPER_OK.has(hintExt)) {
+    await admin.from("call_logs").update({ summary_status: "unsupported" }).eq("id", callId);
+    return { ok: false, error: `audio format .${hintExt} not supported for transcription` };
+  }
   await admin.from("call_logs").update({ summary_status: "processing" }).eq("id", callId);
   // The call's own timestamp anchors relative promises ("Saturday ko call
   // karunga") to real datetimes.
@@ -98,7 +111,14 @@ export async function summarizeAndStore(
       sim: ["m4a", "audio/mp4"],
       callerdesk: ["wav", "audio/wav"], // CallerDesk recordings are .wav
     };
-    const [ext, mime] = FMT[source] ?? ["wav", "audio/wav"];
+    const MIME: Record<string, string> = {
+      m4a: "audio/mp4", mp4: "audio/mp4", mp3: "audio/mpeg", mpeg: "audio/mpeg",
+      wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", webm: "audio/webm",
+    };
+    // Prefer the sniffed extension (real container) over the source guess.
+    const [ext, mime] = hintExt
+      ? [hintExt, MIME[hintExt] ?? "audio/mpeg"]
+      : (FMT[source] ?? ["wav", "audio/wav"]);
 
     const form = new FormData();
     form.append("model", "whisper-large-v3");

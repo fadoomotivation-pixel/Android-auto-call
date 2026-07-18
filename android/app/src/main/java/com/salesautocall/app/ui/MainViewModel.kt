@@ -898,7 +898,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 attached > 0 && failed == 0 -> "✓ $attached recording(s) attached — AI summaries are on the way. Open the Calls tab."
                 attached > 0 -> "✓ $attached attached, $failed failed. ${firstError ?: ""}"
                 failed > 0 -> "Upload failed: ${firstError ?: "unknown"}."
-                else -> "No recordings matched. Is the folder right, and were the calls made from the app's Dialer?"
+                // attached == 0 && failed == 0: recordings made from the app are
+                // attached automatically right after each call, so a manual sync
+                // usually has nothing left to do. Say so plainly instead of alarming.
+                else -> "✓ Nothing new to sync — your recordings are already attached. Open the Calls tab to play them."
             }
             set { it.copy(recordingSyncing = false, recordingSyncMsg = msg) }
             loadCalls(force = true)

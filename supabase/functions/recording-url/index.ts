@@ -82,9 +82,17 @@ Deno.serve(async (req) => {
     const key = rest.slice(slash + 1);
     const { data: blob, error } = await admin.storage.from(bucket).download(key);
     if (error || !blob) return err({ ok: false, error: "storage fetch failed" }, 502);
+    // Serve the true content-type from the object's real extension (amr/m4a/…)
+    // so the player picks the right decoder.
+    const dot = key.lastIndexOf(".");
+    const kext = dot >= 0 ? key.slice(dot + 1).toLowerCase() : "";
+    const byExt: Record<string, string> = {
+      amr: "audio/amr", m4a: "audio/mp4", mp4: "audio/mp4", mp3: "audio/mpeg",
+      wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", webm: "audio/webm",
+    };
     return new Response(blob.stream(), {
       status: 200,
-      headers: { ...cors, "Content-Type": contentType, "Cache-Control": "private, max-age=300" },
+      headers: { ...cors, "Content-Type": byExt[kext] ?? contentType, "Cache-Control": "private, max-age=300" },
     });
   }
 
