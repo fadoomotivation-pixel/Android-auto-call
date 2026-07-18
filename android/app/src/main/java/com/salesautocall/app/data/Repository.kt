@@ -976,6 +976,15 @@ object Repository {
         }
     }
 
+    /** Removes this device's token on logout so pushes for the old login can
+     *  never ring on a phone someone else signs into next. */
+    suspend fun unregisterDeviceToken(token: String) {
+        if (token.isBlank()) return
+        runCatching {
+            client.from("device_tokens").delete { filter { eq("token", token) } }
+        }
+    }
+
     // ---------- site-visit geofencing ----------
 
     /** All of the company's pinned project sites (RLS scopes to the company). */

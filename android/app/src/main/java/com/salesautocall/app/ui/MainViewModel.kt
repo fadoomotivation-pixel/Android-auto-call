@@ -428,6 +428,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun signOut() {
         viewModelScope.launch {
+            // Unregister this phone's push token BEFORE the session dies —
+            // otherwise the old login keeps receiving pushes on this device,
+            // which leaks one company's lead alerts to whoever signs in next.
+            runCatching { Repository.unregisterDeviceToken(AppPrefs.getPushToken(getApplication())) }
             runCatching { Repository.signOut() }
             invalidateCaches() // next user starts with fresh data, not cached TTLs
             // Keep authResolved so we land straight on the login screen (not the

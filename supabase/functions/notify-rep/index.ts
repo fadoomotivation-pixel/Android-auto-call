@@ -94,7 +94,22 @@ Deno.serve(async (req) => {
   if (targetUserIds && targetUserIds.length) q = q.in("user_id", targetUserIds);
   if (scopeCompany) q = q.eq("company_id", scopeCompany);
   const { data: rows } = await q;
-  const tokens = (rows ?? []).map((r) => r.token as string);
+
+  // Company cross-check: drop any token whose stamped company no longer matches
+  // the user's CURRENT profile company. A stale row (old login on a shared
+  // phone, a user moved between companies) must never leak one company's lead
+  // pushes onto another company's device.
+  const userIds = [...new Set((rows ?? []).map((r) => r.user_id as string))];
+  const { data: profs } = userIds.length
+    ? await admin.from("profiles").select("id, company_id").in("id", userIds)
+    : { data: [] };
+  const companyOf = new Map((profs ?? []).map((p) => [p.id as string, p.company_id as string | null]));
+  const tokens = (rows ?? [])
+    .filter((r) => {
+      const pc = companyOf.get(r.user_id as string);
+      return pc !== undefined && String(r.company_id ?? "") === String(pc ?? "");
+    })
+    .map((r) => r.token as string);
   if (!tokens.length) return json({ ok: true, sent: 0, note: "no devices" });
 
   // Mint the FCM access token.
