@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ImportLeads } from "./ImportLeads";
 import { LeadHistory } from "./LeadHistory";
 
-type Sp = { id: string; full_name: string | null; territory: string | null };
+type Sp = { id: string; full_name: string | null; territory: string | null; company_id?: string | null; company_name?: string | null };
 type Lead = {
   id: string;
   name: string | null;
@@ -27,9 +27,18 @@ function chunk<T>(arr: T[], n: number): T[][] {
   return out;
 }
 
-export function LeadManager({ companyId, salespeople }: { companyId: string; salespeople: Sp[] }) {
+export function LeadManager({ companyId, salespeople, isSuper = false }: { companyId: string; salespeople: Sp[]; isSuper?: boolean }) {
   const supabase = createClient();
   const nameOf = (id: string | null) => salespeople.find((s) => s.id === id)?.full_name || (id ? "—" : "Unassigned");
+  // For the super admin, a telecaller may belong to another company. That rep's
+  // company is the target the lead MOVES to (via admin_assign_contacts), so the
+  // lead never ends up in one company while owned by another company's rep.
+  const spOf = (id: string) => salespeople.find((s) => s.id === id);
+  const isCrossCompany = (id: string) => {
+    const c = spOf(id)?.company_id;
+    return !!c && c !== companyId;
+  };
+  const labelOf = (s: Sp) => (isSuper && s.company_name ? `${s.full_name ?? "—"} · ${s.company_name}` : (s.full_name ?? "—"));
 
   const [tab, setTab] = useState<"unassigned" | "assigned">("unassigned");
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
@@ -123,13 +132,35 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
     setSelected(new Set(ids));
   }
 
+  /** Move a set of leads to a rep in ANOTHER company (super admin only). Uses the
+   *  SECURITY DEFINER RPC so company_id + salesperson_id move together. */
+  async function reassignCrossCompany(ids: string[]): Promise<boolean> {
+    const target = spOf(assignTo);
+    if (!target?.company_id) return false;
+    let ok = true;
+    for (const batch of chunk(ids, 500)) {
+      const { error } = await supabase.rpc("admin_assign_contacts", {
+        p_contact_ids: batch, p_company_id: target.company_id, p_salesperson_id: assignTo,
+      });
+      if (error) { ok = false; setMsg(`Assign failed: ${error.message}`); break; }
+    }
+    return ok;
+  }
+
   async function assignSelected() {
     if (!assignTo || selected.size === 0) return;
     setBusy(true);
-    for (const ids of chunk(Array.from(selected), 500)) {
-      await supabase.from("contacts").update({ salesperson_id: assignTo }).in("id", ids);
+    const ids = Array.from(selected);
+    if (isCrossCompany(assignTo)) {
+      const ok = await reassignCrossCompany(ids);
+      setBusy(false);
+      if (!ok) { setTimeout(() => setMsg(null), 3500); return; }
+    } else {
+      for (const batch of chunk(ids, 500)) {
+        await supabase.from("contacts").update({ salesperson_id: assignTo }).in("id", batch);
+      }
+      setBusy(false);
     }
-    setBusy(false);
     setMsg(`Assigned ${selected.size} lead(s) to ${nameOf(assignTo)}.`);
     setSelected(new Set());
     await load(true);
@@ -141,11 +172,31 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
     if (!assignTo) return;
     if (!confirm(`Assign ALL ${stats.unassigned} unassigned leads to ${nameOf(assignTo)}?`)) return;
     setBusy(true);
-    let q = supabase.from("contacts").update({ salesperson_id: assignTo }).is("salesperson_id", null);
-    const s = safe(search);
-    if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
-    await q;
-    setBusy(false);
+    if (isCrossCompany(assignTo)) {
+      // Cross-company needs explicit ids for the RPC — collect all unassigned first.
+      const ids: string[] = [];
+      let from = 0;
+      let more = true;
+      while (more) {
+        let q = supabase.from("contacts").select("id").eq("company_id", companyId).is("salesperson_id", null).range(from, from + 999);
+        const s = safe(search);
+        if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
+        const { data } = await q;
+        const page = (data ?? []) as { id: string }[];
+        ids.push(...page.map((r) => r.id));
+        if (page.length < 1000) more = false;
+        else from += 1000;
+      }
+      const ok = await reassignCrossCompany(ids);
+      setBusy(false);
+      if (!ok) { setTimeout(() => setMsg(null), 3500); return; }
+    } else {
+      let q = supabase.from("contacts").update({ salesperson_id: assignTo }).is("salesperson_id", null);
+      const s = safe(search);
+      if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
+      await q;
+      setBusy(false);
+    }
     setMsg(`Assigned all unassigned leads to ${nameOf(assignTo)}.`);
     setSelected(new Set());
     await load(true);
@@ -280,7 +331,7 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Chip active={agentFilter === null} onClick={() => setAgentFilter(null)} label="All" count={stats.assigned} />
           {salespeople.map((sp) => (
-            <Chip key={sp.id} active={agentFilter === sp.id} onClick={() => setAgentFilter(sp.id)} label={sp.full_name || "—"} count={agentCounts[sp.id] ?? 0} />
+            <Chip key={sp.id} active={agentFilter === sp.id} onClick={() => setAgentFilter(sp.id)} label={labelOf(sp)} count={agentCounts[sp.id] ?? 0} />
           ))}
         </div>
       )}
@@ -303,9 +354,14 @@ export function LeadManager({ companyId, salespeople }: { companyId: string; sal
         >
           <option value="">Choose telecaller…</option>
           {salespeople.map((sp) => (
-            <option key={sp.id} value={sp.id}>{sp.full_name || sp.id.slice(0, 8)}</option>
+            <option key={sp.id} value={sp.id}>{labelOf(sp)}</option>
           ))}
         </select>
+        {isSuper && assignTo && isCrossCompany(assignTo) && (
+          <span style={{ fontSize: 12, color: "#f59e0b" }}>
+            ⚠ Moves the lead(s) into {spOf(assignTo)?.company_name}&apos;s account.
+          </span>
+        )}
         <button className="primary" style={{ width: "auto", padding: "8px 14px" }} disabled={busy || !assignTo || selected.size === 0} onClick={assignSelected}>
           Assign selected ({selected.size})
         </button>
