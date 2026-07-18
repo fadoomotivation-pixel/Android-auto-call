@@ -85,56 +85,73 @@ Deno.serve(async (req) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE);
 
-  // Without the Google OAuth app credentials, the stored refresh token can't be
-  // exchanged for an access token — every upload would silently fail. Surface
-  // this clearly (it's a project-secret config gap, not a per-call problem).
-  if (!G_CLIENT_ID || !G_CLIENT_SECRET) {
-    await markFailed(admin, callId, "GOOGLE_CLIENT_ID/SECRET not set as Edge Function secrets — Drive auth impossible.");
-    return json({ ok: false, error: "Google Drive not configured on the server (missing GOOGLE_CLIENT_ID/SECRET)." });
-  }
+  const ext = source === "sim" ? "m4a" : "wav";
+  const mime = source === "sim" ? "audio/mp4" : "audio/wav";
 
-  const { data: comp } = await admin.from("companies").select("name").eq("id", row.company_id).maybeSingle();
-  const drive = await resolveDrive(admin, row.company_id, comp?.name ?? "");
-  if (!drive) {
-    await markFailed(admin, callId, "No Google Drive connected (company or platform).");
-    return json({ ok: false, error: "No Google Drive connected (company or platform)." });
+  // Upload the recording to the company's Google Drive when one is configured
+  // (bring-your-own storage for scale); returns the Drive file id, or null if
+  // Drive isn't set up / the upload fails. We then fall back to Supabase Storage
+  // so recording ALWAYS works out of the box — no Google setup required.
+  async function tryDrive(bytes: Uint8Array): Promise<string | null> {
+    if (!G_CLIENT_ID || !G_CLIENT_SECRET) return null;
+    const { data: comp } = await admin.from("companies").select("name").eq("id", row!.company_id).maybeSingle();
+    const drive = await resolveDrive(admin, row!.company_id, comp?.name ?? "").catch(() => null);
+    if (!drive) return null;
+    try {
+      const token = await driveAccessToken(drive.refreshToken);
+      const metadata = { name: `${callId}.${ext}`, mimeType: mime, parents: drive.parent ? [drive.parent] : undefined };
+      const boundary = "scb" + crypto.randomUUID().replace(/-/g, "");
+      const enc = new TextEncoder();
+      const pre = enc.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` + JSON.stringify(metadata) + `\r\n--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`);
+      const post = enc.encode(`\r\n--${boundary}--`);
+      const body = new Uint8Array(pre.length + bytes.length + post.length);
+      body.set(pre, 0); body.set(bytes, pre.length); body.set(post, pre.length + bytes.length);
+      const up = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body,
+      });
+      const ud2 = await up.json();
+      return (up.ok && ud2.id) ? (ud2.id as string) : null;
+    } catch (_e) {
+      return null;
+    }
   }
 
   try {
     const bytes = new Uint8Array(await req.arrayBuffer());
     if (bytes.length === 0) return json({ ok: false, error: "empty body" }, 400);
-    const token = await driveAccessToken(drive.refreshToken);
-    const ext = source === "sim" ? "m4a" : "wav";
-    const mime = source === "sim" ? "audio/mp4" : "audio/wav";
-    const metadata = { name: `${callId}.${ext}`, mimeType: mime, parents: drive.parent ? [drive.parent] : undefined };
-    const boundary = "scb" + crypto.randomUUID().replace(/-/g, "");
-    const enc = new TextEncoder();
-    const pre = enc.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` + JSON.stringify(metadata) + `\r\n--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`);
-    const post = enc.encode(`\r\n--${boundary}--`);
-    const body = new Uint8Array(pre.length + bytes.length + post.length);
-    body.set(pre, 0); body.set(bytes, pre.length); body.set(post, pre.length + bytes.length);
-    const up = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
-      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}` }, body,
-    });
-    const ud2 = await up.json();
-    if (!up.ok || !ud2.id) {
-      await markFailed(admin, callId, `Drive upload failed: ${JSON.stringify(ud2).slice(0, 300)}`);
-      return json({ ok: false, error: `Drive upload failed: ${JSON.stringify(ud2)}` });
+
+    // Prefer Drive if configured; otherwise (or on Drive failure) store the
+    // recording in Supabase Storage. recording_path carries an "sb://" prefix for
+    // storage objects so recording-url knows where to read from; a bare id is Drive.
+    const driveId = await tryDrive(bytes);
+    let recordingPath: string;
+    if (driveId) {
+      recordingPath = driveId;
+    } else {
+      const key = `${row.company_id}/${callId}.${ext}`;
+      const { error: upErr } = await admin.storage.from("call-recordings")
+        .upload(key, bytes, { contentType: mime, upsert: true });
+      if (upErr) {
+        await markFailed(admin, callId, `Storage upload failed: ${upErr.message}`);
+        return json({ ok: false, error: `Storage upload failed: ${upErr.message}` }, 502);
+      }
+      recordingPath = `sb://call-recordings/${key}`;
     }
+
     // Clear any prior error from a retried call.
-    await admin.from("call_logs").update({ recording_path: ud2.id, recording_status: "ready", recording_seconds: duration, recording_source: source, recording_error: null }).eq("id", callId);
+    await admin.from("call_logs").update({ recording_path: recordingPath, recording_status: "ready", recording_seconds: duration, recording_source: source, recording_error: null }).eq("id", callId);
 
     // Fire-and-forget AI summary so the admin gets it automatically. Reuses the
-    // bytes already in memory (no second Drive download) and runs in the
-    // background so the phone's upload isn't blocked on Whisper/Llama.
+    // bytes already in memory (no second download) and runs in the background so
+    // the phone's upload isn't blocked on Whisper/Llama.
     if (hasGroq() && bytes.length > 0) {
       const task = summarizeAndStore(admin, callId, bytes, source);
       if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(task);
       else await task;
     }
-    return json({ ok: true, file_id: ud2.id });
+    return json({ ok: true, path: recordingPath, store: driveId ? "gdrive" : "supabase" });
   } catch (e) {
     await markFailed(admin, callId, String(e));
-    return json({ ok: false, error: String(e) });
+    return json({ ok: false, error: String(e) }, 502);
   }
 });
