@@ -21,6 +21,11 @@ class BootReceiver : BroadcastReceiver() {
             action != "android.intent.action.MY_PACKAGE_REPLACED"
         ) return
 
+        // Recording/call-log sync is revenue-critical and must survive a reboot
+        // even if the rep never re-opens the app — reschedule it unconditionally,
+        // before (and independent of) the SIP opt-in check below.
+        com.salesautocall.app.data.SyncWorkers.schedule(context)
+
         if (!AppPrefs.getIncomingEnabled(context)) return
         if (AppPrefs.getAgentId(context).isBlank() || AppPrefs.getSipPassword(context).isBlank()) return
 

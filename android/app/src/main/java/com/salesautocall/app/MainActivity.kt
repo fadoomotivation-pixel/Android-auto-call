@@ -42,24 +42,10 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        // Hourly call-log sync, but only on a network and not when the battery is
-        // low — so it never wakes the phone to fail or drain a dying battery.
-        val workManager = WorkManager.getInstance(this)
-        val syncConstraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .setRequiresBatteryNotLow(true)
-            .build()
-        val periodicWork = PeriodicWorkRequestBuilder<CallLogSyncWorker>(1, TimeUnit.HOURS)
-            .setConstraints(syncConstraints)
-            .build()
-        workManager.enqueueUniquePeriodicWork("CallLogSync", ExistingPeriodicWorkPolicy.KEEP, periodicWork)
-
-        // Hourly recording sync — pulls the dialer's new call recordings into the
-        // CRM (and auto-summarises them). The worker itself only does work 10 AM–7 PM.
-        val recordingWork = PeriodicWorkRequestBuilder<RecordingSyncWorker>(1, TimeUnit.HOURS)
-            .setConstraints(syncConstraints)
-            .build()
-        workManager.enqueueUniquePeriodicWork("RecordingSync", ExistingPeriodicWorkPolicy.KEEP, recordingWork)
+        // Background sync (call logs + the revenue-critical recording upload).
+        // Centralised so app launch and device boot schedule the exact same
+        // hardened jobs. See SyncWorkers.
+        com.salesautocall.app.data.SyncWorkers.schedule(this)
 
         setContent {
             AppTheme {
