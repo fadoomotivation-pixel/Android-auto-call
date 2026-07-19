@@ -1273,21 +1273,54 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             )
                         }
                     }
-                else -> items(filtered, key = { it.id ?: it.phone }) { c ->
-                    LeadCard(
-                        c = c,
-                        followUp = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone],
-                        cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
-                        selectMode = selectMode,
-                        isSelected = c.id != null && c.id in selectedIds,
-                        onToggleSelect = { c.id?.let { id -> selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id } },
-                        onCall = { vm.dialManual(c.phone) },
-                        onCloudCall = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
-                        onWhatsApp = { vm.openWaChat(c) },
-                        onSchedule = { scheduleFor = c },
-                        onMore = { actionFor = c },
-                        onOpen = { c.id?.let { vm.openLeadDetail(it) } },
-                    )
+                else -> {
+                    val leadCard: @Composable (Contact) -> Unit = { c ->
+                        LeadCard(
+                            c = c,
+                            followUp = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone],
+                            cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
+                            selectMode = selectMode,
+                            isSelected = c.id != null && c.id in selectedIds,
+                            onToggleSelect = { c.id?.let { id -> selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id } },
+                            onCall = { vm.dialManual(c.phone) },
+                            onCloudCall = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
+                            onWhatsApp = { vm.openWaChat(c) },
+                            onSchedule = { scheduleFor = c },
+                            onMore = { actionFor = c },
+                            onOpen = { c.id?.let { vm.openLeadDetail(it) } },
+                        )
+                    }
+                    // In the plain New pile, a lead that BOUNCED BACK (yesterday's
+                    // callback / no-answer retry) looks identical to a genuinely
+                    // fresh lead — so the list splits into two labelled sections:
+                    // "tried before, call again" on top, untouched fresh below.
+                    val plainNew = bucket == "new" && stageFilter == null && quick == null &&
+                        tempFilter == null && query.isBlank() && sortBy == "default"
+                    val isFresh = { c: Contact -> c.status in setOf("new", "queued") && c.attempts == 0 }
+                    val retryPile = if (plainNew) filtered.filterNot(isFresh) else emptyList()
+                    val freshPile = if (plainNew) filtered.filter(isFresh) else emptyList()
+                    if (plainNew && retryPile.isNotEmpty() && freshPile.isNotEmpty()) {
+                        item(key = "hdr_retry") {
+                            Text(
+                                "🔁 Tried before — call again (${retryPile.size})",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Amber, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                        items(retryPile, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                        item(key = "hdr_fresh") {
+                            Text(
+                                "✨ Fresh — never called yet (${freshPile.size})",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        items(freshPile, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                    } else {
+                        items(filtered, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                    }
                 }
             }
         }
