@@ -176,31 +176,39 @@ export async function summarizeAndStore(
           const { data: contact } = await admin.from("contacts")
             .select("id, name, phone, budget, notes").eq("id", call.contact_id).maybeSingle();
           if (contact) {
-            const updates: Record<string, unknown> = {};
-            if (wada.budget && !contact.budget) updates.budget = wada.budget;
+            // Budget: fill-only-if-empty, enforced IN the update itself so a
+            // budget the voice-note AI (or the rep) wrote a moment ago can
+            // never be clobbered by this slower background task.
+            if (wada.budget) {
+              await admin.from("contacts").update({ budget: wada.budget })
+                .eq("id", contact.id).is("budget", null);
+            }
             const factLine = [
               wada.preferences ? `Chahiye: ${wada.preferences}` : null,
               wada.objections.length ? `Atka: ${wada.objections.join(", ")}` : null,
               wada.timeline ? `Kab tak: ${wada.timeline}` : null,
             ].filter(Boolean).join(" · ");
-            if (factLine && !(contact.notes ?? "").includes(factLine)) {
-              updates.notes = contact.notes ? `${contact.notes}\n🤖 ${factLine}` : `🤖 ${factLine}`;
-            }
-            if (Object.keys(updates).length) {
-              await admin.from("contacts").update(updates).eq("id", contact.id);
+            if (factLine) {
+              // Atomic + dedup-safe append (migration 0078) — concurrent writers
+              // can't drop each other's lines any more.
+              await admin.rpc("append_contact_note", { p_contact: contact.id, p_line: `🤖 ${factLine}` });
             }
             if (wada.promise_at) {
               // One lead = one pending follow-up. Move the existing one rather
-              // than stacking a second — UNLESS it was set AFTER this call
-              // started (the rep, the post-call sheet or the voice-note AI
-              // already owns the next touch for this call; don't fight them).
+              // than stacking a second — UNLESS it was set OR MOVED after this
+              // call started (the rep, the post-call sheet or the voice-note AI
+              // owns the newer plan; a moved follow-up keeps its old created_at,
+              // so the LAST TOUCH — updated_at — is what decides).
               const note = wada.promise_note ?? "Wada — call pe promise kiya tha";
               const { data: existing } = await admin.from("follow_ups")
-                .select("id, created_at").eq("contact_id", contact.id).eq("status", "pending")
+                .select("id, created_at, updated_at").eq("contact_id", contact.id).eq("status", "pending")
                 .order("created_at", { ascending: false }).limit(1).maybeSingle();
               if (existing?.id) {
-                const setAfterCall = Date.parse(existing.created_at ?? "") > callTimeMs;
-                if (!setAfterCall) {
+                const lastTouch = Math.max(
+                  Date.parse(existing.updated_at ?? "") || 0,
+                  Date.parse(existing.created_at ?? "") || 0,
+                );
+                if (lastTouch <= callTimeMs) {
                   await admin.from("follow_ups").update({ due_at: wada.promise_at, note }).eq("id", existing.id);
                 }
               } else {

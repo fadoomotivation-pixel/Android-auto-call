@@ -77,6 +77,7 @@ function systemPrompt(): string {
     '"callback_requested": boolean, ' +
     '"budget": string|null, "temperature": string|null, "next_step": string|null, ' +
     '"customer_name": string|null, "token_amount": number|null, ' +
+    '"alt_phone": string|null, "project": string|null, ' +
     '"phone_invalid": boolean, "facts": string[], ' +
     '"requirements": {"bhk": string|null, "size": string|null, ' +
     '"location": string|null, "purpose": string|null, "timeline": string|null, ' +
@@ -103,6 +104,10 @@ function systemPrompt(): string {
     "naam Rakesh hai', 'Sharma ji bole…'), else null — never invent one. " +
     "token_amount: if a booking token/advance was PAID, the amount in plain " +
     "rupees as a number ('50 hazar token diya' → 50000, '2 lakh' → 200000); null otherwise. " +
+    "alt_phone: a SECOND phone number spoken for THIS customer ('dusra number …', " +
+    "'WhatsApp number alag hai'), digits as spoken; null unless clearly a phone number. " +
+    "project: the project/site name the customer is interested in ('Gaur City wala', " +
+    "'ABC Heights me 2BHK'); null if no project named. " +
     "temperature: ALWAYS rate the buyer's intent in this call — 'hot' (ready to " +
     "visit/book/negotiating, very keen), 'warm' (interested but needs time / will " +
     "discuss with family / comparing), or 'cold' (not interested, only enquiring, " +
@@ -225,6 +230,7 @@ Deno.serve(async (req) => {
     let budget: string | null = null, temp: string | null = null;
     let nextStep: string | null = null, phoneInvalid = false;
     let custName: string | null = null, tokenAmount: number | null = null;
+    let altPhone: string | null = null, project: string | null = null;
     let facts: string[] = [];
     let reqs: Record<string, string> = {};
     try {
@@ -245,6 +251,13 @@ Deno.serve(async (req) => {
       }
       if (typeof p.token_amount === "number" && p.token_amount >= 500 && p.token_amount <= 100_000_000) {
         tokenAmount = Math.round(p.token_amount);
+      }
+      if (typeof p.alt_phone === "string") {
+        const digits = p.alt_phone.replace(/\D/g, "");
+        if (digits.length >= 10 && digits.length <= 12) altPhone = digits;
+      }
+      if (typeof p.project === "string" && p.project.trim().length >= 2) {
+        project = p.project.trim().slice(0, 60);
       }
       if (p.phone_invalid === true) phoneInvalid = true;
       if (Array.isArray(p.facts)) {
@@ -273,7 +286,7 @@ Deno.serve(async (req) => {
     // ---------- AUTO-ACTIONS ----------
     const actions: string[] = [];
     const { data: contact } = await admin.from("contacts")
-      .select("id, name, phone, salesperson_id, company_id, status, budget, temperature, extra, notes, site_visit_at, token_amount")
+      .select("id, name, phone, alt_phone, company_name, salesperson_id, company_id, status, budget, temperature, extra, notes, site_visit_at, token_amount")
       .eq("id", note.contact_id).maybeSingle();
     const rep: string | null = contact?.salesperson_id ?? note.actor_id ?? null;
     const who = contact?.name ?? contact?.phone ?? "lead";
@@ -317,6 +330,25 @@ Deno.serve(async (req) => {
         actions.push(`Name: ${custName}`);
         await logAct("identity", `Customer name heard: ${custName} (from voice note)`);
       }
+    }
+
+    // Second number spoken → fill alt_phone (only when empty, and only if it's
+    // genuinely a different number than the lead's main one).
+    if (contact && altPhone) {
+      const tail = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "").slice(-10);
+      const hasAlt = !!(contact.alt_phone && String(contact.alt_phone).trim());
+      if (!hasAlt && tail(altPhone) !== tail(contact.phone) && tail(altPhone).length === 10) {
+        await admin.from("contacts").update({ alt_phone: altPhone }).eq("id", contact.id);
+        actions.push(`Alt number saved`);
+        await logAct("identity", `Second number heard: ${altPhone} (from voice note)`);
+      }
+    }
+
+    // Project named → remember which project this buyer is about (fill-if-empty).
+    if (contact && project && !(contact.company_name ?? "").trim()) {
+      await admin.from("contacts").update({ company_name: project }).eq("id", contact.id);
+      actions.push(`Project: ${project}`);
+      await logAct("requirement", `Interested project: ${project} (from voice note)`);
     }
 
     // Site visit cancelled → clear the planned date so reminders/pipeline don't
@@ -439,15 +471,15 @@ Deno.serve(async (req) => {
 
     // Catch-all: anything ELSE the telecaller said that no structured field
     // captured lands on the lead's notes as "🎙 …" lines — a spoken update must
-    // never just disappear. Deduped by containment so re-runs don't stack.
+    // never just disappear. append_contact_note (migration 0078) is atomic and
+    // dedup-safe, so this can never race the recording AI's note writes.
     if (contact && facts.length) {
       const curNotes = contact.notes ?? "";
       const fresh = facts.filter((f) => !curNotes.includes(f));
+      for (const f of fresh) {
+        await admin.rpc("append_contact_note", { p_contact: contact.id, p_line: `🎙 ${f}` });
+      }
       if (fresh.length) {
-        const lines = fresh.map((f) => `🎙 ${f}`).join("\n");
-        await admin.from("contacts").update({
-          notes: curNotes ? `${curNotes}\n${lines}` : lines,
-        }).eq("id", contact.id);
         actions.push(`Noted: ${fresh.join(" · ")}`);
         await logAct("note", `Heard: ${fresh.join(" · ")} (from voice note)`);
       }
