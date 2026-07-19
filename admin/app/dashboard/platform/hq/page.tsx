@@ -31,15 +31,31 @@ function fmtTalk(seconds: number) {
   return `${seconds}s`;
 }
 
+const RANGES = [
+  { key: "today", label: "Today" },
+  { key: "7d", label: "7 days" },
+  { key: "30d", label: "30 days" },
+  { key: "all", label: "All time" },
+] as const;
+
 export default async function PlatformHqPage({
   searchParams,
 }: {
-  searchParams: { co?: string };
+  searchParams: { co?: string; range?: string };
 }) {
   const supabase = await createClient();
   const co = searchParams.co || "";
+  const range = RANGES.some((r) => r.key === searchParams.range) ? searchParams.range! : "today";
+  const rangeLabel = RANGES.find((r) => r.key === range)!.label.toLowerCase();
+  const qs = (o: { co?: string; range?: string }) => {
+    const p = new URLSearchParams();
+    if (o.co) p.set("co", o.co);
+    if (o.range && o.range !== "today") p.set("range", o.range);
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  };
 
-  const { data: companiesRaw, error } = await supabase.rpc("super_hq");
+  const { data: companiesRaw, error } = await supabase.rpc("super_hq", { p_range: range });
   if (error) {
     return (
       <>
@@ -55,7 +71,7 @@ export default async function PlatformHqPage({
   let calls: HqCall[] = [];
   if (current) {
     const [r1, r2] = await Promise.all([
-      supabase.rpc("super_hq_reps", { p_company: current.company_id }),
+      supabase.rpc("super_hq_reps", { p_company: current.company_id, p_range: range }),
       supabase.rpc("super_hq_calls", { p_company: current.company_id, p_limit: 40 }),
     ]);
     reps = (r1.data ?? []) as HqRep[];
@@ -74,14 +90,33 @@ export default async function PlatformHqPage({
       <h2>🛰 Platform HQ {current ? `· ${current.company_name.trim()}` : ""}</h2>
       <p className="subtitle">
         {current
-          ? <><a href="/dashboard/platform/hq">← All companies</a> · today&apos;s work and latest calls</>
-          : "Your whole business, live — today's numbers across every company. Click a company to drill in."}
+          ? <><a href={`/dashboard/platform/hq${qs({ range })}`}>← All companies</a> · {rangeLabel} work and latest calls</>
+          : `Your whole business, live — ${rangeLabel} across every company. Click a company to drill in.`}
       </p>
+
+      {/* Time-range picker — so the board is never blank on a fresh day. */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "4px 0 12px" }}>
+        {RANGES.map((r) => (
+          <a
+            key={r.key}
+            href={`/dashboard/platform/hq${qs({ co, range: r.key })}`}
+            className="card"
+            style={{
+              padding: "6px 14px", textDecoration: "none",
+              fontWeight: r.key === range ? 700 : 400,
+              color: r.key === range ? "#fff" : "inherit",
+              background: r.key === range ? "var(--accent, #4353B8)" : undefined,
+            }}
+          >
+            {r.label}
+          </a>
+        ))}
+      </div>
 
       {!current && (
         <>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "12px 0 18px" }}>
-            {stat(rows.reduce((a, c) => a + c.calls_today, 0), "Calls today")}
+            {stat(rows.reduce((a, c) => a + c.calls_today, 0), `Calls ${rangeLabel}`)}
             {stat(rows.reduce((a, c) => a + c.connected_today, 0), "Connected")}
             {stat(rows.reduce((a, c) => a + c.recordings_today, 0), "Recordings")}
             {stat(fmtTalk(rows.reduce((a, c) => a + c.talk_today, 0)), "Talk time")}
@@ -91,7 +126,7 @@ export default async function PlatformHqPage({
             {rows.map((c) => (
               <a
                 key={c.company_id}
-                href={`/dashboard/platform/hq?co=${c.company_id}`}
+                href={`/dashboard/platform/hq${qs({ co: c.company_id, range })}`}
                 className="card"
                 style={{ textDecoration: "none", color: "inherit", display: "block" }}
               >
@@ -120,13 +155,13 @@ export default async function PlatformHqPage({
       {current && (
         <>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "12px 0 18px" }}>
-            {stat(current.calls_today, "Calls today")}
+            {stat(current.calls_today, `Calls ${rangeLabel}`)}
             {stat(current.connected_today, "Connected")}
             {stat(current.recordings_today, "Recordings")}
             {stat(fmtTalk(current.talk_today), "Talk time")}
           </div>
 
-          <h3 style={{ margin: "6px 0 8px" }}>Team today</h3>
+          <h3 style={{ margin: "6px 0 8px" }}>Team · {rangeLabel}</h3>
           <div className="table-responsive">
             <table>
               <thead>
