@@ -17,19 +17,19 @@ export default async function LeadsPage() {
     .eq("id", user!.id)
     .single<Pick<Profile, "company_id" | "role">>();
 
-  if (profile?.role !== "admin") {
-    return <div className="empty">Lead management is available to company admins only.</div>;
-  }
-  if (!profile.company_id) {
-    return <div className="empty">Your account isn&apos;t linked to a company yet.</div>;
-  }
-
-  // Is this admin also the platform (super) admin? Only then may they see and
+  // Is this account the platform (super) admin? Only then may they see and
   // assign to telecallers OUTSIDE their own company — a regular company admin
   // must stay strictly scoped to their own team (company isolation).
   const { data: pa } = await supabase
     .from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle();
   const isSuper = !!pa;
+
+  if (profile?.role !== "admin" && !isSuper) {
+    return <div className="empty">Lead management is available to company admins only.</div>;
+  }
+  if (!profile?.company_id) {
+    return <div className="empty">Your account isn&apos;t linked to a company yet.</div>;
+  }
 
   let salespeople: Sp[] = [];
   if (isSuper) {
