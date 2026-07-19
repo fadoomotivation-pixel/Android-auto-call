@@ -29,7 +29,7 @@ already here.
   and verify data with a `select`.
 
 ## 3. Supabase migrations
-- Sequential numbering. **Next number is `0082`** (last is `0081`).
+- Sequential numbering. **Next number is `0086`** (last is `0085`).
 - **Apply it live AND commit the identical `.sql` file** to `supabase/migrations/`.
   DB and repo must never drift.
 - Make everything idempotent: `create ... if not exists`, `create or replace`,
@@ -57,6 +57,13 @@ already here.
   so it never overwrites a newer plan set by the rep or the voice-note AI.
 - **Add note lines via the `append_contact_note(contact, line)` RPC** (0078) —
   atomic + dedup-safe. Never read-modify-write `contacts.notes`.
+- **A call linked to a lead is never off-CRM.** `trg_link_call_to_contact` (0082)
+  auto-links a call to the same-phone lead and (0083) clears `off_crm`. The
+  `recording_crm_sweep()` job (0084, twice daily) also relabels stragglers and
+  releases uploads stuck >6h so the phone re-attempts them. Recording capture is
+  revenue-critical — never weaken this path.
+- **Platform HQ is range-aware.** `super_hq(p_range)` / `super_hq_reps(company,
+  p_range)` (0085) take `today` | `7d` | `30d` | `all` (default `today`).
 - **Company isolation is absolute.** Company-scoped rows never cross companies.
   Only a `platform_admins` (super admin) row sees cross-company data, via the
   `super_hq*` RPCs and the super-admin RLS policies. Don't widen any RLS.

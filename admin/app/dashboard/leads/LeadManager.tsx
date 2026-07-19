@@ -40,6 +40,21 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
   };
   const labelOf = (s: Sp) => (isSuper && s.company_name ? `${s.full_name ?? "—"} · ${s.company_name}` : (s.full_name ?? "—"));
 
+  // Super admin only: narrow the whole board to one company. Built from the
+  // telecaller list the page already loaded (unique company_id → name).
+  const companies = isSuper
+    ? Array.from(
+        new Map(
+          salespeople
+            .filter((s) => s.company_id)
+            .map((s) => [s.company_id as string, s.company_name ?? "—"]),
+        ).entries(),
+      ).sort((a, b) => a[1].localeCompare(b[1]))
+    : [];
+  const [companyFilter, setCompanyFilter] = useState<string>("");
+  // Reps shown in chips/assign menu — scoped to the picked company when set.
+  const visibleReps = companyFilter ? salespeople.filter((s) => s.company_id === companyFilter) : salespeople;
+
   const [tab, setTab] = useState<"unassigned" | "assigned">("unassigned");
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -60,10 +75,17 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
 
   // The super admin oversees every company, so their queries must NOT be pinned
   // to their own company_id — a cross-company telecaller's leads live in that
-  // rep's company. Regular admins stay scoped to their own company. Super-admin
-  // RLS (migration 0006) permits the cross-company SELECT.
+  // rep's company. When the super admin picks a company filter, scope to THAT
+  // company; otherwise span all. Regular admins always stay on their own
+  // company. Super-admin RLS (migration 0006) permits the cross-company SELECT.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const scopeCompany = <T,>(q: T): T => (isSuper ? q : (q as any).eq("company_id", companyId));
+  const scopeCompany = <T,>(q: T): T => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!isSuper) return (q as any).eq("company_id", companyId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (companyFilter) return (q as any).eq("company_id", companyFilter);
+    return q;
+  };
 
   const buildQuery = useCallback(() => {
     let q = scopeCompany(
@@ -82,7 +104,7 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
     return q;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, tab, agentFilter, search, companyId, isSuper]);
+  }, [supabase, tab, agentFilter, search, companyId, isSuper, companyFilter]);
 
   const load = useCallback(
     async (reset: boolean) => {
@@ -114,7 +136,7 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     );
     setAgentCounts(counts);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, salespeople, companyId, isSuper]);
+  }, [supabase, salespeople, companyId, isSuper, companyFilter]);
 
   // Reload list when filters change (debounced for search).
   useEffect(() => {
@@ -124,12 +146,12 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, agentFilter, search]);
+  }, [tab, agentFilter, search, companyFilter]);
 
   useEffect(() => {
     void refreshStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [companyFilter]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -318,6 +340,19 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
         <button className="primary" style={{ width: "auto", padding: "9px 16px" }} onClick={() => setImportOpen(true)}>
           ⬆ Import Leads
         </button>
+        {isSuper && companies.length > 0 && (
+          <select
+            value={companyFilter}
+            onChange={(e) => { setCompanyFilter(e.target.value); setAgentFilter(null); }}
+            title="Filter the whole board to one company"
+            style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text)", outline: "none" }}
+          >
+            <option value="">🏢 All companies</option>
+            {companies.map(([id, name]) => (
+              <option key={id} value={id}>{name}</option>
+            ))}
+          </select>
+        )}
         {msg && <span style={{ color: "var(--accent)", fontSize: 13 }}>{msg}</span>}
       </div>
 
@@ -342,7 +377,7 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
       {tab === "assigned" && salespeople.length > 0 && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Chip active={agentFilter === null} onClick={() => setAgentFilter(null)} label="All" count={stats.assigned} />
-          {salespeople.map((sp) => (
+          {visibleReps.map((sp) => (
             <Chip key={sp.id} active={agentFilter === sp.id} onClick={() => setAgentFilter(sp.id)} label={labelOf(sp)} count={agentCounts[sp.id] ?? 0} />
           ))}
         </div>
@@ -365,7 +400,7 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
           style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text)", outline: "none" }}
         >
           <option value="">Choose telecaller…</option>
-          {salespeople.map((sp) => (
+          {visibleReps.map((sp) => (
             <option key={sp.id} value={sp.id}>{labelOf(sp)}</option>
           ))}
         </select>

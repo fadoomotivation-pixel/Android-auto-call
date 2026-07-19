@@ -208,30 +208,15 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
     }
 
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bmp ->
-        if (bmp != null) {
-            scope.launch {
-                val (selfie, label, lat, lng) = withContext(Dispatchers.IO) {
-                    val s = bitmapToDataUrl(bmp)
-                    val loc = lastLocation(context)
-                    val lbl = loc?.let { geocode(context, it.latitude, it.longitude) }
-                    Quad(s, lbl, loc?.latitude, loc?.longitude)
-                }
-                vm.punchIn(selfie, lat, lng, label)
+    // Simple check-in: no selfie. Grab the GPS fix (best-effort) and punch in.
+    fun punchInWithLocation() {
+        scope.launch {
+            val (label, lat, lng) = withContext(Dispatchers.IO) {
+                val loc = lastLocation(context)
+                val lbl = loc?.let { geocode(context, it.latitude, it.longitude) }
+                Triple(lbl, loc?.latitude, loc?.longitude)
             }
-        }
-    }
-
-    // Camera permission gate — request first, launch camera only on grant.
-    val cameraPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) cameraLauncher.launch(null)
-    }
-
-    fun launchCameraWithPermission() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            cameraLauncher.launch(null)
-        } else {
-            cameraPermLauncher.launch(Manifest.permission.CAMERA)
+            vm.punchIn(null, lat, lng, label)
         }
     }
 
@@ -244,7 +229,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { TopRow("Attendance", "Selfie + GPS verified check-in", onBack) }
+        item { TopRow("Attendance", "GPS-verified check-in", onBack) }
 
         item {
             Box(
@@ -252,15 +237,9 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                     .background(Brush.linearGradient(listOf(Color(0xFF4353B8), Color(0xFF333A8F)))).padding(20.dp),
             ) {
                 Column {
-                    val selfie = decodeSelfie(a?.selfie)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (selfie != null) {
-                            Image(selfie, contentDescription = "Selfie", contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(64.dp).clip(CircleShape).border(2.dp, Color.White, CircleShape))
-                        } else {
-                            Box(Modifier.size(64.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.CameraAlt, contentDescription = "Camera", tint = Color.White)
-                            }
+                        Box(Modifier.size(64.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+                            Icon(if (onShift || done) Icons.Default.CheckCircle else Icons.Default.LocationOn, contentDescription = null, tint = Color.White)
                         }
                         Spacer(Modifier.width(14.dp))
                         Column {
@@ -269,7 +248,7 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                                 style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                when { done -> "In ${hhmm(a?.punchInAt)} · Out ${hhmm(a?.punchOutAt)}"; onShift -> "Since ${hhmm(a?.punchInAt)}"; else -> "Punch in with a selfie + location" },
+                                when { done -> "In ${hhmm(a?.punchInAt)} · Out ${hhmm(a?.punchOutAt)}"; onShift -> "Since ${hhmm(a?.punchInAt)}"; else -> "Punch in with your location" },
                                 style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.88f),
                             )
                         }
@@ -296,14 +275,14 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White)
                             .clickable(enabled = canPunch) {
-                                if (onShift) vm.punchOut() else launchCameraWithPermission()
+                                if (onShift) vm.punchOut() else punchInWithLocation()
                             }.padding(vertical = 14.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (!onShift && !done) { Icon(Icons.Default.CameraAlt, contentDescription = null, tint = Color(0xFF333A8F), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
+                            if (!onShift && !done) { Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color(0xFF333A8F), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
                             Text(
-                                when { app.attendanceBusy -> "Please wait…"; done -> "Shift done for today ✓"; onShift -> "Punch out"; else -> "Punch in with selfie" },
+                                when { app.attendanceBusy -> "Please wait…"; done -> "Shift done for today ✓"; onShift -> "Punch out"; else -> "Punch in" },
                                 color = Color(0xFF333A8F), fontWeight = FontWeight.Bold,
                             )
                         }
