@@ -78,7 +78,7 @@ function systemPrompt(): string {
     '"budget": string|null, "temperature": string|null, "next_step": string|null, ' +
     '"customer_name": string|null, "token_amount": number|null, ' +
     '"alt_phone": string|null, "project": string|null, ' +
-    '"phone_invalid": boolean, "facts": string[], ' +
+    '"connected": boolean, "phone_invalid": boolean, "facts": string[], ' +
     '"requirements": {"bhk": string|null, "size": string|null, ' +
     '"location": string|null, "purpose": string|null, "timeline": string|null, ' +
     '"loan_needed": boolean|null}}. ' +
@@ -89,8 +89,10 @@ function systemPrompt(): string {
     "was agreed or planned), 'negotiation' (discussing price/loan/token), " +
     "'token_paid' (paid a booking token), 'booked' (deal closed/won), 'callback' " +
     "(asked to call later, OR the call did not connect — no answer, busy, phone " +
-    "switched off, cut, not picked), 'not_interested', 'lost', 'dnc' " +
-    "(said do not call). Use 'unknown' ONLY if the note is empty/a test with no signal. " +
+    "switched off, cut, not picked), 'not_interested' (customer clearly said NOT " +
+    "interested after talking), 'lost', 'dnc' (customer said DO NOT call again). " +
+    "IMPORTANT: a call that did not connect is 'callback', NEVER 'not_interested' " +
+    "or 'dnc'. Use 'unknown' ONLY if the note is empty/a test with no signal. " +
     "site_visit_date: ONLY if a site visit was agreed/planned, resolve phrases " +
     'like "27 tarik", "agle Sunday", "parso" to YYYY-MM-DD (future). ' +
     "site_visit_time: HH:MM 24h if a time was said, else null. " +
@@ -116,8 +118,14 @@ function systemPrompt(): string {
     "the smartest next move / how to handle the objection raised (e.g. \"Price zyada " +
     "bola — EMI aur payment-plan ka option samjhao\", \"Family se discuss karega — 2 din " +
     "baad follow-up aur brochure WhatsApp karo\"). null only if the call didn't connect. " +
-    "phone_invalid: true ONLY if the note says the number is wrong / not in service / " +
-    "does not exist. facts: 0-3 SHORT lines (each ≤80 chars, Hinglish OK) for any " +
+    "connected: true if the telecaller ACTUALLY SPOKE with the customer on this " +
+    "call; false if the call did NOT connect (switched off, no answer, busy, ringing " +
+    "only, cut, not reachable, 'number band', 'uthaya nahi'). " +
+    "phone_invalid: true ONLY when the number is GENUINELY WRONG / does not exist / " +
+    "belongs to someone else ('galat number', 'aisa koi nahi', 'wrong person', 'kisi " +
+    "aur ka number'). A phone that is merely SWITCHED OFF, busy, unreachable or not " +
+    "picked is NOT phone_invalid — that is just a call that didn't connect (connected=false). " +
+    "facts: 0-3 SHORT lines (each ≤80 chars, Hinglish OK) for any " +
     "OTHER update the telecaller spoke that none of the fields above captured — " +
     "e.g. \"WhatsApp pe brochure bhej diya\", \"Bhai ke saath aayenge\", \"Pehle Noida " +
     "me flat dekha tha\". Empty array if nothing extra. NEVER repeat what a field " +
@@ -231,6 +239,7 @@ Deno.serve(async (req) => {
     let nextStep: string | null = null, phoneInvalid = false;
     let custName: string | null = null, tokenAmount: number | null = null;
     let altPhone: string | null = null, project: string | null = null;
+    let connected: boolean | null = null;
     let facts: string[] = [];
     let reqs: Record<string, string> = {};
     try {
@@ -259,6 +268,7 @@ Deno.serve(async (req) => {
       if (typeof p.project === "string" && p.project.trim().length >= 2) {
         project = p.project.trim().slice(0, 60);
       }
+      if (typeof p.connected === "boolean") connected = p.connected;
       if (p.phone_invalid === true) phoneInvalid = true;
       if (Array.isArray(p.facts)) {
         facts = p.facts
@@ -275,9 +285,24 @@ Deno.serve(async (req) => {
       }
     } catch { /* keep raw as summary */ }
 
+    // Did the call connect? The model's `connected` flag, backed by the
+    // unreached-text safety net. A call that didn't connect (switched off, no
+    // answer, busy, cut) is a RETRY — never a wrong number, never "not interested".
+    const unreachedText = UNREACHED_RE.test(`${summary} ${transcript}`);
+    const notConnected = connected === false || (connected === null && unreachedText);
+
     // Safety net: if the model gave no stage but the note is clearly a call that
     // didn't connect, treat it as a callback so the lead never stalls in "New".
-    if (!disposition && UNREACHED_RE.test(`${summary} ${transcript}`)) disposition = "callback";
+    if (!disposition && (unreachedText || connected === false)) disposition = "callback";
+
+    // A call that didn't connect can NEVER be not_interested / lost / dnc — those
+    // require the customer to have actually spoken. Force it to a retry.
+    if (notConnected && ["not_interested", "lost", "dnc"].includes(disposition ?? "")) disposition = "callback";
+
+    // A "switched off / busy / no answer" call is NOT a wrong number. If the
+    // model flagged phone_invalid but the call simply didn't connect, drop the
+    // invalid flag — it's a retry, not a Do-Not-Call.
+    if (phoneInvalid && notConnected) phoneInvalid = false;
 
     // If the model didn't hand back a temperature, derive one from the stage so
     // the lead's hot/warm/cold badge is always kept accurate from the note.
@@ -286,7 +311,7 @@ Deno.serve(async (req) => {
     // ---------- AUTO-ACTIONS ----------
     const actions: string[] = [];
     const { data: contact } = await admin.from("contacts")
-      .select("id, name, phone, alt_phone, company_name, salesperson_id, company_id, status, budget, temperature, extra, notes, site_visit_at, token_amount")
+      .select("id, name, phone, alt_phone, company_name, salesperson_id, company_id, status, budget, temperature, extra, notes, site_visit_at, token_amount, attempts")
       .eq("id", note.contact_id).maybeSingle();
     const rep: string | null = contact?.salesperson_id ?? note.actor_id ?? null;
     const who = contact?.name ?? contact?.phone ?? "lead";
@@ -401,6 +426,18 @@ Deno.serve(async (req) => {
         actions.push(`Stage → ${stageLabel(disposition)}`);
         await logAct("status", `Stage → ${stageLabel(disposition)} (from voice note)`);
       }
+    }
+
+    // Call didn't connect → it counts as a NO-CONNECT ATTEMPT. Bump the attempts
+    // ladder so the lead shows "🔁 Attempt N" and lands in the New tab's
+    // "Tried before — call again" section instead of looking brand-new. Capped so
+    // it can't run away, and only for a lead that's still in the calling pile.
+    if (contact && notConnected && !phoneInvalid &&
+        !["booked", "token_paid", "site_visit", "negotiation", "dnc"].includes(contact.status)) {
+      const nextAttempts = Math.min((contact.attempts ?? 0) + 1, 9);
+      await admin.from("contacts").update({ attempts: nextAttempts }).eq("id", contact.id);
+      actions.push(`Attempt ${nextAttempts} — didn't connect`);
+      await logAct("attempt", `Call didn't connect — attempt ${nextAttempts} (from voice note)`);
     }
 
     // "Call later" with NO usable day/time (or a past one) → never lose it:
