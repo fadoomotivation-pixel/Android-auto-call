@@ -53,6 +53,7 @@ export function Sidebar({
             <div style={{ margin: "14px 6px 4px", fontSize: 11, letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" }}>
               Super admin
             </div>
+            <NavLink href="/dashboard/platform/hq" label="🛰 Platform HQ" />
             <NavLink href="/dashboard/platform" label="🏢 Companies" />
             <NavLink href="/dashboard/platform/telecallers" label="🎧 Telecallers" />
             <NavLink href="/dashboard/platform/contacts" label="📇 Contacts" />
