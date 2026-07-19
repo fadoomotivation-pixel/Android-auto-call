@@ -1053,17 +1053,34 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // must never clutter the working lists.
     val closedSet = setOf("lost", "not_interested", "dnc")
     val nowMs = System.currentTimeMillis()
+    val endOfTodayMs = java.time.LocalDate.now().plusDays(1)
+        .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
     fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
     fun sleeping(c: Contact): Boolean {
         val due = fuOf(c)?.let { instantMillis(it.dueAt) } ?: return false
         return due > nowMs
     }
+    // "Today" = the day's action list. A lead belongs here when it was CALLED
+    // today (drains it out of New so New stays purely fresh), OR its follow-up is
+    // due today / overdue, OR its site visit is today. Done leads (booked/closed)
+    // never appear. Leads here ALSO still show in their real bucket (Working /
+    // Pipeline) — Today is a one-day cross-cut, not a new home.
+    fun dueTodayOrOverdue(c: Contact): Boolean {
+        val due = fuOf(c)?.let { instantMillis(it.dueAt) } ?: return false
+        return due <= endOfTodayMs
+    }
+    fun inToday(c: Contact): Boolean =
+        c.status !in closedSet && c.status != "booked" &&
+            (isToday(c.lastContactedAt) || dueTodayOrOverdue(c) || isToday(c.siteVisitAt))
     val base = when {
         stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
         quick == "retry" -> app.leads.filter { it.status in setOf("no_answer", "busy", "wrong_person", "callback", "follow_up") }
         else -> when (bucket) {
-            "new" -> app.leads.filter { it.status in newSet && !sleeping(it) }
+            // New = truly fresh: a calling-pile status, not sleeping, and NOT
+            // already handled today (called / due / visiting).
+            "new" -> app.leads.filter { it.status in newSet && !sleeping(it) && !inToday(it) }
+            "today" -> app.leads.filter { inToday(it) }
             "working" -> app.leads.filter { it.status in workingSet || (it.status in newSet && sleeping(it)) }
             "pipeline" -> app.leads.filter { it.status in pipelineSet }
             "booked" -> app.leads.filter { it.status == "booked" }
@@ -1181,7 +1198,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val segments = listOf(
                         "all" to Triple("All", app.leads.size, MaterialTheme.colorScheme.primary),
-                        "new" to Triple("New", app.leads.count { it.status in newSet && !sleeping(it) }, MaterialTheme.colorScheme.primary),
+                        "new" to Triple("New", app.leads.count { it.status in newSet && !sleeping(it) && !inToday(it) }, MaterialTheme.colorScheme.primary),
+                        "today" to Triple("Today", app.leads.count { inToday(it) }, Cyan),
                         "working" to Triple("Working", app.leads.count { it.status in workingSet || (it.status in newSet && sleeping(it)) }, Indigo),
                         "pipeline" to Triple("Pipeline", app.leads.count { it.status in pipelineSet }, Purple),
                         "booked" to Triple("Booked", app.leads.count { it.status == "booked" }, Green),

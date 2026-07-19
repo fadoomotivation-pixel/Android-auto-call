@@ -117,6 +117,8 @@ data class Contact(
     @SerialName("site_visit_verified") val siteVisitVerified: Boolean? = null,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("assigned_at") val assignedAt: String? = null,
+    /** When this lead was last CALLED (any direction) — drives the "Today" view. */
+    @SerialName("last_contacted_at") val lastContactedAt: String? = null,
 )
 
 /** A company project's pinned location, used to geo-fence site-visit arrivals. */
