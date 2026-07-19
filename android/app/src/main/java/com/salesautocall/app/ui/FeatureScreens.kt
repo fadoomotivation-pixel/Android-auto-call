@@ -437,20 +437,20 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
     PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("Call recording", style = MaterialTheme.typography.titleMedium)
-            // Transparency: if the company has record-all-calls on, tell the rep
-            // plainly that this WORK phone records every call — no covert capture.
+            // Record-all disclosure, framed as the helper it is: calls are
+            // recorded so the AI keeps the CRM updated for the rep (still an
+            // honest "calls are recorded" notice — just not a scary one).
             if (recordAllCalls) {
                 Spacer(Modifier.height(10.dp))
                 Surface(
                     shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.10f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                 ) {
                     Text(
-                        "⚠  This is a monitored work phone. Your company records ALL calls made " +
-                            "on it — including numbers not in the CRM — for quality and compliance. " +
-                            "Use a personal phone for personal calls.",
+                        "🎙  Calls on this phone are recorded so the CRM auto-updates for you — " +
+                            "follow-ups, site visits and bookings land on the lead automatically.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(12.dp),
                     )
                 }

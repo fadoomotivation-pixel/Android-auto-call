@@ -156,14 +156,6 @@ data class AppState(
     val postCallName: String? = null,
     val postCallCampaignId: String? = null,
     val postCallConnected: Boolean = false,
-    // Platform HQ (super admin): cross-company oversight right on the phone.
-    val isSuper: Boolean = false,
-    val hqLoading: Boolean = false,
-    val hqCompanies: List<com.salesautocall.app.data.HqCompany> = emptyList(),
-    val hqCompanyId: String? = null,
-    val hqCompanyName: String? = null,
-    val hqReps: List<com.salesautocall.app.data.HqRep> = emptyList(),
-    val hqCalls: List<com.salesautocall.app.data.HqCall> = emptyList(),
     // In-app update: set when a newer build is published; drives the update prompt.
     val update: AppUpdater.Release? = null,
     val checkingUpdate: Boolean = false,
@@ -309,39 +301,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             checkForUpdate()
         }
     }
-
-    // ---------- Platform HQ (super admin) ----------
-
-    /** Detects super-admin quietly; flips the HQ entry card on when true. */
-    fun checkSuper() {
-        if (_state.value.isSuper) return
-        viewModelScope.launch {
-            val isSuper = runCatching { Repository.isSuperAdmin() }.getOrDefault(false)
-            if (isSuper) set { it.copy(isSuper = true) }
-        }
-    }
-
-    /** Loads the whole platform's per-company scoreboard. */
-    fun loadHq() {
-        viewModelScope.launch {
-            set { it.copy(hqLoading = true) }
-            runCatching { Repository.fetchHq() }
-                .onSuccess { rows -> set { it.copy(hqCompanies = rows, hqLoading = false) } }
-                .onFailure { e -> set { it.copy(hqLoading = false, error = e.message ?: "Couldn't load HQ") } }
-        }
-    }
-
-    /** Drills into one company: its reps' day + latest playable calls. */
-    fun openHqCompany(companyId: String, name: String) {
-        set { it.copy(hqCompanyId = companyId, hqCompanyName = name, hqReps = emptyList(), hqCalls = emptyList(), hqLoading = true) }
-        viewModelScope.launch {
-            val reps = runCatching { Repository.fetchHqReps(companyId) }.getOrDefault(emptyList())
-            val calls = runCatching { Repository.fetchHqCalls(companyId) }.getOrDefault(emptyList())
-            set { it.copy(hqReps = reps, hqCalls = calls, hqLoading = false) }
-        }
-    }
-
-    fun closeHqCompany() = set { it.copy(hqCompanyId = null, hqCompanyName = null, hqReps = emptyList(), hqCalls = emptyList()) }
 
     /** Checks the public GitHub release for a newer build; surfaces an update prompt. */
     fun checkForUpdate(manual: Boolean = false) {

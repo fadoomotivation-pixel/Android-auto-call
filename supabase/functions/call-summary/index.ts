@@ -62,13 +62,30 @@ Deno.serve(async (req) => {
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE);
-  const { data: ci } = await admin.from("storage_integrations").select("refresh_token").eq("company_id", row.company_id).maybeSingle();
-  const { data: ps } = await admin.from("platform_storage").select("refresh_token").eq("id", true).maybeSingle();
   let bytes: Uint8Array | null = null;
-  if (ci?.refresh_token) bytes = await fetchMedia(row.recording_path, ci.refresh_token);
-  if (!bytes && ps?.refresh_token) bytes = await fetchMedia(row.recording_path, ps.refresh_token);
-  if (!bytes) return json({ ok: false, error: "could not fetch recording from Drive" });
+  let extHint: string | undefined;
 
-  const res = await summarizeAndStore(admin, call_log_id, bytes, row.recording_source ?? "sip");
+  // Supabase Storage object ("sb://<bucket>/<key>") — the default store when no
+  // Drive is configured. Read it directly; the key's extension tells Whisper
+  // which decoder to use.
+  const path = row.recording_path as string;
+  if (path.startsWith("sb://")) {
+    const rest = path.slice("sb://".length);
+    const slash = rest.indexOf("/");
+    const key = rest.slice(slash + 1);
+    const { data: blob } = await admin.storage.from(rest.slice(0, slash)).download(key);
+    if (blob) bytes = new Uint8Array(await blob.arrayBuffer());
+    const dot = key.lastIndexOf(".");
+    if (dot >= 0) extHint = key.slice(dot + 1).toLowerCase();
+    if (!bytes) return json({ ok: false, error: "could not fetch recording from storage" });
+  } else {
+    const { data: ci } = await admin.from("storage_integrations").select("refresh_token").eq("company_id", row.company_id).maybeSingle();
+    const { data: ps } = await admin.from("platform_storage").select("refresh_token").eq("id", true).maybeSingle();
+    if (ci?.refresh_token) bytes = await fetchMedia(path, ci.refresh_token);
+    if (!bytes && ps?.refresh_token) bytes = await fetchMedia(path, ps.refresh_token);
+    if (!bytes) return json({ ok: false, error: "could not fetch recording from Drive" });
+  }
+
+  const res = await summarizeAndStore(admin, call_log_id, bytes, row.recording_source ?? "sip", extHint);
   return json(res, res.ok ? 200 : 500);
 });

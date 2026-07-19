@@ -641,10 +641,8 @@ private fun MainShell(vm: MainViewModel) {
                             vm,
                             onCampaigns = { nav.navigate("analytics") },
                             onCallHistory = { nav.navigate("calls") },
-                            onPlatformHq = { nav.navigate("hq") },
                         )
                     }
-                    composable("hq") { PlatformHqScreen(vm, onBack = { nav.popBackStack() }) }
                     composable("followups") { FollowUpsScreen(vm, onBack = { nav.popBackStack() }) }
                     composable("attendance") { AttendanceScreen(vm, onBack = { nav.popBackStack() }) }
                     composable("calendar") { CalendarScreen(vm, onBack = { nav.popBackStack() }) }
