@@ -45,6 +45,7 @@ export function Sidebar({
         {profile?.role !== "admin" && <NavLink href="/dashboard/contacts" label="Contacts" />}
         <NavLink href="/dashboard/calls" label="Call logs" />
         <NavLink href="/dashboard/recordings" label="Recordings" />
+        <NavLink href="/dashboard/apps" label="📲 App downloads" />
         {profile?.role === "admin" && <NavLink href="/dashboard/reports" label="📊 Reports" />}
         
         {isSuper && (
