@@ -40,8 +40,11 @@ class RecordingSyncWorker(
     }
 
     companion object {
-        private const val START_HOUR = 10
-        private const val END_HOUR = 19
+        // Wide active window (7 AM … 11 PM) so no real call is ever missed; the
+        // gate only exists to avoid needlessly waking the phone in the dead of
+        // night, and a call-ended one-shot (KEY_FORCE) bypasses it anyway.
+        private const val START_HOUR = 7
+        private const val END_HOUR = 23
 
         /** Input-data flag: run even outside working hours (call-ended one-shots). */
         const val KEY_FORCE = "force"
