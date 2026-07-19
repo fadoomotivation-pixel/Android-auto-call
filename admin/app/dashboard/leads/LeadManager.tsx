@@ -58,12 +58,20 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
 
   const safe = (s: string) => s.trim().replace(/[,%()]/g, "");
 
+  // The super admin oversees every company, so their queries must NOT be pinned
+  // to their own company_id — a cross-company telecaller's leads live in that
+  // rep's company. Regular admins stay scoped to their own company. Super-admin
+  // RLS (migration 0006) permits the cross-company SELECT.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const scopeCompany = <T,>(q: T): T => (isSuper ? q : (q as any).eq("company_id", companyId));
+
   const buildQuery = useCallback(() => {
-    let q = supabase
-      .from("contacts")
-      .select("id, name, phone, company_name, status, salesperson_id, budget, territory, created_at, notes")
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false });
+    let q = scopeCompany(
+      supabase
+        .from("contacts")
+        .select("id, name, phone, company_name, status, salesperson_id, budget, territory, created_at, notes")
+        .order("created_at", { ascending: false }),
+    );
     if (tab === "unassigned") {
       q = q.is("salesperson_id", null);
     } else {
@@ -73,7 +81,8 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     const s = safe(search);
     if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
     return q;
-  }, [supabase, tab, agentFilter, search, companyId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, tab, agentFilter, search, companyId, isSuper]);
 
   const load = useCallback(
     async (reset: boolean) => {
@@ -89,20 +98,23 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
   );
 
   const refreshStats = useCallback(async () => {
-    const totalRes = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("company_id", companyId);
-    const unRes = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("company_id", companyId).is("salesperson_id", null);
+    const totalRes = await scopeCompany(supabase.from("contacts").select("id", { count: "exact", head: true }));
+    const unRes = await scopeCompany(supabase.from("contacts").select("id", { count: "exact", head: true })).is("salesperson_id", null);
     const total = totalRes.count ?? 0;
     const unassigned = unRes.count ?? 0;
     setStats({ total, unassigned, assigned: total - unassigned });
     const counts: Record<string, number> = {};
     await Promise.all(
       salespeople.map(async (sp) => {
-        const r = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("company_id", companyId).eq("salesperson_id", sp.id);
+        // Count purely by rep — never by the admin's company — so a cross-company
+        // telecaller shows their real assigned total instead of 0.
+        const r = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("salesperson_id", sp.id);
         counts[sp.id] = r.count ?? 0;
       }),
     );
     setAgentCounts(counts);
-  }, [supabase, salespeople, companyId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, salespeople, companyId, isSuper]);
 
   // Reload list when filters change (debounced for search).
   useEffect(() => {
@@ -178,7 +190,7 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
       let from = 0;
       let more = true;
       while (more) {
-        let q = supabase.from("contacts").select("id").eq("company_id", companyId).is("salesperson_id", null).range(from, from + 999);
+        let q = scopeCompany(supabase.from("contacts").select("id")).is("salesperson_id", null).range(from, from + 999);
         const s = safe(search);
         if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
         const { data } = await q;

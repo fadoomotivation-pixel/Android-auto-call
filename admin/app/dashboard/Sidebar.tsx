@@ -34,7 +34,7 @@ export function Sidebar({
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/rag" label="🧠 RAG" />}
         <NavLink href="/dashboard/salespeople" label="Salespeople" />
         {profile?.role === "admin" && <NavLink href="/dashboard/attendance" label="📅 Attendance" />}
-        {profile?.role === "admin" && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
+        {profile?.role === "admin" && !isSuper && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/whatsapp" label="💬 WhatsApp" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/facebook" label="📱 Facebook Leads" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/capture" label="🪝 Lead Capture" />}
@@ -54,6 +54,7 @@ export function Sidebar({
               Super admin
             </div>
             <NavLink href="/dashboard/platform/hq" label="🛰 Platform HQ" />
+            <NavLink href="/dashboard/leads" label="🎯 Lead Management" />
             <NavLink href="/dashboard/platform" label="🏢 Companies" />
             <NavLink href="/dashboard/platform/telecallers" label="🎧 Telecallers" />
             <NavLink href="/dashboard/platform/contacts" label="📇 Contacts" />
