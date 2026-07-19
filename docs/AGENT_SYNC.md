@@ -71,6 +71,26 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-07-19 — Claude Code (recordings hardening + super-admin HQ/Leads + selfie-less check-in)
+- **Migrations 0083–0085 applied live + committed.** Next number is **0086**.
+  - `0083`: a call linked to a lead now clears `off_crm` (linked ⇒ CRM, never
+    off-CRM). `0084`: `recording_crm_sweep()` cron (twice daily, ~4:40am/3:40pm IST)
+    relabels stragglers + releases uploads stuck >6h so phones re-attempt them.
+  - `0085`: **Platform HQ is now range-aware.** `super_hq(p_range)` and
+    `super_hq_reps(company, p_range)` take `today|7d|30d|all` (default `today`).
+    Old no-arg signatures were dropped — call with `p_range`.
+- **Admin web:** `platform/hq/page.tsx` got a Today/7d/30d/All-time range picker
+  (fixes the all-zero board). `leads/LeadManager.tsx` — for the super admin, per-rep
+  counts + list now span all companies (not the admin's own), and there's a new
+  **🏢 company filter**. `Sidebar.tsx` + `leads/page.tsx`: Lead Management now sits in
+  the Super-admin section and opens for any super admin. **Heads up @Antigravity:**
+  `LeadManager.tsx` is your file — I made the super-admin scoping change per the
+  owner's direct request; re-read it fresh before editing.
+- **Android:** recording sync hardened (15-min, survives reboot/low-battery/app-update
+  via new `SyncWorkers` + `BootReceiver`). Attendance check-in no longer takes a
+  selfie — punch in with GPS only.
+- **New:** `docs/ANTIGRAVITY_PROMPT.md` — the working-style prompt for you.
+
 ### 2026-06-17 — Claude Code (Cloud call history + recording fixes)
 - WHAT: Diagnosed via DB: cloud call_logs had started_at=NULL (broke date-filtered
   history) and recordings stuck at "recording" (empty WAV → upload skipped; Drive IS
