@@ -815,36 +815,6 @@ object Repository {
         return resp.bodyAsText()
     }
 
-    // ---------- Platform HQ (super admin) ----------
-
-    /** True when the signed-in user is a platform (super) admin. */
-    suspend fun isSuperAdmin(): Boolean {
-        val uid = currentUserId() ?: return false
-        return runCatching {
-            client.from("platform_admins").select(
-                columns = io.github.jan.supabase.postgrest.query.Columns.raw("user_id"),
-            ) { filter { eq("user_id", uid) } }.decodeList<kotlinx.serialization.json.JsonObject>().isNotEmpty()
-        }.getOrDefault(false)
-    }
-
-    /** Per-company scoreboard for the whole platform (super admin only). */
-    suspend fun fetchHq(): List<HqCompany> =
-        client.postgrest.rpc("super_hq").decodeList<HqCompany>()
-
-    /** One company's telecallers with today's work (super admin only). */
-    suspend fun fetchHqReps(companyId: String): List<HqRep> =
-        client.postgrest.rpc(
-            "super_hq_reps",
-            buildJsonObject { put("p_company", companyId) },
-        ).decodeList<HqRep>()
-
-    /** One company's latest calls, playable when a recording is ready. */
-    suspend fun fetchHqCalls(companyId: String, limit: Int = 30): List<HqCall> =
-        client.postgrest.rpc(
-            "super_hq_calls",
-            buildJsonObject { put("p_company", companyId); put("p_limit", limit) },
-        ).decodeList<HqCall>()
-
     suspend fun joinCompanyByCode(code: String) {
         client.postgrest.rpc(
             "join_company_by_code",
