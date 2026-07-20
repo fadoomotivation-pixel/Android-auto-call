@@ -1111,7 +1111,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Column(Modifier.fillMaxSize()) {
-        Refreshable(onRefresh = { vm.loadLeads(force = true) }, modifier = Modifier.weight(1f)) {
+        Refreshable(onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) }, modifier = Modifier.weight(1f)) {
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
@@ -1140,7 +1140,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         pipelineValue = pipelineValue,
                         scoring = app.aiScoringLeads,
                         reviveCount = reviveCount,
-                        onRefresh = { vm.loadLeads(force = true) },
+                        onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
                         onScore = { vm.scoreLeads() },
                         onSelect = { selectMode = true },
                         onDueNow = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },

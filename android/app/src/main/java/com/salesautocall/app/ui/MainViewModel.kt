@@ -1660,6 +1660,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             ) else c
                         })
                     }
+                    // A "callback" lead rests in Working only while it has a pending
+                    // reminder; the DB auto-creates one (migration 0086). Pull the
+                    // fresh follow-up list so the lead leaves New right away instead
+                    // of lingering until the next manual refresh.
+                    if (status == "callback") loadFollowUps(force = true)
                 }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
