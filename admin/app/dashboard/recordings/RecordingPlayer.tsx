@@ -14,8 +14,17 @@ export function RecordingPlayer({ callId, canDelete }: { callId: string; canDele
     setBusy(true);
     setErr(null);
     try {
-      const res = await fetch(`/api/audio-proxy?callId=${callId}`);
-      if (!res.ok) throw new Error(`Couldn't load recording (${res.status})`);
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/audio-proxy?callId=${callId}`, {
+        headers: {
+          Authorization: `Bearer ${session?.access_token ?? ""}`
+        }
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Couldn't load recording (${res.status})`);
+      }
       const blob = await res.blob();
       setSrc(URL.createObjectURL(blob));
     } catch (e) {
