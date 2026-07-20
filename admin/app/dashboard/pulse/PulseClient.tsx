@@ -38,6 +38,7 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedRep, setCopiedRep] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -57,6 +58,32 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // One telecaller's full day — shareable on its own ("har telecaller ka alag").
+  function repReport(r: Rep, companyName?: string | null): string {
+    const lines: string[] = [`📊 ${r.name} — Daily Pulse (${date})`];
+    if (companyName) lines.push(`🏢 ${companyName}`);
+    lines.push(
+      `📞 ${r.calls} calls · ${r.connected} connected · ${fmtDur(r.talkSeconds)} talk` +
+        (r.hotLeads > 0 ? ` · 🔥 ${r.hotLeads} hot` : ""),
+    );
+    if (r.narrative) lines.push(`\n✨ ${r.narrative}`);
+    const notes = r.voiceNotes.filter((v) => v.summary);
+    if (notes.length) {
+      lines.push(`\n🎤 Voice notes:`);
+      notes.forEach((v) => lines.push(`• ${v.lead}: ${v.summary}`));
+    }
+    if (r.moves.length) {
+      lines.push(`\n🔄 Lead moves:`);
+      r.moves.forEach((m) => lines.push(`• ${m.lead}: ${m.detail}${m.byAi ? " (AI)" : ""}`));
+    }
+    if (r.siteVisits.length) lines.push(`\n📍 Site visits: ${r.siteVisits.join(", ")}`);
+    if (!r.calls && !notes.length && !r.moves.length && !r.siteVisits.length) {
+      lines.push(`\nAaj koi activity nahi.`);
+    }
+    lines.push(`\n— via Call Pro AI`);
+    return lines.join("\n");
+  }
+
   function shareText(): string {
     const lines: string[] = [`📊 Daily Pulse — ${date}`];
     for (const c of companies) {
@@ -65,6 +92,9 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
       for (const r of c.reps) {
         lines.push(`\n• ${r.name} — ${r.calls} calls, ${r.connected} connected, ${fmtDur(r.talkSeconds)} talk`);
         if (r.narrative) lines.push(`  ${r.narrative}`);
+        r.voiceNotes.filter((v) => v.summary).slice(0, 3).forEach((v) => lines.push(`  🎤 ${v.lead}: ${v.summary}`));
+        r.moves.slice(0, 4).forEach((m) => lines.push(`  🔄 ${m.lead}: ${m.detail}`));
+        if (r.siteVisits.length) lines.push(`  📍 Site visit: ${r.siteVisits.join(", ")}`);
       }
     }
     lines.push(`\n— via Call Pro AI`);
@@ -78,6 +108,15 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
   }
   function whatsappReport() {
     window.open(`https://wa.me/?text=${encodeURIComponent(shareText())}`, "_blank");
+  }
+
+  async function copyRep(r: Rep, companyName?: string | null) {
+    await navigator.clipboard.writeText(repReport(r, companyName));
+    setCopiedRep(r.id);
+    setTimeout(() => setCopiedRep((id) => (id === r.id ? null : id)), 2000);
+  }
+  function whatsappRep(r: Rep, companyName?: string | null) {
+    window.open(`https://wa.me/?text=${encodeURIComponent(repReport(r, companyName))}`, "_blank");
   }
 
   const anyReps = companies.some((c) => c.reps.length > 0);
@@ -177,6 +216,22 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                   )}
 
                   {idle && <div style={{ fontSize: 13, color: "var(--muted)" }}>Aaj koi activity nahi.</div>}
+
+                  {/* Per-telecaller share — send THIS rep's day on its own. */}
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <button
+                      onClick={() => copyRep(r, c.company_name)}
+                      style={{ flex: 1, fontSize: 12, padding: "6px 10px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "var(--text)", cursor: "pointer" }}
+                    >
+                      {copiedRep === r.id ? "✓ Copied" : "📋 Copy"}
+                    </button>
+                    <button
+                      onClick={() => whatsappRep(r, c.company_name)}
+                      style={{ flex: 1, fontSize: 12, padding: "6px 10px", borderRadius: 7, border: "none", background: "#25D366", color: "#032b17", fontWeight: 600, cursor: "pointer" }}
+                    >
+                      💬 WhatsApp
+                    </button>
+                  </div>
                 </div>
               );
             })}
