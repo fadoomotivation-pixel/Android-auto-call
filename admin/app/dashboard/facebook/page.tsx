@@ -186,10 +186,19 @@ export default function FacebookSetupPage() {
         </div>
         
         <h3 style={{ margin: "0 0 8px 0", color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 2: Connect Page</h3>
-        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>
+        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 12, lineHeight: 1.6 }}>
           1. Go to Graph API Explorer or your App settings to generate a <b style={{ color: "var(--text)" }}>Page Access Token</b>.<br />
           2. Find your <b style={{ color: "var(--text)" }}>Page ID</b> from your Facebook Page About section.
         </p>
+        <div style={{ background: "rgba(255, 179, 0, 0.06)", border: "1px solid rgba(255, 179, 0, 0.35)", padding: 16, borderRadius: 12, marginBottom: 20, fontSize: 13, lineHeight: 1.6 }}>
+          <b style={{ color: "var(--text)" }}>Getting “Required permissions are missing for the app”?</b> The token must
+          be granted <b style={{ color: "var(--text)" }}>leads_retrieval</b>, <b style={{ color: "var(--text)" }}>pages_show_list</b>,{" "}
+          <b style={{ color: "var(--text)" }}>pages_read_engagement</b> and <b style={{ color: "var(--text)" }}>pages_manage_metadata</b>.
+          Then, in the Meta App Dashboard, give the app <b style={{ color: "var(--text)" }}>Advanced Access</b> to{" "}
+          <b style={{ color: "var(--text)" }}>leads_retrieval</b> (or add yourself as a Tester while in Development mode),
+          and make sure the Page is <b style={{ color: "var(--text)" }}>subscribed</b> to the app for the{" "}
+          <b style={{ color: "var(--text)" }}>leadgen</b> field. This error comes from Meta’s app/token setup, not the CRM.
+        </div>
 
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>

@@ -3,6 +3,43 @@ import { createClient } from "@/lib/supabase/server";
 import { spawn } from "child_process";
 import ffmpegStatic from "ffmpeg-static";
 
+// ffmpeg needs the Node runtime (child_process) — not the Edge runtime.
+export const runtime = "nodejs";
+// Transcoding a call recording can take a few seconds on a cold start; give the
+// serverless function headroom (capped by the plan's own limit).
+export const maxDuration = 60;
+
+// Pipe an AMR buffer through ffmpeg and resolve with the full MP3 buffer. We
+// buffer the whole output (recordings are short) instead of streaming so that a
+// transcode failure surfaces as a clean error BEFORE any response headers are
+// sent, rather than a truncated/broken audio stream in the browser.
+function transcodeAmrToMp3(input: Buffer, ffmpegPath: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn(ffmpegPath, ["-i", "pipe:0", "-f", "mp3", "pipe:1"]);
+    const out: Buffer[] = [];
+    let stderr = "";
+
+    ffmpeg.stdout.on("data", (chunk: Buffer) => out.push(chunk));
+    ffmpeg.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    ffmpeg.on("error", (err: Error) => reject(err));
+    ffmpeg.on("close", (code: number) => {
+      if (code === 0 && out.length) {
+        resolve(Buffer.concat(out));
+      } else {
+        reject(new Error(`ffmpeg exited ${code}: ${stderr.slice(-500)}`));
+      }
+    });
+
+    ffmpeg.stdin.on("error", () => {
+      /* EPIPE if ffmpeg dies early — the close/error handler reports the reason */
+    });
+    ffmpeg.stdin.write(input);
+    ffmpeg.stdin.end();
+  });
+}
+
 export async function GET(req: NextRequest) {
   try {
     const callId = req.nextUrl.searchParams.get("callId");
@@ -24,7 +61,9 @@ export async function GET(req: NextRequest) {
     }
 
     let buffer: Buffer;
+    let sourceType = "";
     if (data instanceof Blob) {
+      sourceType = data.type || "";
       buffer = Buffer.from(await data.arrayBuffer());
     } else if (data instanceof ArrayBuffer) {
       buffer = Buffer.from(data);
@@ -36,50 +75,40 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Empty audio data", { status: 404 });
     }
 
-    const isAMR = buffer.length >= 5 && buffer[0] === 0x23 && buffer[1] === 0x21 && buffer[2] === 0x41 && buffer[3] === 0x4d && buffer[4] === 0x52;
+    // AMR files start with the magic header "#!AMR".
+    const isAMR =
+      buffer.length >= 5 &&
+      buffer[0] === 0x23 &&
+      buffer[1] === 0x21 &&
+      buffer[2] === 0x41 &&
+      buffer[3] === 0x4d &&
+      buffer[4] === 0x52;
 
-    if (isAMR && ffmpegStatic) {
-      const stream = new ReadableStream({
-        start(controller) {
-          const ffmpegPath = ffmpegStatic as string;
-          const ffmpeg = spawn(ffmpegPath, [
-            "-i", "pipe:0",
-            "-f", "mp3",
-            "pipe:1"
-          ]);
-
-          ffmpeg.stdout.on("data", (chunk: Buffer) => {
-            controller.enqueue(chunk);
-          });
-
-          ffmpeg.stdout.on("end", () => {
-            controller.close();
-          });
-
-          ffmpeg.stderr.on("data", (errData: Buffer) => {
-          });
-
-          ffmpeg.on("error", (err: Error) => {
-            console.error("FFmpeg error:", err);
-            controller.error(err);
-          });
-
-          ffmpeg.stdin.write(buffer);
-          ffmpeg.stdin.end();
-        }
-      });
-
-      return new NextResponse(stream, {
-        headers: {
-          "Content-Type": "audio/mpeg",
-          "Cache-Control": "private, max-age=300",
-        },
-      });
+    if (isAMR) {
+      if (!ffmpegStatic) {
+        // Never happens once the binary is bundled, but fail loudly rather than
+        // handing the browser raw AMR bytes it cannot decode.
+        return new NextResponse("Audio transcoder unavailable on server", { status: 501 });
+      }
+      try {
+        const mp3 = await transcodeAmrToMp3(buffer, ffmpegStatic as string);
+        return new NextResponse(new Uint8Array(mp3), {
+          headers: {
+            "Content-Type": "audio/mpeg",
+            "Cache-Control": "private, max-age=300",
+          },
+        });
+      } catch (e: any) {
+        console.error("AMR transcode failed:", e?.message || e);
+        return new NextResponse("Could not transcode recording for playback", { status: 502 });
+      }
     }
 
+    // Already a browser-playable format (m4a/wav/mp3…) — pass it through with the
+    // real content-type the edge function reported.
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
-        "Content-Type": "audio/mp4",
+        "Content-Type": sourceType || "audio/mp4",
         "Cache-Control": "private, max-age=300",
       },
     });
