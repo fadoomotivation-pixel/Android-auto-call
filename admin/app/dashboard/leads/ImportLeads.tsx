@@ -86,13 +86,22 @@ export function ImportLeads({
     setBusy(true);
     setError(null);
 
-    // Check for duplicates
+    // Check for duplicates. PostgREST caps a select at 1000 rows, so page
+    // through ALL existing phones — otherwise big lists silently miss dupes
+    // beyond the first 1000 and re-import them.
     const norm = (p: string) => (p || "").replace(/\D/g, "").slice(-10);
-    const { data: existing } = await supabase
-      .from("contacts")
-      .select("phone")
-      .eq("company_id", companyId);
-    const have = new Set((existing ?? []).map((r) => norm(r.phone as string)));
+    const have = new Set<string>();
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data: page, error: pErr } = await supabase
+        .from("contacts")
+        .select("phone")
+        .eq("company_id", companyId)
+        .range(from, from + PAGE - 1);
+      if (pErr) break;
+      for (const r of page ?? []) have.add(norm(r.phone as string));
+      if (!page || page.length < PAGE) break;
+    }
     const fresh: typeof parsed = [];
     const dupes: typeof parsed = [];
     const seenNew = new Set<string>();
