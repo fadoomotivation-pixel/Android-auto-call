@@ -17,7 +17,39 @@ type Lead = {
   territory: string | null;
   created_at: string;
   notes: string | null;
+  temperature: string | null;
+  last_contacted_at: string | null;
 };
+
+// Status chips shown on the admin board, in funnel order.
+const STATUS_FILTERS: { key: string; label: string }[] = [
+  { key: "new", label: "New" },
+  { key: "callback", label: "Callback" },
+  { key: "interested", label: "Interested" },
+  { key: "site_visit", label: "Site Visit" },
+  { key: "negotiation", label: "Negotiation" },
+  { key: "token_paid", label: "Token" },
+  { key: "booked", label: "Booked" },
+  { key: "not_interested", label: "Not int." },
+  { key: "lost", label: "Lost" },
+];
+const TEMP_META: Record<string, { label: string; color: string; bg: string }> = {
+  hot: { label: "🔥 Hot", color: "#fca5a5", bg: "rgba(239,68,68,0.14)" },
+  warm: { label: "🌤 Warm", color: "#fcd34d", bg: "rgba(245,158,11,0.14)" },
+  cold: { label: "❄️ Cold", color: "#93c5fd", bg: "rgba(59,130,246,0.14)" },
+};
+function timeAgo(iso: string | null): string | null {
+  if (!iso) return null;
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 0) return null;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
 
 const PAGE = 50;
 
@@ -77,6 +109,10 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
   // company. Per-company dedup (0080) can't catch these — different tenants —
   // so the super admin sees them flagged and can decide what to do.
   const [crossCoPhones, setCrossCoPhones] = useState<Set<string>>(new Set());
+  // Status + temperature filters and their live counts (per current scope).
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [tempFilter, setTempFilter] = useState<string>("");
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
 
   const safe = (s: string) => s.trim().replace(/[,%()]/g, "");
 
@@ -98,7 +134,7 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     let q = scopeCompany(
       supabase
         .from("contacts")
-        .select("id, name, phone, company_name, status, salesperson_id, budget, territory, created_at, notes")
+        .select("id, name, phone, company_name, status, salesperson_id, budget, territory, created_at, notes, temperature, last_contacted_at")
         .order("created_at", { ascending: false }),
     );
     if (tab === "unassigned") {
@@ -107,11 +143,13 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
       q = q.not("salesperson_id", "is", null);
       if (agentFilter) q = q.eq("salesperson_id", agentFilter);
     }
+    if (statusFilter) q = q.eq("status", statusFilter);
+    if (tempFilter) q = q.eq("temperature", tempFilter);
     const s = safe(search);
     if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
     return q;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, tab, agentFilter, search, companyId, isSuper, companyFilter]);
+  }, [supabase, tab, agentFilter, search, companyId, isSuper, companyFilter, statusFilter, tempFilter]);
 
   const load = useCallback(
     async (reset: boolean) => {
@@ -153,12 +191,36 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, agentFilter, search, companyFilter]);
+  }, [tab, agentFilter, search, companyFilter, statusFilter, tempFilter]);
 
   useEffect(() => {
     void refreshStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyFilter]);
+
+  // Live per-status counts for the filter chips, respecting the company scope.
+  // Paged so it isn't capped at PostgREST's 1000-row limit.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const counts: Record<string, number> = {};
+      const P = 1000;
+      for (let from = 0; ; from += P) {
+        let q = supabase.from("contacts").select("status");
+        if (!isSuper) q = q.eq("company_id", companyId);
+        else if (companyFilter) q = q.eq("company_id", companyFilter);
+        const { data, error } = await q.range(from, from + P - 1).returns<{ status: string }[]>();
+        if (error) break;
+        for (const r of data ?? []) counts[r.status] = (counts[r.status] ?? 0) + 1;
+        if (!data || data.length < P) break;
+      }
+      if (!cancelled) setStatusCounts(counts);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyFilter, companyId, isSuper]);
 
   // Super admin only: find phones shared across companies. Page through every
   // contact (PostgREST caps a select at 1000) and keep the tails whose set of
@@ -426,6 +488,32 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
         </div>
       )}
 
+      {/* Status filter chips — with live counts (whole scope, not just this tab). */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Chip active={statusFilter === ""} onClick={() => setStatusFilter("")} label="All statuses" count={stats.total} />
+        {STATUS_FILTERS.filter((s) => (statusCounts[s.key] ?? 0) > 0 || statusFilter === s.key).map((s) => (
+          <Chip key={s.key} active={statusFilter === s.key} onClick={() => setStatusFilter(statusFilter === s.key ? "" : s.key)} label={s.label} count={statusCounts[s.key] ?? 0} />
+        ))}
+      </div>
+
+      {/* Temperature filter */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {(["hot", "warm", "cold"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTempFilter(tempFilter === t ? "" : t)}
+            style={{
+              fontSize: 12.5, padding: "5px 12px", borderRadius: 999, cursor: "pointer",
+              border: `1px solid ${tempFilter === t ? TEMP_META[t].color : "var(--border)"}`,
+              background: tempFilter === t ? TEMP_META[t].bg : "transparent",
+              color: tempFilter === t ? TEMP_META[t].color : "var(--muted)",
+            }}
+          >
+            {TEMP_META[t].label}
+          </button>
+        ))}
+      </div>
+
       <input
         className="search"
         placeholder="Search by name or phone…"
@@ -501,6 +589,11 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 15, color: "#fff", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   {l.name || l.phone}
+                  {l.temperature && TEMP_META[l.temperature] && (
+                    <span style={{ fontSize: 11, fontWeight: 600, color: TEMP_META[l.temperature].color, background: TEMP_META[l.temperature].bg, borderRadius: 6, padding: "2px 8px" }}>
+                      {TEMP_META[l.temperature].label}
+                    </span>
+                  )}
                   {isSuper && crossCoPhones.has(norm10(l.phone)) && (
                     <span
                       title="This phone number also exists under another company"
@@ -515,7 +608,8 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
                   {l.company_name && <span>· 🏢 {l.company_name}</span>}
                   {l.territory && <span>· 📍 {l.territory}</span>}
                   {l.budget && <span>· 💰 {l.budget}</span>}
-                  {l.created_at && <span>· 🕒 {new Date(l.created_at).toLocaleString()}</span>}
+                  {timeAgo(l.last_contacted_at) && <span>· 📞 last: {timeAgo(l.last_contacted_at)}</span>}
+                  {l.created_at && <span>· 🕒 {new Date(l.created_at).toLocaleDateString()}</span>}
                 </div>
                 {l.notes && (
                   <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)", padding: "8px 12px", background: "rgba(16, 185, 129, 0.05)", borderLeft: "3px solid var(--accent)", borderRadius: 6 }}>
