@@ -22,8 +22,13 @@ export function RecordingPlayer({ callId, canDelete }: { callId: string; canDele
         }
       });
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Couldn't load recording (${res.status})`);
+        const text = (await res.text().catch(() => "")).trim();
+        // A framework-level crash returns an HTML error page — don't dump that
+        // markup into the table; show a concise status instead.
+        const clean = !text || text.startsWith("<") || text.length > 200
+          ? `Couldn't load recording (${res.status})`
+          : text;
+        throw new Error(clean);
       }
       const blob = await res.blob();
       setSrc(URL.createObjectURL(blob));
