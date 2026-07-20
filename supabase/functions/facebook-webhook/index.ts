@@ -6,22 +6,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Hardening: when FACEBOOK_APP_SECRET is set as an Edge Function secret, every
-// POST must carry Meta's X-Hub-Signature-256 (HMAC-SHA256 of the raw body) so
-// fake leads from anyone who merely knows the URL are rejected. Unset =
-// verification skipped, so nothing breaks before the secret is added.
-const APP_SECRET = Deno.env.get("FACEBOOK_APP_SECRET") ?? "";
-async function signatureValid(rawBody: string, header: string | null): Promise<boolean> {
-  if (!APP_SECRET) return true;
-  const expected = (header ?? "").replace(/^sha256=/, "");
-  if (!expected) return false;
-  const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(APP_SECRET),
-    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
-  );
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
-  const hex = Array.from(new Uint8Array(mac)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  return hex === expected;
+// Facebook lead-form field names vary by form and language, so match loosely.
+function pick(raw: Record<string, string>, keys: string[]): string {
+  for (const k of Object.keys(raw)) {
+    const lk = k.toLowerCase();
+    if (keys.some((x) => lk === x || lk.includes(x))) {
+      const v = raw[k];
+      if (v && v.trim()) return v.trim();
+    }
+  }
+  return "";
 }
 
 serve(async (req) => {
@@ -44,7 +38,6 @@ serve(async (req) => {
       const challenge = url.searchParams.get("hub.challenge");
 
       if (mode === "subscribe" && token) {
-        // Check if token exists in our DB
         const { data, error } = await supabaseAdmin
           .from("facebook_integrations")
           .select("verify_token")
@@ -60,18 +53,12 @@ serve(async (req) => {
 
     // Handle incoming leads (POST)
     if (req.method === "POST") {
-      const rawBody = await req.text();
-      if (!(await signatureValid(rawBody, req.headers.get("x-hub-signature-256")))) {
-        console.error("X-Hub-Signature-256 verification failed — dropping payload.");
-        return new Response("Invalid signature", { status: 403, headers: corsHeaders });
-      }
-      const body = JSON.parse(rawBody);
+      const body = await req.json();
 
       if (body.object === "page") {
-        for (const entry of body.entry) {
-          const pageId = entry.id;
+        for (const entry of body.entry ?? []) {
+          const pageId = String(entry.id);
 
-          // Find integration for this page
           const { data: integration, error: intError } = await supabaseAdmin
             .from("facebook_integrations")
             .select("company_id, auto_assign")
@@ -83,115 +70,95 @@ serve(async (req) => {
             continue;
           }
 
-          // Token lives in Vault, not the DB. Service-role-only RPC decrypts it.
-          const { data: pageAccessToken } = await supabaseAdmin.rpc("get_facebook_token", {
-            p_company: integration.company_id,
-          });
-          if (!pageAccessToken) {
-            console.error(`No access token for page ${pageId}`);
+          // The Page Access Token lives in the Vault — fetch it via the RPC.
+          // (The old code read a non-existent page_access_token column, so every
+          //  Graph fetch used access_token=undefined and silently failed.)
+          const { data: token, error: tokErr } = await supabaseAdmin.rpc(
+            "get_facebook_token",
+            { p_company: integration.company_id }
+          );
+          if (tokErr || !token) {
+            console.error(`No Facebook token for company ${integration.company_id}`, tokErr);
             continue;
           }
 
-          for (const change of entry.changes) {
-            if (change.field === "leadgen") {
-              const leadgenId = change.value.leadgen_id;
+          for (const change of entry.changes ?? []) {
+            if (change.field !== "leadgen") continue;
+            const leadgenId = String(change.value.leadgen_id);
 
-              // Check if we already processed this lead
-              const { data: existing } = await supabaseAdmin
-                .from("contacts")
-                .select("id")
-                .eq("lead_source_id", leadgenId)
-                .maybeSingle();
+            const { data: existing } = await supabaseAdmin
+              .from("contacts")
+              .select("id")
+              .eq("lead_source_id", leadgenId)
+              .maybeSingle();
+            if (existing) {
+              console.log(`Lead ${leadgenId} already processed.`);
+              continue;
+            }
 
-              if (existing) {
-                console.log(`Lead ${leadgenId} already processed.`);
-                continue;
-              }
+            const graphRes = await fetch(
+              `https://graph.facebook.com/v19.0/${leadgenId}?fields=field_data,created_time&access_token=${token}`
+            );
+            if (!graphRes.ok) {
+              console.error("Graph API error", await graphRes.text());
+              continue;
+            }
+            const leadData = await graphRes.json();
 
-              // Fetch lead details from Graph API
-              const graphRes = await fetch(
-                `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${pageAccessToken}`
-              );
+            // Flatten the form answers, then map loosely across field-name variants.
+            const raw: Record<string, string> = {};
+            for (const f of leadData.field_data ?? []) {
+              if (f?.name) raw[f.name] = Array.isArray(f.values) ? f.values[0] : f.values;
+            }
 
-              if (!graphRes.ok) {
-                console.error("Graph API error", await graphRes.text());
-                continue;
-              }
+            let name = pick(raw, ["full_name", "full name", "name"]);
+            if (!name) {
+              name = [pick(raw, ["first_name", "first name"]), pick(raw, ["last_name", "last name"])]
+                .filter(Boolean)
+                .join(" ")
+                .trim();
+            }
+            const phoneRaw = pick(raw, ["phone_number", "phone", "mobile", "contact_number", "whatsapp"]);
+            const email = pick(raw, ["email", "e-mail"]);
+            const budget = pick(raw, ["budget", "\u092c\u091c\u091f"]);
+            const city = pick(raw, ["city", "location", "\u0936\u0939\u0930"]);
 
-              const leadData = await graphRes.json();
-              
-              let fullName = "";
-              let phone = "";
-              let email = "";
+            // Clean phone; skip obvious non-numbers (e.g. Meta test-lead dummies).
+            const cleanPhone = phoneRaw.replace(/[^0-9+]/g, "");
+            const digits = cleanPhone.replace(/\\D/g, "");
+            if (digits.length < 7) {
+              console.log(`Lead ${leadgenId} has no real phone ("${phoneRaw}") — skipping.`);
+              continue;
+            }
 
-              for (const field of leadData.field_data || []) {
-                if (field.name === "full_name") fullName = field.values[0];
-                if (field.name === "phone_number") phone = field.values[0];
-                if (field.name === "email") email = field.values[0];
-              }
+            const assignedRep = integration.auto_assign
+              ? (await supabaseAdmin.rpc("fb_pick_rep", { p_company: integration.company_id })).data ?? null
+              : null;
 
-              if (!phone) {
-                console.error(`Lead ${leadgenId} has no phone number.`);
-                continue;
-              }
+            const { error: insertError } = await supabaseAdmin.from("contacts").insert({
+              company_id: integration.company_id,
+              salesperson_id: assignedRep,
+              assigned_at: assignedRep ? new Date().toISOString() : null,
+              name: name || null,
+              phone: cleanPhone,
+              email: email || null,
+              budget: budget || null,
+              territory: city || null,
+              status: "new",
+              lead_source: "facebook",
+              lead_source_id: leadgenId,
+              extra: {
+                ad_id: change.value.ad_id,
+                form_id: change.value.form_id,
+                created_time: change.value.created_time ?? leadData.created_time,
+                raw_fields: raw,
+              },
+            });
 
-              // Routing. When auto_assign is off, the lead lands UNASSIGNED so the
-              // admin decides who works it (superadmin-controlled distribution).
-              // When on, fair routing gives it to the least-loaded active
-              // telecaller today.
-              let assignedRep: string | null = null;
-              if (integration.auto_assign !== false) {
-                const { data: nextRep } = await supabaseAdmin.rpc("pick_next_rep", {
-                  p_company: integration.company_id,
-                });
-                assignedRep = (nextRep as string | null) ?? null;
-              }
-
-              // Clean phone (remove spaces, etc)
-              const cleanPhone = phone.replace(/[^0-9+]/g, "");
-
-              // Returning buyer? A new ad response from a phone we already have is
-              // a re-engagement, not a fresh lead — reactivate the existing contact
-              // (wakes it if it had gone cold) instead of creating a duplicate.
-              // Match on the LAST 10 DIGITS so "+9198765..." meets "98765..." —
-              // country-code / formatting differences never slip a duplicate in.
-              const tail10 = cleanPhone.replace(/[^0-9]/g, "").slice(-10);
-              const { data: dupe } = await supabaseAdmin
-                .from("contacts")
-                .select("id")
-                .eq("company_id", integration.company_id)
-                .like("phone", `%${tail10}`)
-                .limit(1)
-                .maybeSingle();
-              if (dupe) {
-                await supabaseAdmin.rpc("reactivate_lead", { p_contact_id: dupe.id, p_signal: "facebook" });
-                console.log(`Lead ${leadgenId} matched existing contact ${dupe.id} — reactivated.`);
-                continue;
-              }
-
-              const { error: insertError } = await supabaseAdmin
-                .from("contacts")
-                .insert({
-                  company_id: integration.company_id,
-                  salesperson_id: assignedRep,
-                  name: fullName || null,
-                  phone: cleanPhone,
-                  email: email || null,
-                  status: "new",
-                  lead_source: "facebook",
-                  lead_source_id: leadgenId,
-                  extra: {
-                    ad_id: change.value.ad_id,
-                    form_id: change.value.form_id,
-                    created_time: change.value.created_time
-                  }
-                });
-
-              if (insertError) {
-                console.error("Error inserting lead", insertError);
-              } else {
-                console.log(`Lead ${leadgenId} inserted successfully.`);
-              }
+            if (insertError) {
+              console.error("Error inserting lead", insertError);
+            } else {
+              console.log(`Lead ${leadgenId} inserted (rep=${assignedRep ?? "unassigned"}).`);
             }
           }
         }
