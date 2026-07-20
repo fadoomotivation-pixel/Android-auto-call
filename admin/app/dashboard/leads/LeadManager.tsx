@@ -39,6 +39,9 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     return !!c && c !== companyId;
   };
   const labelOf = (s: Sp) => (isSuper && s.company_name ? `${s.full_name ?? "—"} · ${s.company_name}` : (s.full_name ?? "—"));
+  // Last-10 digits — the phone identity used for dedup everywhere (matches the
+  // 0080 DB trigger and the import check).
+  const norm10 = (p: string) => (p || "").replace(/\D/g, "").slice(-10);
 
   // Super admin only: narrow the whole board to one company. Built from the
   // telecaller list the page already loaded (unique company_id → name).
@@ -70,6 +73,10 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
 
   const [stats, setStats] = useState({ total: 0, unassigned: 0, assigned: 0 });
   const [agentCounts, setAgentCounts] = useState<Record<string, number>>({});
+  // Super admin only: phone tails (last-10) that exist under MORE THAN ONE
+  // company. Per-company dedup (0080) can't catch these — different tenants —
+  // so the super admin sees them flagged and can decide what to do.
+  const [crossCoPhones, setCrossCoPhones] = useState<Set<string>>(new Set());
 
   const safe = (s: string) => s.trim().replace(/[,%()]/g, "");
 
@@ -152,6 +159,42 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     void refreshStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyFilter]);
+
+  // Super admin only: find phones shared across companies. Page through every
+  // contact (PostgREST caps a select at 1000) and keep the tails whose set of
+  // company_ids has more than one entry.
+  useEffect(() => {
+    if (!isSuper) return;
+    let cancelled = false;
+    (async () => {
+      const byTail = new Map<string, Set<string>>();
+      const P = 1000;
+      for (let from = 0; ; from += P) {
+        const { data, error } = await supabase
+          .from("contacts")
+          .select("phone, company_id")
+          .range(from, from + P - 1)
+          .returns<{ phone: string; company_id: string | null }[]>();
+        if (error) break;
+        for (const r of data ?? []) {
+          const t = norm10(r.phone);
+          if (t.length < 10 || !r.company_id) continue;
+          const set = byTail.get(t) ?? new Set<string>();
+          set.add(r.company_id);
+          byTail.set(t, set);
+        }
+        if (!data || data.length < P) break;
+      }
+      if (cancelled) return;
+      const cross = new Set<string>();
+      for (const [t, comps] of byTail) if (comps.size > 1) cross.add(t);
+      setCrossCoPhones(cross);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuper, supabase]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -456,7 +499,17 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
             <label key={l.id} className="card" style={{ display: "flex", gap: 12, alignItems: "center", cursor: "pointer", padding: 16, background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", transition: "all 0.2s ease" }}>
               <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 15, color: "#fff" }}>{l.name || l.phone}</div>
+                <div style={{ fontWeight: 600, fontSize: 15, color: "#fff", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  {l.name || l.phone}
+                  {isSuper && crossCoPhones.has(norm10(l.phone)) && (
+                    <span
+                      title="This phone number also exists under another company"
+                      style={{ fontSize: 11, fontWeight: 600, color: "#f59e0b", background: "rgba(245, 158, 11, 0.12)", border: "1px solid rgba(245, 158, 11, 0.35)", borderRadius: 6, padding: "2px 8px" }}
+                    >
+                      ⧉ also in another company
+                    </span>
+                  )}
+                </div>
                 <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4, display: "flex", flexWrap: "wrap", gap: "8px" }}>
                   <span style={{ color: "#cbd5e1" }}>📞 {l.phone}</span>
                   {l.company_name && <span>· 🏢 {l.company_name}</span>}
