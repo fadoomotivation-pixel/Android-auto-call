@@ -7,6 +7,54 @@ never collide and the human never has to untangle a mess. **Read
 `docs/AI_COLLAB_RULES.md` first — it is the source of truth; this file is just how
 to *operate* day-to-day.**
 
+## ⛔ HARD RULES — learned the hard way (read these every time)
+
+These are the exact mistakes that have already cost the human a debugging session.
+Do not repeat them.
+
+1. **Local edits DO NOT EXIST until pushed. A change you didn't `git push` is
+   invisible to Claude, to Vercel, to the CI, and to production.** Editing files in
+   your local working copy and then saying "done / fixed / production-ready" is a
+   FALSE report. Every change ends with: commit → `git push` → open a PR. If you
+   cannot push, say so plainly ("changes are local, NOT pushed") — never imply they
+   are live.
+2. **Never claim a fix is "done" or "production-ready" without proving it against
+   the remote.** Before you say done, verify: `git log origin/main --oneline`
+   (or the PR's file diff) actually shows your change, `npx tsc --noEmit` is clean,
+   and — for anything deployed — the Vercel build log / runtime log / a DB `select`
+   confirms real behaviour. "It should work" is not verification.
+3. **Read your OWN diff before you describe it.** Don't write a summary that claims
+   config/files you didn't actually change (e.g. saying `next.config.mjs` was
+   updated when it wasn't). Describe only what `git diff` shows.
+4. **Finish the whole fix, not the first half.** A partial fix that looks plausible
+   but doesn't work end-to-end is worse than none — it makes everyone think the
+   problem is solved. See the ffmpeg recipe below for what "the whole fix" means.
+5. **Sync before you touch a file.** Claude pushes to `main` constantly. `git fetch
+   origin && git merge origin/main` first, then read the file fresh. Your local copy
+   goes stale fast; editing a stale file re-introduces bugs Claude already fixed.
+6. **Multi-tenant scoping is not optional.** Dedup, assign, import, counts — every
+   contact operation is scoped by `company_id`. The super admin's own company is the
+   Platform HQ oversight tenant, NOT a real tenant. A super-admin action must target
+   the *selected* company; defaulting to their own company silently writes to the
+   wrong tenant and bypasses the per-company dedup. Prefer making the human pick the
+   target company (disable the action with a hint) over silently guessing.
+
+### The complete Vercel + ffmpeg recipe (all four parts, or it fails)
+`admin/app/api/audio-proxy` transcodes `.amr` recordings with `ffmpeg-static`. On
+Vercel this needs ALL of:
+1. `ffmpeg-static` in `admin/package.json` **and** in `admin/package-lock.json`
+   (out-of-sync lockfile → `npm ci` fails the whole build).
+2. `experimental.serverComponentsExternalPackages: ["ffmpeg-static"]` in
+   `admin/next.config.mjs`.
+3. `experimental.outputFileTracingIncludes` mapping `/api/audio-proxy` →
+   `./node_modules/ffmpeg-static/ffmpeg` (NFT won't trace a binary referenced only
+   as a runtime path string).
+4. `admin/vercel.json` `buildCommand` that actually downloads the binary, e.g.
+   `npm run ensure-ffmpeg && npm run copy-pdf-worker && next build` — because Vercel
+   runs `next build` directly, so npm `prebuild` hooks never fire.
+Parts 1–2 alone (a common half-fix) still `ENOENT` at runtime. This is already done
+on `main`; don't "re-fix" it with a partial version.
+
 ## Your lane
 - **You own:** the admin web import/lead UI — `admin/app/dashboard/leads/ImportLeads.tsx`,
   `LeadManager.tsx`, `LeadHistory.tsx`, and import-side helpers.
