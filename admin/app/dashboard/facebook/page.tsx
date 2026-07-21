@@ -31,6 +31,9 @@ const STAGE_LABELS: Record<string, string> = {
   booked: "Booked / Won",
 };
 
+type Check = { ok: boolean; label: string };
+type RecentLead = { id: string; name: string | null; phone: string; created_at: string; extra: { form_id?: string; created_time?: string } | null };
+
 export default function FacebookSetupPage() {
   const supabase = createClient();
   const [integration, setIntegration] = useState<FbIntegration | null>(null);
@@ -51,6 +54,14 @@ export default function FacebookSetupPage() {
   const [eventMap, setEventMap] = useState<Record<string, string>>({ ...DEFAULT_EVENT_MAP });
   const [savingCapi, setSavingCapi] = useState(false);
 
+  // Connection tester + auto-subscribe + recent leads
+  const [companyId, setCompanyId] = useState<string>("");
+  const [testing, setTesting] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [checks, setChecks] = useState<{ token?: Check; subscription?: Check; permission?: Check } | null>(null);
+  const [connMsg, setConnMsg] = useState<string | null>(null);
+  const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
+
   const webhookUrl = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/facebook-webhook";
 
   useEffect(() => {
@@ -60,6 +71,8 @@ export default function FacebookSetupPage() {
       
       const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userData.user.id).single();
       if (!profile?.company_id) return;
+      setCompanyId(profile.company_id);
+      void loadRecentLeads(profile.company_id);
 
       const { data } = await supabase
         .from("facebook_integrations")
@@ -85,10 +98,54 @@ export default function FacebookSetupPage() {
     load();
   }, [supabase]);
 
+  async function loadRecentLeads(company: string) {
+    const { data } = await supabase
+      .from("contacts")
+      .select("id, name, phone, created_at, extra")
+      .eq("company_id", company)
+      .eq("lead_source", "facebook")
+      .order("created_at", { ascending: false })
+      .limit(8)
+      .returns<RecentLead[]>();
+    setRecentLeads(data ?? []);
+  }
+
+  async function runTest() {
+    setTesting(true);
+    setChecks(null);
+    setConnMsg(null);
+    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; checks?: typeof checks }>(
+      "facebook-manage",
+      { body: { action: "test" } },
+    );
+    setTesting(false);
+    if (error || !data?.ok) {
+      setConnMsg(data?.error || error?.message || "Test failed.");
+      return;
+    }
+    setChecks(data.checks ?? null);
+  }
+
+  async function runSubscribe() {
+    setSubscribing(true);
+    setConnMsg(null);
+    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string }>(
+      "facebook-manage",
+      { body: { action: "subscribe" } },
+    );
+    setSubscribing(false);
+    if (error || !data?.ok) {
+      setConnMsg(data?.error || error?.message || "Subscribe failed.");
+      return;
+    }
+    setConnMsg("✓ Page subscribed to the app for leadgen. Re-run the test to confirm.");
+    void runTest();
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    
+
     const { data: userData } = await supabase.auth.getUser();
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userData?.user?.id!).single();
     
@@ -266,6 +323,79 @@ export default function FacebookSetupPage() {
             {saving ? "Saving..." : "Save Integration"}
           </button>
         </form>
+      </div>
+
+      {/* Connection health — verify + one-click subscribe (via facebook-manage). */}
+      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
+        <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Connection health</h3>
+        <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.6 }}>
+          Check that your token, page subscription and lead permission are all live — and subscribe the page in one click.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: checks || connMsg ? 16 : 0 }}>
+          <button
+            type="button"
+            onClick={runTest}
+            disabled={testing || !integration}
+            style={{ background: "rgba(24,119,242,0.12)", color: "#1877F2", border: "1px solid rgba(24,119,242,0.35)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: testing ? "wait" : "pointer" }}
+          >
+            {testing ? "Testing…" : "🔍 Test connection"}
+          </button>
+          <button
+            type="button"
+            onClick={runSubscribe}
+            disabled={subscribing || !integration}
+            style={{ background: "linear-gradient(135deg, #1877F2, #0A52CC)", color: "white", padding: "10px 18px", borderRadius: 8, border: "none", fontWeight: 600, cursor: subscribing ? "wait" : "pointer" }}
+          >
+            {subscribing ? "Subscribing…" : "🔗 Auto-subscribe page"}
+          </button>
+        </div>
+        {!integration && <p style={{ fontSize: 13, color: "var(--muted)" }}>Save the Page integration above first.</p>}
+        {connMsg && <div style={{ fontSize: 13, color: connMsg.startsWith("✓") ? "#22c55e" : "#f87171", marginBottom: 10 }}>{connMsg}</div>}
+        {checks && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {[checks.token, checks.subscription, checks.permission].filter(Boolean).map((c, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 }}>
+                <span style={{ fontSize: 16 }}>{c!.ok ? "✅" : "❌"}</span>
+                <span style={{ color: c!.ok ? "var(--text)" : "#fca5a5" }}>{c!.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Facebook leads — proof that sync is flowing. */}
+      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Recent Facebook leads</h3>
+          <button
+            type="button"
+            onClick={() => companyId && loadRecentLeads(companyId)}
+            disabled={!companyId}
+            style={{ fontSize: 12, padding: "5px 12px", borderRadius: 7, border: "1px solid var(--border)", background: "rgba(255,255,255,0.04)", color: "var(--muted)", cursor: "pointer" }}
+          >
+            🔄 Refresh
+          </button>
+        </div>
+        {recentLeads.length === 0 ? (
+          <p style={{ fontSize: 14, color: "var(--muted)", margin: 0 }}>
+            No Facebook leads yet. Once a lead form is submitted (or you send a test lead), it appears here within seconds.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {recentLeads.map((l) => (
+              <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 600, color: "var(--text)" }}>{l.name || "(no name)"}</div>
+                  <div style={{ fontSize: 13, color: "var(--muted)", fontFamily: "monospace" }}>{l.phone}</div>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", textAlign: "right" }}>
+                  <div>🕒 {new Date(l.extra?.created_time ?? l.created_at).toLocaleString()}</div>
+                  {l.extra?.form_id && <div style={{ opacity: 0.7 }}>form {String(l.extra.form_id).slice(-6)}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Step 3 — close the loop: send conversions BACK to Meta (CAPI) */}
