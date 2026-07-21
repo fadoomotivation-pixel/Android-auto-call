@@ -61,6 +61,12 @@ export default function FacebookSetupPage() {
   const [checks, setChecks] = useState<{ token?: Check; subscription?: Check; permission?: Check } | null>(null);
   const [connMsg, setConnMsg] = useState<string | null>(null);
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
+  const [copiedField, setCopiedField] = useState<string>("");
+  function copyField(text: string, key: string) {
+    navigator.clipboard.writeText(text);
+    setCopiedField(key);
+    setTimeout(() => setCopiedField((k) => (k === key ? "" : k)), 1200);
+  }
 
   const webhookUrl = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/facebook-webhook";
 
@@ -238,8 +244,20 @@ export default function FacebookSetupPage() {
         </p>
         
         <div style={{ background: "rgba(24, 119, 242, 0.05)", border: "1px solid rgba(24, 119, 242, 0.3)", padding: 16, borderRadius: 12, marginBottom: 32, fontFamily: "monospace", fontSize: 13, boxShadow: "0 0 20px rgba(24, 119, 242, 0.1)" }}>
-          <div><b style={{ color: "#1877F2" }}>Webhook URL:</b> {webhookUrl}</div>
-          <div style={{ marginTop: 8 }}><b style={{ color: "#1877F2" }}>Verify Token:</b> {verifyToken}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span><b style={{ color: "#1877F2" }}>Webhook URL:</b> {webhookUrl}</span>
+            <button type="button" onClick={() => copyField(webhookUrl, "url")}
+              style={{ fontSize: 11, padding: "3px 9px", borderRadius: 6, border: "1px solid rgba(24,119,242,0.4)", background: "rgba(24,119,242,0.1)", color: "#1877F2", cursor: "pointer" }}>
+              {copiedField === "url" ? "Copied ✓" : "Copy"}
+            </button>
+          </div>
+          <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span><b style={{ color: "#1877F2" }}>Verify Token:</b> {verifyToken}</span>
+            <button type="button" onClick={() => copyField(verifyToken, "vt")}
+              style={{ fontSize: 11, padding: "3px 9px", borderRadius: 6, border: "1px solid rgba(24,119,242,0.4)", background: "rgba(24,119,242,0.1)", color: "#1877F2", cursor: "pointer" }}>
+              {copiedField === "vt" ? "Copied ✓" : "Copy"}
+            </button>
+          </div>
         </div>
         
         <h3 style={{ margin: "0 0 8px 0", color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 2: Connect Page</h3>
