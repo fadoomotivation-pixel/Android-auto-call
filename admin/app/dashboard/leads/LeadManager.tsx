@@ -89,6 +89,11 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
   const [companyFilter, setCompanyFilter] = useState<string>("");
   // Reps shown in chips/assign menu — scoped to the picked company when set.
   const visibleReps = companyFilter ? salespeople.filter((s) => s.company_id === companyFilter) : salespeople;
+  // Which company an import lands in. A super admin's own company is the
+  // Platform HQ oversight tenant — importing there silently bypasses the
+  // per-company dedup for the REAL tenant, so a super admin must first pick the
+  // target company; a regular admin always imports into their own company.
+  const importCompanyId = isSuper ? companyFilter : companyId;
 
   const [tab, setTab] = useState<"unassigned" | "assigned">("unassigned");
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
@@ -392,11 +397,18 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
   }
 
   async function autoAssignByTerritory() {
+    // A super admin must pick a company first — otherwise this would assign
+    // unassigned leads across EVERY company at once.
+    if (isSuper && !companyFilter) {
+      setMsg("Pick a company first to auto-assign its leads.");
+      setTimeout(() => setMsg(null), 3000);
+      return;
+    }
     setBusy(true);
-    // Fetch all unassigned leads that have a territory
-    const { data: unassigned } = await supabase
-      .from("contacts")
-      .select("id, territory")
+    // Fetch unassigned leads (scoped to the selected company) that have a territory
+    const { data: unassigned } = await scopeCompany(
+      supabase.from("contacts").select("id, territory"),
+    )
       .is("salesperson_id", null)
       .not("territory", "is", null);
 
@@ -415,7 +427,7 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     for (const lead of unassigned) {
       if (!lead.territory) continue;
       const t = lead.territory.trim().toLowerCase();
-      const matches = salespeople.filter(sp => sp.territory && sp.territory.trim().toLowerCase() === t);
+      const matches = visibleReps.filter(sp => sp.territory && sp.territory.trim().toLowerCase() === t);
       if (matches.length > 0) {
         const chosen = matches[Math.floor(Math.random() * matches.length)];
         updates.push({ id: lead.id, salesperson_id: chosen.id });
@@ -442,7 +454,13 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <button className="primary" style={{ width: "auto", padding: "9px 16px" }} onClick={() => setImportOpen(true)}>
+        <button
+          className="primary"
+          style={{ width: "auto", padding: "9px 16px", opacity: importCompanyId ? 1 : 0.5, cursor: importCompanyId ? "pointer" : "not-allowed" }}
+          onClick={() => importCompanyId && setImportOpen(true)}
+          disabled={!importCompanyId}
+          title={importCompanyId ? "" : "Pick a company first so leads import into it (and dedupe against it)."}
+        >
           ⬆ Import Leads
         </button>
         {isSuper && companies.length > 0 && (
@@ -457,6 +475,9 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
               <option key={id} value={id}>{name}</option>
             ))}
           </select>
+        )}
+        {isSuper && !importCompanyId && (
+          <span style={{ color: "#f59e0b", fontSize: 13 }}>← Pick a company to import into it</span>
         )}
         {msg && <span style={{ color: "var(--accent)", fontSize: 13 }}>{msg}</span>}
       </div>
@@ -639,9 +660,9 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
         </button>
       )}
 
-      {importOpen && (
+      {importOpen && importCompanyId && (
         <ImportLeads
-          companyId={companyId}
+          companyId={importCompanyId}
           salespeople={salespeople}
           onClose={() => setImportOpen(false)}
           onDone={async (n) => {
