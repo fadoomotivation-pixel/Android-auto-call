@@ -53,6 +53,8 @@ export default function FacebookSetupPage() {
   const [capiEnabled, setCapiEnabled] = useState(false);
   const [eventMap, setEventMap] = useState<Record<string, string>>({ ...DEFAULT_EVENT_MAP });
   const [savingCapi, setSavingCapi] = useState(false);
+  const [capiTesting, setCapiTesting] = useState(false);
+  const [capiMsg, setCapiMsg] = useState<string | null>(null);
 
   // Connection tester + auto-subscribe + recent leads
   const [companyId, setCompanyId] = useState<string>("");
@@ -203,6 +205,21 @@ export default function FacebookSetupPage() {
       alert("Saved successfully! Now configure the webhook in your Meta App Dashboard.");
     }
     setSaving(false);
+  }
+
+  async function runTestCapi() {
+    setCapiTesting(true);
+    setCapiMsg(null);
+    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; received?: number }>(
+      "facebook-manage",
+      { body: { action: "test_capi" } },
+    );
+    setCapiTesting(false);
+    if (error || !data?.ok) {
+      setCapiMsg(data?.error || error?.message || "CAPI test failed.");
+      return;
+    }
+    setCapiMsg(`✓ CAPI working — Meta accepted the test event (${data.received} received). Conversions will flow as leads progress.`);
   }
 
   async function handleSaveCapi(e: React.FormEvent) {
@@ -506,6 +523,19 @@ export default function FacebookSetupPage() {
           >
             {savingCapi ? "Saving..." : "Save Conversions Setup"}
           </button>
+
+          {/* Prove the CAPI token + dataset actually work — sends one test event. */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+            <button
+              type="button"
+              onClick={runTestCapi}
+              disabled={capiTesting}
+              style={{ background: "rgba(16,185,129,0.12)", color: "#22c55e", border: "1px solid rgba(16,185,129,0.4)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: capiTesting ? "wait" : "pointer" }}
+            >
+              {capiTesting ? "Testing…" : "🧪 Test CAPI"}
+            </button>
+            {capiMsg && <span style={{ fontSize: 13, color: capiMsg.startsWith("✓") ? "#22c55e" : "#f87171" }}>{capiMsg}</span>}
+          </div>
         </form>
       </div>
     </div>
