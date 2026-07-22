@@ -1,0 +1,66 @@
+name: Transcode AMR recordings
+
+# Some budget phones record SIM calls as .amr, which Whisper can't transcribe and
+# browsers can't play. The Supabase edge runtime can't run ffmpeg (no Web Worker),
+# but GitHub's runners ship a full ffmpeg — so we convert AMR → MP3 here, for free.
+# The amr-convert edge function does the DB/Drive work; this job only fetches bytes,
+# runs ffmpeg, and hands the MP3 back. Auth is a dedicated AMR_SECRET (repo secret)
+# that only drives AMR conversion — never the service key.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7,37 * * * *" # twice an hour, off the busy :00/:30 marks
+
+concurrency:
+  group: amr-transcode
+  cancel-in-progress: false
+
+jobs:
+  transcode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure ffmpeg
+        run: ffmpeg -version >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+
+      - name: Convert pending AMR recordings to MP3
+        env:
+          FN: https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/amr-convert
+          SECRET: ${{ secrets.AMR_SECRET }}
+        run: |
+          set -uo pipefail
+          if [ -z "${SECRET:-}" ]; then
+            echo "AMR_SECRET is not set. Add it in repo Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          post() { curl -sS -X POST "$FN" -H 'Content-Type: application/json' --data "$1"; }
+
+          ids=$(post "$(jq -n --arg s "$SECRET" '{secret:$s,action:"list",limit:25}')" | jq -r '.ids[]?')
+          if [ -z "$ids" ]; then echo "Nothing pending."; exit 0; fi
+
+          converted=0; skipped=0; failed=0
+          for id in $ids; do
+            echo "::group::$id"
+            b64=$(post "$(jq -n --arg s "$SECRET" --arg id "$id" '{secret:$s,action:"get",id:$id}')" | jq -r '.base64 // empty')
+            if [ -z "$b64" ]; then echo "download failed"; failed=$((failed+1)); echo "::endgroup::"; continue; fi
+            echo "$b64" | base64 -d > in.bin
+
+            if [ "$(head -c 5 in.bin 2>/dev/null)" = "#!AMR" ]; then
+              if ffmpeg -y -hide_banner -loglevel error -i in.bin -ac 1 -ar 16000 -codec:a libmp3lame -b:a 48k out.mp3; then
+                jq -n --arg s "$SECRET" --arg id "$id" --arg b "$(base64 -w0 out.mp3)" \
+                  '{secret:$s,action:"put",id:$id,base64:$b}' > payload.json
+                res=$(curl -sS -X POST "$FN" -H 'Content-Type: application/json' --data @payload.json)
+                echo "put -> $res"
+                echo "$res" | jq -e '.ok == true' >/dev/null && converted=$((converted+1)) || failed=$((failed+1))
+              else
+                echo "ffmpeg failed"; failed=$((failed+1))
+              fi
+            else
+              echo "not AMR — marking skipped"
+              post "$(jq -n --arg s "$SECRET" --arg id "$id" '{secret:$s,action:"skip",id:$id}')" >/dev/null
+              skipped=$((skipped+1))
+            fi
+            rm -f in.bin out.mp3 payload.json
+            echo "::endgroup::"
+          done
+          echo "Done — converted=$converted skipped=$skipped failed=$failed"
