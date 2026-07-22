@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { CompanyPicker } from "../whatsapp/CompanyPicker";
 
 type Interest = {
   id: string;
@@ -57,6 +58,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       <p style={{ color: "var(--muted)", marginTop: -6 }}>
         Which projects each buyer is considering — one lead can be at different stages across several projects.
       </p>
+      {isSuper && <CompanyPicker companies={companies ?? []} selected={companyId} />}
       <div className="card">
         {rows.length === 0
           ? <div className="empty">No project interests yet. Reps add them from a lead in the app.</div>

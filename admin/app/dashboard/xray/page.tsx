@@ -11,7 +11,8 @@ export default async function XrayPage() {
     supabase.from("profiles").select("role").eq("id", user!.id).maybeSingle<{ role: string }>(),
     supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
   ]);
-  const isAdmin = me?.role === "admin" || !!pa;
+  const isSuper = !!pa;
+  const isAdmin = me?.role === "admin" || isSuper;
 
   if (!isAdmin) {
     return (
@@ -22,6 +23,12 @@ export default async function XrayPage() {
     );
   }
 
+  // The super admin serves EVERY company equally — they choose whose X-Ray to
+  // read (the sales-xray function already scopes by company_id for them).
+  const { data: companies } = isSuper
+    ? await supabase.from("companies").select("id, name").order("name").returns<{ id: string; name: string | null }[]>()
+    : { data: null };
+
   return (
     <>
       <h2>🩻 Sales X-Ray</h2>
@@ -30,7 +37,7 @@ export default async function XrayPage() {
         maang rahe hain, jeetne wali calls me kya common tha, aur kaunsi &quot;dead&quot; leads wapas
         jeeti ja sakti hain. Refreshes itself every Monday morning.
       </p>
-      <XrayClient />
+      <XrayClient isSuper={isSuper} companies={companies ?? []} />
     </>
   );
 }

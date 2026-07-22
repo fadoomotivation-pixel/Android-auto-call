@@ -16,26 +16,36 @@ type Report = {
   stats?: { conversations: number; leads: number; days: number; distribution?: string };
 };
 
-export function XrayClient() {
+type Company = { id: string; name: string | null };
+
+export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: boolean; companies?: Company[] }) {
   const [report, setReport] = useState<Report | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Super admin picks whose X-Ray to read; regular admin is scoped by RLS.
+  const [companyId, setCompanyId] = useState<string>(isSuper ? (companies[0]?.id ?? "") : "");
 
   // Open instantly with the latest stored report (the Monday cron keeps it fresh).
   const loadStored = useCallback(async () => {
     const supabase = createClient();
-    const { data } = await supabase
+    let q = supabase
       .from("sales_xray")
       .select("report, created_at")
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    // Without this filter a super admin would see whichever company's report is
+    // newest — pin it to the selected company instead.
+    if (isSuper && companyId) q = q.eq("company_id", companyId);
+    const { data } = await q.maybeSingle();
     if (data) {
       setReport(data.report as Report);
       setGeneratedAt(data.created_at as string);
+    } else {
+      setReport(null);
+      setGeneratedAt(null);
     }
-  }, []);
+  }, [isSuper, companyId]);
 
   useEffect(() => { loadStored(); }, [loadStored]);
 
@@ -46,7 +56,7 @@ export function XrayClient() {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke<{
       ok: boolean; error?: string; report?: Report; skipped?: string;
-    }>("sales-xray", { body: {} });
+    }>("sales-xray", { body: isSuper && companyId ? { company_id: companyId } : {} });
     setBusy(false);
     if (error || !data?.ok) {
       setError(data?.error || error?.message || "X-Ray failed.");
@@ -64,7 +74,17 @@ export function XrayClient() {
 
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "14px 0 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "14px 0 20px", flexWrap: "wrap" }}>
+        {isSuper && (
+          <select
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", minWidth: 200 }}
+          >
+            {companies.length === 0 && <option value="">No companies</option>}
+            {companies.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
+          </select>
+        )}
         <button className="primary" onClick={regenerate} disabled={busy} style={{ padding: "10px 18px" }}>
           {busy ? "Scanning every conversation…" : "🔄 Run fresh X-Ray"}
         </button>

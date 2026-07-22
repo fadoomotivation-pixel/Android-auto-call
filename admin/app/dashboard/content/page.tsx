@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { CompanyPicker } from "../whatsapp/CompanyPicker";
 import { ContentLibrary } from "./ContentLibrary";
 
 type Asset = {
@@ -72,6 +73,7 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
         Brochures, videos, reviews &amp; testimonials your reps can share with buyers over WhatsApp.
         Shared links are tracked — when a buyer opens one, the lead is automatically re-engaged.
       </p>
+      {isSuper && <CompanyPicker companies={companies ?? []} selected={companyId} />}
       {!companyId
         ? <div className="empty">No company selected.</div>
         : <ContentLibrary companyId={companyId} assets={assets ?? []} />}

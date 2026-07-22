@@ -37,6 +37,25 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-07-22 — Claude Code
+
+- **OWNER DIRECTIVE (permanent):** `ankitguitarmonk@gmail.com` is the platform
+  **super admin for ALL companies equally** — not "ankit" company's admin. Every
+  admin-web page must give the super admin a cross-company view / company picker;
+  never default a super-admin page to their own `profiles.company_id`. Recorded
+  in `CLAUDE.md` and `docs/AI_COLLAB_RULES.md` §5. Audit of all dashboard pages
+  for this is in progress (Claude).
+- Touched `admin/app/dashboard/leads/ImportLeads.tsx` (Antigravity's area) at the
+  owner's direct request (PR #303): Import button always opens; required
+  in-modal "Import into" company picker for super admin; "Assign to" reps now
+  scoped to the target company (cross-company assign bug). Please keep this
+  behavior when editing the import UI.
+- CAPI now configured for ALL companies (same dataset/token as ankit, per-company
+  vault copies). 13 pending conversions backfilled (33 total sent).
+- `amr-transcode.yml` also lives on the **default branch**
+  (`claude/sales-app-auto-call-logging-Bb7e6`) — GitHub only fires
+  schedule/dispatch from the default branch. Keep both copies in sync.
+
 ## WHAT EXISTS TODAY (state of the product)
 
 **Android app** (`android/`, Kotlin + Compose): telecaller CRM — lead pipeline +
