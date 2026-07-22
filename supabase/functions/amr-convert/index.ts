@@ -129,11 +129,13 @@ Deno.serve(async (req) => {
 
   try {
     if (action === "list") {
+      // Candidates = ready SIM recordings whose AI summary failed / was
+      // unsupported (the AMR suspects). A converted one leaves this set because
+      // its summary_status becomes 'ready'; a non-AMR one is parked as 'skipped'.
       const { data } = await admin.from("call_logs")
         .select("id")
         .eq("recording_status", "ready").eq("recording_source", "sim")
         .in("summary_status", ["failed", "unsupported"])
-        .filter("extra->>amr_state", "is", null)
         .limit(Math.min(Math.max(Number(body.limit) || 25, 1), 100));
       return json({ ok: true, ids: (data ?? []).map((r) => r.id) });
     }
@@ -158,7 +160,7 @@ Deno.serve(async (req) => {
     if (action === "put") {
       const mp3 = decodeBase64(body.base64 ?? "");
       if (mp3.length === 0) return json({ ok: false, error: "empty mp3" }, 400);
-      const { data: row } = await admin.from("call_logs").select("company_id, recording_path, extra").eq("id", body.id).maybeSingle();
+      const { data: row } = await admin.from("call_logs").select("company_id, recording_path").eq("id", body.id).maybeSingle();
       if (!row) return json({ ok: false, error: "not found" }, 404);
       let newPath: string | null = null;
       const d = await driveFor(admin, row.company_id as string);
@@ -172,16 +174,17 @@ Deno.serve(async (req) => {
         if (error) return json({ ok: false, error: `storage: ${error.message}` }, 502);
         newPath = `sb://call-recordings/${key}`;
       }
-      const extra = { ...((row.extra as Record<string, unknown>) ?? {}), amr_state: "converted", amr_orig: row.recording_path };
-      await admin.from("call_logs").update({ recording_path: newPath, recording_status: "ready", recording_error: null, extra }).eq("id", body.id);
+      // Point the row at the MP3; summarizeMp3 will flip summary_status to
+      // 'ready', which also removes it from the candidate list.
+      await admin.from("call_logs").update({ recording_path: newPath, recording_status: "ready", recording_error: null }).eq("id", body.id);
       const summarized = await summarizeMp3(admin, body.id, mp3);
       return json({ ok: true, path: newPath, summarized });
     }
 
     if (action === "skip") {
-      const { data: row } = await admin.from("call_logs").select("extra").eq("id", body.id).maybeSingle();
-      const extra = { ...((row?.extra as Record<string, unknown>) ?? {}), amr_state: "skipped" };
-      await admin.from("call_logs").update({ extra }).eq("id", body.id);
+      // Not AMR (some other unsupported/failed format) — park it so it isn't
+      // re-listed. 'skipped' is outside the candidate set (failed/unsupported).
+      await admin.from("call_logs").update({ summary_status: "skipped" }).eq("id", body.id);
       return json({ ok: true });
     }
 
