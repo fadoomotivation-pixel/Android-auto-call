@@ -71,7 +71,10 @@ Deno.serve(async (req) => {
       if (!pt) {
         return json({ ok: false, error: e?.message ?? "Couldn't get a Page token. The saved token must be a User or System-User token that has THIS page assigned, with pages_show_list + leads_retrieval." });
       }
-      const { error: sErr } = await admin.rpc("set_facebook_token", { p_company: company, p_token: pt });
+      // Save via the USER's client so set_facebook_token sees auth.uid() (the
+      // caller is the authorized admin/super-admin). The service-role client has
+      // no auth.uid(), which the RPC rejects with "not authorized".
+      const { error: sErr } = await u.rpc("set_facebook_token", { p_company: company, p_token: pt });
       if (sErr) return json({ ok: false, error: "Got the Page token but couldn't save it: " + sErr.message });
       return json({ ok: true, converted: true });
     }
