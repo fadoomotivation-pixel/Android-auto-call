@@ -60,6 +60,22 @@ Deno.serve(async (req) => {
       return json({ ok: true, subscribed: true });
     }
 
+    // "page_token" — the saved token is often a User / System-User token, but
+    // page endpoints (subscribe, lead fetch) need a PAGE access token (Graph
+    // error #190). Derive the page token from the saved one and re-save it. For
+    // a System-User token this page token is long-lived (never expires).
+    if (action === "page_token") {
+      const r = await graph(`${pageId}?fields=access_token&access_token=${token}`);
+      const pt = r.access_token as string | undefined;
+      const e = r.error as { message?: string } | undefined;
+      if (!pt) {
+        return json({ ok: false, error: e?.message ?? "Couldn't get a Page token. The saved token must be a User or System-User token that has THIS page assigned, with pages_show_list + leads_retrieval." });
+      }
+      const { error: sErr } = await admin.rpc("set_facebook_token", { p_company: company, p_token: pt });
+      if (sErr) return json({ ok: false, error: "Got the Page token but couldn't save it: " + sErr.message });
+      return json({ ok: true, converted: true });
+    }
+
     // Default: "test" — three independent checks.
     const page = await graph(`${pageId}?fields=name&access_token=${token}`);
     const pageErr = page.error as { message?: string } | undefined;
