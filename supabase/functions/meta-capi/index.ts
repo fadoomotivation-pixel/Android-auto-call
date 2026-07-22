@@ -58,8 +58,13 @@ Deno.serve(async (req) => {
     .select("id, company_id, name, phone, email, status, lead_source, lead_source_id")
     .eq("id", contact_id).maybeSingle();
   if (!contact) return json({ ok: false, error: "contact not found" }, 404);
-  if (contact.lead_source !== "facebook" || !contact.lead_source_id) {
-    return json({ ok: true, skipped: "not a Meta lead" });
+  // A conversion event needs at least one identifier Meta can match on: the
+  // original Meta lead_id (best, when the lead came through the webhook) OR a
+  // hashed phone/email. Import leads have no lead_id but still match on phone —
+  // Meta credits only the ones whose phone/email actually saw the ad and ignores
+  // the rest, so this is safe and lets CSV-imported ad leads report conversions.
+  if (!contact.lead_source_id && !contact.phone && !contact.email) {
+    return json({ ok: true, skipped: "no phone/email/lead_id to match on" });
   }
 
   // Company CAPI config (dataset + decrypted token + optional map).
@@ -75,7 +80,7 @@ Deno.serve(async (req) => {
   // De-dup: one signal of each kind per lead. If the row already exists, we've sent it.
   const { error: dupErr } = await admin.from("capi_events").insert({
     company_id: contact.company_id, contact_id: contact.id,
-    event_name: eventName, meta_lead_id: String(contact.lead_source_id),
+    event_name: eventName, meta_lead_id: contact.lead_source_id ? String(contact.lead_source_id) : null,
   });
   if (dupErr) {
     if (dupErr.code === "23505") return json({ ok: true, skipped: "already sent", event_name: eventName });
