@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { parseRows, parsePasted, parseCSV, decodeText, type ParsedLead } from "@/lib/leadImport";
 
-type Sp = { id: string; full_name: string | null };
+type Sp = { id: string; full_name: string | null; company_id?: string | null };
 
 function chunk<T>(arr: T[], n: number): T[][] {
   const out: T[][] = [];
@@ -15,17 +15,28 @@ function chunk<T>(arr: T[], n: number): T[][] {
 
 export function ImportLeads({
   companyId,
+  companies,
   salespeople,
   onClose,
   onDone,
 }: {
+  /** Pre-picked target company. May be "" for a super admin — they pick inside. */
   companyId: string;
+  /** Super admin only: [id, name] choices for the in-modal target picker. */
+  companies?: [string, string][];
   salespeople: Sp[];
   onClose: () => void;
   onDone: (count: number) => void;
 }) {
   const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  // The company these leads land in (and dedupe against). A regular admin is
+  // always their own company; a super admin picks it here — REQUIRED before
+  // importing, because the platform-HQ tenant would silently bypass the real
+  // tenant's per-company dedup.
+  const [targetCompany, setTargetCompany] = useState(companyId);
+  // Only that company's reps may receive its leads — never another tenant's.
+  const scopedReps = salespeople.filter((sp) => sp.company_id == null || sp.company_id === targetCompany);
   const [mode, setMode] = useState<"file" | "paste">("file");
   const [paste, setPaste] = useState("");
   const [parsed, setParsed] = useState<ParsedLead[]>([]);
@@ -83,6 +94,7 @@ export function ImportLeads({
 
   async function doImport() {
     if (parsed.length === 0) return;
+    if (!targetCompany) { setError("Pick which company these leads import into."); return; }
     setBusy(true);
     setError(null);
 
@@ -96,7 +108,7 @@ export function ImportLeads({
       const { data: page, error: pErr } = await supabase
         .from("contacts")
         .select("phone")
-        .eq("company_id", companyId)
+        .eq("company_id", targetCompany)
         .range(from, from + PAGE - 1);
       if (pErr) break;
       for (const r of page ?? []) have.add(norm(r.phone as string));
@@ -136,7 +148,7 @@ export function ImportLeads({
 
     setBusy(true);
     const rows = leadsToImport.map((l) => ({
-      company_id: companyId,
+      company_id: targetCompany,
       salesperson_id: assignTo || null,
       name: l.name,
       phone: l.phone,
@@ -191,6 +203,33 @@ export function ImportLeads({
           <h3 style={{ margin: 0 }}>Import Leads</h3>
           <button className="link" onClick={onClose}>✕</button>
         </div>
+
+        {/* Super admin: pick the tenant these leads belong to. Required — the
+            dedup check and the reps list are both scoped to this company. */}
+        {companies && companies.length > 0 && (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: targetCompany ? "var(--muted)" : "#f59e0b" }}>
+              Import into:
+            </span>
+            <select
+              value={targetCompany}
+              disabled={busy}
+              onChange={(e) => {
+                setTargetCompany(e.target.value);
+                setAssignTo(""); // reps belong to the previous company
+                setDuplicateConflicts([]); // stale — dedup was vs the previous company
+                setFreshLeads([]);
+                setError(null);
+              }}
+              style={{ ...input, borderColor: targetCompany ? "var(--border)" : "#f59e0b" }}
+            >
+              <option value="">— pick a company —</option>
+              {companies.map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
           <button
@@ -341,15 +380,21 @@ export function ImportLeads({
         ) : (
           <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13, color: "var(--muted)" }}>Assign to (optional):</span>
-            <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input}>
+            <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input} disabled={!targetCompany}>
               <option value="">Leave unassigned</option>
-              {salespeople.map((sp) => (
+              {scopedReps.map((sp) => (
                 <option key={sp.id} value={sp.id}>{sp.full_name || sp.id.slice(0, 8)}</option>
               ))}
             </select>
             <div style={{ flex: 1 }} />
             <button className="link" onClick={onClose}>Cancel</button>
-            <button className="primary" style={{ width: "auto", padding: "9px 18px" }} disabled={busy || parsed.length === 0} onClick={doImport}>
+            <button
+              className="primary"
+              style={{ width: "auto", padding: "9px 18px" }}
+              disabled={busy || parsed.length === 0 || !targetCompany}
+              title={targetCompany ? "" : "Pick which company these leads import into."}
+              onClick={doImport}
+            >
               {busy ? "Importing…" : `Import ${parsed.length || ""}`}
             </button>
           </div>
