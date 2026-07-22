@@ -91,8 +91,9 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
   const visibleReps = companyFilter ? salespeople.filter((s) => s.company_id === companyFilter) : salespeople;
   // Which company an import lands in. A super admin's own company is the
   // Platform HQ oversight tenant — importing there silently bypasses the
-  // per-company dedup for the REAL tenant, so a super admin must first pick the
-  // target company; a regular admin always imports into their own company.
+  // per-company dedup for the REAL tenant. So for a super admin this only
+  // pre-fills the modal's required in-modal company picker (from the board's
+  // company filter, if set); a regular admin always imports into their own.
   const importCompanyId = isSuper ? companyFilter : companyId;
 
   const [tab, setTab] = useState<"unassigned" | "assigned">("unassigned");
@@ -456,10 +457,8 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button
           className="primary"
-          style={{ width: "auto", padding: "9px 16px", opacity: importCompanyId ? 1 : 0.5, cursor: importCompanyId ? "pointer" : "not-allowed" }}
-          onClick={() => importCompanyId && setImportOpen(true)}
-          disabled={!importCompanyId}
-          title={importCompanyId ? "" : "Pick a company first so leads import into it (and dedupe against it)."}
+          style={{ width: "auto", padding: "9px 16px" }}
+          onClick={() => setImportOpen(true)}
         >
           ⬆ Import Leads
         </button>
@@ -475,9 +474,6 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
               <option key={id} value={id}>{name}</option>
             ))}
           </select>
-        )}
-        {isSuper && !importCompanyId && (
-          <span style={{ color: "#f59e0b", fontSize: 13 }}>← Pick a company to import into it</span>
         )}
         {msg && <span style={{ color: "var(--accent)", fontSize: 13 }}>{msg}</span>}
       </div>
@@ -660,9 +656,10 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
         </button>
       )}
 
-      {importOpen && importCompanyId && (
+      {importOpen && (
         <ImportLeads
           companyId={importCompanyId}
+          companies={isSuper ? companies : undefined}
           salespeople={salespeople}
           onClose={() => setImportOpen(false)}
           onDone={async (n) => {
