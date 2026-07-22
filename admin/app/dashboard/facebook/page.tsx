@@ -58,6 +58,7 @@ export default function FacebookSetupPage() {
   const [companyId, setCompanyId] = useState<string>("");
   const [testing, setTesting] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [checks, setChecks] = useState<{ token?: Check; subscription?: Check; permission?: Check } | null>(null);
   const [connMsg, setConnMsg] = useState<string | null>(null);
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
@@ -145,6 +146,22 @@ export default function FacebookSetupPage() {
       return;
     }
     setConnMsg("✓ Page subscribed to the app for leadgen. Re-run the test to confirm.");
+    void runTest();
+  }
+
+  async function runPageToken() {
+    setFixing(true);
+    setConnMsg(null);
+    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; converted?: boolean }>(
+      "facebook-manage",
+      { body: { action: "page_token" } },
+    );
+    setFixing(false);
+    if (error || !data?.ok) {
+      setConnMsg(data?.error || error?.message || "Couldn't convert to a Page token.");
+      return;
+    }
+    setConnMsg("✓ Converted your token to a Page Access Token and saved it. Re-testing…");
     void runTest();
   }
 
@@ -365,6 +382,15 @@ export default function FacebookSetupPage() {
             style={{ background: "linear-gradient(135deg, #1877F2, #0A52CC)", color: "white", padding: "10px 18px", borderRadius: 8, border: "none", fontWeight: 600, cursor: subscribing ? "wait" : "pointer" }}
           >
             {subscribing ? "Subscribing…" : "🔗 Auto-subscribe page"}
+          </button>
+          <button
+            type="button"
+            onClick={runPageToken}
+            disabled={fixing || !integration}
+            title="If you saved a User / System-User token, this converts it to the Page Access Token the webhook needs."
+            style={{ background: "rgba(16,185,129,0.12)", color: "#22c55e", border: "1px solid rgba(16,185,129,0.4)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: fixing ? "wait" : "pointer" }}
+          >
+            {fixing ? "Fixing…" : "🔧 Get Page token"}
           </button>
         </div>
         {!integration && <p style={{ fontSize: 13, color: "var(--muted)" }}>Save the Page integration above first.</p>}
