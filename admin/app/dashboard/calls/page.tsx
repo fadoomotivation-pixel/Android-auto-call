@@ -129,7 +129,7 @@ export default async function CallsPage({
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id}>
-                  <td>{new Date(c.started_at ?? c.created_at).toLocaleString()}</td>
+                  <td>{new Date(c.started_at ?? c.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
                   <td>{repName.get(c.salesperson_id) || "—"}</td>
                   <td>
                     <strong>{leadName(c) || "Unknown"}</strong>

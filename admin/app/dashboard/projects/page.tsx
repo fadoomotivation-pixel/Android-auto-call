@@ -18,7 +18,7 @@ const STAGE_LABEL: Record<string, string> = {
 
 function fmtDate(ts: string | null): string {
   if (!ts) return "—";
-  return new Date(ts).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(ts).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric" });
 }
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ company?: string }> }) {

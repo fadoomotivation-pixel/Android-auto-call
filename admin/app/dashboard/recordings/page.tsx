@@ -247,7 +247,7 @@ export default async function RecordingsPage({
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id}>
-                  <td>{new Date(c.started_at ?? c.created_at).toLocaleString()}</td>
+                  <td>{new Date(c.started_at ?? c.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
                   {isSuper && <td>{companyById.get(c.company_id) || "—"}</td>}
                   <td>{nameById.get(c.salesperson_id) || "—"}</td>
                   <td>

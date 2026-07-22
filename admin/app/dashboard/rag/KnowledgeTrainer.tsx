@@ -168,7 +168,7 @@ export function KnowledgeTrainer({ isSuper, companies }: { isSuper: boolean; com
         </div>
 
         <div style={{ display: "grid", gap: 6 }}>
-          <span style={label}>Text {text ? `(${text.length.toLocaleString()} chars)` : ""}</span>
+          <span style={label}>Text {text ? `(${text.length.toLocaleString("en-IN")} chars)` : ""}</span>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}

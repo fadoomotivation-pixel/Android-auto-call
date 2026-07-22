@@ -433,7 +433,7 @@ export default function FacebookSetupPage() {
                   <div style={{ fontSize: 13, color: "var(--muted)", fontFamily: "monospace" }}>{l.phone}</div>
                 </div>
                 <div style={{ fontSize: 12, color: "var(--muted)", textAlign: "right" }}>
-                  <div>🕒 {new Date(l.extra?.created_time ?? l.created_at).toLocaleString()}</div>
+                  <div>🕒 {new Date(l.extra?.created_time ?? l.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
                   {l.extra?.form_id && <div style={{ opacity: 0.7 }}>form {String(l.extra.form_id).slice(-6)}</div>}
                 </div>
               </div>

@@ -44,7 +44,7 @@ export default async function ContactsPage() {
                 <td style={{ padding: "16px 20px" }}>
                   <span className={`badge ${c.status}`} style={{ boxShadow: "0 0 10px rgba(255,255,255,0.05)" }}>{c.status}</span>
                 </td>
-                <td style={{ padding: "16px 20px", color: "var(--muted)", fontSize: 13 }}>{new Date(c.created_at).toLocaleDateString()}</td>
+                <td style={{ padding: "16px 20px", color: "var(--muted)", fontSize: 13 }}>{new Date(c.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
               </tr>
             ))}
           </tbody>

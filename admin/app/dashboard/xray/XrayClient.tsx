@@ -70,7 +70,7 @@ export function XrayClient() {
         </button>
         {generatedAt && (
           <span className="subtitle" style={{ margin: 0 }}>
-            Last scan: {new Date(generatedAt).toLocaleString()}
+            Last scan: {new Date(generatedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
             {report?.stats && <> · {report.stats.conversations} conversations · {report.stats.leads} leads · {report.stats.days}d</>}
           </span>
         )}
