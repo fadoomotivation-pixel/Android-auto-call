@@ -23,7 +23,7 @@ type Share = {
 function fmt(ts: string | null): string {
   if (!ts) return "—";
   const d = new Date(ts);
-  return d.toLocaleString(undefined, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 export default async function ContentPage({ searchParams }: { searchParams: Promise<{ company?: string }> }) {

@@ -299,7 +299,7 @@ export default async function PlatformHqPage({
               <tbody>
                 {calls.map((c) => (
                   <tr key={c.call_id}>
-                    <td>{c.started_at ? new Date(c.started_at).toLocaleString() : "—"}</td>
+                    <td>{c.started_at ? new Date(c.started_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
                     <td>{c.rep_name ?? "—"}</td>
                     <td>
                       {c.off_crm

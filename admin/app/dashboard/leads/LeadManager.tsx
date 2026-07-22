@@ -630,7 +630,7 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
                   {l.territory && <span>· 📍 {l.territory}</span>}
                   {l.budget && <span>· 💰 {l.budget}</span>}
                   {timeAgo(l.last_contacted_at) && <span>· 📞 last: {timeAgo(l.last_contacted_at)}</span>}
-                  {l.created_at && <span>· 🕒 {new Date(l.created_at).toLocaleDateString()}</span>}
+                  {l.created_at && <span>· 🕒 {new Date(l.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</span>}
                 </div>
                 {l.notes && (
                   <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)", padding: "8px 12px", background: "rgba(16, 185, 129, 0.05)", borderLeft: "3px solid var(--accent)", borderRadius: 6 }}>
@@ -684,7 +684,7 @@ function StatCard({ label, value, tone, bg }: { label: string; value: number; to
   return (
     <div className="card" style={{ background: bg, border: `1px solid ${tone}22`, boxShadow: `0 8px 32px ${tone}10`, padding: "20px" }}>
       <div style={{ color: tone, fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
-      <div style={{ color: tone, fontSize: 32, fontWeight: 800, marginTop: 8 }}>{value.toLocaleString()}</div>
+      <div style={{ color: tone, fontSize: 32, fontWeight: 800, marginTop: 8 }}>{value.toLocaleString("en-IN")}</div>
     </div>
   );
 }

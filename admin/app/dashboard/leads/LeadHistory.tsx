@@ -72,7 +72,7 @@ export function LeadHistory({ contactId, onClose }: { contactId: string; onClose
              {notes.map((n) => (
                <div key={n.id} style={{ padding: 16, background: "rgba(139, 92, 246, 0.06)", borderRadius: 12, border: "1px solid rgba(139, 92, 246, 0.18)" }}>
                  <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
-                   <span>🎤 {n.actor_name || "Telecaller"} · {new Date(n.created_at).toLocaleString()}</span>
+                   <span>🎤 {n.actor_name || "Telecaller"} · {new Date(n.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</span>
                    <span>⏱️ {n.duration_seconds}s</span>
                  </div>
                  {n.url ? (
@@ -111,7 +111,7 @@ export function LeadHistory({ contactId, onClose }: { contactId: string; onClose
              {logs.map(l => (
                <div key={l.id} style={{ padding: 16, background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.05)" }}>
                  <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
-                   <span>🕒 {new Date(l.created_at).toLocaleString()}</span>
+                   <span>🕒 {new Date(l.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</span>
                    <span>⏱️ {l.duration_seconds} sec</span>
                  </div>
                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>

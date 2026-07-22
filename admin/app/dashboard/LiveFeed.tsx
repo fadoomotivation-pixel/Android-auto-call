@@ -59,7 +59,7 @@ export function LiveFeed({ names }: { names: Record<string, string> }) {
               </div>
               <div style={{ textAlign: "right" }}>
                 {it.outcome && <span className={`badge ${it.outcome}`}>{it.outcome}</span>}
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date(it.created_at).toLocaleTimeString()}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date(it.created_at).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
               </div>
             </div>
           ))}

@@ -157,7 +157,7 @@ export function WhatsAppInbox({
                 <div key={m.id} className={`msg-bubble ${m.direction}`}>
                   {m.body}
                   <span className="msg-time">
-                    {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(m.created_at).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: '2-digit', minute: '2-digit' })}
                     {m.direction === "out" && m.status && ` · ${m.status}`}
                   </span>
                 </div>

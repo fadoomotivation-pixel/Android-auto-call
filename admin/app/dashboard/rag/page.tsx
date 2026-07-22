@@ -130,7 +130,7 @@ export default async function RagPage() {
                     <td style={td}><strong>{r.chunks}</strong></td>
                     <td style={{ ...td, fontSize: 13, color: "var(--muted)" }}>{parts || "—"}</td>
                     <td style={td}>{Number(r.open_gaps) > 0 ? <span style={{ color: "#f59e0b", fontWeight: 600 }}>{r.open_gaps}</span> : "0"}</td>
-                    <td style={{ ...td, fontSize: 13, color: "var(--muted)" }}>{r.last_learned ? new Date(r.last_learned).toLocaleDateString() : "never"}</td>
+                    <td style={{ ...td, fontSize: 13, color: "var(--muted)" }}>{r.last_learned ? new Date(r.last_learned).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "never"}</td>
                   </tr>
                 );
               })}

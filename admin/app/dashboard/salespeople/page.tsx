@@ -69,7 +69,7 @@ export default async function SalespeoplePage() {
                   <td>{r.connected_calls}</td>
                   <td>{r.no_answer_calls}</td>
                   <td>{fmtDuration(r.total_talk_seconds)}</td>
-                  <td>{r.last_call_at ? new Date(r.last_call_at).toLocaleString() : "—"}</td>
+                  <td>{r.last_call_at ? new Date(r.last_call_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
                   <td>
                     <span className={`badge ${active ? "connected" : "dnc"}`} style={{ marginRight: 8 }}>
                       {active ? "active" : "inactive"}

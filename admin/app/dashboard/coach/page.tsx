@@ -68,7 +68,7 @@ export default async function CoachPage() {
             <div key={d.id} className="card hover-scale" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", borderRadius: 16, padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
                 <strong style={{ fontSize: 16, color: "#fff", letterSpacing: "0.2px" }}>
-                  {new Date(d.digest_date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                  {new Date(d.digest_date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", year: "numeric" })}
                   {isSuper && <span style={{ color: "var(--muted)", fontWeight: 400 }}> · {nameById.get(d.company_id) ?? "—"}</span>}
                 </strong>
                 {d.stats && <DigestStats stats={d.stats} />}

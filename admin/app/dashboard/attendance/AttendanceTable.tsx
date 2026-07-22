@@ -50,7 +50,7 @@ export function AttendanceTable({
 
   function formatTime(iso: string | null) {
     if (!iso) return "—";
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: '2-digit', minute: '2-digit' });
   }
 
   function calculateHours(start: string | null, end: string | null) {

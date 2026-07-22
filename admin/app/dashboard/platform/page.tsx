@@ -102,8 +102,8 @@ export default async function PlatformCompaniesPage() {
                 <td>{c.campaigns}</td>
                 <td>{c.contacts}</td>
                 <td>{c.calls}</td>
-                <td>{c.last_call_at ? new Date(c.last_call_at).toLocaleString() : "—"}</td>
-                <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                <td>{c.last_call_at ? new Date(c.last_call_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
+                <td>{new Date(c.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
                 <td>
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
                     <CompanyBranding

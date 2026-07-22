@@ -77,7 +77,7 @@ export default async function PlatformTelecallersPage() {
                 <td>{t.campaigns}</td>
                 <td>{t.calls}</td>
                 <td>{t.connected}</td>
-                <td>{t.last_call_at ? new Date(t.last_call_at).toLocaleString() : "—"}</td>
+                <td>{t.last_call_at ? new Date(t.last_call_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
                 <td>
                   <span className={`badge ${t.is_active ? "connected" : "dnc"}`}>
                     {t.is_active ? "active" : "inactive"}
