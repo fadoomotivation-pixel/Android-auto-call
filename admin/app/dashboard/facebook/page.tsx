@@ -34,11 +34,18 @@ const STAGE_LABELS: Record<string, string> = {
 type Check = { ok: boolean; label: string };
 type RecentLead = { id: string; name: string | null; phone: string; created_at: string; extra: { form_id?: string; created_time?: string } | null };
 
+type Company = { id: string; name: string | null };
+
 export default function FacebookSetupPage() {
   const supabase = createClient();
   const [integration, setIntegration] = useState<FbIntegration | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Super admin serves EVERY company equally: they pick which tenant's Facebook
+  // setup they're editing. A regular admin is silently pinned to their own.
+  const [isSuper, setIsSuper] = useState(false);
+  const [companies, setCompanies] = useState<Company[]>([]);
 
   const [pageId, setPageId] = useState("");
   const [accessToken, setAccessToken] = useState("");
@@ -73,21 +80,47 @@ export default function FacebookSetupPage() {
 
   const webhookUrl = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/facebook-webhook";
 
+  // Step 1: figure out who's viewing and which company to start on.
   useEffect(() => {
-    async function load() {
+    async function init() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) return;
-      
-      const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userData.user.id).single();
-      if (!profile?.company_id) return;
-      setCompanyId(profile.company_id);
-      void loadRecentLeads(profile.company_id);
+
+      const [{ data: profile }, { data: pa }] = await Promise.all([
+        supabase.from("profiles").select("company_id").eq("id", userData.user.id).maybeSingle<{ company_id: string | null }>(),
+        supabase.from("platform_admins").select("user_id").eq("user_id", userData.user.id).maybeSingle(),
+      ]);
+      const superAdmin = !!pa;
+      setIsSuper(superAdmin);
+
+      if (superAdmin) {
+        const { data: cos } = await supabase.from("companies").select("id, name").order("name").returns<Company[]>();
+        setCompanies(cos ?? []);
+        setCompanyId(cos?.[0]?.id ?? "");
+        if (!cos || cos.length === 0) setLoading(false);
+      } else if (profile?.company_id) {
+        setCompanyId(profile.company_id);
+      } else {
+        setLoading(false);
+      }
+    }
+    init();
+  }, [supabase]);
+
+  // Step 2: (re)load the integration whenever the selected company changes.
+  useEffect(() => {
+    if (!companyId) return;
+    let cancelled = false;
+    async function loadIntegration() {
+      setLoading(true);
+      void loadRecentLeads(companyId);
 
       const { data } = await supabase
         .from("facebook_integrations")
         .select("*")
-        .eq("company_id", profile.company_id)
+        .eq("company_id", companyId)
         .maybeSingle();
+      if (cancelled) return;
 
       if (data) {
         setIntegration(data);
@@ -99,13 +132,23 @@ export default function FacebookSetupPage() {
         setEventMap({ ...DEFAULT_EVENT_MAP, ...(data.capi_event_map ?? {}) });
         // tokens are write-only — never fetched to the client (they live in Vault)
       } else {
-        // Generate a random verify token for new setup
+        // Fresh company: reset the form and mint a new verify token.
+        setIntegration(null);
+        setPageId("");
+        setDatasetId("");
+        setCapiEnabled(false);
+        setAutoAssign(true);
+        setEventMap({ ...DEFAULT_EVENT_MAP });
         setVerifyToken(Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15));
       }
+      setChecks(null);
+      setConnMsg(null);
+      setCapiMsg(null);
       setLoading(false);
     }
-    load();
-  }, [supabase]);
+    loadIntegration();
+    return () => { cancelled = true; };
+  }, [companyId, supabase]);
 
   async function loadRecentLeads(company: string) {
     const { data } = await supabase
@@ -125,7 +168,7 @@ export default function FacebookSetupPage() {
     setConnMsg(null);
     const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; checks?: typeof checks }>(
       "facebook-manage",
-      { body: { action: "test" } },
+      { body: { action: "test", company_id: companyId } },
     );
     setTesting(false);
     if (error || !data?.ok) {
@@ -140,7 +183,7 @@ export default function FacebookSetupPage() {
     setConnMsg(null);
     const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string }>(
       "facebook-manage",
-      { body: { action: "subscribe" } },
+      { body: { action: "subscribe", company_id: companyId } },
     );
     setSubscribing(false);
     if (error || !data?.ok) {
@@ -156,7 +199,7 @@ export default function FacebookSetupPage() {
     setConnMsg(null);
     const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; converted?: boolean }>(
       "facebook-manage",
-      { body: { action: "page_token" } },
+      { body: { action: "page_token", company_id: companyId } },
     );
     setFixing(false);
     if (error || !data?.ok) {
@@ -169,41 +212,52 @@ export default function FacebookSetupPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!companyId) { alert("Pick a company first."); return; }
     setSaving(true);
 
-    const { data: userData } = await supabase.auth.getUser();
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userData?.user?.id!).single();
-    
-    if (profile?.company_id) {
-      // 1) Upsert the non-secret row first so it exists for the token RPC.
-      const { error } = await supabase.from("facebook_integrations").upsert({
-        company_id: profile.company_id,
-        page_id: pageId,
-        verify_token: verifyToken,
-        auto_assign: autoAssign,
-        updated_at: new Date().toISOString()
-      });
+    // Operates on the SELECTED company (super admin) or the admin's own — both
+    // resolved into companyId. The set_facebook_token RPC authorizes a
+    // platform_admin for any company, so this stays safe.
+    // 1) Upsert the non-secret row first so it exists for the token RPC.
+    const { error } = await supabase.from("facebook_integrations").upsert({
+      company_id: companyId,
+      page_id: pageId,
+      verify_token: verifyToken,
+      auto_assign: autoAssign,
+      updated_at: new Date().toISOString()
+    });
 
-      if (error) {
-        alert("Error saving: " + error.message);
+    if (error) {
+      alert("Error saving: " + error.message);
+      setSaving(false);
+      return;
+    }
+
+    // 2) Store the token in Vault only if a new one was entered (blank = keep current).
+    if (accessToken.trim()) {
+      const { error: tErr } = await supabase.rpc("set_facebook_token", {
+        p_company: companyId, p_token: accessToken.trim(),
+      });
+      if (tErr) {
+        alert("Error saving token: " + tErr.message);
         setSaving(false);
         return;
       }
-
-      // 2) Store the token in Vault only if a new one was entered (blank = keep current).
-      if (accessToken.trim()) {
-        const { error: tErr } = await supabase.rpc("set_facebook_token", {
-          p_company: profile.company_id, p_token: accessToken.trim(),
-        });
-        if (tErr) {
-          alert("Error saving token: " + tErr.message);
-          setSaving(false);
-          return;
-        }
-        setAccessToken("");
-      }
-      alert("Saved successfully! Now configure the webhook in your Meta App Dashboard.");
+      setAccessToken("");
     }
+    // Reflect the freshly-saved row so the token-dependent buttons unlock.
+    setIntegration((prev) => ({
+      page_id: pageId,
+      page_access_token_secret_id: accessToken.trim() ? "saved" : (prev?.page_access_token_secret_id ?? null),
+      verify_token: verifyToken,
+      created_at: prev?.created_at ?? new Date().toISOString(),
+      dataset_id: prev?.dataset_id ?? null,
+      capi_enabled: prev?.capi_enabled ?? null,
+      capi_token_secret_id: prev?.capi_token_secret_id ?? null,
+      capi_event_map: prev?.capi_event_map ?? null,
+      auto_assign: autoAssign,
+    }));
+    alert("Saved successfully! Now configure the webhook in your Meta App Dashboard.");
     setSaving(false);
   }
 
@@ -212,7 +266,7 @@ export default function FacebookSetupPage() {
     setCapiMsg(null);
     const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; received?: number }>(
       "facebook-manage",
-      { body: { action: "test_capi" } },
+      { body: { action: "test_capi", company_id: companyId } },
     );
     setCapiTesting(false);
     if (error || !data?.ok) {
@@ -228,30 +282,27 @@ export default function FacebookSetupPage() {
       alert("Save the Page integration above first, then set up conversions.");
       return;
     }
+    if (!companyId) { alert("Pick a company first."); return; }
     setSavingCapi(true);
-    const { data: userData } = await supabase.auth.getUser();
-    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userData?.user?.id!).single();
-    if (profile?.company_id) {
-      const { error } = await supabase.rpc("set_facebook_capi", {
-        p_company: profile.company_id,
-        p_dataset_id: datasetId.trim() || null,
-        p_token: capiToken.trim() || null, // blank = keep current
-        p_event_map: eventMap,
-        p_enabled: capiEnabled,
+    const { error } = await supabase.rpc("set_facebook_capi", {
+      p_company: companyId,
+      p_dataset_id: datasetId.trim() || null,
+      p_token: capiToken.trim() || null, // blank = keep current
+      p_event_map: eventMap,
+      p_enabled: capiEnabled,
+    });
+    if (error) {
+      alert("Error saving conversions setup: " + error.message);
+    } else {
+      setCapiToken("");
+      setIntegration({
+        ...integration,
+        dataset_id: datasetId.trim() || null,
+        capi_enabled: capiEnabled,
+        capi_token_secret_id: capiToken.trim() ? "saved" : integration.capi_token_secret_id,
+        capi_event_map: eventMap,
       });
-      if (error) {
-        alert("Error saving conversions setup: " + error.message);
-      } else {
-        setCapiToken("");
-        setIntegration({
-          ...integration,
-          dataset_id: datasetId.trim() || null,
-          capi_enabled: capiEnabled,
-          capi_token_secret_id: capiToken.trim() ? "saved" : integration.capi_token_secret_id,
-          capi_event_map: eventMap,
-        });
-        alert("Conversions setup saved. Meta will now learn which leads convert.");
-      }
+      alert("Conversions setup saved. Meta will now learn which leads convert.");
     }
     setSavingCapi(false);
   }
@@ -267,7 +318,22 @@ export default function FacebookSetupPage() {
         <h2 style={{ margin: "0 0 4px 0", letterSpacing: "-0.5px" }}>📱 Facebook Lead Ads Setup</h2>
         <p className="subtitle" style={{ margin: 0 }}>Automatically sync leads from your Facebook & Instagram campaigns.</p>
       </div>
-      
+
+      {/* Super admin: pick which company's Facebook setup to manage. */}
+      {isSuper && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 13, color: "var(--muted)" }}>Company:</span>
+          <select
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", minWidth: 220 }}
+          >
+            {companies.length === 0 && <option value="">No companies</option>}
+            {companies.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
+          </select>
+        </div>
+      )}
+
       <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
         <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 1: Setup Meta App</h3>
         <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>

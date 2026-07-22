@@ -67,6 +67,13 @@ already here.
 - **Company isolation is absolute.** Company-scoped rows never cross companies.
   Only a `platform_admins` (super admin) row sees cross-company data, via the
   `super_hq*` RPCs and the super-admin RLS policies. Don't widen any RLS.
+- **The super admin serves ALL companies equally.** `ankitguitarmonk@gmail.com`
+  is the platform super admin — NOT merely the "ankit" company's admin (that
+  company is just the HQ tenant their profile sits in). Every admin-web page
+  must give the super admin an all-companies view and/or a company picker;
+  never silently scope a super-admin page to `profiles.company_id` — that
+  biases the whole dashboard to one tenant. Pattern to copy:
+  `dashboard/leads` (scopeCompany + companyFilter) or `?company=` search param.
 
 ## 6. AI authority order (voice-note AI vs recording AI — never let them fight)
 - Priority: **rep's manual action > voice-note AI (rep's own words) > recording AI

@@ -45,10 +45,15 @@ Deno.serve(async (req) => {
     const { data: profile } = await admin.from("profiles").select("company_id, role").eq("id", ud.user.id).maybeSingle();
     const { data: pa } = await admin.from("platform_admins").select("user_id").eq("user_id", ud.user.id).maybeSingle();
     if (profile?.role !== "admin" && !pa) return json({ ok: false, error: "Admins only" }, 403);
-    const company = profile?.company_id;
-    if (!company) return json({ ok: false, error: "Your account isn't linked to a company yet." });
 
-    const { action } = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({}));
+    const { action } = body;
+    // The super admin serves EVERY company equally — they may pass company_id
+    // to manage any tenant's integration. A regular admin is always pinned to
+    // their own company (the override is ignored for them).
+    let company = profile?.company_id as string | null | undefined;
+    if (pa && typeof body.company_id === "string" && body.company_id) company = body.company_id;
+    if (!company) return json({ ok: false, error: "Your account isn't linked to a company yet." });
 
     // CAPI test needs no page token — handle it before the page-token gate.
     if (action === "test_capi") {
