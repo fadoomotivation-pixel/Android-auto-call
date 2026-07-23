@@ -815,7 +815,7 @@ private fun CoachSheet(
                 Text("🎯 AI Coach", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onToggleMini) {
-                    Text(if (mini) "Bada karo" else "Aaj ke liye chota karo")
+                    Text(if (mini) "Bada karo" else "Hide")
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -869,17 +869,39 @@ private fun CoachSheet(
                     panel.coaching?.let { c ->
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(14.dp)) {
-                                Text(
-                                    "📞 Last call" + (c.leadName?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
-                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        "📞 Last call" + (c.leadName?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    c.rating?.let { r ->
+                                        Text(
+                                            "⭐".repeat(r.coerceIn(1, 5)) + " $r/5",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
                                 c.good?.takeIf { it.isNotBlank() }?.let {
                                     Spacer(Modifier.height(6.dp))
                                     Text("✅ $it", style = MaterialTheme.typography.bodyMedium)
                                 }
+                                // Only shown when the coach actually has a useful suggestion —
+                                // a good call gets pure motivation, no forced "improve".
                                 c.improve?.takeIf { it.isNotBlank() }?.let {
                                     Spacer(Modifier.height(6.dp))
                                     Text("💡 $it", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                if ((c.rating ?: 0) >= 4 && c.improve.isNullOrBlank()) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text(
+                                        "🔥 Shaandaar call! Aise hi karte rahiye.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
                                 }
                             }
                         }

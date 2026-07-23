@@ -1,17 +1,20 @@
 // RAG ingest — turns material into retrievable knowledge.
-// Body: { title?, source_kind?, source_id?, text, scope?, company_id? }
+// Body: { title?, source_kind?, source_id?, text, scope?, company_id?, offset?, batch? }
 //   scope 'global'  → shared brain for ALL companies (company_id = null).
 //                     Platform super-admin ONLY.
 //   scope 'company' → a single company's private brain (default).
 //                     Company admins use their own; super-admin may target any
 //                     company via company_id.
-// Splits the text into ~overlapping chunks, embeds each with Supabase Edge's
-// built-in gte-small model (384-dim, free — no external embedding API), and
-// stores them in knowledge_chunks for the coach to retrieve.
+//
+// BATCHED: embedding many chunks at once blew the edge CPU budget (HTTP 546) on
+// a full book. Each call now embeds at most `batch` chunks starting at `offset`
+// and returns { done, next } so the caller loops until done. The old-chunk
+// cleanup runs only on the first batch (offset 0), so batches don't wipe each
+// other. The gte-small model (384-dim, free) and knowledge_chunks table are the
+// SAME ones rep-coach / rag-ask / win-harvest use — one brain, no copy.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-// Supabase's on-edge embedding model (no key, no external call).
 declare const Supabase: { ai: { Session: new (m: string) => { run(input: string, opts: { mean_pool: boolean; normalize: boolean }): Promise<number[]> } } };
 
 const cors = {
@@ -43,56 +46,70 @@ function chunk(text: string): string[] {
     }
   }
   if (buf.trim()) out.push(buf.trim());
-  return out.slice(0, 200); // safety cap per ingest call
+  return out.slice(0, 400); // safety cap
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   const auth = req.headers.get("Authorization") ?? "";
-  const u = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
-  const { data: ud } = await u.auth.getUser();
-  if (!ud?.user) return json({ ok: false, error: "Unauthorized" }, 401);
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+  const isService = bearer === SERVICE;
 
-  // Only admins / super admins may add knowledge.
-  const { data: prof } = await u.from("profiles").select("role, company_id").eq("id", ud.user.id).maybeSingle();
-  const { data: pa } = await u.from("platform_admins").select("user_id").eq("user_id", ud.user.id).maybeSingle();
-  const isAdmin = prof?.role === "admin" || !!pa;
-  if (!isAdmin) return json({ ok: false, error: "Admins only." }, 403);
+  const bodyIn = await req.json().catch(() => ({} as Record<string, unknown>));
 
-  const bodyIn = await req.json().catch(() => ({}));
+  // ---- Authorize + resolve who may write where. ----
+  let isSuper = false;
+  let profCompany: string | null = null;
+  if (isService) {
+    isSuper = true; // admin tooling: may target global or any company
+  } else {
+    const u = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
+    const { data: ud } = await u.auth.getUser();
+    if (!ud?.user) return json({ ok: false, error: "Unauthorized" }, 401);
+    const { data: prof } = await u.from("profiles").select("role, company_id").eq("id", ud.user.id).maybeSingle();
+    const { data: pa } = await u.from("platform_admins").select("user_id").eq("user_id", ud.user.id).maybeSingle();
+    const isAdmin = prof?.role === "admin" || !!pa;
+    if (!isAdmin) return json({ ok: false, error: "Admins only." }, 403);
+    isSuper = !!pa;
+    profCompany = (prof?.company_id as string) ?? null;
+  }
+
   const text: string = String(bodyIn.text ?? "").trim();
   const title: string | null = bodyIn.title ? String(bodyIn.title).slice(0, 200) : null;
-  const sourceKind: string = ["brochure", "price", "faq", "call", "note", "guide", "offer"].includes(bodyIn.source_kind) ? bodyIn.source_kind : "note";
+  const sourceKind: string = ["brochure", "price", "faq", "call", "note", "guide", "offer", "win"].includes(String(bodyIn.source_kind)) ? String(bodyIn.source_kind) : "note";
   const sourceId: string | null = bodyIn.source_id ? String(bodyIn.source_id).slice(0, 100) : null;
   if (!text) return json({ ok: false, error: "Empty text." }, 400);
 
-  // GLOBAL scope trains the shared brain for every company — platform super-admin
-  // only. COMPANY scope stays isolated: super-admin may target any company;
-  // company admins are pinned to their own.
   const isGlobal = bodyIn.scope === "global";
   let companyId: string | null;
   if (isGlobal) {
-    if (!pa) return json({ ok: false, error: "Global training is super-admin only." }, 403);
+    if (!isSuper) return json({ ok: false, error: "Global training is super-admin only." }, 403);
     companyId = null;
   } else {
-    companyId = (pa && bodyIn.company_id) ? String(bodyIn.company_id) : (prof?.company_id ?? null);
+    companyId = (isSuper && bodyIn.company_id) ? String(bodyIn.company_id) : profCompany;
     if (!companyId) return json({ ok: false, error: "No company." }, 400);
   }
 
   const chunks = chunk(text);
   if (chunks.length === 0) return json({ ok: false, error: "Nothing to ingest." }, 400);
 
+  // Batch window — keeps embedding under the edge CPU budget.
+  const offset = Math.max(0, Math.floor(Number(bodyIn.offset) || 0));
+  const batch = Math.min(Math.max(Math.floor(Number(bodyIn.batch) || 5), 1), 8);
+
   const admin = createClient(SUPABASE_URL, SERVICE);
-  // Re-ingesting the same source replaces its old chunks (idempotent).
-  if (sourceId) {
+  // Re-ingesting a source replaces its old chunks — but only on the first batch,
+  // so later batches of the same upload don't delete earlier ones.
+  if (offset === 0 && sourceId) {
     const del = admin.from("knowledge_chunks").delete().eq("source_id", sourceId);
     await (companyId === null ? del.is("company_id", null) : del.eq("company_id", companyId));
   }
 
+  const slice = chunks.slice(offset, offset + batch);
   const model = new Supabase.ai.Session("gte-small");
   let stored = 0;
-  for (const c of chunks) {
+  for (const c of slice) {
     try {
       const embedding = await model.run(c, { mean_pool: true, normalize: true });
       const { error } = await admin.from("knowledge_chunks").insert({
@@ -103,5 +120,7 @@ Deno.serve(async (req) => {
     } catch (_e) { /* skip a chunk that fails to embed */ }
   }
 
-  return json({ ok: true, chunks: chunks.length, stored });
+  const nextOffset = offset + batch;
+  const done = nextOffset >= chunks.length;
+  return json({ ok: true, chunks: chunks.length, stored, offset, next: done ? null : nextOffset, done });
 });
