@@ -43,7 +43,11 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
         const val CHANNEL_ID = "hot_leads"
-        const val ASSIGN_CHANNEL_ID = "lead_assignments"
+        // Bumped to _v2 so the new "cha-ching" sound actually takes effect: an
+        // Android channel's sound is locked in at creation, so changing it needs
+        // a fresh channel id. Legacy pushes naming the old id are remapped below.
+        const val ASSIGN_CHANNEL_ID = "lead_assignments_v2"
+        private const val LEGACY_ASSIGN_CHANNEL_ID = "lead_assignments"
         const val FOLLOWUP_CHANNEL_ID = "followups"
         const val AGENDA_CHANNEL_ID = "agenda"
         const val QUOTES_CHANNEL_ID = "quotes"
@@ -74,10 +78,13 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
                         },
                     )
                 }
+                // Retire the old assignment channel (chime_followup) so the new
+                // cha-ching channel is the only one users see.
+                runCatching { nm.deleteNotificationChannel(LEGACY_ASSIGN_CHANNEL_ID) }
                 create(CHANNEL_ID, "Hot leads", "Instant alerts when a new lead needs a call", null, NotificationManager.IMPORTANCE_HIGH)
                 create(
                     ASSIGN_CHANNEL_ID, "Lead assignments", "When new leads are assigned to you",
-                    R.raw.chime_followup, NotificationManager.IMPORTANCE_HIGH,
+                    R.raw.cha_ching, NotificationManager.IMPORTANCE_HIGH,
                 )
                 create(
                     FOLLOWUP_CHANNEL_ID, "Follow-up & visit reminders",
@@ -97,8 +104,11 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
 
         fun notify(context: Context, title: String, body: String, contactId: String?, channelId: String = CHANNEL_ID, openTab: String? = null) {
             ensureChannel(context)
+            // Legacy server pushes still name the old assignment channel — ring
+            // them on the new cha-ching channel instead.
+            val requested = if (channelId == LEGACY_ASSIGN_CHANNEL_ID) ASSIGN_CHANNEL_ID else channelId
             // Only ring on a known channel; fall back to hot_leads otherwise.
-            val ch = if (channelId in KNOWN_CHANNELS) channelId else CHANNEL_ID
+            val ch = if (requested in KNOWN_CHANNELS) requested else CHANNEL_ID
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 if (contactId != null) putExtra("open_contact_id", contactId)

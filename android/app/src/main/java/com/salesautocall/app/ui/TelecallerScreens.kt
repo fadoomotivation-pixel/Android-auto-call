@@ -2105,7 +2105,11 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
     val lead = app.postCallContactId?.let { id -> app.leads.find { it.id == id } }
 
     AlertDialog(
-        onDismissRequest = { vm.dismissPostCall() },
+        // A CONNECTED call must not close without a disposition — otherwise the
+        // lead silently stays "new" and looks untouched the next day. Outside-tap
+        // / back are ignored; one outcome tap is the only way out. A missed call
+        // stays freely dismissable (its "new" status is correct).
+        onDismissRequest = { if (!connected) vm.dismissPostCall() },
         title = {
             Column {
                 Text("Call ended", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -2160,8 +2164,9 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                         singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        if (connected) "How did the call go?" else "What happened?",
+                        if (connected) "How did the call go? (zaroori)" else "What happened?",
                         style = MaterialTheme.typography.labelLarge,
+                        color = if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(Modifier.height(8.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2208,12 +2213,23 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
         confirmButton = {},
         dismissButton = {
             if (scheduleFor == null) {
-                // A typed note or temperature is never thrown away — Skip
-                // becomes "Save & close" the moment something is captured.
-                val hasContext = note.isNotBlank() || temp != null
-                TextButton(onClick = {
-                    if (hasContext) vm.postCallSaveContext(temp, note) else vm.dismissPostCall()
-                }) { Text(if (hasContext) "Save & close" else "Skip") }
+                if (connected) {
+                    // Connected call → no Skip. The lead must not stay "new";
+                    // an outcome tap above is the only exit.
+                    Text(
+                        "⚠ Ek outcome chuno",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                } else {
+                    // A typed note or temperature is never thrown away — Skip
+                    // becomes "Save & close" the moment something is captured.
+                    val hasContext = note.isNotBlank() || temp != null
+                    TextButton(onClick = {
+                        if (hasContext) vm.postCallSaveContext(temp, note) else vm.dismissPostCall()
+                    }) { Text(if (hasContext) "Save & close" else "Skip") }
+                }
             }
         },
     )
