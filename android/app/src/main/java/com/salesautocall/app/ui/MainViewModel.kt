@@ -260,7 +260,45 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { com.salesautocall.app.sip.SipBackgroundService.start(app) }
             runCatching { com.salesautocall.app.sip.SipWatchdogWorker.schedule(app) }
         }
+        observeSimCalls()
         refreshSession()
+    }
+
+    /**
+     * A MANUAL SIM dial just ended → arm the post-call disposition sheet, so a
+     * connected call never leaves the lead sitting in "new" without an outcome
+     * (which is why called leads used to look untouched the next day). Campaign
+     * calls are skipped — the auto-dialer runs its own after-call review. Only
+     * CRM leads qualify; a random/off-CRM number has no lead to update.
+     */
+    private fun observeSimCalls() {
+        viewModelScope.launch {
+            var last: com.salesautocall.app.dialer.SimCallUi? = null
+            com.salesautocall.app.dialer.SimCallMonitor.state.collect { cur ->
+                val prev = last
+                last = cur
+                val ended = cur == null && prev != null
+                if (!ended) return@collect
+                if (com.salesautocall.app.dialer.DialerController.state.value.isRunning) return@collect
+                if (!_state.value.reviewAfterCall) return@collect
+                val phone = prev!!.phone
+                val key = phone.filter { it.isDigit() }.takeLast(10)
+                val lead = _state.value.leads.firstOrNull {
+                    it.phone.filter { c -> c.isDigit() }.takeLast(10) == key
+                } ?: return@collect
+                val contactId = lead.id ?: return@collect
+                set {
+                    it.copy(
+                        postCallContactId = contactId,
+                        postCallPhone = phone,
+                        postCallName = lead.name,
+                        postCallCampaignId = null,
+                        // Off-hook (activeAtMillis>0) = a real conversation → force an outcome.
+                        postCallConnected = prev.activeAtMillis > 0,
+                    )
+                }
+            }
+        }
     }
 
     private val lenientJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }

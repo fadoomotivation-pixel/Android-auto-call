@@ -177,7 +177,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
     var editIdentityOpen by remember { mutableStateOf(false) }
     var funnelExpanded by remember { mutableStateOf(false) }
     var journeyExpanded by remember { mutableStateOf(false) }
-    var callsExpanded by remember { mutableStateOf(false) }
 
     val followUp = app.followUpList.firstOrNull {
         (it.contactId != null && it.contactId == contact.id) || it.phone == contact.phone
@@ -445,6 +444,33 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
+                // ---- Calls & recordings — always open, right under the funnel so
+                // the rep hears the recording without hunting for a tap. ----
+                item {
+                    SectionCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Call, null, tint = BlueL, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("CALLS & RECORDINGS", style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp)
+                            val n = app.leadDetailCalls.size
+                            if (n > 0) {
+                                Spacer(Modifier.width(8.dp))
+                                Text("$n", style = MaterialTheme.typography.labelMedium, color = SubInk)
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        when {
+                            app.leadDetailLoading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                            app.leadDetailCalls.isEmpty() -> Text("No calls logged for this lead yet.", style = MaterialTheme.typography.bodySmall, color = SubInk)
+                            else -> app.leadDetailCalls.forEach { call ->
+                                LeadCallRow(call, playing = call.id != null && call.id == app.playingCallId,
+                                    onPlay = { call.id?.let { vm.playRecording(it) } }, onStop = { vm.stopRecording() })
+                            }
+                        }
+                    }
+                }
+
                 // ---- Token amount (only when at Token Paid) ----
                 if (contact.status == "token_paid") {
                     item {
@@ -482,7 +508,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                // ---- Temperature · Journey · Calls (3 columns) ----
+                // ---- Temperature · Journey (2 columns; Calls moved under the funnel) ----
                 item {
                     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         MiniCard("TEMPERATURE", Modifier.weight(1f).fillMaxHeight()) {
@@ -499,22 +525,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                     Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
                                         color = Ink, maxLines = 1)
                                     at?.let { Text(fmtWhen(it), style = MaterialTheme.typography.labelSmall, color = SubInk) }
-                                }
-                                Icon(Icons.Default.KeyboardArrowRight, null, tint = SubInk, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                        MiniCard("CALLS & RECORDINGS", Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(18.dp)).clickable { callsExpanded = !callsExpanded }) {
-                            val n = app.leadDetailCalls.size
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.size(28.dp).clip(CircleShape).background(BlueL.copy(alpha = 0.10f)), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Call, null, tint = BlueL, modifier = Modifier.size(15.dp))
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(if (n == 0) "No calls logged yet" else "$n call${if (n == 1) "" else "s"} logged",
-                                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = Ink, maxLines = 1)
-                                    Text(if (n == 0) "Make a call to start tracking" else "Tap to play recordings",
-                                        style = MaterialTheme.typography.labelSmall, color = SubInk, maxLines = 1)
                                 }
                                 Icon(Icons.Default.KeyboardArrowRight, null, tint = SubInk, modifier = Modifier.size(18.dp))
                             }
@@ -536,22 +546,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         if (journey.isEmpty()) Text("Updates you make will show here with date & time.",
                             style = MaterialTheme.typography.bodySmall, color = SubInk)
                         else journey.forEachIndexed { i, (atIso, type, text) -> JourneyRow(atIso, type, text, last = i == journey.lastIndex) }
-                    } }
-                }
-
-                // ---- Expanded Calls ----
-                if (callsExpanded) {
-                    item { SectionCard {
-                        Text("CALLS & RECORDINGS", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp)
-                        Spacer(Modifier.height(10.dp))
-                        when {
-                            app.leadDetailLoading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                            app.leadDetailCalls.isEmpty() -> Text("No calls logged for this lead yet.", style = MaterialTheme.typography.bodySmall, color = SubInk)
-                            else -> app.leadDetailCalls.forEach { call ->
-                                LeadCallRow(call, playing = call.id != null && call.id == app.playingCallId,
-                                    onPlay = { call.id?.let { vm.playRecording(it) } }, onStop = { vm.stopRecording() })
-                            }
-                        }
                     } }
                 }
 
