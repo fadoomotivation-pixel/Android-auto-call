@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { spawn } from "child_process";
 import ffmpegStatic from "ffmpeg-static";
 
@@ -8,6 +7,9 @@ export const runtime = "nodejs";
 // Transcoding a call recording can take a few seconds on a cold start; give the
 // serverless function headroom (capped by the plan's own limit).
 export const maxDuration = 60;
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 // Pipe an AMR buffer through ffmpeg and resolve with the full MP3 buffer. We
 // buffer the whole output (recordings are short) instead of streaming so that a
@@ -49,28 +51,32 @@ export async function GET(req: NextRequest) {
 
     const authHeader = req.headers.get("Authorization");
 
-    const supabase = await createClient();
-
-    const { data, error } = await supabase.functions.invoke("recording-url", {
-      body: { call_log_id: callId },
-      headers: authHeader ? { Authorization: authHeader } : undefined,
+    // Fetch the recording bytes from the edge function with a RAW fetch and read
+    // them as an ArrayBuffer. We must NOT use supabase.functions.invoke here: it
+    // auto-decodes unknown content-types (audio/mpeg, audio/mp4…) as TEXT, which
+    // UTF-8-mangles every non-ASCII byte and corrupts the audio — the browser
+    // then can't decode it ("Could not play the audio file"). A raw fetch +
+    // arrayBuffer keeps the bytes intact. recording-url is JWT-gated, so forward
+    // the caller's Authorization (and the anon apikey the gateway expects).
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/recording-url`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: ANON,
+        Authorization: authHeader ?? `Bearer ${ANON}`,
+      },
+      body: JSON.stringify({ call_log_id: callId }),
     });
 
-    if (error) {
-      return new NextResponse(String(error.message || error), { status: 400 });
+    if (!res.ok) {
+      const text = (await res.text().catch(() => "")).trim();
+      const clean = !text || text.startsWith("<") || text.length > 200
+        ? `Couldn't load recording (${res.status})`
+        : text;
+      return new NextResponse(clean, { status: res.status === 401 ? 401 : 400 });
     }
 
-    let buffer: Buffer;
-    let sourceType = "";
-    if (data instanceof Blob) {
-      sourceType = data.type || "";
-      buffer = Buffer.from(await data.arrayBuffer());
-    } else if (data instanceof ArrayBuffer) {
-      buffer = Buffer.from(data);
-    } else {
-      buffer = Buffer.from(data || "");
-    }
-
+    const buffer = Buffer.from(await res.arrayBuffer());
     if (!buffer || buffer.length === 0) {
       return new NextResponse("Empty audio data", { status: 404 });
     }
@@ -105,12 +111,9 @@ export async function GET(req: NextRequest) {
     }
 
     // Already a browser-playable format (m4a/wav/mp3…). Sniff the REAL format
-    // from the magic bytes and set the matching Content-Type ourselves —
-    // don't trust the upstream label. AMR SIM recordings get transcoded to MP3
-    // by the GitHub-Actions pipeline, but the edge function still reported
-    // "audio/mp4" (its source-based guess), so the browser tried to decode MP3
-    // bytes as AAC and failed with "Could not play the audio file". Sniffing
-    // makes playback correct regardless of what the edge function says.
+    // from the magic bytes and set the matching Content-Type ourselves — don't
+    // trust the upstream label (a converted .amr becomes MP3 but the edge
+    // function still guesses "audio/mp4" from recording_source).
     const sniffType = ((): string => {
       const b = buffer;
       if (b.length >= 3 && b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return "audio/mpeg"; // "ID3"
@@ -118,7 +121,7 @@ export async function GET(req: NextRequest) {
       if (b.length >= 8 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "audio/mp4"; // ...ftyp
       if (b.length >= 4 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return "audio/wav"; // "RIFF"
       if (b.length >= 4 && b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "audio/ogg"; // "OggS"
-      return sourceType || "audio/mp4";
+      return "audio/mp4";
     })();
 
     return new NextResponse(new Uint8Array(buffer), {
