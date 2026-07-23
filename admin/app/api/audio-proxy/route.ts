@@ -104,11 +104,26 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Already a browser-playable format (m4a/wav/mp3…) — pass it through with the
-    // real content-type the edge function reported.
+    // Already a browser-playable format (m4a/wav/mp3…). Sniff the REAL format
+    // from the magic bytes and set the matching Content-Type ourselves —
+    // don't trust the upstream label. AMR SIM recordings get transcoded to MP3
+    // by the GitHub-Actions pipeline, but the edge function still reported
+    // "audio/mp4" (its source-based guess), so the browser tried to decode MP3
+    // bytes as AAC and failed with "Could not play the audio file". Sniffing
+    // makes playback correct regardless of what the edge function says.
+    const sniffType = ((): string => {
+      const b = buffer;
+      if (b.length >= 3 && b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return "audio/mpeg"; // "ID3"
+      if (b.length >= 2 && b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return "audio/mpeg"; // MP3 frame sync
+      if (b.length >= 8 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "audio/mp4"; // ...ftyp
+      if (b.length >= 4 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return "audio/wav"; // "RIFF"
+      if (b.length >= 4 && b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "audio/ogg"; // "OggS"
+      return sourceType || "audio/mp4";
+    })();
+
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
-        "Content-Type": sourceType || "audio/mp4",
+        "Content-Type": sniffType,
         "Cache-Control": "private, max-age=300",
       },
     });
