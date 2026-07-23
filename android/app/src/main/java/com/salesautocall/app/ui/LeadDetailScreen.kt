@@ -444,6 +444,50 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
+                // ---- Call Coach — honest rating + guidance from THIS lead's last
+                // real recording. The coach "observes" the call and rates it; a
+                // good call only gets motivation, no forced suggestion. ----
+                if (app.leadCoachLoading || app.leadCoach != null) {
+                    item {
+                        val coach = app.leadCoach
+                        SectionCard {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("🎯 CALL COACH", style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp,
+                                    modifier = Modifier.weight(1f))
+                                coach?.rating?.let { r ->
+                                    Text("⭐".repeat(r.coerceIn(1, 5)) + " $r/5",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold, color = IndigoL)
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            if (coach == null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("Aakhri call ki recording analyse ho rahi hai…",
+                                        style = MaterialTheme.typography.bodySmall, color = SubInk)
+                                }
+                            } else {
+                                coach.good?.takeIf { it.isNotBlank() }?.let {
+                                    Text("✅ $it", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                coach.improve?.takeIf { it.isNotBlank() }?.let {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("💡 $it", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                if ((coach.rating ?: 0) >= 4 && coach.improve.isNullOrBlank()) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("🔥 Shaandaar call! Aise hi karte rahiye.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold, color = IndigoL)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // ---- Calls & recordings — always open, right under the funnel so
                 // the rep hears the recording without hunting for a tap. ----
                 item {

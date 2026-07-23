@@ -32,10 +32,18 @@ const SYSTEM_PROMPT =
   "picks, ids exactly as given, best first.\n" +
   "reason: max ~8 words, Hinglish (Roman script), for the rep — respectful 'aap' " +
   "form, e.g. 'Visit ho chuki — aaj close karein'.\n" +
-  "opener: 1-2 short natural Hinglish lines the rep will SAY to the customer on the " +
-  "phone. ALWAYS address the customer with respectful 'aap' — never tu/tum. Warm, " +
-  "confident, specific to that lead; use the COMPANY FACTS (a real project, price or " +
-  "offer) when they fit, never invent numbers.";
+  "opener: 1-2 short natural Hinglish lines the rep will SAY to the customer. ALWAYS " +
+  "address the customer with respectful 'aap' — never tu/tum.\n" +
+  "The opener MUST be SPECIFIC to THIS lead and PICK UP THE THREAD — use the lead's " +
+  "NAME, and reference their last_call / notes / stage / budget (e.g. 'pichhli baar " +
+  "aapne 2BHK ke baare me poochha tha', 'aapki site visit ho chuki hai'), then drive " +
+  "the ONE next step for that stage (site-visit done → ask for booking/decision; hot " +
+  "→ lock a site visit with a day/time; callback → the promised follow-up). Where a " +
+  "COMPANY FACT fits (a real project / price / offer), weave it in — never invent " +
+  "numbers.\n" +
+  "Every opener must be DIFFERENT from the others — no template. NEVER use the empty " +
+  "filler line 'Aapka interest kitna hai?' or a generic 'main aapko details bhejna " +
+  "chahta hoon' with nothing specific. Make each line something a real closer would say.";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -107,7 +115,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: 0.3,
+        model: "llama-3.3-70b-versatile", temperature: 0.55,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },

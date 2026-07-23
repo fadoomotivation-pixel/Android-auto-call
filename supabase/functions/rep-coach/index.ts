@@ -205,6 +205,46 @@ Deno.serve(async (req) => {
     return json({ ok: true, answer: answer ?? "Abhi jawab nahi bana paaya — ek baar phir poochhiye." });
   }
 
+  // ---------- LEAD mode: rating + guidance for ONE lead's last real call ----
+  // Shown on the lead's own page — the coach "observes" that lead's recording
+  // (transcript) and gives an honest rating + one guidance line, per lead.
+  if (body.mode === "lead") {
+    const contactId = String(body.contact_id ?? "").trim();
+    if (!contactId) return json({ ok: false, error: "contact_id required" }, 400);
+    const { data: call } = await admin.from("call_logs")
+      .select("id, started_at, duration_seconds, transcript, summary")
+      .eq("contact_id", contactId)
+      .gte("duration_seconds", MIN_COACH_SECONDS)
+      .not("transcript", "is", null)
+      .order("started_at", { ascending: false, nullsFirst: false })
+      .limit(1).maybeSingle();
+    if (!call?.id) return json({ ok: true, coaching: null });
+
+    const { data: cached } = await admin.from("coach_feedback")
+      .select("good, improve, rating").eq("call_id", call.id).maybeSingle();
+    let good = cached?.good as string | undefined;
+    let improve = cached?.improve as string | undefined;
+    let rating = cached?.rating as number | undefined;
+    // Regenerate when never coached OR coached before rating existed (rating null).
+    if (!cached || cached.rating == null) {
+      const wrote = await coachOneCall(admin, {
+        id: call.id as string, salesperson_id: uid, company_id: company,
+        transcript: String(call.transcript), summary: call.summary as string | null,
+      }).catch(() => false);
+      if (wrote) {
+        const { data: fresh } = await admin.from("coach_feedback")
+          .select("good, improve, rating").eq("call_id", call.id).maybeSingle();
+        good = (fresh?.good as string) ?? good;
+        improve = (fresh?.improve as string) ?? improve;
+        rating = (fresh?.rating as number) ?? rating;
+      }
+    }
+    return json({
+      ok: true,
+      coaching: { good: good ?? null, improve: improve ?? null, rating: rating ?? null, callAt: call.started_at },
+    });
+  }
+
   // ONE fresh Groq generation per request max — coaching, brief and tip each
   // make an LLM call, and doing all three at once blew the edge time budget
   // (HTTP 546). Cached results are always free; anything uncached gets filled in
@@ -228,7 +268,9 @@ Deno.serve(async (req) => {
     let improve = cached?.improve as string | undefined;
     let rating = cached?.rating as number | undefined;
 
-    if (!cached && !spent) {
+    // Regenerate when never coached OR coached before rating existed (rating null),
+    // so the star rating actually appears instead of staying blank.
+    if ((!cached || cached.rating == null) && !spent) {
       spent = true;
       // RAG-grounded: the coach quotes the company's own playbook (prices,
       // offers, rebuttals) — same brain assistant-chat / rag-ask use.

@@ -169,6 +169,10 @@ data class AppState(
     /** "Who did what, when" timeline entries for the open lead. */
     val leadDetailActivities: List<com.salesautocall.app.data.LeadActivity> = emptyList(),
     val leadDetailLoading: Boolean = false,
+    // Per-lead call coach: honest rating + guidance from THIS lead's last real
+    // call recording. Shown on the lead's own page.
+    val leadCoach: com.salesautocall.app.data.CoachCallFeedback? = null,
+    val leadCoachLoading: Boolean = false,
     // RAG v4: proactive "before you call" AI brief for the open lead.
     val leadBrief: String? = null,
     val leadBriefLoading: Boolean = false,
@@ -2260,7 +2264,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
-        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false, coachError = null) }
+        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadCoach = null, leadCoachLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false, coachError = null) }
         viewModelScope.launch {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())
@@ -2274,6 +2278,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             // summary lands; this catches any leftover pending one (e.g. the
             // server couldn't match a contact at the time). Zero taps.
             calls.firstOrNull { it.wadaState == "pending" && it.aiActions != null }?.let { applyWada(it) }
+        }
+        // Per-lead call coach (rating + guidance from this lead's last recording).
+        // Separate coroutine — it may generate on first view, so it shouldn't
+        // hold up the rest of the lead page.
+        viewModelScope.launch {
+            val coach = runCatching { Repository.leadCallCoach(contactId) }.getOrNull()
+            set {
+                if (it.leadDetailId == contactId) it.copy(leadCoach = coach, leadCoachLoading = false)
+                else it
+            }
         }
     }
 
