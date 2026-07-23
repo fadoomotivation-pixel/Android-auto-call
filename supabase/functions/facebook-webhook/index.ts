@@ -131,12 +131,40 @@ serve(async (req) => {
               continue;
             }
 
-            const assignedRep = integration.auto_assign
-              ? (await supabaseAdmin.rpc("fb_pick_rep", { p_company: integration.company_id })).data ?? null
-              : null;
+            // Route the lead to the right COMPANY by its form. One central page
+            // runs ads for many companies, so the page's own company is only a
+            // fallback — a per-form mapping (facebook_lead_routes) decides where
+            // each form's leads actually belong (and, optionally, which rep).
+            const formId = change.value.form_id ? String(change.value.form_id) : null;
+            let targetCompany = integration.company_id as string;
+            let routedRep: string | null = null;
+            let autoAssign = integration.auto_assign as boolean;
+            if (formId) {
+              const { data: route } = await supabaseAdmin
+                .from("facebook_lead_routes")
+                .select("company_id, salesperson_id")
+                .eq("form_id", formId)
+                .maybeSingle();
+              if (route?.company_id) {
+                targetCompany = route.company_id as string;
+                routedRep = (route.salesperson_id as string) ?? null;
+                // Honour the routed company's own auto-assign preference.
+                const { data: rc } = await supabaseAdmin
+                  .from("facebook_integrations")
+                  .select("auto_assign")
+                  .eq("company_id", targetCompany)
+                  .maybeSingle();
+                autoAssign = rc?.auto_assign ?? true;
+              }
+            }
+
+            const assignedRep = routedRep
+              ?? (autoAssign
+                ? (await supabaseAdmin.rpc("fb_pick_rep", { p_company: targetCompany })).data ?? null
+                : null);
 
             const { error: insertError } = await supabaseAdmin.from("contacts").insert({
-              company_id: integration.company_id,
+              company_id: targetCompany,
               salesperson_id: assignedRep,
               assigned_at: assignedRep ? new Date().toISOString() : null,
               name: name || null,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { FormRouting } from "./FormRouting";
 
 interface FbIntegration {
   page_id: string;
@@ -333,6 +334,9 @@ export default function FacebookSetupPage() {
           </select>
         </div>
       )}
+
+      {/* Multi-company routing: one central Facebook → each form to its company. */}
+      {isSuper && <FormRouting />}
 
       <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
         <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 1: Setup Meta App</h3>
