@@ -83,23 +83,44 @@ export function KnowledgeTrainer({ isSuper, companies }: { isSuper: boolean; com
 
     setBusy(true); setMsg(null);
     const source_id = title.trim() ? `train:${scope}:${title.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 60)}` : undefined;
-    const { data, error } = await supabase.functions.invoke("knowledge-ingest", {
-      body: {
-        text: body,
-        title: title.trim() || fileName || null,
-        source_kind: kind,
-        scope,
-        ...(scope === "company" && isSuper ? { company_id: companyId } : {}),
-        ...(source_id ? { source_id } : {}),
-      },
-    });
-    setBusy(false);
+    const baseBody = {
+      text: body,
+      title: title.trim() || fileName || null,
+      source_kind: kind,
+      scope,
+      ...(scope === "company" && isSuper ? { company_id: companyId } : {}),
+      ...(source_id ? { source_id } : {}),
+    };
 
-    if (error || (data && (data as { ok?: boolean }).ok === false)) {
-      setMsg({ ok: false, text: error?.message ?? (data as { error?: string })?.error ?? "Training failed." });
+    // Ingest in batches — a whole book is too many chunks to embed in one
+    // request (the edge function would hit its CPU limit). We loop, advancing
+    // `offset` until the server says done, so any size of book lands safely.
+    let offset = 0;
+    let stored = 0;
+    let total: number | null = null;
+    let guard = 0;
+    try {
+      while (guard++ < 200) {
+        const { data, error } = await supabase.functions.invoke("knowledge-ingest", {
+          body: { ...baseBody, offset },
+        });
+        if (error || (data && (data as { ok?: boolean }).ok === false)) {
+          throw new Error(error?.message ?? (data as { error?: string })?.error ?? "Training failed.");
+        }
+        const d = data as { stored?: number; chunks?: number; next?: number | null; done?: boolean };
+        stored += d.stored ?? 0;
+        total = d.chunks ?? total;
+        if (total) setMsg({ ok: true, text: `Teaching… ${Math.min(offset + 5, total)}/${total}` });
+        if (d.done || d.next == null) break;
+        offset = d.next;
+      }
+    } catch (e) {
+      setBusy(false);
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Training failed." });
       return;
     }
-    const stored = (data as { stored?: number })?.stored ?? 0;
+    setBusy(false);
+
     const where = scope === "global" ? "the shared global brain (all companies)" : `${companies.find((c) => c.id === companyId)?.name ?? "the company"}'s brain`;
     setMsg({ ok: true, text: `Learned ${stored} fact${stored === 1 ? "" : "s"} into ${where}.` });
     setText(""); setTitle(""); setFileName(null);

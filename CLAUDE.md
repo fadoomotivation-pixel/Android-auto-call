@@ -42,6 +42,13 @@ migrations in `supabase/migrations/`).
   Guidebooks: admin RAG page → `knowledge-ingest` (scope `global` = all
   companies, super-admin only; `source_kind='guide'`). ALL of it shares the ONE
   `match_knowledge` brain — never build a parallel retrieval store.
+  `knowledge-ingest` embeds in BATCHES (`offset`/`batch`, client loops till
+  `done`) — a whole book at once blew the edge CPU budget (HTTP 546). `rep-coach`
+  makes at most ONE fresh Groq call per request (`spent` guard) for the same
+  reason. Last-call coaching returns an honest 1-5 `rating`; when the call is
+  good it gives NO `improve` (empty) — only motivate, never a forced suggestion.
+  Keep the brain clean: win-harvest skips leads with nothing learnable; don't
+  double-ingest the same guide (idempotent `source_id`).
 - **Facebook = ONE central business** (gokul, act 1254913623362544) advertising for
   MANY companies. Leads route to the right company by **form**
   (`facebook_lead_routes`, super-admin maps them on the Facebook page UI). Meta's

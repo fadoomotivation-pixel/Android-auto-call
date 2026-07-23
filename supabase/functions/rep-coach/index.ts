@@ -60,12 +60,12 @@ const ASK_SYSTEM =
 const COACH_SYSTEM =
   "You are a warm, senior real-estate sales coach reviewing ONE call by a telecaller. " +
   "The transcript may be in Hindi, English or Hinglish, in any script — understand all three. " +
-  'Reply ONLY as JSON {"good": string, "improve": string}. ALWAYS write both in easy Hinglish ' +
-  "(Roman script, aap-form) — that is what the telecaller reads best. Each 1-2 short sentences. " +
-  "good = what the rep genuinely did well on THIS call. improve = the ONE most useful thing to do " +
-  "better next time (not a list — over-coaching frustrates reps). If company playbook facts are " +
-  "provided, ground the improve tip in them (exact price / offer / rebuttal ka reference do) instead " +
-  "of generic advice. Be specific to the transcript. NEVER invent details.";
+  'Reply ONLY as JSON {"rating": number, "good": string, "improve": string}. ' +
+  "rating = an HONEST 1-5 score of this call (1 = weak, 5 = excellent). Be fair, not inflated. " +
+  "good = what the rep genuinely did well on THIS call, in warm easy Hinglish (Roman script, aap-form), 1-2 short sentences — always motivating. " +
+  "improve = the ONE most useful thing to do better next time, same Hinglish style. " +
+  "IMPORTANT: if the call was genuinely good (rating >= 4) and there is no real, useful improvement, set improve to \"\" (empty) — do NOT invent a suggestion just to fill it; a rep who did well should only be motivated, not confused. Only give improve when it truly helps. Never a list. " +
+  "If company playbook facts are provided, ground the improve tip in them (exact price / offer / rebuttal ka reference do). Be specific to the transcript. NEVER invent details.";
 
 /** Generate + store coaching for one call. Returns true when a row was written. */
 async function coachOneCall(
@@ -81,11 +81,15 @@ async function coachOneCall(
     `Call transcript:\n\n${String(call.transcript).slice(0, 9000)}${factsBlock}`,
   );
   const good = typeof out?.good === "string" ? out.good : null;
-  const improve = typeof out?.improve === "string" ? out.improve : null;
-  if (!good && !improve) return false;
+  // Empty improve = "call was good, nothing to add" — keep it null, don't force one.
+  const improveRaw = typeof out?.improve === "string" ? out.improve.trim() : "";
+  const improve = improveRaw.length ? improveRaw : null;
+  const ratingNum = Number(out?.rating);
+  const rating = Number.isFinite(ratingNum) ? Math.max(1, Math.min(5, Math.round(ratingNum))) : null;
+  if (!good && !improve && rating == null) return false;
   await admin.from("coach_feedback").upsert({
     call_id: call.id, salesperson_id: call.salesperson_id, company_id: call.company_id,
-    good, improve,
+    good, improve, rating,
   });
   return true;
 }
@@ -201,6 +205,12 @@ Deno.serve(async (req) => {
     return json({ ok: true, answer: answer ?? "Abhi jawab nahi bana paaya — ek baar phir poochhiye." });
   }
 
+  // ONE fresh Groq generation per request max — coaching, brief and tip each
+  // make an LLM call, and doing all three at once blew the edge time budget
+  // (HTTP 546). Cached results are always free; anything uncached gets filled in
+  // on the next open. Priority: coaching > brief > tip.
+  let spent = false;
+
   // ---------- 1) Last-call coaching (cached per call) ----------
   let coaching: Record<string, unknown> | null = null;
   const { data: lastCall } = await admin.from("call_logs")
@@ -213,11 +223,13 @@ Deno.serve(async (req) => {
 
   if (lastCall?.id) {
     const { data: cached } = await admin.from("coach_feedback")
-      .select("good, improve").eq("call_id", lastCall.id).maybeSingle();
+      .select("good, improve, rating").eq("call_id", lastCall.id).maybeSingle();
     let good = cached?.good as string | undefined;
     let improve = cached?.improve as string | undefined;
+    let rating = cached?.rating as number | undefined;
 
-    if (!cached) {
+    if (!cached && !spent) {
+      spent = true;
       // RAG-grounded: the coach quotes the company's own playbook (prices,
       // offers, rebuttals) — same brain assistant-chat / rag-ask use.
       const wrote = await coachOneCall(admin, {
@@ -226,19 +238,20 @@ Deno.serve(async (req) => {
       }).catch(() => false);
       if (wrote) {
         const { data: fresh } = await admin.from("coach_feedback")
-          .select("good, improve").eq("call_id", lastCall.id).maybeSingle();
+          .select("good, improve, rating").eq("call_id", lastCall.id).maybeSingle();
         good = (fresh?.good as string) ?? undefined;
         improve = (fresh?.improve as string) ?? undefined;
+        rating = (fresh?.rating as number) ?? undefined;
       }
     }
 
-    if (good || improve) {
+    if (good || improve || rating != null) {
       let leadName: string | null = null;
       if (lastCall.contact_id) {
         const { data: c } = await admin.from("contacts").select("name").eq("id", lastCall.contact_id).maybeSingle();
         leadName = (c?.name as string) ?? null;
       }
-      coaching = { good: good ?? null, improve: improve ?? null, callAt: lastCall.started_at, leadName };
+      coaching = { good: good ?? null, improve: improve ?? null, rating: rating ?? null, callAt: lastCall.started_at, leadName };
     }
   }
 
@@ -283,7 +296,8 @@ Deno.serve(async (req) => {
             ? "Kal koi call log nahi hui. Aaj fresh shuruaat karte hain — pehle 2 ghante me 10 calls ka target rakhiye! 💪"
             : "Aaj abhi tak koi call log nahi hui. Din khatam hone se pehle kuch follow-ups nipta lijiye! 📞",
         };
-      } else {
+      } else if (!spent) {
+        spent = true;
         const label = slot === "morning" ? "KAL (yesterday)" : "AAJ (today, so far)";
         const out = await groqJson(
           "You are a supportive real-estate sales coach writing a mini day-review for a telecaller. " +
@@ -316,7 +330,8 @@ Deno.serve(async (req) => {
       .select("content").eq("salesperson_id", uid).eq("brief_date", tipDate).eq("slot", "tip").maybeSingle();
     if (cachedTip?.content) {
       tip = cachedTip.content as string;
-    } else {
+    } else if (!spent) {
+      spent = true;
       // Seed the tip with real brain facts (guidebook + harvested wins +
       // playbook) so it's specific, not filler — aimed at the funnel goal.
       const seed = await playbookFacts(

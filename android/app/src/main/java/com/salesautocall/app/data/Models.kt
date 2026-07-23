@@ -140,6 +140,8 @@ data class ChatMsg(val role: String, val content: String)
 data class CoachCallFeedback(
     val good: String?,
     val improve: String?,
+    /** Honest 1-5 rating of the last call (null = not scored). */
+    val rating: Int? = null,
     val callAt: String?,
     val leadName: String?,
 )

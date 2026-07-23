@@ -494,6 +494,7 @@ object Repository {
                 CoachCallFeedback(
                     good = it["good"]?.jsonPrimitive?.contentOrNull,
                     improve = it["improve"]?.jsonPrimitive?.contentOrNull,
+                    rating = it["rating"]?.jsonPrimitive?.intOrNull,
                     callAt = it["callAt"]?.jsonPrimitive?.contentOrNull,
                     leadName = it["leadName"]?.jsonPrimitive?.contentOrNull,
                 )
