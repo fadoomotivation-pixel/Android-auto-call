@@ -144,7 +144,9 @@ data class CoachCallFeedback(
     val leadName: String?,
 )
 data class CoachBrief(val slot: String, val content: String)
-data class CoachPanel(val coaching: CoachCallFeedback?, val brief: CoachBrief?)
+/** The floating coach panel: last-call feedback, the day brief, and ONE daily
+ *  tip (grounded in the company brain — guidebook + past wins). */
+data class CoachPanel(val coaching: CoachCallFeedback?, val brief: CoachBrief?, val tip: String? = null)
 
 /** One "Aaj ke 5" pick — the AI's next-best call with a ready-to-speak opener. */
 data class FocusPick(val contactId: String, val reason: String, val opener: String)

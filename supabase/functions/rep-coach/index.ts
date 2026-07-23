@@ -44,6 +44,19 @@ async function playbookFacts(admin: SupabaseClient, companyId: string, text: str
   }
 }
 
+// Two-way "ask the coach": the rep asks anything, live. Grounded in the SAME
+// brain (company playbook + global guidebook + harvested wins) and always aimed
+// at the next funnel step.
+const ASK_SYSTEM =
+  "You are a sharp, friendly senior real-estate sales coach helping a telecaller LIVE, right now. " +
+  "The question may be in Hindi, English or Hinglish, in any script — understand all three, and ALWAYS " +
+  "answer in easy Roman Hinglish (aap-form), short and practical. " +
+  'Reply ONLY as JSON {"answer": string}. Give a concrete, doable answer — a line they can actually say, ' +
+  "or the next step to take — not theory or a lecture. If brain facts are provided, ground the answer in " +
+  "them (quote the exact price / offer / rebuttal line) instead of generic advice. Your north star: move the " +
+  "lead one step forward — interested → site visit → booking. Finish with the single next action or a " +
+  "ready-to-speak line. NEVER invent facts that aren't in the brain; if unknown, say what to find out.";
+
 const COACH_SYSTEM =
   "You are a warm, senior real-estate sales coach reviewing ONE call by a telecaller. " +
   "The transcript may be in Hindi, English or Hinglish, in any script — understand all three. " +
@@ -162,6 +175,32 @@ Deno.serve(async (req) => {
   if (!prof?.company_id) return json({ ok: false, error: "No company" }, 400);
   const company = prof.company_id as string;
 
+  const body = await req.json().catch(() => ({} as Record<string, unknown>));
+
+  // ---------- ASK mode: two-way Q&A, grounded + goal-oriented ----------
+  if (body.mode === "ask") {
+    const question = String(body.question ?? "").trim();
+    if (!question) return json({ ok: false, error: "empty question" }, 400);
+    const facts = await playbookFacts(admin, company, question);
+    const factsBlock = facts.length
+      ? `\n\nBrain facts (company playbook + guidebook + past wins) — ground your answer in these:\n${facts.map((f) => `- ${f}`).join("\n")}`
+      : "";
+    const out = await groqJson(
+      ASK_SYSTEM,
+      `Telecaller's question:\n${question.slice(0, 800)}${factsBlock}`,
+      0.5,
+    );
+    const answer = typeof out?.answer === "string" ? out.answer.trim() : null;
+    const contactId = typeof body.contact_id === "string" ? body.contact_id : null;
+    // Save to the rep's memory — their questions become team signal, and the
+    // best Q&A can later be promoted into the shared brain.
+    await admin.from("coach_qa").insert({
+      company_id: company, salesperson_id: uid,
+      question: question.slice(0, 2000), answer, contact_id: contactId,
+    }).catch(() => {});
+    return json({ ok: true, answer: answer ?? "Abhi jawab nahi bana paaya — ek baar phir poochhiye." });
+  }
+
   // ---------- 1) Last-call coaching (cached per call) ----------
   let coaching: Record<string, unknown> | null = null;
   const { data: lastCall } = await admin.from("call_logs")
@@ -269,5 +308,40 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ ok: true, coaching, brief });
+  // ---------- 3) Daily tip (one per rep per day, from the brain) ----------
+  let tip: string | null = null;
+  {
+    const tipDate = istDate();
+    const { data: cachedTip } = await admin.from("coach_briefs")
+      .select("content").eq("salesperson_id", uid).eq("brief_date", tipDate).eq("slot", "tip").maybeSingle();
+    if (cachedTip?.content) {
+      tip = cachedTip.content as string;
+    } else {
+      // Seed the tip with real brain facts (guidebook + harvested wins +
+      // playbook) so it's specific, not filler — aimed at the funnel goal.
+      const seed = await playbookFacts(
+        admin, company,
+        "site visit close booking objection follow-up price offer real estate sales tip",
+      );
+      const out = await groqJson(
+        "You are a senior real-estate sales coach. Give ONE short daily tip to a telecaller in easy Roman " +
+        "Hinglish (aap-form), max 30 words, concrete and doable, aimed at moving leads interested → site " +
+        'visit → booking. Reply ONLY as JSON {"tip": string}. If brain facts are given, base the tip on them ' +
+        "(quote a real offer/line). Never generic filler, never invent facts.",
+        seed.length
+          ? `Brain facts:\n${seed.map((f) => `- ${f}`).join("\n")}`
+          : "No specific facts — give one solid universal site-visit/closing tip.",
+        0.7,
+      );
+      const t = typeof out?.tip === "string" && out.tip.trim() ? out.tip.trim() : null;
+      if (t) {
+        await admin.from("coach_briefs").upsert({
+          salesperson_id: uid, brief_date: tipDate, slot: "tip", company_id: company, content: t,
+        });
+        tip = t;
+      }
+    }
+  }
+
+  return json({ ok: true, coaching, brief, tip });
 });

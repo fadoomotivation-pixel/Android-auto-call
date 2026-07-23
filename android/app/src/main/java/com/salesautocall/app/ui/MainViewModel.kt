@@ -199,6 +199,12 @@ data class AppState(
     val coachObjection: String = "",
     val coachRebuttal: String? = null,
     val coachRebuttalLoading: Boolean = false,
+    // "Ask the coach": open two-way Q&A inside the floating coach. The rep types
+    // any question (Hindi/Hinglish/English) and gets a grounded, goal-oriented
+    // answer from the company brain (playbook + guidebook + past wins).
+    val coachAsk: String = "",
+    val coachAnswer: String? = null,
+    val coachAnswerLoading: Boolean = false,
     /** True while the mic is capturing a new voice note. */
     val voiceRecording: Boolean = false,
     /** True while a finished take uploads + registers. */
@@ -1668,6 +1674,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun closeCoach() = set { it.copy(coachOpen = false) }
+
+    // ---- Ask the coach (open Q&A inside the floating coach) ----
+    fun setCoachAsk(text: String) = set { it.copy(coachAsk = text) }
+    fun clearCoachAnswer() = set { it.copy(coachAnswer = null, coachAsk = "") }
+    fun askCoach() {
+        val q = _state.value.coachAsk.trim()
+        if (q.isEmpty() || _state.value.coachAnswerLoading) return
+        set { it.copy(coachAnswerLoading = true, coachAnswer = null) }
+        viewModelScope.launch {
+            val ans = runCatching { Repository.coachAsk(q) }.getOrNull()
+            set {
+                it.copy(
+                    coachAnswerLoading = false,
+                    coachAnswer = ans ?: "Abhi jawab nahi mila — thodi der me phir try kijiye.",
+                )
+            }
+        }
+    }
 
     // ---- Objection Buster (floating coach) ----
     fun setCoachObjection(text: String) = set { it.copy(coachObjection = text) }

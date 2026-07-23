@@ -32,6 +32,16 @@ migrations in `supabase/migrations/`).
   (per-company `capi_token_secret_id` / `page_access_token_secret_id`).
 
 ## Operational notes
+- **Floating AI Coach brain** (`rep-coach` fn): returns `{coaching, brief, tip}`
+  and a `mode:"ask"` two-way Q&A (rep asks anything → grounded answer, saved to
+  `coach_qa`). Daily `tip` cached in `coach_briefs` slot `'tip'`. The **shared
+  winning brain** = `win-harvest` fn: when a lead reaches site_visit/booking it
+  distils "what worked" into a **company-scoped** `knowledge_chunks` row
+  (`source_kind='win'`, idempotent `source_id='win:<contact>'`), so
+  `match_knowledge` teaches every rep in that company. Cron `win-harvest-2h`.
+  Guidebooks: admin RAG page → `knowledge-ingest` (scope `global` = all
+  companies, super-admin only; `source_kind='guide'`). ALL of it shares the ONE
+  `match_knowledge` brain — never build a parallel retrieval store.
 - **Facebook = ONE central business** (gokul, act 1254913623362544) advertising for
   MANY companies. Leads route to the right company by **form**
   (`facebook_lead_routes`, super-admin maps them on the Facebook page UI). Meta's
