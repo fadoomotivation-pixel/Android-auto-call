@@ -3,6 +3,8 @@ package com.salesautocall.app.ui
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -118,42 +120,63 @@ fun AudioPlayer(
         return
     }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    // A calm pill: a filled circular play/pause, a slim progress bar, and the
+    // elapsed / total time underneath — reads like a proper voice-message player.
+    Surface(
+        modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
     ) {
-        IconButton(onClick = {
-            exoPlayer?.let { if (isPlaying) it.pause() else it.play() }
-        }) {
-            if (buffering) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play"
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(42.dp),
+            ) {
+                IconButton(onClick = { exoPlayer?.let { if (isPlaying) it.pause() else it.play() } }) {
+                    if (buffering) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp), strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(Modifier.weight(1f)) {
+                Slider(
+                    value = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f,
+                    onValueChange = { percent ->
+                        if (duration > 0) {
+                            val newPos = (percent * duration.toFloat()).toLong()
+                            exoPlayer?.seekTo(newPos)
+                            currentPosition = newPos
+                        }
+                    },
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(24.dp),
                 )
+                Row(Modifier.fillMaxWidth().padding(horizontal = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(formatTime(currentPosition), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatTime(duration), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
-
-        Slider(
-            value = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f,
-            onValueChange = { percent ->
-                if (duration > 0) {
-                    val newPos = (percent * duration.toFloat()).toLong()
-                    exoPlayer?.seekTo(newPos)
-                    currentPosition = newPos
-                }
-            },
-            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
-        )
-
-        Text(
-            text = formatTime(currentPosition) + " / " + formatTime(duration),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
