@@ -118,6 +118,9 @@ class ManualCallService : Service() {
         // Persist BEFORE stopping — stopSelf() cancels this scope, and a launched
         // persist coroutine used to die mid-insert (calls vanished from history).
         persist(phone, companyId, salespersonId, startedAt, durationSec, outcome, recordingPath)
+        // Push the log + recording to the CRM now, not at the next 15-min window,
+        // so the manager sees the call almost live.
+        com.salesautocall.app.data.SyncWorkers.syncNow(applicationContext)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

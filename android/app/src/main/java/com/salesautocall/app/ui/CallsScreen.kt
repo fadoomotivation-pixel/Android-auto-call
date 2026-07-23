@@ -177,11 +177,14 @@ fun CallsScreen(vm: MainViewModel) {
             return@Column
         }
 
+        // Off-CRM calls (record-all-calls capture of numbers that aren't leads —
+        // often the rep's personal calls) are for the web admin only, never shown
+        // to the telecaller in the app.
         val rows = when (sub) {
             2 -> missed
             3 -> followUps
             else -> app.callList
-        }
+        }.filter { !it.offCrm }
 
         when {
             app.callsLoading -> Box(Modifier.fillMaxWidth().padding(32.dp)) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
