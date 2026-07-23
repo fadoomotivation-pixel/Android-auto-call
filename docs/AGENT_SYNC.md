@@ -37,6 +37,25 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## CHANGE LOG (newest first — read the top before you start)
+
+### 2026-07-22 · Claude · CAPI matches phone/email + Import button always clickable
+- **`supabase/functions/meta-capi`**: the deployed function was already upgraded to
+  match conversions on the lead's **hashed phone/email** (not only real webhook FB
+  leads with a `lead_source_id`), so manually-entered / CSV-imported ad leads report
+  conversions too. The repo copy was STALE (old "facebook-only" gate) — now synced to
+  the deployed version. The DB trigger (`0053`) still only auto-fires for true FB
+  leads; other stages are reached via one-off backfills. Meta credits only the leads
+  whose phone/email actually saw the ad and ignores the rest, so this is safe.
+- One-time CAPI backfill run for the CAPI-enabled company's already-qualified leads;
+  all 33 qualifying leads now have accepted CAPI events. Other tenants have no CAPI
+  config, so their leads correctly skip.
+- **`admin/.../ImportLeads.tsx` + `LeadManager.tsx`** (Antigravity's lane — touched
+  because the user asked): the **Import Leads** button is now always clickable. For a
+  super admin the target-company picker moved INTO the import dialog (required before
+  any write), instead of disabling the button on the board. Multi-tenant safety is
+  unchanged — a company must still be chosen; dedupe + insert use that company.
+
 ## WHAT EXISTS TODAY (state of the product)
 
 **Android app** (`android/`, Kotlin + Compose): telecaller CRM — lead pipeline +

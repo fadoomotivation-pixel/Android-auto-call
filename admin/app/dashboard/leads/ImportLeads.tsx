@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { parseRows, parsePasted, parseCSV, decodeText, type ParsedLead } from "@/lib/leadImport";
 
-type Sp = { id: string; full_name: string | null };
+type Sp = { id: string; full_name: string | null; company_id?: string | null; company_name?: string | null };
 
 function chunk<T>(arr: T[], n: number): T[][] {
   const out: T[][] = [];
@@ -15,16 +15,33 @@ function chunk<T>(arr: T[], n: number): T[][] {
 
 export function ImportLeads({
   companyId,
+  companies,
   salespeople,
   onClose,
   onDone,
 }: {
+  // The pre-selected target company. For a regular admin this is always their own
+  // company. For a super admin it may be "" (no company picked yet) — in that case
+  // `companies` is supplied and the admin picks the target INSIDE this dialog, so
+  // the entry button no longer has to be disabled on the board.
   companyId: string;
+  companies?: [string, string][];
   salespeople: Sp[];
   onClose: () => void;
   onDone: (count: number) => void;
 }) {
   const supabase = createClient();
+  // The company leads actually import into. Starts from the pre-selection; a super
+  // admin can change it here. Keeping the picker in the dialog means the Import
+  // button is always clickable, while the multi-tenant safety (a company MUST be
+  // chosen before anything is written) is preserved.
+  const [targetCompany, setTargetCompany] = useState(companyId);
+  const pickCompany = !!companies; // super admin path — a choice is required
+  // Assignee list is scoped to the chosen company so a lead never lands in one
+  // company owned by another company's rep.
+  const assignableReps = pickCompany
+    ? salespeople.filter((s) => s.company_id === targetCompany)
+    : salespeople;
   const fileRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<"file" | "paste">("file");
   const [paste, setPaste] = useState("");
@@ -83,6 +100,10 @@ export function ImportLeads({
 
   async function doImport() {
     if (parsed.length === 0) return;
+    if (pickCompany && !targetCompany) {
+      setError("Pick which company these leads belong to first.");
+      return;
+    }
     setBusy(true);
     setError(null);
 
@@ -96,7 +117,7 @@ export function ImportLeads({
       const { data: page, error: pErr } = await supabase
         .from("contacts")
         .select("phone")
-        .eq("company_id", companyId)
+        .eq("company_id", targetCompany)
         .range(from, from + PAGE - 1);
       if (pErr) break;
       for (const r of page ?? []) have.add(norm(r.phone as string));
@@ -136,7 +157,7 @@ export function ImportLeads({
 
     setBusy(true);
     const rows = leadsToImport.map((l) => ({
-      company_id: companyId,
+      company_id: targetCompany,
       salesperson_id: assignTo || null,
       name: l.name,
       phone: l.phone,
@@ -191,6 +212,30 @@ export function ImportLeads({
           <h3 style={{ margin: 0 }}>Import Leads</h3>
           <button className="link" onClick={onClose}>✕</button>
         </div>
+
+        {/* Super admin: choose which company these leads belong to. Required —
+            leads dedupe and are owned per company, so this must be picked before
+            anything is written. Regular admins never see this (own company only). */}
+        {pickCompany && (
+          <div style={{ marginTop: 14 }}>
+            <label style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>Import into company</label>
+            <select
+              value={targetCompany}
+              onChange={(e) => { setTargetCompany(e.target.value); setAssignTo(""); }}
+              style={{ ...input, width: "100%", marginTop: 6, borderColor: targetCompany ? "var(--border)" : "#f59e0b" }}
+            >
+              <option value="">— select a company —</option>
+              {companies!.map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+            {!targetCompany && (
+              <p style={{ fontSize: 12, color: "#f59e0b", margin: "6px 0 0" }}>
+                Pick the company first — leads import into it and dedupe against it.
+              </p>
+            )}
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
           <button
@@ -341,15 +386,21 @@ export function ImportLeads({
         ) : (
           <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
             <span style={{ fontSize: 13, color: "var(--muted)" }}>Assign to (optional):</span>
-            <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input}>
+            <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input} disabled={pickCompany && !targetCompany}>
               <option value="">Leave unassigned</option>
-              {salespeople.map((sp) => (
+              {assignableReps.map((sp) => (
                 <option key={sp.id} value={sp.id}>{sp.full_name || sp.id.slice(0, 8)}</option>
               ))}
             </select>
             <div style={{ flex: 1 }} />
             <button className="link" onClick={onClose}>Cancel</button>
-            <button className="primary" style={{ width: "auto", padding: "9px 18px" }} disabled={busy || parsed.length === 0} onClick={doImport}>
+            <button
+              className="primary"
+              style={{ width: "auto", padding: "9px 18px" }}
+              disabled={busy || parsed.length === 0 || (pickCompany && !targetCompany)}
+              title={pickCompany && !targetCompany ? "Pick a company above first" : ""}
+              onClick={doImport}
+            >
               {busy ? "Importing…" : `Import ${parsed.length || ""}`}
             </button>
           </div>

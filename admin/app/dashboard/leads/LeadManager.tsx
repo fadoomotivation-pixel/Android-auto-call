@@ -456,10 +456,8 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button
           className="primary"
-          style={{ width: "auto", padding: "9px 16px", opacity: importCompanyId ? 1 : 0.5, cursor: importCompanyId ? "pointer" : "not-allowed" }}
-          onClick={() => importCompanyId && setImportOpen(true)}
-          disabled={!importCompanyId}
-          title={importCompanyId ? "" : "Pick a company first so leads import into it (and dedupe against it)."}
+          style={{ width: "auto", padding: "9px 16px" }}
+          onClick={() => setImportOpen(true)}
         >
           ⬆ Import Leads
         </button>
@@ -475,9 +473,6 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
               <option key={id} value={id}>{name}</option>
             ))}
           </select>
-        )}
-        {isSuper && !importCompanyId && (
-          <span style={{ color: "#f59e0b", fontSize: 13 }}>← Pick a company to import into it</span>
         )}
         {msg && <span style={{ color: "var(--accent)", fontSize: 13 }}>{msg}</span>}
       </div>
@@ -660,9 +655,10 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
         </button>
       )}
 
-      {importOpen && importCompanyId && (
+      {importOpen && (
         <ImportLeads
           companyId={importCompanyId}
+          companies={isSuper ? companies : undefined}
           salespeople={salespeople}
           onClose={() => setImportOpen(false)}
           onDone={async (n) => {

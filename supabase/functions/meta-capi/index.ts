@@ -1,7 +1,10 @@
 // Meta Conversions API forwarder — the "close the loop" half of Meta lead ads.
-// When a lead that CAME FROM a Meta Instant Form crosses a qualifying funnel
-// stage, we send Meta a conversion event keyed on the original lead_id, so its
-// optimization learns which leads actually convert and finds more like them.
+// When a lead crosses a qualifying funnel stage we send Meta a conversion event,
+// keyed on the original Meta lead_id when we have it (best), else matched on the
+// lead's hashed phone/email. That lets even manually-entered / CSV-imported ad
+// leads report conversions — Meta credits the ones whose phone/email actually
+// saw the ad and quietly ignores the rest, so its optimization still learns which
+// leads convert and finds more like them.
 //
 // Body: { contact_id, status?, event_name? }
 //   - status     → mapped to a Meta event_name via the company's map (or defaults)
@@ -58,8 +61,14 @@ Deno.serve(async (req) => {
     .select("id, company_id, name, phone, email, status, lead_source, lead_source_id")
     .eq("id", contact_id).maybeSingle();
   if (!contact) return json({ ok: false, error: "contact not found" }, 404);
-  if (contact.lead_source !== "facebook" || !contact.lead_source_id) {
-    return json({ ok: true, skipped: "not a Meta lead" });
+  // A conversion event needs at least one identifier Meta can match on: the
+  // original Meta lead_id (best, when the lead came through the webhook) OR a
+  // hashed phone/email. Import / manually-entered ad leads have no lead_id but
+  // still match on phone — Meta credits only the ones whose phone/email actually
+  // saw the ad and ignores the rest, so this is safe and lets those leads report
+  // conversions too.
+  if (!contact.lead_source_id && !contact.phone && !contact.email) {
+    return json({ ok: true, skipped: "no phone/email/lead_id to match on" });
   }
 
   // Company CAPI config (dataset + decrypted token + optional map).
@@ -75,7 +84,7 @@ Deno.serve(async (req) => {
   // De-dup: one signal of each kind per lead. If the row already exists, we've sent it.
   const { error: dupErr } = await admin.from("capi_events").insert({
     company_id: contact.company_id, contact_id: contact.id,
-    event_name: eventName, meta_lead_id: String(contact.lead_source_id),
+    event_name: eventName, meta_lead_id: contact.lead_source_id ? String(contact.lead_source_id) : null,
   });
   if (dupErr) {
     if (dupErr.code === "23505") return json({ ok: true, skipped: "already sent", event_name: eventName });
