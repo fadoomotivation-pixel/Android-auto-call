@@ -25,10 +25,11 @@ object AppPrefs {
     fun getAutostartPrompted(context: Context): Boolean = prefs(context).getBoolean("autostart_prompted", false)
     fun setAutostartPrompted(context: Context, v: Boolean) = prefs(context).edit().putBoolean("autostart_prompted", v).apply()
 
-    /** The floating AI Coach hides for ONE day only — it returns tomorrow, so a
-     *  rep can dismiss it without losing the feature forever. */
-    fun getCoachHiddenDate(context: Context): String = prefs(context).getString("coach_hidden_date", "") ?: ""
-    fun setCoachHiddenDate(context: Context, isoDate: String) = prefs(context).edit().putString("coach_hidden_date", isoDate).apply()
+    /** The floating AI Coach shrinks to a mini dot for ONE day only — it never
+     *  disappears (still one tap away), and returns to full size tomorrow. */
+    fun getCoachMiniDate(context: Context): String = prefs(context).getString("coach_hidden_date", "") ?: ""
+    fun setCoachMiniDate(context: Context, isoDate: String) = prefs(context).edit().putString("coach_hidden_date", isoDate).apply()
+    fun clearCoachMini(context: Context) = prefs(context).edit().remove("coach_hidden_date").apply()
     
     fun getAgentId(context: Context): String = prefs(context).getString(KEY_AGENT, "") ?: ""
     fun setAgentId(context: Context, v: String) = prefs(context).edit().putString(KEY_AGENT, v.trim()).apply()
