@@ -37,6 +37,18 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-07-23 — Claude Code (Objection Buster in the floating coach)
+
+- Finished the interrupted "Objection Buster" upgrade (the other session hit its
+  spend limit mid-build). Added to the floating AI Coach sheet (`AppRoot.kt`
+  `CoachSheet`): common-objection chips + a text field → the exact RAG-grounded
+  rebuttal to say back, with Copy. Standalone (no open lead needed) so it works
+  mid-call from any screen. New `Repository.coachRebuttal(objection)` (reuses the
+  assistant-chat RAG brain, lead = null) + VM `getCoachRebuttal` /
+  `setCoachObjection` / `clearCoachRebuttal` + state `coachObjection` /
+  `coachRebuttal` / `coachRebuttalLoading`. The lead-scoped objection coach in
+  `LeadDetailScreen` (`getRebuttal`) is untouched.
+
 ## 2026-07-23 — Claude Code
 
 - **Floating AI Coach (app)**: top-right 🎯 bubble on all tabs (hide = today only,

@@ -194,6 +194,11 @@ data class AppState(
     val coachLoading: Boolean = false,
     val coachPicks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
     val coachPicksLoading: Boolean = false,
+    // Objection Buster inside the floating coach: the objection being typed, the
+    // rebuttal (null = none yet), and whether we're fetching. Not tied to a lead.
+    val coachObjection: String = "",
+    val coachRebuttal: String? = null,
+    val coachRebuttalLoading: Boolean = false,
     /** True while the mic is capturing a new voice note. */
     val voiceRecording: Boolean = false,
     /** True while a finished take uploads + registers. */
@@ -1625,6 +1630,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     fun closeCoach() = set { it.copy(coachOpen = false) }
+
+    // ---- Objection Buster (floating coach) ----
+    fun setCoachObjection(text: String) = set { it.copy(coachObjection = text) }
+    fun clearCoachRebuttal() = set { it.copy(coachRebuttal = null, coachObjection = "") }
+
+    /** The customer objected mid-call → the exact RAG-grounded line to say back.
+     *  Standalone (no open lead needed) so it works from any screen. */
+    fun getCoachRebuttal(objection: String) {
+        val q = objection.trim()
+        if (q.isBlank() || _state.value.coachRebuttalLoading) return
+        set { it.copy(coachRebuttalLoading = true, coachRebuttal = null) }
+        viewModelScope.launch {
+            val reply = runCatching { Repository.coachRebuttal(q) }.getOrNull()
+            // A failure never lands in the result field — the rep must not read an
+            // error as "the line to say".
+            set { it.copy(coachRebuttal = reply, coachRebuttalLoading = false) }
+        }
+    }
+
     fun closeSettings() = set { it.copy(showSettings = false) }
 
     /** From an overlay's bottom nav: close overlays and ask MainShell to switch tab. */

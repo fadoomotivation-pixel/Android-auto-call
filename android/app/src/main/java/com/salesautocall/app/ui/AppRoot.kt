@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -94,7 +95,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.AutofillType
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -691,6 +694,12 @@ private fun MainShell(vm: MainViewModel) {
                     picks = state.coachPicks,
                     picksLoading = state.coachPicksLoading,
                     resolveLead = { id -> state.leads.firstOrNull { l -> l.id == id } },
+                    objection = state.coachObjection,
+                    onObjectionChange = { vm.setCoachObjection(it) },
+                    rebuttal = state.coachRebuttal,
+                    rebuttalLoading = state.coachRebuttalLoading,
+                    onGetRebuttal = { vm.getCoachRebuttal(it) },
+                    onClearRebuttal = { vm.clearCoachRebuttal() },
                     onCall = { phone ->
                         vm.closeCoach()
                         vm.dialManual(phone)
@@ -739,10 +748,17 @@ private fun CoachSheet(
     picks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
     picksLoading: Boolean = false,
     resolveLead: (String) -> com.salesautocall.app.data.Contact? = { null },
+    objection: String = "",
+    onObjectionChange: (String) -> Unit = {},
+    rebuttal: String? = null,
+    rebuttalLoading: Boolean = false,
+    onGetRebuttal: (String) -> Unit = {},
+    onClearRebuttal: () -> Unit = {},
     onCall: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onHideToday: () -> Unit,
 ) {
+    val clipboard = LocalClipboardManager.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth()
@@ -868,6 +884,68 @@ private fun CoachSheet(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
+                }
+            }
+
+            // ---- 🛡️ Objection Buster — customer ne mana kiya, turant sahi jawab.
+            // RAG-grounded (company ke apne prices/offers/closing lines se), kisi
+            // bhi screen se mid-call. Kisi open lead ki zaroorat nahi.
+            Spacer(Modifier.height(16.dp))
+            Text("🛡️ Objection Buster", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Customer ne mana kiya? Tap karo ya likho — turant sahi jawab milega.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(
+                    "Too expensive", "Location too far", "Need to discuss at home",
+                    "Just thinking about it", "Loan problem", "Cheaper elsewhere",
+                ).forEach { c ->
+                    FilterChip(
+                        selected = false,
+                        onClick = { if (!rebuttalLoading) { onObjectionChange(c); onGetRebuttal(c) } },
+                        label = { Text(c) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = objection,
+                onValueChange = onObjectionChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Customer ne kya kaha?") },
+                maxLines = 3,
+            )
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = { onGetRebuttal(objection) },
+                enabled = objection.isNotBlank() && !rebuttalLoading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (rebuttalLoading) "Soch raha hoon…" else "Jawab batao →", fontWeight = FontWeight.Bold)
+            }
+            rebuttal?.let { r ->
+                Spacer(Modifier.height(12.dp))
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(
+                            "YE BOLIYE 👇", style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(r.trim(), style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { clipboard.setText(AnnotatedString(r.trim())) }) { Text("Copy") }
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = onClearRebuttal) { Text("Naya sawaal") }
+                        }
+                    }
                 }
             }
         }
