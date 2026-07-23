@@ -529,6 +529,27 @@ object Repository {
     }
 
     /**
+     * Objection Buster (floating coach) — the SAME RAG v9 objection brain, but not
+     * tied to an open lead. The rep is mid-call from any screen and just needs the
+     * counter; the rebuttal is grounded in the company's own playbook (prices,
+     * offers, closing lines). Returns the lines to say, or null.
+     */
+    suspend fun coachRebuttal(objection: String): String? {
+        val prompt = buildString {
+            append("On a live sales call, the customer just objected: \"")
+            append(objection.trim().take(300))
+            append("\".\n")
+            append("Give me the EXACT words to say back — a warm, confident counter in Hinglish ")
+            append("(Roman script, how an Indian telecaller actually speaks). 2-3 short lines, ready to say out loud. ")
+            append("Address the customer respectfully with 'aap' — never tu/tum. ")
+            append("Ground it in our company's real facts (a price, an offer, a project USP, or a line from a call that closed) — ")
+            append("quote the fact if we have it; if we don't, give the best honest counter. ")
+            append("Finish with one question that nudges the customer to the next step. No preamble — just the lines to say.")
+        }
+        return assistantChat(listOf(ChatMsg("user", prompt)), lead = null)
+    }
+
+    /**
      * RAG v12 — the "after the call" move. Drafts a ready-to-send WhatsApp
      * follow-up for this lead, grounded in the company's own playbook: warm,
      * professional, respectful (aap-form), never inventing prices. Reuses the
