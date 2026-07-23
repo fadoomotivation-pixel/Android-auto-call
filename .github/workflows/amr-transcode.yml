@@ -50,8 +50,13 @@ jobs:
 
             if [ "$(head -c 5 in.bin 2>/dev/null)" = "#!AMR" ]; then
               if ffmpeg -y -hide_banner -loglevel error -i in.bin -ac 1 -ar 16000 -codec:a libmp3lame -b:a 48k out.mp3; then
-                jq -n --arg s "$SECRET" --arg id "$id" --arg b "$(base64 -w0 out.mp3)" \
-                  '{secret:$s,action:"put",id:$id,base64:$b}' > payload.json
+                # The base64 MP3 is hundreds of KB — far past the argv size limit
+                # (E2BIG), so it CANNOT go through `jq --arg` (that failed with
+                # "Argument list too long"). Read it from a file via --rawfile,
+                # and strip the trailing newline so the decoder gets clean base64.
+                base64 -w0 out.mp3 > out.b64
+                jq -n --arg s "$SECRET" --arg id "$id" --rawfile b out.b64 \
+                  '{secret:$s,action:"put",id:$id,base64:($b|rtrimstr("\n"))}' > payload.json
                 res=$(curl -sS -X POST "$FN" -H 'Content-Type: application/json' --data @payload.json)
                 echo "put -> $res"
                 echo "$res" | jq -e '.ok == true' >/dev/null && converted=$((converted+1)) || failed=$((failed+1))
@@ -63,7 +68,7 @@ jobs:
               post "$(jq -n --arg s "$SECRET" --arg id "$id" '{secret:$s,action:"skip",id:$id}')" >/dev/null
               skipped=$((skipped+1))
             fi
-            rm -f in.bin out.mp3 payload.json
+            rm -f in.bin out.mp3 out.b64 payload.json
             echo "::endgroup::"
           done
           echo "Done — converted=$converted skipped=$skipped failed=$failed"
