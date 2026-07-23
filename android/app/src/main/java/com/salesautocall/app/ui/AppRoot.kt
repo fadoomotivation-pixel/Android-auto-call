@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -591,11 +592,12 @@ private fun MainShell(vm: MainViewModel) {
                 )
             },
         ) { padding ->
-            // Floating AI Coach bubble — top-right, above every tab. Hidden for
-            // the rest of the day when dismissed (returns tomorrow).
+            // Floating AI Coach bubble — top-right, above every tab. It never
+            // disappears; "hide" just shrinks it to a mini dot for the rest of
+            // the day (still one tap away), returning to full size tomorrow.
             val ctx = LocalContext.current
             val today = remember { java.time.LocalDate.now().toString() }
-            var coachHidden by remember { mutableStateOf(AppPrefs.getCoachHiddenDate(ctx) == today) }
+            var coachMini by remember { mutableStateOf(AppPrefs.getCoachMiniDate(ctx) == today) }
 
             Box(Modifier.padding(padding)) {
             Column {
@@ -681,18 +683,22 @@ private fun MainShell(vm: MainViewModel) {
                 }
             }
 
-            if (!coachHidden) {
-                CoachBubble(
-                    onOpen = { vm.openCoach() },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp),
-                )
-            }
+            CoachBubble(
+                mini = coachMini,
+                onOpen = { vm.openCoach() },
+                onExpand = {
+                    AppPrefs.clearCoachMini(ctx)
+                    coachMini = false
+                },
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp),
+            )
             if (state.coachOpen) {
                 CoachSheet(
                     panel = state.coachPanel,
                     loading = state.coachLoading,
                     picks = state.coachPicks,
                     picksLoading = state.coachPicksLoading,
+                    mini = coachMini,
                     resolveLead = { id -> state.leads.firstOrNull { l -> l.id == id } },
                     objection = state.coachObjection,
                     onObjectionChange = { vm.setCoachObjection(it) },
@@ -705,9 +711,14 @@ private fun MainShell(vm: MainViewModel) {
                         vm.dialManual(phone)
                     },
                     onDismiss = { vm.closeCoach() },
-                    onHideToday = {
-                        AppPrefs.setCoachHiddenDate(ctx, today)
-                        coachHidden = true
+                    onToggleMini = {
+                        if (coachMini) {
+                            AppPrefs.clearCoachMini(ctx)
+                            coachMini = false
+                        } else {
+                            AppPrefs.setCoachMiniDate(ctx, today)
+                            coachMini = true
+                        }
                         vm.closeCoach()
                     },
                 )
@@ -720,17 +731,37 @@ private fun MainShell(vm: MainViewModel) {
 // ---- The app's one jade accent, theme-aware. ----
 internal fun jadeAccent(dark: Boolean) = if (dark) Color(0xFF8189E6) else Color(0xFF4353B8)
 
-/** The floating AI Coach bubble — quiet, top-right, one tap to open. */
+/**
+ * The floating AI Coach bubble — top-right, one tap to open. A soft jade→indigo
+ * gradient disc with a subtle halo ring. When [mini] it shrinks to a small dot
+ * (never vanishes) so a rep can tuck it away for the day; tapping the dot brings
+ * it back to full size.
+ */
 @Composable
-private fun CoachBubble(onOpen: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.size(44.dp).clip(CircleShape).clickable { onOpen() },
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primary,
-        shadowElevation = 6.dp,
+private fun CoachBubble(
+    mini: Boolean,
+    onOpen: () -> Unit,
+    onExpand: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dark = isSystemInDarkTheme()
+    val gradient = Brush.linearGradient(
+        colors = if (dark) listOf(Color(0xFF8189E6), Color(0xFF5D63C4))
+                 else listOf(Color(0xFF5765D6), Color(0xFF3C46A8)),
+    )
+    val size = if (mini) 20.dp else 46.dp
+    Box(
+        modifier = modifier
+            .size(size)
+            .shadow(if (mini) 3.dp else 8.dp, CircleShape)
+            .clip(CircleShape)
+            .background(gradient)
+            .border(1.dp, Color.White.copy(alpha = if (dark) 0.14f else 0.28f), CircleShape)
+            .clickable { if (mini) onExpand() else onOpen() },
+        contentAlignment = Alignment.Center,
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text("🎯", style = MaterialTheme.typography.titleMedium)
+        if (!mini) {
+            Text("🎯", style = MaterialTheme.typography.titleLarge)
         }
     }
 }
@@ -738,7 +769,7 @@ private fun CoachBubble(onOpen: () -> Unit, modifier: Modifier = Modifier) {
 /**
  * The coach sheet: last-call feedback (kya acha tha / kya better ho sakta hai —
  * one point each, never a lecture) + the 10 AM "kal ka din" / 6 PM "aaj ka din"
- * brief. "Aaj ke liye hide" tucks the bubble away until tomorrow.
+ * brief. "Aaj ke liye chota karo" shrinks the bubble to a mini dot until tomorrow.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -747,6 +778,7 @@ private fun CoachSheet(
     loading: Boolean,
     picks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
     picksLoading: Boolean = false,
+    mini: Boolean = false,
     resolveLead: (String) -> com.salesautocall.app.data.Contact? = { null },
     objection: String = "",
     onObjectionChange: (String) -> Unit = {},
@@ -756,7 +788,7 @@ private fun CoachSheet(
     onClearRebuttal: () -> Unit = {},
     onCall: (String) -> Unit = {},
     onDismiss: () -> Unit,
-    onHideToday: () -> Unit,
+    onToggleMini: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -769,7 +801,9 @@ private fun CoachSheet(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("🎯 AI Coach", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onHideToday) { Text("Aaj ke liye hide") }
+                TextButton(onClick = onToggleMini) {
+                    Text(if (mini) "Bada karo" else "Aaj ke liye chota karo")
+                }
             }
             Spacer(Modifier.height(8.dp))
 
