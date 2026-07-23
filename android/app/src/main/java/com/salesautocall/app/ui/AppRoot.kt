@@ -60,6 +60,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -586,7 +588,14 @@ private fun MainShell(vm: MainViewModel) {
                 )
             },
         ) { padding ->
-            Column(Modifier.padding(padding)) {
+            // Floating AI Coach bubble — top-right, above every tab. Hidden for
+            // the rest of the day when dismissed (returns tomorrow).
+            val ctx = LocalContext.current
+            val today = remember { java.time.LocalDate.now().toString() }
+            var coachHidden by remember { mutableStateOf(AppPrefs.getCoachHiddenDate(ctx) == today) }
+
+            Box(Modifier.padding(padding)) {
+            Column {
                 NavHost(
                     nav,
                     startDestination = Tab.Home.route,
@@ -668,12 +677,124 @@ private fun MainShell(vm: MainViewModel) {
                     }
                 }
             }
+
+            if (!coachHidden) {
+                CoachBubble(
+                    onOpen = { vm.openCoach() },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp),
+                )
+            }
+            if (state.coachOpen) {
+                CoachSheet(
+                    panel = state.coachPanel,
+                    loading = state.coachLoading,
+                    onDismiss = { vm.closeCoach() },
+                    onHideToday = {
+                        AppPrefs.setCoachHiddenDate(ctx, today)
+                        coachHidden = true
+                        vm.closeCoach()
+                    },
+                )
+            }
+            }
         }
     }
 }
 
 // ---- The app's one jade accent, theme-aware. ----
 internal fun jadeAccent(dark: Boolean) = if (dark) Color(0xFF8189E6) else Color(0xFF4353B8)
+
+/** The floating AI Coach bubble — quiet, top-right, one tap to open. */
+@Composable
+private fun CoachBubble(onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.size(44.dp).clip(CircleShape).clickable { onOpen() },
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary,
+        shadowElevation = 6.dp,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text("🎯", style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+/**
+ * The coach sheet: last-call feedback (kya acha tha / kya better ho sakta hai —
+ * one point each, never a lecture) + the 10 AM "kal ka din" / 6 PM "aaj ka din"
+ * brief. "Aaj ke liye hide" tucks the bubble away until tomorrow.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CoachSheet(
+    panel: com.salesautocall.app.data.CoachPanel?,
+    loading: Boolean,
+    onDismiss: () -> Unit,
+    onHideToday: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🎯 AI Coach", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onHideToday) { Text("Aaj ke liye hide") }
+            }
+            Spacer(Modifier.height(8.dp))
+
+            when {
+                loading && panel == null -> Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                panel == null -> Text(
+                    "Coach abhi data nahi laa paya — thodi der baad try kariye.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                else -> {
+                    panel.brief?.let { b ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(14.dp)) {
+                                Text(
+                                    if (b.slot == "morning") "🌅 Kal ka din" else "🌆 Aaj ka din",
+                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(b.content, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    panel.coaching?.let { c ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(14.dp)) {
+                                Text(
+                                    "📞 Last call" + (c.leadName?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                                )
+                                c.good?.takeIf { it.isNotBlank() }?.let {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("✅ $it", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                c.improve?.takeIf { it.isNotBlank() }?.let {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("💡 $it", style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+                    }
+                    if (panel.brief == null && panel.coaching == null) {
+                        Text(
+                            "Abhi coaching ke liye koi real call nahi mili (30 sec+ ki call chahiye). " +
+                                "Ek achhi lambi call kijiye — coach yahin milega! 💪",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 /**
  * The floating call bar — the app's bottom navigation, shared by MainShell and

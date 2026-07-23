@@ -39,6 +39,16 @@ entry before you start, and add an entry after every change.**
 
 ## 2026-07-23 — Claude Code
 
+- **Floating AI Coach (app)**: top-right 🎯 bubble on all tabs (hide = today only,
+  AppPrefs `coach_hidden_date`), opens a sheet with (a) last-call coaching —
+  ONLY calls ≥30s with transcript, ONE good + ONE improve point (no lecture),
+  cached per call in `coach_feedback`; (b) 10 AM IST "kal ka din" / 6 PM "aaj ka
+  din" brief cached in `coach_briefs` (migration 0091). Edge function
+  `rep-coach` (v1). These shared tables are readable by manager-digest /
+  team-pulse / sales-xray — link there, don't re-derive coaching.
+
+## 2026-07-23 — Claude Code (earlier)
+
 - Touched **Antigravity's `admin/app/api/audio-proxy/route.ts`** (minimal, logged
   per rules): the pass-through branch now **content-sniffs** the buffer's magic
   bytes (ID3/MP3 frame-sync → audio/mpeg, ftyp → audio/mp4, RIFF → wav, OggS →

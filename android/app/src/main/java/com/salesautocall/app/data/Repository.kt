@@ -458,6 +458,33 @@ object Repository {
     }
 
     /**
+     * The floating AI Coach panel: last-call feedback (>=30s calls only) + the
+     * 10 AM / 6 PM day brief. All heavy lifting + caching lives in rep-coach.
+     */
+    suspend fun coachPanel(): CoachPanel? {
+        val resp = client.functions.invoke("rep-coach", buildJsonObject { })
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull() ?: return null
+        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return null
+        val c = obj["coaching"] as? JsonObject
+        val b = obj["brief"] as? JsonObject
+        return CoachPanel(
+            coaching = c?.let {
+                CoachCallFeedback(
+                    good = it["good"]?.jsonPrimitive?.contentOrNull,
+                    improve = it["improve"]?.jsonPrimitive?.contentOrNull,
+                    callAt = it["callAt"]?.jsonPrimitive?.contentOrNull,
+                    leadName = it["leadName"]?.jsonPrimitive?.contentOrNull,
+                )
+            },
+            brief = b?.let {
+                val slot = it["slot"]?.jsonPrimitive?.contentOrNull
+                val content = it["content"]?.jsonPrimitive?.contentOrNull
+                if (slot != null && content != null) CoachBrief(slot, content) else null
+            },
+        )
+    }
+
+    /**
      * RAG v9 — the "objection coach". The customer just said no; this returns
      * the EXACT words to say back, grounded in the company's own playbook (price
      * facts + lines from calls that actually closed). Reuses the assistant-chat
