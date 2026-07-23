@@ -1053,8 +1053,6 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // must never clutter the working lists.
     val closedSet = setOf("lost", "not_interested", "dnc")
     val nowMs = System.currentTimeMillis()
-    val endOfTodayMs = java.time.LocalDate.now().plusDays(1)
-        .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
     fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
     fun sleeping(c: Contact): Boolean {
         val due = fuOf(c)?.let { instantMillis(it.dueAt) } ?: return false
@@ -1062,16 +1060,23 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     }
     // "Today" = the day's action list. A lead belongs here when it was CALLED
     // today (drains it out of New so New stays purely fresh), OR its follow-up is
-    // due today / overdue, OR its site visit is today. Done leads (booked/closed)
-    // never appear. Leads here ALSO still show in their real bucket (Working /
-    // Pipeline) — Today is a one-day cross-cut, not a new home.
-    fun dueTodayOrOverdue(c: Contact): Boolean {
+    // due TODAY (earlier-today still counts — it's today's work), OR its site
+    // visit is today. Done leads (booked/closed) never appear. Leads here ALSO
+    // still show in their real bucket — Today is a one-day cross-cut.
+    //
+    // Previous days' OVERDUE callbacks do NOT belong in Today — they were piling
+    // up here (e.g. 15 stale callbacks turning a rep's Today into a 19-lead
+    // dumping ground) and drowning out "aaj ka kaam". An overdue callback is
+    // just someone to call NOW, so it falls back into New (the call pile) with
+    // its attempt tag, sorted to the top — never lost, just in the right list.
+    fun dueToday(c: Contact): Boolean {
         val due = fuOf(c)?.let { instantMillis(it.dueAt) } ?: return false
-        return due <= endOfTodayMs
+        val d = java.time.Instant.ofEpochMilli(due).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        return d == java.time.LocalDate.now()
     }
     fun inToday(c: Contact): Boolean =
         c.status !in closedSet && c.status != "booked" &&
-            (isToday(c.lastContactedAt) || dueTodayOrOverdue(c) || isToday(c.siteVisitAt))
+            (isToday(c.lastContactedAt) || dueToday(c) || isToday(c.siteVisitAt))
     val base = when {
         stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
