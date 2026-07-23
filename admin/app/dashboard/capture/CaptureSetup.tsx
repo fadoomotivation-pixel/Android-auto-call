@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -39,9 +39,26 @@ export function CaptureSetup({
   const [copiedEmbed, setCopiedEmbed] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  // Live capture volume — proof the pipeline is working, and a nudge to promote
+  // the form more. Counts non-Facebook, externally-captured leads (website /
+  // webhook / landing pages) for this company.
+  const [caps, setCaps] = useState({ d7: 0, d30: 0, loading: true });
   const set = (k: keyof typeof form, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
   const captureUrl = config?.capture_token ? `${functionUrl}?token=${config.capture_token}` : null;
+
+  const loadCaps = useCallback(async () => {
+    const supabase = createClient();
+    const now = Date.now();
+    const d7 = new Date(now - 7 * 864e5).toISOString();
+    const d30 = new Date(now - 30 * 864e5).toISOString();
+    const q = () => supabase.from("contacts").select("id", { count: "exact", head: true })
+      .eq("company_id", companyId).not("lead_source", "is", null).neq("lead_source", "facebook");
+    const [a, b] = await Promise.all([q().gte("created_at", d7), q().gte("created_at", d30)]);
+    setCaps({ d7: a.count ?? 0, d30: b.count ?? 0, loading: false });
+  }, [companyId]);
+
+  useEffect(() => { void loadCaps(); }, [loadCaps]);
 
   // A complete copy-paste website form — non-technical users drop this into any
   // site builder's HTML/embed block; it POSTs straight to the capture URL.
@@ -102,13 +119,27 @@ export function CaptureSetup({
       <div>
         <span style={lbl}>Your capture URL</span>
         {captureUrl ? (
-          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            <code style={{ ...input, fontSize: 12, overflowX: "auto", whiteSpace: "nowrap" }}>{captureUrl}</code>
-            <button className="primary" type="button" style={{ whiteSpace: "nowrap" }}
-              onClick={() => { navigator.clipboard.writeText(captureUrl); setCopied(true); setTimeout(() => setCopied(false), 1200); }}>
-              {copied ? "Copied ✓" : "Copy"}
-            </button>
-          </div>
+          <>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <code style={{ ...input, fontSize: 12, overflowX: "auto", whiteSpace: "nowrap" }}>{captureUrl}</code>
+              <button className="primary" type="button" style={{ whiteSpace: "nowrap" }}
+                onClick={() => { navigator.clipboard.writeText(captureUrl); setCopied(true); setTimeout(() => setCopied(false), 1200); }}>
+                {copied ? "Copied ✓" : "Copy"}
+              </button>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent("Please share your details here, we'll call you back: " + captureUrl)}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ whiteSpace: "nowrap", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: "rgba(37,211,102,0.14)", color: "#25D366", border: "1px solid rgba(37,211,102,0.4)", fontWeight: 600, fontSize: 13 }}
+              >
+                Share on WhatsApp
+              </a>
+            </div>
+            {/* Capture volume — is the form actually bringing leads in? */}
+            <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+              <CapStat label="Captured · 7 days" value={caps.d7} loading={caps.loading} />
+              <CapStat label="Captured · 30 days" value={caps.d30} loading={caps.loading} />
+            </div>
+          </>
         ) : (
           <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>Save once to generate your unique capture URL.</p>
         )}
@@ -201,6 +232,15 @@ export function CaptureSetup({
           </div>
         </details>
       )}
+    </div>
+  );
+}
+
+function CapStat({ label, value, loading }: { label: string; value: number; loading: boolean }) {
+  return (
+    <div style={{ flex: "1 1 140px", minWidth: 140, background: "rgba(67,83,184,0.06)", border: "1px solid rgba(67,83,184,0.2)", borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ fontSize: 11.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.4px", color: "var(--muted)" }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--accent, #4353B8)" }}>{loading ? "…" : value.toLocaleString("en-IN")}</div>
     </div>
   );
 }

@@ -72,6 +72,13 @@ export default function FacebookSetupPage() {
   const [checks, setChecks] = useState<{ token?: Check; subscription?: Check; permission?: Check } | null>(null);
   const [connMsg, setConnMsg] = useState<string | null>(null);
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
+  // Live lead stats — super admin sees ALL companies (the central account serves
+  // everyone); a regular admin sees only their own. CAPI = conversions we've sent
+  // back to Meta so its optimization learns which leads convert.
+  const [stats, setStats] = useState({ today: 0, d7: 0, d30: 0, conversions: 0, loading: true });
+  // Auto health-check runs once when a token exists, so the super admin lands on
+  // a live status instead of having to click "Test connection" every time.
+  const [autoCheckedFor, setAutoCheckedFor] = useState<string>("");
   const [copiedField, setCopiedField] = useState<string>("");
   function copyField(text: string, key: string) {
     navigator.clipboard.writeText(text);
@@ -151,6 +158,23 @@ export default function FacebookSetupPage() {
     return () => { cancelled = true; };
   }, [companyId, supabase]);
 
+  // Live stats — super admin's numbers span every company, so reload on identity
+  // too (not just company switches).
+  useEffect(() => {
+    if (!isSuper && !companyId) return;
+    void loadStats(isSuper, companyId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, isSuper]);
+
+  // Land on a live connection status without making the admin click "Test".
+  useEffect(() => {
+    if (integration?.page_access_token_secret_id && companyId && autoCheckedFor !== companyId && !testing) {
+      setAutoCheckedFor(companyId);
+      void runTest();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [integration, companyId]);
+
   async function loadRecentLeads(company: string) {
     const { data } = await supabase
       .from("contacts")
@@ -161,6 +185,27 @@ export default function FacebookSetupPage() {
       .limit(8)
       .returns<RecentLead[]>();
     setRecentLeads(data ?? []);
+  }
+
+  // Facebook lead volume + conversions sent. Super admin: across every company
+  // (the one central account feeds them all); regular admin: their own only.
+  async function loadStats(superAdmin: boolean, company: string) {
+    setStats((s) => ({ ...s, loading: true }));
+    const now = new Date();
+    const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const d7 = new Date(now.getTime() - 7 * 864e5).toISOString();
+    const d30 = new Date(now.getTime() - 30 * 864e5).toISOString();
+    const scope = <T,>(q: T): T =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      superAdmin ? q : (q as any).eq("company_id", company);
+    const base = () => scope(supabase.from("contacts").select("id", { count: "exact", head: true }).eq("lead_source", "facebook"));
+    const [t, w, m, conv] = await Promise.all([
+      base().gte("created_at", startToday),
+      base().gte("created_at", d7),
+      base().gte("created_at", d30),
+      scope(supabase.from("capi_events").select("id", { count: "exact", head: true }).eq("ok", true)),
+    ]);
+    setStats({ today: t.count ?? 0, d7: w.count ?? 0, d30: m.count ?? 0, conversions: conv.count ?? 0, loading: false });
   }
 
   async function runTest() {
@@ -313,12 +358,106 @@ export default function FacebookSetupPage() {
 
   if (loading) return <div>Loading...</div>;
 
+  // Overall connection health, derived from the last test (auto-run on load).
+  const checkList = checks ? [checks.token, checks.subscription, checks.permission].filter(Boolean) as Check[] : [];
+  const allGood = checkList.length === 3 && checkList.every((c) => c.ok);
+  const anyBad = checkList.some((c) => !c.ok);
+
+  const header = (
+    <div>
+      <h2 style={{ margin: "0 0 4px 0", letterSpacing: "-0.5px" }}>📱 Facebook Lead Ads</h2>
+      <p className="subtitle" style={{ margin: 0 }}>
+        {isSuper
+          ? "One central Facebook account runs ads for every company — leads route to each automatically."
+          : "Your Facebook leads flow in automatically from the central Call Pro AI ad account."}
+      </p>
+    </div>
+  );
+
+  // The heart of the model: one account, many companies, super-admin controlled.
+  const centralBanner = (
+    <div className="card" style={{ background: "linear-gradient(135deg, rgba(24,119,242,0.10), rgba(24,119,242,0.02))", border: "1px solid rgba(24,119,242,0.28)", borderRadius: 16, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 18 }}>🏢</span>
+        <span style={{ fontWeight: 700, color: "var(--text)", fontSize: 15 }}>One account → every company</span>
+        {checks && (
+          <span style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 600, padding: "4px 12px", borderRadius: 999,
+            background: allGood ? "rgba(34,197,94,0.14)" : anyBad ? "rgba(248,113,113,0.14)" : "rgba(148,163,184,0.14)",
+            color: allGood ? "#22c55e" : anyBad ? "#f87171" : "var(--muted)" }}>
+            {allGood ? "✅ Connection live" : anyBad ? "⚠ Needs attention" : "Checking…"}
+          </span>
+        )}
+      </div>
+      <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)", lineHeight: 1.6 }}>
+        All ad campaigns run from a <b style={{ color: "var(--text)" }}>single Call Pro AI Facebook account</b>. Every lead is
+        auto-routed to the right company by its lead form.{" "}
+        {isSuper
+          ? "You (platform admin) own the connection and the form → company routing below."
+          : "Your platform admin manages the connection centrally — you just receive the leads."}
+      </p>
+    </div>
+  );
+
+  const statsGrid = (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
+      <FbStat label="Leads today" value={stats.today} tone="#1877F2" loading={stats.loading} />
+      <FbStat label="Last 7 days" value={stats.d7} tone="#22c55e" loading={stats.loading} />
+      <FbStat label="Last 30 days" value={stats.d30} tone="#a855f7" loading={stats.loading} />
+      <FbStat label="Conversions → Meta" value={stats.conversions} tone="#f59e0b" loading={stats.loading} />
+    </div>
+  );
+
+  const recentLeadsCard = (
+    <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Recent Facebook leads</h3>
+        <button type="button" onClick={() => companyId && loadRecentLeads(companyId)} disabled={!companyId}
+          style={{ fontSize: 12, padding: "5px 12px", borderRadius: 7, border: "1px solid var(--border)", background: "rgba(255,255,255,0.04)", color: "var(--muted)", cursor: "pointer" }}>
+          🔄 Refresh
+        </button>
+      </div>
+      {recentLeads.length === 0 ? (
+        <p style={{ fontSize: 14, color: "var(--muted)", margin: 0 }}>
+          No Facebook leads yet. Once a lead form is submitted, it appears here within seconds.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {recentLeads.map((l) => (
+            <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: 10, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontWeight: 600, color: "var(--text)" }}>{l.name || "(no name)"}</div>
+                <div style={{ fontSize: 13, color: "var(--muted)", fontFamily: "monospace" }}>{l.phone}</div>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)", textAlign: "right" }}>
+                <div>🕒 {new Date(l.extra?.created_time ?? l.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
+                {l.extra?.form_id && <div style={{ opacity: 0.7 }}>form {String(l.extra.form_id).slice(-6)}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // A regular company admin does NOT configure Meta — the platform runs one
+  // central account. Show them a clean, read-only view: what's happening and
+  // their own incoming leads, minus the developer setup.
+  if (!isSuper) {
+    return (
+      <div style={{ maxWidth: 700, display: "flex", flexDirection: "column", gap: 20 }}>
+        {header}
+        {centralBanner}
+        {statsGrid}
+        {recentLeadsCard}
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 700, display: "flex", flexDirection: "column", gap: 20 }}>
-      <div>
-        <h2 style={{ margin: "0 0 4px 0", letterSpacing: "-0.5px" }}>📱 Facebook Lead Ads Setup</h2>
-        <p className="subtitle" style={{ margin: 0 }}>Automatically sync leads from your Facebook & Instagram campaigns.</p>
-      </div>
+      {header}
+      {centralBanner}
+      {statsGrid}
 
       {/* Super admin: pick which company's Facebook setup to manage. */}
       {isSuper && (
@@ -494,40 +633,7 @@ export default function FacebookSetupPage() {
         )}
       </div>
 
-      {/* Recent Facebook leads — proof that sync is flowing. */}
-      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h3 style={{ margin: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Recent Facebook leads</h3>
-          <button
-            type="button"
-            onClick={() => companyId && loadRecentLeads(companyId)}
-            disabled={!companyId}
-            style={{ fontSize: 12, padding: "5px 12px", borderRadius: 7, border: "1px solid var(--border)", background: "rgba(255,255,255,0.04)", color: "var(--muted)", cursor: "pointer" }}
-          >
-            🔄 Refresh
-          </button>
-        </div>
-        {recentLeads.length === 0 ? (
-          <p style={{ fontSize: 14, color: "var(--muted)", margin: 0 }}>
-            No Facebook leads yet. Once a lead form is submitted (or you send a test lead), it appears here within seconds.
-          </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {recentLeads.map((l) => (
-              <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: 10, flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontWeight: 600, color: "var(--text)" }}>{l.name || "(no name)"}</div>
-                  <div style={{ fontSize: 13, color: "var(--muted)", fontFamily: "monospace" }}>{l.phone}</div>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--muted)", textAlign: "right" }}>
-                  <div>🕒 {new Date(l.extra?.created_time ?? l.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
-                  {l.extra?.form_id && <div style={{ opacity: 0.7 }}>form {String(l.extra.form_id).slice(-6)}</div>}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {recentLeadsCard}
 
       {/* Step 3 — close the loop: send conversions BACK to Meta (CAPI) */}
       <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
@@ -608,6 +714,15 @@ export default function FacebookSetupPage() {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function FbStat({ label, value, tone, loading }: { label: string; value: number; tone: string; loading: boolean }) {
+  return (
+    <div className="card" style={{ background: `${tone}0d`, border: `1px solid ${tone}22`, borderRadius: 14, padding: "16px 18px" }}>
+      <div style={{ color: tone, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+      <div style={{ color: tone, fontSize: 28, fontWeight: 800, marginTop: 6 }}>{loading ? "…" : value.toLocaleString("en-IN")}</div>
     </div>
   );
 }
