@@ -558,6 +558,40 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // Greeting hero
         item { GreetingCard(app, firstName, onOpenAttendance = { onNavigate("attendance") }) }
 
+        // Calling Score — front and centre. The AI listens to the rep's calls and
+        // gives an honest average score, so they see their calling quality first.
+        app.callingScore?.let { score ->
+            item {
+                val stars = Math.round(score).toInt().coerceIn(1, 5)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                            Text("🎯", fontSize = 22.sp)
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Calling Score", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text("AI ne aapki ${app.callingScoreCount} call${if (app.callingScoreCount == 1) "" else "s"} suni",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f))
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(String.format(java.util.Locale.US, "%.1f", score) + " / 5",
+                                style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary)
+                            Text("⭐".repeat(stars), fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
         // "No lead left behind" — interested leads without a reminder, fixed in one tap.
         if (unprotected.isNotEmpty()) {
             item {

@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { AskConsole } from "./AskConsole";
 import { KnowledgeTrainer } from "./KnowledgeTrainer";
+import { KnowledgeManager } from "./KnowledgeManager";
 
 type Stat = {
   company_id: string;
@@ -76,6 +77,8 @@ export default async function RagPage() {
       {error && <div className="error" style={{ marginTop: 8 }}>{error.message}</div>}
 
       <KnowledgeTrainer isSuper={isSuper} companies={companies} />
+
+      <KnowledgeManager isSuper={isSuper} companies={companies} />
 
       <AskConsole />
 

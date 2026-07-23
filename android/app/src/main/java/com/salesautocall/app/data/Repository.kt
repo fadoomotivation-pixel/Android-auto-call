@@ -508,6 +508,20 @@ object Repository {
         )
     }
 
+    /** The rep's overall calling score = average of their coached call ratings
+     *  (1-5). Shown right up front on Home. Returns (average, count) or null when
+     *  no calls have been rated yet. RLS returns only the rep's own rows. */
+    suspend fun callingScore(): Pair<Double, Int>? {
+        val uid = currentUserId() ?: return null
+        val rows = client.from("coach_feedback")
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("rating")) {
+                filter { eq("salesperson_id", uid) }
+            }.decodeList<RatingRow>()
+        val rated = rows.mapNotNull { it.rating }
+        if (rated.isEmpty()) return null
+        return rated.average() to rated.size
+    }
+
     /**
      * Per-lead call coach: the coach "observes" THIS lead's last real call
      * (>=30s, transcript ready) and returns an honest 1-5 rating + one guidance

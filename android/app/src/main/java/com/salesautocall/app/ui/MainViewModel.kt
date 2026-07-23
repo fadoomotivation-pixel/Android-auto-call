@@ -74,6 +74,10 @@ data class AppState(
     val todayCalls: Int = 0,
     val todayConnected: Int = 0,
     val todayTalk: Int = 0,
+    // Overall calling score (avg of the rep's coached call ratings, 1-5) — shown
+    // right up front on Home. Null until at least one call is rated.
+    val callingScore: Double? = null,
+    val callingScoreCount: Int = 0,
     val followUpInfo: String? = null,
     val followUpDone: Boolean = false,
     val pendingParse: ParseResult? = null,
@@ -1278,6 +1282,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         loadAttendance(force)
         loadFollowUps(force)
         loadLeaderboard(_state.value.leaderboardPeriod, force)
+        viewModelScope.launch {
+            runCatching { Repository.callingScore() }.getOrNull()?.let { (avg, n) ->
+                set { it.copy(callingScore = avg, callingScoreCount = n) }
+            }
+        }
     }
 
     // ---------- lead pipeline ----------
