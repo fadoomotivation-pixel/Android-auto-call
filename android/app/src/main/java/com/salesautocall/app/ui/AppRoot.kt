@@ -688,6 +688,13 @@ private fun MainShell(vm: MainViewModel) {
                 CoachSheet(
                     panel = state.coachPanel,
                     loading = state.coachLoading,
+                    picks = state.coachPicks,
+                    picksLoading = state.coachPicksLoading,
+                    resolveLead = { id -> state.leads.firstOrNull { l -> l.id == id } },
+                    onCall = { phone ->
+                        vm.closeCoach()
+                        vm.dialManual(phone)
+                    },
                     onDismiss = { vm.closeCoach() },
                     onHideToday = {
                         AppPrefs.setCoachHiddenDate(ctx, today)
@@ -729,11 +736,20 @@ private fun CoachBubble(onOpen: () -> Unit, modifier: Modifier = Modifier) {
 private fun CoachSheet(
     panel: com.salesautocall.app.data.CoachPanel?,
     loading: Boolean,
+    picks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
+    picksLoading: Boolean = false,
+    resolveLead: (String) -> com.salesautocall.app.data.Contact? = { null },
+    onCall: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onHideToday: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+        Column(
+            Modifier.fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("🎯 AI Coach", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
@@ -790,6 +806,68 @@ private fun CoachSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+            }
+
+            // ---- "Aaj ke 5" — the AI sales manager's next-best calls, each with
+            // a ready-to-speak opener. One tap = dialing. THE founder-demo moment.
+            Spacer(Modifier.height(14.dp))
+            Text("🔥 Aaj ke 5 — sabse pehle ye calls", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            when {
+                picksLoading -> Box(Modifier.fillMaxWidth().padding(18.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                }
+                picks.isEmpty() -> Text(
+                    "AI abhi aapke leads padh raha hai — thodi der me yahan aaj ke best 5 calls milengi.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                else -> picks.forEach { p ->
+                    val lead = resolveLead(p.contactId)
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        lead?.name?.takeIf { it.isNotBlank() } ?: lead?.phone ?: "Lead",
+                                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                    )
+                                    if (p.reason.isNotBlank()) {
+                                        Text(
+                                            p.reason, style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.primary, maxLines = 2,
+                                        )
+                                    }
+                                }
+                                lead?.phone?.let { ph ->
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(40.dp).clip(CircleShape).clickable { onCall(ph) },
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                Icons.Default.Call, contentDescription = "Call",
+                                                tint = MaterialTheme.colorScheme.onPrimary,
+                                                modifier = Modifier.size(19.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            if (p.opener.isNotBlank()) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "🗣️ \"${p.opener}\"",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
             }
         }
