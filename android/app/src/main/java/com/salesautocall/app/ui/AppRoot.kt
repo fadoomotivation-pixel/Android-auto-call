@@ -62,6 +62,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.CircularProgressIndicator
@@ -706,6 +707,12 @@ private fun MainShell(vm: MainViewModel) {
                     rebuttalLoading = state.coachRebuttalLoading,
                     onGetRebuttal = { vm.getCoachRebuttal(it) },
                     onClearRebuttal = { vm.clearCoachRebuttal() },
+                    ask = state.coachAsk,
+                    onAskChange = { vm.setCoachAsk(it) },
+                    answer = state.coachAnswer,
+                    answerLoading = state.coachAnswerLoading,
+                    onAsk = { vm.askCoach() },
+                    onClearAnswer = { vm.clearCoachAnswer() },
                     onCall = { phone ->
                         vm.closeCoach()
                         vm.dialManual(phone)
@@ -786,6 +793,12 @@ private fun CoachSheet(
     rebuttalLoading: Boolean = false,
     onGetRebuttal: (String) -> Unit = {},
     onClearRebuttal: () -> Unit = {},
+    ask: String = "",
+    onAskChange: (String) -> Unit = {},
+    answer: String? = null,
+    answerLoading: Boolean = false,
+    onAsk: () -> Unit = {},
+    onClearAnswer: () -> Unit = {},
     onCall: (String) -> Unit = {},
     onDismiss: () -> Unit,
     onToggleMini: () -> Unit,
@@ -826,6 +839,29 @@ private fun CoachSheet(
                                 )
                                 Spacer(Modifier.height(6.dp))
                                 Text(b.content, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    // Daily tip — one grounded, goal-oriented nudge a day, from the brain.
+                    panel.tip?.takeIf { it.isNotBlank() }?.let { t ->
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            ),
+                        ) {
+                            Column(Modifier.padding(14.dp)) {
+                                Text(
+                                    "💡 Aaj ka tip",
+                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    t, style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
                             }
                         }
                         Spacer(Modifier.height(12.dp))
@@ -918,6 +954,52 @@ private fun CoachSheet(
                         }
                     }
                     Spacer(Modifier.height(8.dp))
+                }
+            }
+
+            // ---- 💬 Ask the coach — open two-way Q&A. Rep kuch bhi poochhe
+            // (Hindi/Hinglish/English), jawab company brain (playbook + guidebook
+            // + past wins) se aata hai, hamesha agle funnel step ki taraf.
+            Spacer(Modifier.height(16.dp))
+            Text("💬 Coach se poochho", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Koi bhi sawaal — pitch, price, follow-up, site visit tak kaise le jaayein. Coach guide karega.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = ask,
+                onValueChange = onAskChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Jaise: is lead ko site visit tak kaise le jaaun?") },
+                maxLines = 4,
+            )
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = onAsk,
+                enabled = ask.isNotBlank() && !answerLoading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (answerLoading) "Soch raha hoon…" else "Poochho →", fontWeight = FontWeight.Bold)
+            }
+            answer?.let { a ->
+                Spacer(Modifier.height(12.dp))
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        Text(
+                            "COACH 🎯", style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(a.trim(), style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { clipboard.setText(AnnotatedString(a.trim())) }) { Text("Copy") }
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = onClearAnswer) { Text("Naya sawaal") }
+                        }
+                    }
                 }
             }
 

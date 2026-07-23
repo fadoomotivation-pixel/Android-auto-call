@@ -503,7 +503,28 @@ object Repository {
                 val content = it["content"]?.jsonPrimitive?.contentOrNull
                 if (slot != null && content != null) CoachBrief(slot, content) else null
             },
+            tip = obj["tip"]?.jsonPrimitive?.contentOrNull,
         )
+    }
+
+    /**
+     * Two-way "ask the coach": the rep asks anything (Hindi/Hinglish/English) and
+     * gets a short, practical answer grounded in the SAME company brain (playbook
+     * + global guidebook + harvested wins), always nudging toward the next funnel
+     * step. The question + answer is saved as the rep's coach memory server-side.
+     */
+    suspend fun coachAsk(question: String, contactId: String? = null): String? {
+        val resp = client.functions.invoke(
+            "rep-coach",
+            buildJsonObject {
+                put("mode", "ask")
+                put("question", question.trim().take(800))
+                if (contactId != null) put("contact_id", contactId)
+            },
+        )
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull() ?: return null
+        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return null
+        return obj["answer"]?.jsonPrimitive?.contentOrNull
     }
 
     /**
