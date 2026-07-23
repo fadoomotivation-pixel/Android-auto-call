@@ -509,6 +509,32 @@ object Repository {
     }
 
     /**
+     * Per-lead call coach: the coach "observes" THIS lead's last real call
+     * (>=30s, transcript ready) and returns an honest 1-5 rating + one guidance
+     * line, shown on the lead's own page. Same coach_feedback brain as the
+     * floating coach — generated once, then cached. Returns null if no real call.
+     */
+    suspend fun leadCallCoach(contactId: String): CoachCallFeedback? {
+        val resp = client.functions.invoke(
+            "rep-coach",
+            buildJsonObject {
+                put("mode", "lead")
+                put("contact_id", contactId)
+            },
+        )
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull() ?: return null
+        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return null
+        val c = obj["coaching"] as? JsonObject ?: return null
+        return CoachCallFeedback(
+            good = c["good"]?.jsonPrimitive?.contentOrNull,
+            improve = c["improve"]?.jsonPrimitive?.contentOrNull,
+            rating = c["rating"]?.jsonPrimitive?.intOrNull,
+            callAt = c["callAt"]?.jsonPrimitive?.contentOrNull,
+            leadName = null,
+        )
+    }
+
+    /**
      * Two-way "ask the coach": the rep asks anything (Hindi/Hinglish/English) and
      * gets a short, practical answer grounded in the SAME company brain (playbook
      * + global guidebook + harvested wins), always nudging toward the next funnel
