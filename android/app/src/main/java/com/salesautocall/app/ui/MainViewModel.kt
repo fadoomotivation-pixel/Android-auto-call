@@ -188,6 +188,12 @@ data class AppState(
     val reviveLoaded: Boolean = false,
     // Voice notes on the open lead ("kya baat hui" in the rep's own voice).
     val voiceNotes: List<com.salesautocall.app.data.LeadVoiceNote> = emptyList(),
+    // Floating AI Coach (top-right bubble): panel data + open/loading state.
+    val coachPanel: com.salesautocall.app.data.CoachPanel? = null,
+    val coachOpen: Boolean = false,
+    val coachLoading: Boolean = false,
+    val coachPicks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
+    val coachPicksLoading: Boolean = false,
     /** True while the mic is capturing a new voice note. */
     val voiceRecording: Boolean = false,
     /** True while a finished take uploads + registers. */
@@ -1592,6 +1598,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun closeAddLead() = set { it.copy(showAddLead = false) }
 
     fun openSettings() = set { it.copy(showSettings = true) }
+
+    /** Floating AI Coach: open the sheet and (re)load the panel + "Aaj ke 5".
+     *  The backend caches per call / per day-slot; the picks load once per
+     *  session — so repeat opens are instant and cheap. */
+    fun openCoach() {
+        set {
+            it.copy(
+                coachOpen = true,
+                coachLoading = it.coachPanel == null,
+                coachPicksLoading = it.coachPicks.isEmpty(),
+            )
+        }
+        loadLeads(force = false) // so picks can resolve to names/phones
+        viewModelScope.launch {
+            val panel = runCatching { Repository.coachPanel() }.getOrNull()
+            set { it.copy(coachPanel = panel ?: it.coachPanel, coachLoading = false) }
+        }
+        viewModelScope.launch {
+            if (_state.value.coachPicks.isEmpty()) {
+                val picks = runCatching { Repository.focusFive() }.getOrDefault(emptyList())
+                set { it.copy(coachPicks = picks, coachPicksLoading = false) }
+            } else {
+                set { it.copy(coachPicksLoading = false) }
+            }
+        }
+    }
+    fun closeCoach() = set { it.copy(coachOpen = false) }
     fun closeSettings() = set { it.copy(showSettings = false) }
 
     /** From an overlay's bottom nav: close overlays and ask MainShell to switch tab. */

@@ -136,6 +136,19 @@ data class ProjectSite(
 /** One turn in the in-app AI assistant chat (local only). */
 data class ChatMsg(val role: String, val content: String)
 
+/** What the floating AI Coach shows: last-call feedback + the day brief. */
+data class CoachCallFeedback(
+    val good: String?,
+    val improve: String?,
+    val callAt: String?,
+    val leadName: String?,
+)
+data class CoachBrief(val slot: String, val content: String)
+data class CoachPanel(val coaching: CoachCallFeedback?, val brief: CoachBrief?)
+
+/** One "Aaj ke 5" pick — the AI's next-best call with a ready-to-speak opener. */
+data class FocusPick(val contactId: String, val reason: String, val opener: String)
+
 /** One WhatsApp message (either direction) shown in the in-app chat thread. */
 @Serializable
 data class WhatsAppMessage(

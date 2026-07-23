@@ -12,6 +12,7 @@ import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -455,6 +456,54 @@ object Repository {
         return if (obj?.get("ok")?.jsonPrimitive?.booleanOrNull == true) {
             obj["reply"]?.jsonPrimitive?.contentOrNull
         } else null
+    }
+
+    /**
+     * "Aaj ke 5" — the AI sales manager's next-best calls for this rep, each
+     * with a short reason and a ready-to-speak Hinglish opener grounded in the
+     * company's own RAG facts. Reuses the focus-five function.
+     */
+    suspend fun focusFive(): List<FocusPick> {
+        val resp = client.functions.invoke("focus-five", buildJsonObject { })
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull() ?: return emptyList()
+        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return emptyList()
+        val arr = obj["picks"] as? JsonArray ?: return emptyList()
+        return arr.mapNotNull { el ->
+            val o = el as? JsonObject ?: return@mapNotNull null
+            val id = o["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            FocusPick(
+                contactId = id,
+                reason = o["reason"]?.jsonPrimitive?.contentOrNull ?: "",
+                opener = o["opener"]?.jsonPrimitive?.contentOrNull ?: "",
+            )
+        }
+    }
+
+    /**
+     * The floating AI Coach panel: last-call feedback (>=30s calls only) + the
+     * 10 AM / 6 PM day brief. All heavy lifting + caching lives in rep-coach.
+     */
+    suspend fun coachPanel(): CoachPanel? {
+        val resp = client.functions.invoke("rep-coach", buildJsonObject { })
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull() ?: return null
+        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return null
+        val c = obj["coaching"] as? JsonObject
+        val b = obj["brief"] as? JsonObject
+        return CoachPanel(
+            coaching = c?.let {
+                CoachCallFeedback(
+                    good = it["good"]?.jsonPrimitive?.contentOrNull,
+                    improve = it["improve"]?.jsonPrimitive?.contentOrNull,
+                    callAt = it["callAt"]?.jsonPrimitive?.contentOrNull,
+                    leadName = it["leadName"]?.jsonPrimitive?.contentOrNull,
+                )
+            },
+            brief = b?.let {
+                val slot = it["slot"]?.jsonPrimitive?.contentOrNull
+                val content = it["content"]?.jsonPrimitive?.contentOrNull
+                if (slot != null && content != null) CoachBrief(slot, content) else null
+            },
+        )
     }
 
     /**
