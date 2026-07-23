@@ -37,6 +37,17 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-07-23 — Claude Code
+
+- Touched **Antigravity's `admin/app/api/audio-proxy/route.ts`** (minimal, logged
+  per rules): the pass-through branch now **content-sniffs** the buffer's magic
+  bytes (ID3/MP3 frame-sync → audio/mpeg, ftyp → audio/mp4, RIFF → wav, OggS →
+  ogg) instead of trusting the upstream Content-Type. Why: AMR SIM recordings are
+  transcoded to MP3 by the GitHub-Actions pipeline, but `recording-url` still
+  reported `audio/mp4`, so browsers tried to decode MP3 as AAC → "Could not play
+  the audio file". The AMR→MP3 ffmpeg transcode branch you added is untouched.
+- Also fixed `recording-url` (v13) to serve the Drive file's real mimeType.
+
 ## 2026-07-22 — Claude Code
 
 - **OWNER DIRECTIVE (permanent):** `ankitguitarmonk@gmail.com` is the platform
