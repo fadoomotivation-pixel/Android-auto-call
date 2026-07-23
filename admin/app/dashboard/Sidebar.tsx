@@ -54,6 +54,7 @@ export function Sidebar({
               Super admin
             </div>
             <NavLink href="/dashboard/platform/hq" label="🛰 Platform HQ" />
+            <NavLink href="/dashboard/ads" label="📈 Ads Manager" />
             <NavLink href="/dashboard/leads" label="🎯 Lead Management" />
             <NavLink href="/dashboard/platform" label="🏢 Companies" />
             <NavLink href="/dashboard/platform/telecallers" label="🎧 Telecallers" />
