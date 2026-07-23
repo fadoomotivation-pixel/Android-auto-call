@@ -55,6 +55,36 @@ Deno.serve(async (req) => {
     if (pa && typeof body.company_id === "string" && body.company_id) company = body.company_id;
     if (!company) return json({ ok: false, error: "Your account isn't linked to a company yet." });
 
+    // List the connected page(s)' lead forms with their current company route, so
+    // the super admin can map each form to the company it actually belongs to.
+    if (action === "list_forms") {
+      const base = admin.from("facebook_integrations").select("company_id, page_id").neq("page_id", "");
+      const { data: integs } = pa ? await base : await base.eq("company_id", company);
+      const forms: Array<Record<string, unknown>> = [];
+      for (const it of integs ?? []) {
+        if (!it.page_id) continue;
+        const { data: tok } = await admin.rpc("get_facebook_token", { p_company: it.company_id });
+        if (!tok) continue;
+        const r = await graph(`${it.page_id}/leadgen_forms?fields=id,name,status,leads_count&limit=100&access_token=${tok}`);
+        for (const f of ((r.data as Array<Record<string, unknown>>) ?? [])) {
+          forms.push({
+            form_id: String(f.id), name: f.name ?? "", leads_count: f.leads_count ?? 0,
+            status: f.status ?? "", page_id: it.page_id,
+          });
+        }
+      }
+      const { data: routes } = await admin.from("facebook_lead_routes").select("form_id, company_id, salesperson_id");
+      const routeBy = new Map((routes ?? []).map((x: { form_id: string }) => [x.form_id, x]));
+      const withRoutes = forms.map((f) => {
+        const rt = routeBy.get(f.form_id as string) as { company_id?: string; salesperson_id?: string } | undefined;
+        return { ...f, route_company_id: rt?.company_id ?? null, route_rep_id: rt?.salesperson_id ?? null };
+      });
+      const { data: companies } = pa
+        ? await admin.from("companies").select("id, name").order("name")
+        : await admin.from("companies").select("id, name").eq("id", company);
+      return json({ ok: true, forms: withRoutes, companies: companies ?? [] });
+    }
+
     // CAPI test needs no page token — handle it before the page-token gate.
     if (action === "test_capi") {
       const { data: cfg } = await admin.rpc("get_facebook_capi", { p_company: company });
