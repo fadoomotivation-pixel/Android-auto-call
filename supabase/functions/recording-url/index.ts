@@ -104,7 +104,14 @@ Deno.serve(async (req) => {
     if (ci?.refresh_token) media = await fetchMedia(row.recording_path, ci.refresh_token);
     if (!media && ps?.refresh_token) media = await fetchMedia(row.recording_path, ps.refresh_token);
     if (!media) return err({ ok: false, error: "drive fetch failed" }, 502);
-    return new Response(media.body, { status: 200, headers: { ...cors, "Content-Type": contentType, "Cache-Control": "private, max-age=300" } });
+    // Trust the file's REAL stored mimeType from Drive, not a source-based guess.
+    // A .amr recorded on SIM gets transcoded to MP3 (audio/mpeg) by the amr pipeline,
+    // but recording_source stays "sim" — serving the old hardcoded "audio/mp4" made
+    // browsers try to decode MP3 bytes as AAC/MP4 and fail ("Could not play the audio
+    // file" / garbled). ExoPlayer sniffs and works, which hid this on the app.
+    const driveCt = (media.headers.get("Content-Type") ?? "").split(";")[0].trim().toLowerCase();
+    const ct = driveCt.startsWith("audio/") ? driveCt : contentType;
+    return new Response(media.body, { status: 200, headers: { ...cors, "Content-Type": ct, "Cache-Control": "private, max-age=300" } });
   } catch (e) {
     return err({ ok: false, error: String(e) }, 500);
   }
