@@ -63,6 +63,8 @@ export default function FacebookSetupPage() {
   const [savingCapi, setSavingCapi] = useState(false);
   const [capiTesting, setCapiTesting] = useState(false);
   const [capiMsg, setCapiMsg] = useState<string | null>(null);
+  const [pulling, setPulling] = useState(false);
+  const [pullMsg, setPullMsg] = useState<string | null>(null);
 
   // Connection tester + auto-subscribe + recent leads
   const [companyId, setCompanyId] = useState<string>("");
@@ -322,6 +324,30 @@ export default function FacebookSetupPage() {
     setCapiMsg(`✓ CAPI working — Meta accepted the test event (${data.received} received). Conversions will flow as leads progress.`);
   }
 
+  // Manual catch-up: pull any Facebook leads the 10-min cron / webhook missed,
+  // right now. Each imported lead is routed to its company + rep (so the rep gets
+  // the notification), and the contact-insert trigger fires CAPI back to Meta.
+  async function pullLeads() {
+    setPulling(true);
+    setPullMsg(null);
+    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; inserted?: number; dup?: number; forms?: number }>(
+      "facebook-poll",
+      { body: { since_days: 7 } },
+    );
+    setPulling(false);
+    if (error || !data?.ok) {
+      setPullMsg(data?.error || error?.message || "Couldn't pull leads.");
+      return;
+    }
+    const n = data.inserted ?? 0;
+    setPullMsg(
+      n > 0
+        ? `✓ ${n} new lead${n === 1 ? "" : "s"} imported — routed to their rep (CAPI + alert fired).`
+        : `✓ Up to date — no missed leads (${data.dup ?? 0} already in CRM across ${data.forms ?? 0} form${data.forms === 1 ? "" : "s"}).`,
+    );
+    if (companyId) void loadStats(isSuper, companyId);
+  }
+
   async function handleSaveCapi(e: React.FormEvent) {
     e.preventDefault();
     if (!integration) {
@@ -476,6 +502,32 @@ export default function FacebookSetupPage() {
 
       {/* Multi-company routing: one central Facebook → each form to its company. */}
       {isSuper && <FormRouting />}
+
+      {/* Manual catch-up — pull any leads the cron/webhook missed, on demand. */}
+      {isSuper && (
+        <div className="card" style={{ background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.25)", padding: 20, borderRadius: 16, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ minWidth: 220, flex: 1 }}>
+              <strong style={{ color: "#fff", fontSize: 15 }}>⚡ Pull Facebook leads now</strong>
+              <p className="subtitle" style={{ marginTop: 2 }}>
+                A lead didn&apos;t reach the rep in real time? Pull the last 7 days now — each missed lead
+                is routed to its company &amp; rep (they get the alert), and CAPI fires back to Meta.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={pullLeads}
+              disabled={pulling}
+              style={{ background: "#10b981", color: "#04120c", fontWeight: 700, border: "none", padding: "12px 20px", borderRadius: 10, cursor: pulling ? "default" : "pointer", whiteSpace: "nowrap" }}
+            >
+              {pulling ? "Pulling…" : "Pull leads now"}
+            </button>
+          </div>
+          {pullMsg && (
+            <div style={{ marginTop: 12, fontSize: 14, color: pullMsg.startsWith("✓") ? "#10b981" : "#ef4444" }}>{pullMsg}</div>
+          )}
+        </div>
+      )}
 
       <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
         <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 1: Setup Meta App</h3>
