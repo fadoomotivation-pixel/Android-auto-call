@@ -830,42 +830,8 @@ private fun CoachSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 else -> {
-                    panel.brief?.let { b ->
-                        Card(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(14.dp)) {
-                                Text(
-                                    if (b.slot == "morning") "🌅 Kal ka din" else "🌆 Aaj ka din",
-                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                Text(b.content, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    // Daily tip — one grounded, goal-oriented nudge a day, from the brain.
-                    panel.tip?.takeIf { it.isNotBlank() }?.let { t ->
-                        Card(
-                            Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            ),
-                        ) {
-                            Column(Modifier.padding(14.dp)) {
-                                Text(
-                                    "💡 Aaj ka tip",
-                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    t, style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                    }
+                    // Last call FIRST — the rating + guidance the rep opens the
+                    // coach for. Kept at the very front so it's never missed.
                     panel.coaching?.let { c ->
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(14.dp)) {
@@ -905,6 +871,43 @@ private fun CoachSheet(
                                 }
                             }
                         }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    // Motivation + plan below the score: the day brief and one tip.
+                    panel.brief?.let { b ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(14.dp)) {
+                                Text(
+                                    if (b.slot == "morning") "🌅 Kal ka din" else "🌆 Aaj ka din",
+                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(b.content, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    panel.tip?.takeIf { it.isNotBlank() }?.let { t ->
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            ),
+                        ) {
+                            Column(Modifier.padding(14.dp)) {
+                                Text(
+                                    "💡 Aaj ka tip",
+                                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    t, style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
                     }
                     if (panel.brief == null && panel.coaching == null) {
                         Text(
