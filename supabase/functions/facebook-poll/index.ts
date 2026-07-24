@@ -17,6 +17,7 @@ import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const GRAPH = "https://graph.facebook.com/v19.0";
 
 const cors = {
@@ -99,8 +100,22 @@ async function importLead(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
-  const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-  if (bearer !== SERVICE) return json({ ok: false, error: "Unauthorized" }, 401);
+  // Allowed callers: the cron/service key, OR a platform super-admin's JWT — so
+  // the admin can hit a "Pull leads now" button on the web to catch up any leads
+  // the 10-min cron / webhook missed. (Regular company admins can't: this reads
+  // the ONE central Facebook business across all companies.)
+  const auth = req.headers.get("Authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+  let authorized = bearer === SERVICE;
+  if (!authorized && bearer) {
+    const u = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
+    const { data: ud } = await u.auth.getUser();
+    if (ud?.user) {
+      const { data: pa } = await u.from("platform_admins").select("user_id").eq("user_id", ud.user.id).maybeSingle();
+      authorized = !!pa;
+    }
+  }
+  if (!authorized) return json({ ok: false, error: "Super-admin only." }, 401);
 
   const body = await req.json().catch(() => ({}));
   const sinceDays = Math.min(Math.max(Number(body.since_days) || 7, 1), 90);
