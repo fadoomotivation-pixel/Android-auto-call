@@ -92,6 +92,11 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
     actions?: { priority?: string; title?: string; why?: string; how?: string; metric?: string; source?: string }[];
     watch?: string[];
   };
+  // Per-campaign verdict from the advisor: is a weak campaign an AD problem, or
+  // did nobody call its leads? Shown as a badge so the owner never pauses a
+  // working ad because of an internal follow-up failure.
+  type Diag = { verdict?: string; verdict_label?: string; followup?: { never_pct?: number; called_in_30m_pct?: number; median_minutes?: number | null } | null };
+  const [diag, setDiag] = useState<Record<string, Diag>>({});
   const [advice, setAdvice] = useState<Advice | null>(null);
   const [advising, setAdvising] = useState(false);
   const [advErr, setAdvErr] = useState<string | null>(null);
@@ -172,19 +177,22 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
     if (data?.ok && Array.isArray(data.rows)) setBdRows(data.rows);
   }
   // Clear stale advice whenever the underlying numbers change.
-  useEffect(() => { setAdvice(null); setAdvErr(null); }, [rows, preset]);
+  useEffect(() => { setAdvice(null); setAdvErr(null); setDiag({}); }, [rows, preset]);
 
   async function runAdvisor() {
     if (rows.length === 0) { setAdvErr("Load your ads first, then ask the advisor."); return; }
     setAdvising(true); setAdvErr(null);
     const rangeLabel = PRESETS.find((p) => p.key === preset)?.label ?? preset;
-    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; advice?: Advice }>(
+    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; advice?: Advice; campaigns?: ({ id?: string } & Diag)[] }>(
       "ad-advisor",
       { body: { rows, currency, company_id: companyId, range: rangeLabel } },
     );
     setAdvising(false);
     if (error || !data?.ok || !data.advice) { setAdvErr(data?.error || error?.message || "Couldn't analyse right now."); return; }
     setAdvice(data.advice);
+    const map: Record<string, Diag> = {};
+    for (const c of data.campaigns ?? []) if (c.id) map[String(c.id)] = { verdict: c.verdict, verdict_label: c.verdict_label, followup: c.followup };
+    setDiag(map);
   }
 
   /** Plain-text summary of the advice for copy / WhatsApp / a note. */
@@ -513,6 +521,19 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
                                   Lead {q.grade}
                                 </span>
                               )}
+                              {(() => {
+                                const d = diag[a.campaign_id];
+                                if (!d?.verdict || d.verdict === "unknown") return null;
+                                const tone = d.verdict === "followup_problem" ? "#f59e0b" : d.verdict === "ad_problem" ? "#ef4444" : "#22c55e";
+                                const icon = d.verdict === "followup_problem" ? "\u260E\uFE0F" : d.verdict === "ad_problem" ? "\uD83C\uDFAF" : "\u2705";
+                                const short = d.verdict === "followup_problem" ? "Follow-up problem" : d.verdict === "ad_problem" ? "Ad problem" : "Working";
+                                return (
+                                  <span title={d.verdict_label ?? short}
+                                    style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: "1px 7px" }}>
+                                    {icon} {short}
+                                  </span>
+                                );
+                              })()}
                               {anyFatigued && (
                                 <span title="A creative here is fatiguing — high frequency, falling CTR"
                                   style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "#f59e0b" }}>🔥 fatigue</span>
