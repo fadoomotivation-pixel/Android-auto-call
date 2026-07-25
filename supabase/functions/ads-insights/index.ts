@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
     }
 
     // Ad-level insights for the window.
-    const fields = "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,impressions,clicks,spend,ctr,cpc,actions";
+    const fields = "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,impressions,clicks,spend,ctr,cpc,frequency,actions";
     const insRes = await fetch(`${GRAPH}/act_${acct}/insights?level=ad&${timeParam}&fields=${fields}&limit=500&access_token=${encodeURIComponent(token)}`).then((r) => r.json()).catch(() => ({}));
     if (insRes.error) return json({ ok: false, error: insRes.error.message ?? "Couldn't read ad insights (ads_read permission?)." });
 
@@ -165,6 +165,7 @@ Deno.serve(async (req) => {
         spend: num(r.spend),
         ctr: num(r.ctr),
         cpc: num(r.cpc),
+        frequency: num(r.frequency),
         meta_leads: metaLeads(r.actions as { action_type?: string; value?: string }[] | undefined),
         crm_leads: c.leads,
         crm_qualified: c.qualified,
