@@ -97,11 +97,18 @@ const SYSTEM =
   "letting the system find audiences rather than over-restricting. Concretely help LOWER CPC/CPM/CPA and RAISE CTR & ROAS: " +
   "call out which campaigns to scale, cut, or restructure, and what to change (audience, creative, placement, budget, offer). " +
   'Reply ONLY as JSON: {"headline": string, "funnel": {"awareness": string, "retargeting": string, "conversion": string}, ' +
-  '"actions": [{"priority": "high"|"medium"|"low", "title": string, "why": string, "how": string, "metric": string}], ' +
+  '"alerts": [{"severity": "high"|"medium", "text": string}], ' +
+  '"actions": [{"priority": "high"|"medium"|"low", "title": string, "why": string, "how": string, "metric": string, "source": string}], ' +
   '"watch": [string]}. headline = one blunt sentence on the account\'s biggest lever. Each funnel value = 1-2 sentences on ' +
-  "that stage's health + the fix. 4-7 actions, most impactful first; 'why' cites the actual numbers, 'how' is a concrete " +
-  "step, 'metric' is the KPI it moves (CTR/CPC/CPM/CPA/ROAS). 'watch' = 2-3 short KPI targets to monitor. Plain English, " +
-  "confident and practical. NEVER invent numbers not in the data.";
+  "that stage's health + the fix. " +
+  "alerts = anomalies worth flagging NOW from the data (e.g. a campaign with high spend but 0 bookings, CTR under ~0.8%, or " +
+  "CPA far above the account average) — name the campaign and the number; [] if none. " +
+  "actions: 4-7, most impactful first. Each action is a DECISION with its evidence — 'title' is the imperative move naming the " +
+  "campaign (e.g. \"Pause 'Noida Plots – Broad'\"); 'why' states the reason WITH the actual numbers (e.g. 'CTR 0.8%, CPA rupees 4,200 " +
+  "vs account rupees 1,900'); 'how' is the concrete step; 'metric' is the KPI it moves (CTR/CPC/CPM/CPA/ROAS); 'source' names where " +
+  "the evidence came from (e.g. 'Campaign insights, selected date range' or 'CRM lead→booked'). Every action MUST read as " +
+  "ACTION + REASON(with numbers) + DATA SOURCE. 'watch' = 2-3 short KPI targets to monitor. Plain English, confident, practical. " +
+  "NEVER invent numbers not in the data; if a figure is unknown (e.g. ROAS without booking value), say so instead of guessing.";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });

@@ -68,7 +68,8 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   type Advice = {
     headline?: string;
     funnel?: { awareness?: string; retargeting?: string; conversion?: string };
-    actions?: { priority?: string; title?: string; why?: string; how?: string; metric?: string }[];
+    alerts?: { severity?: string; text?: string }[];
+    actions?: { priority?: string; title?: string; why?: string; how?: string; metric?: string; source?: string }[];
     watch?: string[];
   };
   const [advice, setAdvice] = useState<Advice | null>(null);
@@ -96,13 +97,44 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   async function runAdvisor() {
     if (rows.length === 0) { setAdvErr("Load your ads first, then ask the advisor."); return; }
     setAdvising(true); setAdvErr(null);
+    const rangeLabel = PRESETS.find((p) => p.key === preset)?.label ?? preset;
     const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; advice?: Advice }>(
       "ad-advisor",
-      { body: { rows, currency, company_id: companyId } },
+      { body: { rows, currency, company_id: companyId, range: rangeLabel } },
     );
     setAdvising(false);
     if (error || !data?.ok || !data.advice) { setAdvErr(data?.error || error?.message || "Couldn't analyse right now."); return; }
     setAdvice(data.advice);
+  }
+
+  /** Plain-text summary of the advice for copy / WhatsApp / a note. */
+  function adviceText(): string {
+    if (!advice) return "";
+    const rangeLabel = PRESETS.find((p) => p.key === preset)?.label ?? preset;
+    const L: string[] = [`AI Ad Advisor — ${rangeLabel}`];
+    if (advice.headline) L.push("", advice.headline);
+    if (advice.alerts?.length) {
+      L.push("", "⚠ Alerts:");
+      advice.alerts.forEach((a) => L.push(`- ${a.text}`));
+    }
+    if (advice.actions?.length) {
+      L.push("", "Do this next:");
+      advice.actions.forEach((a, i) => {
+        L.push(`${i + 1}. ${a.title}${a.metric ? ` (${a.metric})` : ""}`);
+        if (a.why) L.push(`   Why: ${a.why}`);
+        if (a.how) L.push(`   How: ${a.how}`);
+        if (a.source) L.push(`   Source: ${a.source}`);
+      });
+    }
+    if (advice.watch?.length) L.push("", `Watch: ${advice.watch.join(" · ")}`);
+    return L.join("\n");
+  }
+  function copyAdvice() {
+    void navigator.clipboard.writeText(adviceText());
+    setAdvErr(null);
+  }
+  function shareWhatsApp() {
+    window.open(`https://wa.me/?text=${encodeURIComponent(adviceText())}`, "_blank");
   }
 
   async function save() {
@@ -218,6 +250,21 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
 
             {advice && (
               <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+                {Array.isArray(advice.alerts) && advice.alerts.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {advice.alerts.map((al, i) => {
+                      const hi = al.severity === "high";
+                      return (
+                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 12px", borderRadius: 10,
+                          background: hi ? "rgba(239,68,68,0.1)" : "rgba(245,158,11,0.1)",
+                          border: `1px solid ${hi ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.35)"}` }}>
+                          <span>{hi ? "🚨" : "⚠️"}</span>
+                          <span style={{ fontSize: 13.5, color: hi ? "#fca5a5" : "#fcd34d" }}>{al.text}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 {advice.headline && (
                   <div style={{ fontSize: 16, fontWeight: 600, color: "#fff", letterSpacing: "-0.01em" }}>
                     {advice.headline}
@@ -253,6 +300,7 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
                           </div>
                           {a.why && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 5 }}>{a.why}</div>}
                           {a.how && <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 5 }}>👉 {a.how}</div>}
+                          {a.source && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5, opacity: 0.8 }}>📊 Source: {a.source}</div>}
                         </div>
                       );
                     })}
@@ -266,6 +314,10 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
                     ))}
                   </div>
                 )}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
+                  <button className="link" onClick={copyAdvice}>📋 Copy plan</button>
+                  <button className="link" onClick={shareWhatsApp}>💬 WhatsApp</button>
+                </div>
               </div>
             )}
           </div>
