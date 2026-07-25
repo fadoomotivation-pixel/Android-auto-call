@@ -41,7 +41,7 @@ function pick(raw: Record<string, string>, keys: string[]): string {
 
 async function importLead(
   admin: SupabaseClient,
-  lead: { id: string; created_time?: string; field_data?: Array<{ name?: string; values?: string[] }> },
+  lead: { id: string; created_time?: string; ad_id?: string; adset_id?: string; campaign_id?: string; platform?: string; field_data?: Array<{ name?: string; values?: string[] }> },
   formId: string,
   pageCompany: string,
   pageAutoAssign: boolean,
@@ -92,7 +92,14 @@ async function importLead(
     status: "new",
     lead_source: "facebook",
     lead_source_id: leadgenId,
-    extra: { form_id: formId, created_time: lead.created_time, raw_fields: raw, via: "poll" },
+    // ad_id/adset_id/campaign_id are what the Ads Manager joins on to show which
+    // ad actually produced buyers. Without them every campaign reads "0 leads"
+    // however much it spent — so they are pulled and stored on every lead.
+    extra: {
+      form_id: formId, created_time: lead.created_time, raw_fields: raw, via: "poll",
+      ad_id: lead.ad_id ?? null, adset_id: lead.adset_id ?? null,
+      campaign_id: lead.campaign_id ?? null, platform: lead.platform ?? null,
+    },
   });
   return error ? "error" : "inserted";
 }
@@ -118,6 +125,41 @@ Deno.serve(async (req) => {
   if (!authorized) return json({ ok: false, error: "Super-admin only." }, 401);
 
   const body = await req.json().catch(() => ({}));
+
+  // ---- Backfill attribution: older leads were imported before ad_id was
+  // stored, so every campaign reads "0 leads" in the Ads Manager however much it
+  // spent. Re-read each lead from the Graph API and stamp its ad/adset/campaign
+  // ids onto extra, so historical spend can finally be tied to real buyers. ----
+  if (body.mode === "backfill_attribution") {
+    const adminB = createClient(SUPABASE_URL, SERVICE);
+    const { data: integ } = await adminB.from("facebook_integrations")
+      .select("company_id").neq("page_id", "").limit(1).maybeSingle();
+    if (!integ?.company_id) return json({ ok: false, error: "No connected page." });
+    const { data: tok } = await adminB.rpc("get_facebook_token", { p_company: integ.company_id });
+    if (!tok) return json({ ok: false, error: "No page token." });
+
+    const { data: pending } = await adminB.from("contacts")
+      .select("id, lead_source_id, extra")
+      .eq("lead_source", "facebook")
+      .not("lead_source_id", "is", null)
+      .limit(Math.min(Math.max(Number(body.limit) || 100, 1), 400));
+
+    let fixed = 0, missing = 0;
+    for (const c of pending ?? []) {
+      const ex = (c.extra ?? {}) as Record<string, unknown>;
+      if (ex.ad_id) continue; // already attributed
+      const g = await fetch(
+        `${GRAPH}/${c.lead_source_id}?fields=ad_id,adset_id,campaign_id,platform&access_token=${tok}`,
+      ).then((r) => r.json()).catch(() => ({}));
+      if (!g?.ad_id) { missing++; continue; }
+      const { error } = await adminB.from("contacts")
+        .update({ extra: { ...ex, ad_id: g.ad_id, adset_id: g.adset_id ?? null, campaign_id: g.campaign_id ?? null, platform: g.platform ?? null } })
+        .eq("id", c.id);
+      if (!error) fixed++;
+    }
+    return json({ ok: true, fixed, missing, scanned: (pending ?? []).length });
+  }
+
   const sinceDays = Math.min(Math.max(Number(body.since_days) || 7, 1), 90);
   const limitPerForm = Math.min(Math.max(Number(body.limit_per_form) || 50, 1), 200);
   const cutoffMs = Date.now() - sinceDays * 86400_000;
@@ -146,7 +188,7 @@ Deno.serve(async (req) => {
       if (!mapped.has(formId)) continue; // unmapped → don't import
       forms++;
       const leadsRes = await fetch(
-        `${GRAPH}/${formId}/leads?fields=id,created_time,field_data&limit=${limitPerForm}&access_token=${token}`,
+        `${GRAPH}/${formId}/leads?fields=id,created_time,ad_id,adset_id,campaign_id,platform,field_data&limit=${limitPerForm}&access_token=${token}`,
       ).then((r) => r.json()).catch(() => ({}));
       for (const lead of (leadsRes.data ?? [])) {
         const ct = Date.parse(lead.created_time ?? "");
