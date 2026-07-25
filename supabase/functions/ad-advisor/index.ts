@@ -55,7 +55,7 @@ function byCampaign(rows: AdRow[]) {
     m.set(k, a);
   }
   return [...m.values()].map((c) => ({
-    name: c.campaign_name, status: c.campaign_status,
+    id: c.campaign_id, name: c.campaign_name, status: c.campaign_status,
     spend: Math.round(c.spend), impressions: c.impressions, clicks: c.clicks,
     ctr_pct: +(div(c.clicks, c.impressions) * 100).toFixed(2),
     cpc: +div(c.spend, c.clicks).toFixed(2),
@@ -108,7 +108,18 @@ const SYSTEM =
   "vs account rupees 1,900'); 'how' is the concrete step; 'metric' is the KPI it moves (CTR/CPC/CPM/CPA/ROAS); 'source' names where " +
   "the evidence came from (e.g. 'Campaign insights, selected date range' or 'CRM lead→booked'). Every action MUST read as " +
   "ACTION + REASON(with numbers) + DATA SOURCE. 'watch' = 2-3 short KPI targets to monitor. Plain English, confident, practical. " +
-  "NEVER invent numbers not in the data; if a figure is unknown (e.g. ROAS without booking value), say so instead of guessing.";
+  "NEVER invent numbers not in the data; if a figure is unknown (e.g. ROAS without booking value), say so instead of guessing.\n\n" +
+  "CRITICAL — AD PROBLEM vs FOLLOW-UP PROBLEM. Every campaign carries a `followup` block (how many of its leads the sales team " +
+  "actually called, how fast) and a `verdict`. A campaign with no bookings has NOT necessarily failed: if its leads were never " +
+  "called, the ads worked and the TEAM did not. Obey the verdict:\n" +
+  "• verdict 'followup_problem' → NEVER advise pausing, cutting or reducing budget on that campaign. Say plainly that the ads are " +
+  "delivering but the leads aren't being worked, quote the never-called % and median response time, and make the action an " +
+  "OPERATIONAL fix (call the untouched leads today, set a 30-minute first-call SLA, reassign or add a rep, turn on alerts). " +
+  "Flag it in alerts as wasted spend caused by follow-up, not by the ad.\n" +
+  "• verdict 'ad_problem' → the leads WERE worked properly and still didn't convert, so the ad/targeting/offer is genuinely at " +
+  "fault; pausing, restructuring or refreshing creative is fair.\n" +
+  "• verdict 'working' → protect and scale it.\n" +
+  "• verdict 'unknown' → too few leads to judge; advise gathering more data, not cutting.";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -125,6 +136,7 @@ Deno.serve(async (req) => {
   const rows = Array.isArray(body.rows) ? (body.rows as AdRow[]) : [];
   if (rows.length === 0) return json({ ok: false, error: "No campaign data to analyse — load your ads first." }, 200);
   const currency = typeof body.currency === "string" ? body.currency : "";
+  const range = typeof body.range === "string" ? body.range : "";
 
   const campaigns = byCampaign(rows);
   const t = campaigns.reduce(
@@ -145,13 +157,45 @@ Deno.serve(async (req) => {
     cpa_booked: t.booked ? +div(t.spend, t.booked).toFixed(0) : null,
   };
 
+  // ---- Was it the AD, or the FOLLOW-UP? ----
+  // A campaign judged only on bookings gets blamed for a team that never called
+  // its leads. Pull each campaign's follow-up health and label it, so the advice
+  // fixes the real cause instead of pausing a working ad.
+  interface Health { campaign_id: string; leads: number; never_called: number; called_in_30m: number; median_minutes: number | null; advanced: number }
+  const { data: healthRows } = await u.rpc("campaign_lead_health", { p_days: 30 });
+  const health = new Map<string, Health>(
+    ((healthRows ?? []) as Health[]).map((h) => [String(h.campaign_id), h]),
+  );
+
+  const diagnosed = campaigns.map((c) => {
+    const h = health.get(String(c.id));
+    if (!h || h.leads < 3) {
+      return { ...c, followup: h ?? null, verdict: "unknown", verdict_label: "Not enough leads to judge" };
+    }
+    const neverPct = Math.round((h.never_called / h.leads) * 100);
+    const fastPct = Math.round((h.called_in_30m / h.leads) * 100);
+    const advPct = Math.round((h.advanced / h.leads) * 100);
+    const followupBad = neverPct >= 40 || (h.median_minutes != null && h.median_minutes > 240);
+    const verdict = followupBad ? "followup_problem" : advPct >= 10 ? "working" : "ad_problem";
+    const verdict_label = followupBad
+      ? `Follow-up problem — ${neverPct}% of its leads were never called`
+      : verdict === "working"
+        ? `Working — ${advPct}% of leads advanced`
+        : `Ad problem — leads were worked (${fastPct}% within 30 min) but don't convert`;
+    return {
+      ...c,
+      followup: { leads: h.leads, never_called: h.never_called, never_pct: neverPct, called_in_30m_pct: fastPct, median_minutes: h.median_minutes, advanced: h.advanced },
+      verdict, verdict_label,
+    };
+  });
+
   const admin = createClient(SUPABASE_URL, SERVICE);
   const companyId = typeof body.company_id === "string" ? body.company_id : null;
   const brain = await facts(admin, companyId);
 
   const userMsg =
-    `Currency: ${currency || "?"}\nAccount totals: ${JSON.stringify(totals)}\n` +
-    `Campaigns (top by spend):\n${JSON.stringify(campaigns.slice(0, 12))}` +
+    `Currency: ${currency || "?"}${range ? ` | Date range: ${range}` : ""}\nAccount totals: ${JSON.stringify(totals)}\n` +
+    `Campaigns (top by spend). Each carries "followup" (how its leads were actually worked by the sales team) and a "verdict":\n${JSON.stringify(diagnosed.slice(0, 12))}` +
     (brain.length ? `\n\nOur playbook facts (use if relevant):\n${brain.map((f) => `- ${f}`).join("\n")}` : "");
 
   let out: Record<string, unknown> | null = null;
@@ -170,5 +214,5 @@ Deno.serve(async (req) => {
   }
   if (!out) return json({ ok: false, error: "Couldn't analyse right now — try again." }, 200);
 
-  return json({ ok: true, totals, campaigns, advice: out });
+  return json({ ok: true, totals, campaigns: diagnosed, advice: out });
 });
