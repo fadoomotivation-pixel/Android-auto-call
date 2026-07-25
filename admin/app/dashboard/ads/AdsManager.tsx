@@ -7,9 +7,29 @@ type Row = {
   campaign_id: string; campaign_name: string; campaign_status: string;
   adset_id: string; adset_name: string;
   ad_id: string; ad_name: string;
-  impressions: number; clicks: number; spend: number; ctr: number; cpc: number;
+  impressions: number; clicks: number; spend: number; ctr: number; cpc: number; frequency?: number;
   meta_leads: number; crm_leads: number; crm_qualified: number; crm_booked: number;
 };
+
+/** Lead quality from CRM outcomes — the thing Meta can't see. 0-100 + a grade. */
+function leadQuality(leads: number, qualified: number, booked: number): { score: number; grade: string; tone: string } | null {
+  if (!leads) return null;
+  const qr = qualified / leads, br = booked / leads;
+  const score = Math.max(0, Math.min(100, Math.round(qr * 100 + br * 300)));
+  const [grade, tone] = br >= 0.03 || qr >= 0.4 ? ["A", "#22c55e"]
+    : qr >= 0.25 ? ["B", "#84cc16"]
+    : qr >= 0.1 ? ["C", "#f59e0b"]
+    : ["D", "#ef4444"];
+  return { score, grade, tone };
+}
+
+/** Creative fatigue: seen too often, clicks drying up. */
+function fatigue(frequency: number | undefined, ctr: number): { level: string; tone: string } | null {
+  const f = frequency ?? 0;
+  if (f >= 4 && ctr < 1.0) return { level: "High", tone: "#ef4444" };
+  if (f >= 3 && ctr < 1.2) return { level: "Rising", tone: "#f59e0b" };
+  return null;
+}
 
 const PRESETS: { key: string; label: string }[] = [
   { key: "today", label: "Today" },
@@ -300,6 +320,10 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
             <Stat label="Booked" value={totals.booked.toLocaleString("en-IN")} tone="#22c55e" delta={deltaFor(totals.booked, prevTotals?.booked, true)} />
             <Stat label="Cost / Booked" value={totals.booked ? money(sym, totals.spend / totals.booked) : "—"} tone="#ef4444"
               delta={deltaFor(totals.booked ? totals.spend / totals.booked : 0, prevTotals && prevTotals.booked ? prevTotals.spend / prevTotals.booked : undefined, false)} />
+            {(() => {
+              const q = leadQuality(totals.leads, totals.qualified, totals.booked);
+              return <Stat label="Lead Quality" value={q ? `${q.grade} · ${q.score}` : "—"} tone={q?.tone ?? "#86868B"} />;
+            })()}
           </div>
           {prevTotals && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: -6 }}>▲▼ = change vs the previous {preset === "custom" ? "period" : (PRESETS.find((p) => p.key === preset)?.label ?? "period").toLowerCase()}.</div>}
 
@@ -471,6 +495,11 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
                     {aggs.map((a) => {
                       const open = expanded.has(a.campaign_id);
                       const ctr = a.impressions ? (a.clicks / a.impressions) * 100 : 0;
+                      const q = leadQuality(a.crm_leads, a.crm_qualified, a.crm_booked);
+                      const anyFatigued = a.ads.some((r) => {
+                        const actr = r.impressions ? (r.clicks / r.impressions) * 100 : 0;
+                        return !!fatigue(r.frequency, actr);
+                      });
                       return (
                         <Fragment key={a.campaign_id}>
                           <tr onClick={() => setExpanded((s) => { const n = new Set(s); n.has(a.campaign_id) ? n.delete(a.campaign_id) : n.add(a.campaign_id); return n; })}
@@ -478,6 +507,16 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
                             <td style={{ padding: "10px 10px", fontSize: 13.5, fontWeight: 600, color: "var(--text)", maxWidth: 320 }}>
                               <span style={{ color: "var(--muted)", marginRight: 6 }}>{open ? "▾" : "▸"}</span>
                               {a.campaign_name}
+                              {q && (
+                                <span title={`Lead quality ${q.score}/100 (from CRM outcomes)`}
+                                  style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: q.tone, border: `1px solid ${q.tone}`, borderRadius: 999, padding: "1px 7px" }}>
+                                  Lead {q.grade}
+                                </span>
+                              )}
+                              {anyFatigued && (
+                                <span title="A creative here is fatiguing — high frequency, falling CTR"
+                                  style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "#f59e0b" }}>🔥 fatigue</span>
+                              )}
                               {a.campaign_status && a.campaign_status !== "ACTIVE" && (
                                 <span style={{ marginLeft: 8, fontSize: 11, color: "#f59e0b" }}>{a.campaign_status.toLowerCase().replace(/_/g, " ")}</span>
                               )}
@@ -493,11 +532,18 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
                           </tr>
                           {open && a.ads.map((r) => {
                             const actr = r.impressions ? (r.clicks / r.impressions) * 100 : 0;
+                            const fat = fatigue(r.frequency, actr);
                             return (
                               <tr key={r.ad_id} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
                                 <td style={{ padding: "8px 10px 8px 30px", fontSize: 13, color: "var(--muted)", maxWidth: 320 }}>
                                   {r.ad_name}
                                   {r.adset_name && <span style={{ opacity: 0.6 }}> · {r.adset_name}</span>}
+                                  {fat && (
+                                    <span title={`Frequency ${(r.frequency ?? 0).toFixed(1)}, CTR ${actr.toFixed(2)}% — refresh the creative`}
+                                      style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: fat.tone, border: `1px solid ${fat.tone}`, borderRadius: 999, padding: "0 6px" }}>
+                                      🔥 {fat.level}
+                                    </span>
+                                  )}
                                 </td>
                                 <td style={{ ...td, color: "var(--muted)" }}>{r.impressions.toLocaleString("en-IN")}</td>
                                 <td style={{ ...td, color: "var(--muted)" }}>{r.clicks.toLocaleString("en-IN")}</td>
