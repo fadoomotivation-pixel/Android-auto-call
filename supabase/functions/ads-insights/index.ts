@@ -59,9 +59,18 @@ Deno.serve(async (req) => {
     const { data: pa } = await admin.from("platform_admins").select("user_id").eq("user_id", ud.user.id).maybeSingle();
     if (profile?.role !== "admin" && !pa) return json({ ok: false, error: "Admins only" }, 403);
 
-    const { company, date_preset } = await req.json().catch(() => ({}));
+    const { company, date_preset, time_range, breakdown } = await req.json().catch(() => ({}));
     if (!company) return json({ ok: false, error: "missing company" }, 400);
     const preset = PRESET_SINCE[date_preset] ? date_preset : "last_30d";
+
+    // Custom range wins over a preset. `timeParam` goes straight into the Graph
+    // URL; `sinceMs` bounds the CRM attribution window.
+    const custom = time_range && typeof time_range.since === "string" && typeof time_range.until === "string";
+    const timeParam = custom
+      ? `time_range=${encodeURIComponent(JSON.stringify({ since: time_range.since, until: time_range.until }))}`
+      : `date_preset=${preset}`;
+    const sinceMs = custom ? Date.parse(`${time_range.since}T00:00:00Z`) : PRESET_SINCE[preset]();
+    const untilIso = custom ? new Date(Date.parse(`${time_range.until}T23:59:59Z`)).toISOString() : null;
 
     const { data: cfg } = await admin.rpc("get_facebook_ads", { p_company: company });
     if (!cfg || !cfg.ad_account_id || !cfg.token) {
@@ -75,6 +84,32 @@ Deno.serve(async (req) => {
     if (acctRes.error) return json({ ok: false, error: acctRes.error.message ?? "Couldn't read the ad account. Check the Ad Account ID and token permissions (ads_read)." });
     const currency = acctRes.currency ?? "";
 
+    // ---- Breakdown mode: compare what's working (placement / audience / region /
+    // device / ad set). Meta-only metrics — CRM attribution isn't available per
+    // breakdown dimension, so these show reach/CTR/CPC/spend for comparison. ----
+    if (breakdown) {
+      const MAP: Record<string, { level: string; breakdowns: string; keys: string[] }> = {
+        placement: { level: "account", breakdowns: "publisher_platform,platform_position", keys: ["publisher_platform", "platform_position"] },
+        audience: { level: "account", breakdowns: "age,gender", keys: ["age", "gender"] },
+        region: { level: "account", breakdowns: "region", keys: ["region"] },
+        device: { level: "account", breakdowns: "impression_device", keys: ["impression_device"] },
+        adset: { level: "adset", breakdowns: "", keys: ["adset_name"] },
+        creative: { level: "ad", breakdowns: "", keys: ["ad_name"] },
+      };
+      const bd = MAP[String(breakdown)] ?? MAP.placement;
+      const bf = `impressions,clicks,spend,ctr,cpc${bd.level === "adset" ? ",adset_name" : bd.level === "ad" ? ",ad_name" : ""}`;
+      const bUrl = `${GRAPH}/act_${acct}/insights?level=${bd.level}&${timeParam}&fields=${bf}` +
+        `${bd.breakdowns ? `&breakdowns=${bd.breakdowns}` : ""}&limit=500&access_token=${encodeURIComponent(token)}`;
+      const bRes = await fetch(bUrl).then((r) => r.json()).catch(() => ({}));
+      if (bRes.error) return json({ ok: false, error: bRes.error.message ?? "Couldn't read breakdown insights." });
+      const bRows = (bRes.data ?? []).map((r: Record<string, unknown>) => ({
+        key: bd.keys.map((k) => r[k]).filter(Boolean).join(" · ") || "(unknown)",
+        impressions: num(r.impressions), clicks: num(r.clicks), spend: num(r.spend),
+        ctr: num(r.ctr), cpc: num(r.cpc),
+      })).sort((a, b) => b.spend - a.spend);
+      return json({ ok: true, currency, breakdown, rows: bRows });
+    }
+
     // Campaign statuses / budgets (insights alone don't return these).
     const campRes = await fetch(`${GRAPH}/act_${acct}/campaigns?fields=id,name,effective_status,daily_budget,lifetime_budget&limit=500&access_token=${encodeURIComponent(token)}`).then((r) => r.json()).catch(() => ({}));
     const campMeta: Record<string, { status: string; daily: number; lifetime: number }> = {};
@@ -84,20 +119,21 @@ Deno.serve(async (req) => {
 
     // Ad-level insights for the window.
     const fields = "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,impressions,clicks,spend,ctr,cpc,actions";
-    const insRes = await fetch(`${GRAPH}/act_${acct}/insights?level=ad&date_preset=${preset}&fields=${fields}&limit=500&access_token=${encodeURIComponent(token)}`).then((r) => r.json()).catch(() => ({}));
+    const insRes = await fetch(`${GRAPH}/act_${acct}/insights?level=ad&${timeParam}&fields=${fields}&limit=500&access_token=${encodeURIComponent(token)}`).then((r) => r.json()).catch(() => ({}));
     if (insRes.error) return json({ ok: false, error: insRes.error.message ?? "Couldn't read ad insights (ads_read permission?)." });
 
     // CRM attribution: leads created in this window, grouped by their ad_id.
-    const since = new Date(PRESET_SINCE[preset]()).toISOString();
+    const since = new Date(sinceMs).toISOString();
     const crm: Record<string, { leads: number; qualified: number; booked: number }> = {};
     const PAGE = 1000;
     for (let from = 0; ; from += PAGE) {
-      const { data: rows, error } = await admin
+      let q = admin
         .from("contacts")
         .select("status, extra")
         .eq("lead_source", "facebook")
-        .gte("created_at", since)
-        .range(from, from + PAGE - 1);
+        .gte("created_at", since);
+      if (untilIso) q = q.lte("created_at", untilIso);
+      const { data: rows, error } = await q.range(from, from + PAGE - 1);
       if (error) break;
       for (const r of rows ?? []) {
         const adId = (r.extra as { ad_id?: string } | null)?.ad_id;

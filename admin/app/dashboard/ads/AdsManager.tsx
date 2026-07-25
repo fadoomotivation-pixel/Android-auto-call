@@ -76,21 +76,81 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   const [advising, setAdvising] = useState(false);
   const [advErr, setAdvErr] = useState<string | null>(null);
 
+  // Custom date range.
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  // Previous-period benchmark totals (same-length window immediately before).
+  const [prevTotals, setPrevTotals] = useState<{ spend: number; leads: number; qualified: number; booked: number } | null>(null);
+  // Breakdown ("what's working") — Meta-only metrics by dimension.
+  type BdRow = { key: string; impressions: number; clicks: number; spend: number; ctr: number; cpc: number };
+  const [bdKind, setBdKind] = useState<string>("");
+  const [bdRows, setBdRows] = useState<BdRow[]>([]);
+  const [bdLoading, setBdLoading] = useState(false);
+
   const sym = symbolOf(currency);
 
-  const load = useCallback(async (p: string) => {
-    setLoading(true); setError(null);
-    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; currency?: string; rows?: Row[] }>(
-      "ads-insights",
-      { body: { company: companyId, date_preset: p } },
-    );
+  // The [since, until] (YYYY-MM-DD) for the current selection, and the same-length
+  // window immediately before it (for the benchmark).
+  function ymd(d: Date): string { return d.toISOString().slice(0, 10); }
+  function currentRange(): { since: string; until: string } | null {
+    if (preset === "custom") return customFrom && customTo ? { since: customFrom, until: customTo } : null;
+    const today = new Date(); const u = ymd(today);
+    if (preset === "today") return { since: u, until: u };
+    if (preset === "last_7d") return { since: ymd(new Date(Date.now() - 6 * 864e5)), until: u };
+    if (preset === "last_30d") return { since: ymd(new Date(Date.now() - 29 * 864e5)), until: u };
+    if (preset === "this_month") { const d = new Date(today.getFullYear(), today.getMonth(), 1); return { since: ymd(d), until: u }; }
+    return null;
+  }
+  function previousRange(cur: { since: string; until: string }): { since: string; until: string } {
+    const s = Date.parse(cur.since), e = Date.parse(cur.until);
+    const lenDays = Math.round((e - s) / 864e5) + 1;
+    const prevUntil = new Date(s - 864e5);
+    const prevSince = new Date(prevUntil.getTime() - (lenDays - 1) * 864e5);
+    return { since: ymd(prevSince), until: ymd(prevUntil) };
+  }
+  /** % change vs the previous period, with whether that direction is good. */
+  function deltaFor(cur: number, prev: number | undefined, upGood: boolean): { pct: number; good: boolean } | null {
+    if (prev == null || prev <= 0) return null;
+    const pct = Math.round(((cur - prev) / prev) * 100);
+    return { pct, good: upGood ? pct >= 0 : pct <= 0 };
+  }
+
+  const load = useCallback(async () => {
+    const cur = currentRange();
+    if (preset === "custom" && !cur) { setError("Pick both a start and end date."); return; }
+    setLoading(true); setError(null); setPrevTotals(null); setBdRows([]); setBdKind("");
+    const body = preset === "custom" && cur
+      ? { company: companyId, time_range: { since: cur.since, until: cur.until } }
+      : { company: companyId, date_preset: preset };
+    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; currency?: string; rows?: Row[] }>("ads-insights", { body });
     setLoading(false); setLoaded(true);
     if (error || !data?.ok) { setError(data?.error || error?.message || "Couldn't load ads data."); setRows([]); return; }
     setCurrency(data.currency ?? "");
     setRows(data.rows ?? []);
-  }, [supabase, companyId]);
+    // Benchmark: pull the same-length window immediately before, quietly.
+    if (cur) {
+      const prev = previousRange(cur);
+      const { data: pd } = await supabase.functions.invoke<{ ok: boolean; rows?: Row[] }>("ads-insights", { body: { company: companyId, time_range: prev } });
+      if (pd?.ok && Array.isArray(pd.rows)) {
+        const pt = pd.rows.reduce((t, r) => ({ spend: t.spend + r.spend, leads: t.leads + r.crm_leads, qualified: t.qualified + r.crm_qualified, booked: t.booked + r.crm_booked }), { spend: 0, leads: 0, qualified: 0, booked: 0 });
+        setPrevTotals(pt);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, companyId, preset, customFrom, customTo]);
 
-  useEffect(() => { if (isConfigured) void load(preset); }, [isConfigured, preset, load]);
+  useEffect(() => {
+    if (isConfigured && (preset !== "custom" || (customFrom && customTo))) void load();
+  }, [isConfigured, preset, customFrom, customTo, load]);
+
+  async function loadBreakdown(kind: string) {
+    setBdKind(kind); setBdLoading(true); setBdRows([]);
+    const cur = currentRange();
+    const body = cur ? { company: companyId, breakdown: kind, time_range: cur } : { company: companyId, breakdown: kind, date_preset: preset };
+    const { data } = await supabase.functions.invoke<{ ok: boolean; rows?: BdRow[] }>("ads-insights", { body });
+    setBdLoading(false);
+    if (data?.ok && Array.isArray(data.rows)) setBdRows(data.rows);
+  }
   // Clear stale advice whenever the underlying numbers change.
   useEffect(() => { setAdvice(null); setAdvErr(null); }, [rows, preset]);
 
@@ -146,7 +206,7 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
     setSaving(false);
     if (error) { setSaveMsg("Couldn't save: " + error.message); return; }
     setToken(""); setSaveMsg("Saved ✓"); setIsConfigured(true); setSetupOpen(false);
-    void load(preset);
+    void load();
   }
 
   const aggs = rollUp(rows);
@@ -208,7 +268,7 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
           {/* Totals + date range */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {PRESETS.map((p) => (
+              {[...PRESETS, { key: "custom", label: "Custom" }].map((p) => (
                 <button key={p.key} onClick={() => setPreset(p.key)}
                   style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: 13,
                     border: `1px solid ${preset === p.key ? "var(--accent)" : "var(--border)"}`,
@@ -217,20 +277,31 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
                   {p.label}
                 </button>
               ))}
+              {preset === "custom" && (
+                <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                  <input type="date" value={customFrom} max={customTo || undefined} onChange={(e) => setCustomFrom(e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.03)", color: "var(--text)", fontSize: 13 }} />
+                  <span style={{ color: "var(--muted)", fontSize: 13 }}>→</span>
+                  <input type="date" value={customTo} min={customFrom || undefined} onChange={(e) => setCustomTo(e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.03)", color: "var(--text)", fontSize: 13 }} />
+                </span>
+              )}
             </div>
-            <button onClick={() => load(preset)} disabled={loading}
+            <button onClick={() => load()} disabled={loading}
               style={{ fontSize: 12, padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.04)", color: "var(--muted)", cursor: "pointer" }}>
               {loading ? "Loading…" : "🔄 Refresh"}
             </button>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-            <Stat label="Spend" value={money(sym, totals.spend)} tone="#f59e0b" />
-            <Stat label="Leads (CRM)" value={totals.leads.toLocaleString("en-IN")} tone="#1877F2" />
-            <Stat label="Qualified" value={totals.qualified.toLocaleString("en-IN")} tone="#a855f7" />
-            <Stat label="Booked" value={totals.booked.toLocaleString("en-IN")} tone="#22c55e" />
-            <Stat label="Cost / Booked" value={totals.booked ? money(sym, totals.spend / totals.booked) : "—"} tone="#ef4444" />
+            <Stat label="Spend" value={money(sym, totals.spend)} tone="#f59e0b" delta={deltaFor(totals.spend, prevTotals?.spend, false)} />
+            <Stat label="Leads (CRM)" value={totals.leads.toLocaleString("en-IN")} tone="#1877F2" delta={deltaFor(totals.leads, prevTotals?.leads, true)} />
+            <Stat label="Qualified" value={totals.qualified.toLocaleString("en-IN")} tone="#a855f7" delta={deltaFor(totals.qualified, prevTotals?.qualified, true)} />
+            <Stat label="Booked" value={totals.booked.toLocaleString("en-IN")} tone="#22c55e" delta={deltaFor(totals.booked, prevTotals?.booked, true)} />
+            <Stat label="Cost / Booked" value={totals.booked ? money(sym, totals.spend / totals.booked) : "—"} tone="#ef4444"
+              delta={deltaFor(totals.booked ? totals.spend / totals.booked : 0, prevTotals && prevTotals.booked ? prevTotals.spend / prevTotals.booked : undefined, false)} />
           </div>
+          {prevTotals && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: -6 }}>▲▼ = change vs the previous {preset === "custom" ? "period" : (PRESETS.find((p) => p.key === preset)?.label ?? "period").toLowerCase()}.</div>}
 
           {/* AI Ad Advisor — reads the loaded campaigns and advises across the funnel. */}
           <div style={{ ...card, background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.25)" }}>
@@ -322,6 +393,56 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
             )}
           </div>
 
+          {/* Breakdowns — what's actually working, by dimension. */}
+          {!error && (
+            <div style={card}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                <strong style={{ color: "#fff", fontSize: 15 }}>🔍 What&apos;s working</strong>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>Compare by:</span>
+                {[
+                  ["placement", "Placement"], ["audience", "Audience"], ["region", "Region"],
+                  ["device", "Device"], ["adset", "Ad set"], ["creative", "Creative"],
+                ].map(([k, lbl]) => (
+                  <button key={k} onClick={() => loadBreakdown(k)}
+                    style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+                      border: `1px solid ${bdKind === k ? "var(--accent)" : "var(--border)"}`,
+                      background: bdKind === k ? "var(--accent)" : "rgba(255,255,255,0.03)",
+                      color: bdKind === k ? "#fff" : "var(--text)" }}>{lbl}</button>
+                ))}
+              </div>
+              {!bdKind ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>Pick a dimension to see which placements, audiences or creatives get the best CTR and cheapest clicks.</div>
+              ) : bdLoading ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+              ) : bdRows.length === 0 ? (
+                <div style={{ fontSize: 13, color: "var(--muted)" }}>No breakdown data for this range.</div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                        <th style={{ ...th, textAlign: "left" }}>{bdKind}</th>
+                        <th style={th}>Impr.</th><th style={th}>Clicks</th><th style={th}>CTR</th><th style={th}>CPC</th><th style={th}>Spend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bdRows.slice(0, 20).map((r, i) => (
+                        <tr key={i} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                          <td style={{ ...td, textAlign: "left", color: "#fff" }}>{r.key}</td>
+                          <td style={td}>{r.impressions.toLocaleString("en-IN")}</td>
+                          <td style={td}>{r.clicks.toLocaleString("en-IN")}</td>
+                          <td style={{ ...td, color: r.ctr >= 1 ? "#22c55e" : r.ctr < 0.6 ? "#ef4444" : undefined }}>{r.ctr.toFixed(2)}%</td>
+                          <td style={td}>{money(sym, r.cpc)}</td>
+                          <td style={td}>{money(sym, r.spend)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {error && <div style={{ ...card, borderColor: "rgba(248,113,113,0.4)", color: "#f87171", fontSize: 14 }}>{error}</div>}
 
           {!error && (
@@ -408,11 +529,16 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone: string }) {
+function Stat({ label, value, tone, delta }: { label: string; value: string; tone: string; delta?: { pct: number; good: boolean } | null }) {
   return (
     <div style={{ background: `${tone}0d`, border: `1px solid ${tone}22`, borderRadius: 14, padding: "16px 18px" }}>
       <div style={{ color: tone, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
       <div style={{ color: tone, fontSize: 24, fontWeight: 800, marginTop: 6 }}>{value}</div>
+      {delta && (
+        <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, color: delta.good ? "#22c55e" : "#ef4444" }}>
+          {delta.pct >= 0 ? "▲" : "▼"} {Math.abs(delta.pct)}% <span style={{ color: "var(--muted)", fontWeight: 400 }}>vs prev</span>
+        </div>
+      )}
     </div>
   );
 }
