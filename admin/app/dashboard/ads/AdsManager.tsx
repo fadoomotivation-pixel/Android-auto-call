@@ -64,6 +64,17 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
 
+  // AI Ad Advisor — analyses the already-loaded rows (no extra Meta fetch).
+  type Advice = {
+    headline?: string;
+    funnel?: { awareness?: string; retargeting?: string; conversion?: string };
+    actions?: { priority?: string; title?: string; why?: string; how?: string; metric?: string }[];
+    watch?: string[];
+  };
+  const [advice, setAdvice] = useState<Advice | null>(null);
+  const [advising, setAdvising] = useState(false);
+  const [advErr, setAdvErr] = useState<string | null>(null);
+
   const sym = symbolOf(currency);
 
   const load = useCallback(async (p: string) => {
@@ -79,6 +90,20 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   }, [supabase, companyId]);
 
   useEffect(() => { if (isConfigured) void load(preset); }, [isConfigured, preset, load]);
+  // Clear stale advice whenever the underlying numbers change.
+  useEffect(() => { setAdvice(null); setAdvErr(null); }, [rows, preset]);
+
+  async function runAdvisor() {
+    if (rows.length === 0) { setAdvErr("Load your ads first, then ask the advisor."); return; }
+    setAdvising(true); setAdvErr(null);
+    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; advice?: Advice }>(
+      "ad-advisor",
+      { body: { rows, currency, company_id: companyId } },
+    );
+    setAdvising(false);
+    if (error || !data?.ok || !data.advice) { setAdvErr(data?.error || error?.message || "Couldn't analyse right now."); return; }
+    setAdvice(data.advice);
+  }
 
   async function save() {
     if (!acctId.trim()) { setSaveMsg("Enter your Ad Account ID."); return; }
@@ -173,6 +198,76 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
             <Stat label="Qualified" value={totals.qualified.toLocaleString("en-IN")} tone="#a855f7" />
             <Stat label="Booked" value={totals.booked.toLocaleString("en-IN")} tone="#22c55e" />
             <Stat label="Cost / Booked" value={totals.booked ? money(sym, totals.spend / totals.booked) : "—"} tone="#ef4444" />
+          </div>
+
+          {/* AI Ad Advisor — reads the loaded campaigns and advises across the funnel. */}
+          <div style={{ ...card, background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 220, flex: 1 }}>
+                <strong style={{ color: "#fff", fontSize: 15 }}>🧠 AI Ad Advisor</strong>
+                <p className="subtitle" style={{ margin: "2px 0 0" }}>
+                  Analyses your live campaigns — CTR, CPC, CPM, CPA, ROAS — and gives prioritised moves across
+                  awareness → retargeting → conversion to lower cost and lift returns (Andromeda-aware).
+                </p>
+              </div>
+              <button className="primary" onClick={runAdvisor} disabled={advising || rows.length === 0}>
+                {advising ? "Analysing…" : advice ? "Re-analyse" : "Analyse my ads"}
+              </button>
+            </div>
+            {advErr && <div style={{ marginTop: 10, color: "#f87171", fontSize: 13 }}>{advErr}</div>}
+
+            {advice && (
+              <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+                {advice.headline && (
+                  <div style={{ fontSize: 16, fontWeight: 600, color: "#fff", letterSpacing: "-0.01em" }}>
+                    {advice.headline}
+                  </div>
+                )}
+                {advice.funnel && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+                    {([
+                      ["📣 Awareness", advice.funnel.awareness, "#f59e0b"],
+                      ["🔁 Retargeting", advice.funnel.retargeting, "#a855f7"],
+                      ["🎯 Conversion", advice.funnel.conversion, "#22c55e"],
+                    ] as const).map(([label, text, tone]) =>
+                      text ? (
+                        <div key={label} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 12, padding: 14 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: tone, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>{label}</div>
+                          <div style={{ fontSize: 13.5, color: "var(--text)", lineHeight: 1.5 }}>{text}</div>
+                        </div>
+                      ) : null,
+                    )}
+                  </div>
+                )}
+                {Array.isArray(advice.actions) && advice.actions.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Do this next</div>
+                    {advice.actions.map((a, i) => {
+                      const tone = a.priority === "high" ? "#ef4444" : a.priority === "medium" ? "#f59e0b" : "#86868B";
+                      return (
+                        <div key={i} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: "1px 8px", textTransform: "uppercase" }}>{a.priority ?? "action"}</span>
+                            <strong style={{ color: "#fff", fontSize: 14 }}>{a.title}</strong>
+                            {a.metric && <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>↳ {a.metric}</span>}
+                          </div>
+                          {a.why && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 5 }}>{a.why}</div>}
+                          {a.how && <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 5 }}>👉 {a.how}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {Array.isArray(advice.watch) && advice.watch.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>Watch:</span>
+                    {advice.watch.map((w, i) => (
+                      <span key={i} style={{ fontSize: 12, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", borderRadius: 999, padding: "3px 10px", color: "var(--text)" }}>{w}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {error && <div style={{ ...card, borderColor: "rgba(248,113,113,0.4)", color: "#f87171", fontSize: 14 }}>{error}</div>}
