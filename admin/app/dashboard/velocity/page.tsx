@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
 import { VelocityBoard } from "./VelocityBoard";
+import { AutoRescue } from "./AutoRescue";
 
 /**
  * Sales Velocity — the Revenue Leak Radar.
@@ -34,6 +35,9 @@ export default async function VelocityPage() {
         what the delay is costing you in deals.
       </p>
       <VelocityBoard isSuper={isSuper} />
+      <div style={{ marginTop: 18 }}>
+        <AutoRescue />
+      </div>
     </>
   );
 }
