@@ -29,6 +29,7 @@ export function Sidebar({
         <h1 className="no-print" style={{ display: "none" }}>SalesAutoCall</h1>
         <NavLink href="/dashboard" label="✨ Overview" />
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/velocity" label="⚡ Sales Velocity" />}
+        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/health" label="📶 Phone Health" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/pulse" label="🔔 Daily Pulse" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/xray" label="🩻 Sales X-Ray" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}

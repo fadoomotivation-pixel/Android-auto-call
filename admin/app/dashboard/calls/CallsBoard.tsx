@@ -245,6 +245,27 @@ export function CallsBoard({
         </span>
       </div>
 
+      {/* Outgoing without a single inbound call isn't a quiet week — it's the
+          signature of a phone whose call-log sync has stopped, and the answer
+          lives on Phone Health, not here. */}
+      {rows.length >= 10 && rows.every((c) => c.direction !== "incoming") && (
+        <div
+          style={{
+            display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
+            border: "1px solid rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.08)",
+            borderRadius: 14, padding: "10px 14px", marginBottom: 14, fontSize: 13,
+          }}
+        >
+          <span>
+            📥 <strong>Zero incoming calls</strong> in this window. Outgoing calls are logged by the app itself;
+            incoming and missed calls only arrive if the phone&apos;s call-log sync is running.
+          </span>
+          <a href="/dashboard/health" style={{ marginLeft: "auto", color: "var(--accent)", whiteSpace: "nowrap" }}>
+            Check Phone Health →
+          </a>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <div className="empty">No calls match these filters.</div>
       ) : (
