@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { WhatsAppSetup } from "./WhatsAppSetup";
 import { CompanyPicker } from "./CompanyPicker";
+import { WhatsAppHealth } from "./WhatsAppHealth";
 import { WhatsAppInbox } from "./WhatsAppInbox";
 
 const WEBHOOK_URL = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/whatsapp-webhook";
@@ -78,6 +79,8 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
       {isSuper && (
         <CompanyPicker companies={companies ?? []} selected={companyId} />
       )}
+
+      <WhatsAppHealth isSuper={isSuper} companyId={companyId} />
 
       {companyId ? (
         <WhatsAppSetup
