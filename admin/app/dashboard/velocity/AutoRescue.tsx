@@ -12,11 +12,12 @@ interface Event {
 }
 
 /**
- * Auto-Rescue control — the human's hand on an autonomous action.
+ * Auto First-Reply control — the human's hand on an autonomous action.
  *
- * The system can reassign a lead nobody called. That is a real action on real
- * customer data, so the owner decides: off by default, their own threshold,
- * and every move it makes is listed below for review.
+ * When nobody has called a lead in time, the system sends one holding WhatsApp
+ * in the rep's own name. It never moves the lead to someone else: ownership,
+ * and the commission that follows it, stay exactly where they were. The owner
+ * decides — off by default, their own limit, every message listed for review.
  */
 export function AutoRescue() {
   const supabase = createClient();
@@ -63,12 +64,13 @@ export function AutoRescue() {
 
   return (
     <div style={card}>
-      <strong style={{ color: "#fff", fontSize: 15 }}>🛟 Auto-Rescue</strong>
+      <strong style={{ color: "#fff", fontSize: 15 }}>💬 Auto First-Reply</strong>
       <p className="subtitle" style={{ margin: "2px 0 8px" }}>
-        Reminders alone don&apos;t save a lead — if nobody calls, it just dies quietly. When this is on, a lead
-        still uncalled after your limit is <strong>handed to another telecaller</strong> and the manager is told.
-        It never contacts the customer itself; it only makes sure a human does. Off until you switch it on, and
-        every move it makes is listed below.
+        A buyer fills three or four forms — whoever replies first usually wins. If nobody has called a lead by
+        your limit, this sends <strong>one short WhatsApp in that telecaller&apos;s own name</strong> so the customer
+        knows they were heard. <strong>The lead is never taken away or reassigned</strong> — it stays with the same
+        person, who still makes the call. Off until you switch it on, one reply per lead, and everything it sends
+        is listed below.
       </p>
 
       {msg && <div className="error" style={{ marginBottom: 8 }}>{msg}</div>}
@@ -90,7 +92,7 @@ export function AutoRescue() {
                 color: on ? "#10b981" : "var(--muted)" }}>
               {busy === c.id ? "…" : on ? "ON" : "OFF"}
             </button>
-            <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Hand over after</span>
+            <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Reply if uncalled after</span>
             <select
               value={p?.reassign_after_min ?? 120}
               onChange={(e) => save(c.id, { reassign_after_min: Number(e.target.value) })}
@@ -115,13 +117,13 @@ export function AutoRescue() {
         </div>
         {events.length === 0 ? (
           <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
-            Nothing yet — it only acts on leads that pass your limit while it&apos;s switched on.
+            Nothing yet — it only replies to leads that pass your limit while it&apos;s switched on.
           </div>
         ) : (
           <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
             {events.map((e) => (
               <div key={e.id} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 13 }}>
-                <span style={{ color: e.action === "reassigned" ? "#10b981" : e.action === "skipped" ? "#f59e0b" : "var(--muted)", fontWeight: 600, minWidth: 96 }}>
+                <span style={{ color: e.action === "holding_reply" ? "#10b981" : e.action === "skipped" ? "#f59e0b" : "var(--muted)", fontWeight: 600, minWidth: 96 }}>
                   {e.action.replace("_", " ")}
                 </span>
                 <span style={{ color: "var(--text)" }}>{e.detail}</span>
