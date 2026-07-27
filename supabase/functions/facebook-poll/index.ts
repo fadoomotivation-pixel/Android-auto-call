@@ -78,7 +78,10 @@ async function importLead(
     autoAssign = rc?.auto_assign ?? true;
   }
   const assignedRep = routedRep
-    ?? (autoAssign ? (await admin.rpc("fb_pick_rep", { p_company: targetCompany })).data ?? null : null);
+    // pick_next_rep is the platform's single eligibility brain (check-in, office
+    // fence, backlog cap). A previous name here didn't exist as an RPC at all, so
+    // auto-assign silently returned null and the lead landed unassigned.
+    ?? (autoAssign ? (await admin.rpc("pick_next_rep", { p_company: targetCompany })).data ?? null : null);
 
   const { error } = await admin.from("contacts").insert({
     company_id: targetCompany,

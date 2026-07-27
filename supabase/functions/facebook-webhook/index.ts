@@ -124,8 +124,10 @@ serve(async (req) => {
             const city = pick(raw, ["city", "location", "\u0936\u0939\u0930"]);
 
             // Clean phone; skip obvious non-numbers (e.g. Meta test-lead dummies).
+            // The digit count guard used an escaped \\D, which matches a literal
+            // backslash — so it stripped nothing and junk leads passed straight in.
             const cleanPhone = phoneRaw.replace(/[^0-9+]/g, "");
-            const digits = cleanPhone.replace(/\\D/g, "");
+            const digits = cleanPhone.replace(/\D/g, "");
             if (digits.length < 7) {
               console.log(`Lead ${leadgenId} has no real phone ("${phoneRaw}") — skipping.`);
               continue;
@@ -160,7 +162,9 @@ serve(async (req) => {
 
             const assignedRep = routedRep
               ?? (autoAssign
-                ? (await supabaseAdmin.rpc("fb_pick_rep", { p_company: targetCompany })).data ?? null
+                // Same single eligibility brain as the poller — check-in, office
+                // fence and backlog cap all apply here too.
+                ? (await supabaseAdmin.rpc("pick_next_rep", { p_company: targetCompany })).data ?? null
                 : null);
 
             const { error: insertError } = await supabaseAdmin.from("contacts").insert({
