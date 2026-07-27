@@ -65,9 +65,17 @@ Deno.serve(async (req) => {
     return json({ ok: true, contact_id: existing.id, deduped: true, reactivated: true });
   }
 
+  // A fixed default owner still wins; otherwise the lead goes through the same
+  // eligibility brain as every other source (on shift, inside the office fence,
+  // not already sitting on a backlog). No eligible rep = it waits in the pool
+  // and is released the moment someone checks in.
+  const assignedRep = cfg.default_salesperson_id
+    ?? (await admin.rpc("pick_next_rep", { p_company: cfg.company_id })).data
+    ?? null;
+
   const { data: inserted, error } = await admin.from("contacts").insert({
     company_id: cfg.company_id,
-    salesperson_id: cfg.default_salesperson_id ?? null,
+    salesperson_id: assignedRep,
     name, phone, email,
     status: "new",
     lead_source: source,
@@ -99,7 +107,7 @@ Deno.serve(async (req) => {
           await admin.from("whatsapp_messages").upsert({
             company_id: cfg.company_id,
             contact_id: inserted.id,
-            salesperson_id: cfg.default_salesperson_id ?? null,
+            salesperson_id: assignedRep,
             direction: "out",
             wa_message_id: wd.messages?.[0]?.id ?? null,
             counterparty: to,
