@@ -167,6 +167,9 @@ data class AppState(
     val updateDownloading: Boolean = false,
     /** Download progress 0f..1f while an update is being fetched. */
     val updateProgress: Float = 0f,
+    /** Prompt pushed aside so the rep can keep calling while the APK downloads.
+     *  The download itself is unaffected — only the dialog is hidden. */
+    val updateMinimized: Boolean = false,
     // Lead detail page (full-screen overlay): which lead is open + its call history.
     val leadDetailId: String? = null,
     val leadDetailCalls: List<CallLog> = emptyList(),
@@ -423,7 +426,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun dismissUpdate() = set { it.copy(update = null, updateDownloading = false, updateProgress = 0f) }
+    fun dismissUpdate() = set { it.copy(update = null, updateDownloading = false, updateProgress = 0f, updateMinimized = false) }
+
+    /** Push the update prompt aside. The download keeps running in viewModelScope,
+     *  so the rep can carry on calling instead of watching a progress bar — a
+     *  shift shouldn't stop because a build was published. */
+    fun minimizeUpdate() = set { it.copy(updateMinimized = true) }
+
+    /** Bring the minimized prompt back (from the progress chip). */
+    fun expandUpdate() = set { it.copy(updateMinimized = false) }
 
     /** Registers this device's FCM token so the backend can push hot-lead alerts.
      *  Also re-sends any token captured before the rep signed in. */
@@ -1974,7 +1985,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     set { st ->
                         st.copy(
                             leads = st.leads.map { c ->
-                                if (c.id == contactId) c.copy(status = status, temperature = temperature ?: c.temperature, notes = cleanNote ?: c.notes) else c
+                                // handledAt locally too, so the lead leaves New the
+                                // instant the rep answers the prompt rather than on
+                                // the next server refresh.
+                                if (c.id == contactId) c.copy(status = status, temperature = temperature ?: c.temperature, notes = cleanNote ?: c.notes, handledAt = java.time.Instant.now().toString()) else c
                             },
                         )
                     }
@@ -2067,7 +2081,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 set { st ->
                     st.copy(leads = st.leads.map { c ->
-                        if (c.id == contactId) c.copy(notes = cleanNote ?: c.notes, temperature = temperature ?: c.temperature) else c
+                        if (c.id == contactId) {
+                            // A typed note IS an answer to the prompt — stamp it so
+                            // the lead moves out of New straight away.
+                            c.copy(
+                                notes = cleanNote ?: c.notes,
+                                temperature = temperature ?: c.temperature,
+                                handledAt = if (cleanNote != null) java.time.Instant.now().toString() else c.handledAt,
+                            )
+                        } else c
                     }, message = "✓ Note saved")
                 }
             }
@@ -2385,9 +2407,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         set { it.copy(voiceRecording = false) }
     }
 
+    /**
+     * Post-call prompt version: records the outcome as a SPOKEN note against the
+     * lead whose call just ended, then closes the sheet. Talking is the fastest
+     * of the three ways to answer the prompt, and it counts the same — the voice
+     * note stamps handled_at server-side, which is what moves the lead into
+     * Today. Without it the lead simply stays in New.
+     */
+    fun finishPostCallVoiceNote() {
+        val contactId = _state.value.postCallContactId ?: run { cancelVoiceNote(); return }
+        finishVoiceNote(contactId)
+        dismissPostCall()
+        // handled_at is stamped when the note row lands, so give the upload a
+        // moment before re-reading — otherwise the list refreshes just too early
+        // and the lead looks like it stayed in New.
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(4_000)
+            loadLeads(force = true)
+        }
+    }
+
     /** Stops the take and ships it: upload → row → AI → refresh the list. */
-    fun finishVoiceNote() {
-        val contactId = _state.value.leadDetailId ?: run { cancelVoiceNote(); return }
+    fun finishVoiceNote(targetContactId: String? = null) {
+        val contactId = targetContactId ?: _state.value.leadDetailId ?: run { cancelVoiceNote(); return }
         val take = com.salesautocall.app.data.VoiceNoteRecorder.stop()
         set { it.copy(voiceRecording = false) }
         if (take == null) {
@@ -2405,7 +2447,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 set { st ->
                     st.copy(
                         voiceUploading = false,
-                        voiceNotes = listOf(note) + st.voiceNotes,
+                        // Only prepend when THIS lead's detail page is open — a note
+                        // recorded from the post-call sheet must not surface under
+                        // whatever lead happens to be open.
+                        voiceNotes = if (st.leadDetailId == contactId) listOf(note) + st.voiceNotes else st.voiceNotes,
                         message = "🎤 Voice note saved — AI summary ban raha hai…",
                     )
                 }

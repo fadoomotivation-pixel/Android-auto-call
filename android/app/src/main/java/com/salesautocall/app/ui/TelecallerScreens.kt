@@ -1092,11 +1092,18 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         val due = fuOf(c)?.let { instantMillis(it.dueAt) } ?: return false
         return due > nowMs
     }
-    // "Today" = the day's action list. A lead belongs here when it was CALLED
-    // today (drains it out of New so New stays purely fresh), OR its follow-up is
-    // due TODAY (earlier-today still counts — it's today's work), OR its site
-    // visit is today. Done leads (booked/closed) never appear. Leads here ALSO
-    // still show in their real bucket — Today is a one-day cross-cut.
+    // "Today" = the day's action list. A lead belongs here when the rep RECORDED
+    // an outcome for it today (drains it out of New so New stays purely fresh),
+    // OR its follow-up is due TODAY (earlier-today still counts — it's today's
+    // work), OR its site visit is today. Done leads (booked/closed) never appear.
+    // Leads here ALSO still show in their real bucket — Today is a one-day
+    // cross-cut.
+    //
+    // Deliberately handled_at, NOT last_contacted_at. A call on its own proves
+    // nothing: a mis-tap dials, hangs up and stamps last_contacted_at, and the
+    // lead used to vanish from New with nothing written down. A lead moves only
+    // once the rep has said what happened — a funnel status, a voice note, a
+    // typed note or a booked callback (see migration 0101).
     //
     // Previous days' OVERDUE callbacks do NOT belong in Today — they were piling
     // up here (e.g. 15 stale callbacks turning a rep's Today into a 19-lead
@@ -1110,7 +1117,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     }
     fun inToday(c: Contact): Boolean =
         c.status !in closedSet && c.status != "booked" &&
-            (isToday(c.lastContactedAt) || dueToday(c) || isToday(c.siteVisitAt))
+            (isToday(c.handledAt) || dueToday(c) || isToday(c.siteVisitAt))
     val base = when {
         stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
@@ -2194,8 +2201,23 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(note, { note = it }, label = { Text("Quick note (optional)") },
+                    OutlinedTextField(note, { note = it }, label = { Text("Type karke batao (optional)") },
                         singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    // Third way to answer the prompt: just say it. Fastest of all
+                    // between two calls, and it counts exactly like a status pick.
+                    if (app.voiceRecording) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            DispoButton("⏹ Rok kar save karo", Green.copy(alpha = 0.16f), Green, Modifier.weight(1f)) {
+                                vm.finishPostCallVoiceNote()
+                            }
+                            DispoButton("Cancel", Slate.copy(alpha = 0.12f), Slate) { vm.cancelVoiceNote() }
+                        }
+                    } else {
+                        DispoButton("🎤 Bol kar batao", Indigo.copy(alpha = 0.12f), Indigo, Modifier.fillMaxWidth()) {
+                            vm.startVoiceNote()
+                        }
+                    }
                     Spacer(Modifier.height(12.dp))
                     Text(
                         if (connected) "How did the call go? (zaroori)" else "What happened?",
@@ -2259,10 +2281,12 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                 } else {
                     // A typed note or temperature is never thrown away — Skip
                     // becomes "Save & close" the moment something is captured.
+                    // Skipping is safe now: with nothing recorded the lead stays
+                    // in New, so a mis-tapped call can't lose it.
                     val hasContext = note.isNotBlank() || temp != null
                     TextButton(onClick = {
                         if (hasContext) vm.postCallSaveContext(temp, note) else vm.dismissPostCall()
-                    }) { Text(if (hasContext) "Save & close" else "Skip") }
+                    }) { Text(if (hasContext) "Save & close" else "Skip — New me hi rahegi") }
                 }
             }
         },
