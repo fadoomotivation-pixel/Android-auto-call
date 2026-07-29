@@ -1,0 +1,12 @@
+-- "Wrong person" did nothing.
+--
+-- The post-call sheet has always had a Wrong person button (someone else picked
+-- up — the lead itself is still unreached), and the app's calling-list rules and
+-- retry ladder both reference that status. It was never added to the enum, so
+-- every tap failed the update and the lead stayed exactly as it was. To the rep
+-- it looked like the app had simply ignored them.
+--
+-- Additive and safe: no existing row changes, and the status slots in beside
+-- 'busy' where it belongs — another "couldn't reach them" outcome that keeps the
+-- lead in the calling list.
+alter type public.contact_status add value if not exists 'wrong_person' after 'busy';

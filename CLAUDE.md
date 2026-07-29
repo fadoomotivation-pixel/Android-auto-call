@@ -31,6 +31,18 @@ migrations in `supabase/migrations/`).
 - Never commit secrets/tokens. Meta/CAPI tokens live in Supabase Vault
   (per-company `capi_token_secret_id` / `page_access_token_secret_id`).
 
+## Voice of the telecaller app
+- **Simple English, not Hindi.** Short everyday words a telecaller already knows
+  ("No answer", "Call back later", "Record voice note", "Stays in New"). Romanised
+  Hindi/Hinglish reads worse than plain English here, and heavy or formal Hindi
+  ("zaroori", "chuno", "rok kar save karo") is wrong — reps found it harder, not
+  easier. Keep sentences short; one line per idea.
+- **Every screen must explain itself.** Reps said the lead buckets "sometimes
+  don't make sense", so each tab carries a one-line description of what's in it.
+  Never leave a rule (why a lead moved, why a tab is empty) to be guessed.
+- This app exists to make a telecaller's day easier — if a screen needs
+  explaining twice, the screen is wrong, not the rep.
+
 ## Operational notes
 - **Floating AI Coach brain** (`rep-coach` fn): returns `{coaching, brief, tip}`
   and a `mode:"ask"` two-way Q&A (rep asks anything → grounded answer, saved to

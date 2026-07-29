@@ -33,6 +33,7 @@ export function Sidebar({
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/health" label="📶 Phone Health" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/pulse" label="🔔 Daily Pulse" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/xray" label="🩻 Sales X-Ray" />}
+        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/integrity" label="🛡 Integrity check" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/rag" label="🧠 RAG" />}
         <NavLink href="/dashboard/salespeople" label="Salespeople" />

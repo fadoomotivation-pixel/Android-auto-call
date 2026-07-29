@@ -73,6 +73,50 @@ export function WhatsAppSetup({
     <div className="card" style={{ display: "flex", flexDirection: "column", gap: 20, background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}>
       <strong style={{ fontSize: 16, letterSpacing: "0.5px", background: "linear-gradient(90deg, #25D366, #128C7E)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Connect your WhatsApp number (Meta Cloud API)</strong>
 
+      {/* The two walls every owner hits at Meta's end, before any of the fields
+          below matter. Both look like our bug and neither is; saying so here is
+          the difference between a 5-minute setup and a stuck afternoon. */}
+      <details style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 12, padding: "12px 14px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: 600, color: "#f59e0b", fontSize: 14 }}>
+          ⚠️ Number add karte waqt Meta pe error aa raha hai? Pehle ye padh lein
+        </summary>
+
+        <div style={{ marginTop: 12, fontSize: 13.5, lineHeight: 1.65, color: "var(--text)" }}>
+          <strong>1. &quot;This phone number is already registered to a WhatsApp account&quot;</strong>
+          <p style={{ margin: "4px 0 8px", color: "var(--muted)" }}>
+            Ye hamari CRM ka error nahi hai — Meta ka niyam hai. Ek number ek hi jagah reh sakta hai:
+            <strong> ya to WhatsApp / WhatsApp Business app me, ya Cloud API me</strong>. Dono me nahi. Wati jaise
+            providers pe bhi yahi niyam lagta hai; wo bas ise apne guided flow ke peeche chhupa dete hain.
+          </p>
+          <p style={{ margin: "0 0 4px", color: "var(--muted)" }}>Do raaste hain:</p>
+          <ul style={{ margin: "0 0 10px 18px", color: "var(--muted)" }}>
+            <li>
+              <strong style={{ color: "var(--text)" }}>Alag number lein (aasaan aur behtar)</strong> — jo number
+              phone pe chal raha hai use waise hi chalne dein, aur API ke liye ek naya number
+              (koi bhi SIM, ya landline) daal dein. Zyadatar companies yahi karti hain.
+            </li>
+            <li>
+              <strong style={{ color: "var(--text)" }}>Wahi number chahiye</strong> — to us phone me
+              WhatsApp Business app kholein → <em>Settings → Account → Delete my account</em> → number hata dein.
+              5 minute ruk kar Meta pe dobara try karein. <strong>Dhyan dein:</strong> isse us phone se wo
+              WhatsApp account aur uski chats chali jaayengi.
+            </li>
+          </ul>
+
+          <strong>2. App &quot;Live&quot; honi chahiye, warna message aayenge hi nahi</strong>
+          <p style={{ margin: "4px 0 0", color: "var(--muted)" }}>
+            Meta app agar <em>Development</em> mode me hai to sirf test webhook milte hain — customer ke asli
+            message kabhi nahi pahunchenge. Meta dashboard me upar app ko <strong>Live / Publish</strong> karna
+            zaroori hai. (Bhejna phir bhi chalta hai; aana band rehta hai.)
+          </p>
+
+          <p style={{ margin: "10px 0 0", color: "var(--muted)" }}>
+            Dono ho jaane ke baad neeche ke khaane bhar kar Save karein, phir upar <strong>🩺 Connection check</strong>
+            chala kar dekh lein ki sach me chal raha hai.
+          </p>
+        </div>
+      </details>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <label style={field}><span style={lbl}>Phone number ID</span>
           <input style={input} value={form.phone_number_id} onChange={(e) => set("phone_number_id", e.target.value)} placeholder="from Meta → WhatsApp → API setup" /></label>
