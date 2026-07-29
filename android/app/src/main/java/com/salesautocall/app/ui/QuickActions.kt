@@ -35,28 +35,18 @@ object QuickActions {
         }.onFailure { toast(context, "Couldn't start call") }
     }
 
-    /** Opens a WhatsApp chat with the number (digits only, country code kept). */
+    /** Opens a WhatsApp chat with the number, in whichever WhatsApp the rep chose. */
     fun whatsApp(context: Context, phone: String) {
-        val digits = phone.filter { it.isDigit() }
-        if (digits.isEmpty()) return
-        runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        }.onFailure { toast(context, "WhatsApp not available") }
+        if (!com.salesautocall.app.data.WhatsAppLauncher.open(context, phone)) {
+            toast(context, "WhatsApp not available")
+        }
     }
 
     /** Opens a WhatsApp chat with the number, pre-filling [text] (e.g. a content link). */
     fun whatsAppText(context: Context, phone: String, text: String) {
-        val digits = phone.filter { it.isDigit() }
-        if (digits.isEmpty()) return
-        runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits?text=${Uri.encode(text)}"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        }.onFailure { toast(context, "WhatsApp not available") }
+        if (!com.salesautocall.app.data.WhatsAppLauncher.open(context, phone, text)) {
+            toast(context, "WhatsApp not available")
+        }
     }
 
     fun copy(context: Context, phone: String) {

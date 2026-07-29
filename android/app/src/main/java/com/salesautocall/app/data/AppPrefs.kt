@@ -21,6 +21,15 @@ object AppPrefs {
     fun getIncomingEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_INCOMING, false)
     fun setIncomingEnabled(context: Context, v: Boolean) = prefs(context).edit().putBoolean(KEY_INCOMING, v).apply()
 
+    /**
+     * Which WhatsApp a message opens in. Some reps run plain WhatsApp, some the
+     * Business one, some both — and on a two-app phone Android otherwise asks
+     * every single time, which is a tap on every message all day. "" = ask each
+     * time (the system chooser), otherwise the chosen package.
+     */
+    fun getWhatsAppPkg(context: Context): String = prefs(context).getString("whatsapp_pkg", "") ?: ""
+    fun setWhatsAppPkg(context: Context, pkg: String) = prefs(context).edit().putString("whatsapp_pkg", pkg).apply()
+
     /** Whether we've already sent the rep to the OEM Autostart screen once. */
     fun getAutostartPrompted(context: Context): Boolean = prefs(context).getBoolean("autostart_prompted", false)
     fun setAutostartPrompted(context: Context, v: Boolean) = prefs(context).edit().putBoolean("autostart_prompted", v).apply()

@@ -206,7 +206,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
     fun doCall() = doCallNumber(contact.phone)
     fun doWhats() = openWhatsAppLocal(
         context, contact.phone,
-        waTemplateLocal(contact.name, contact.companyName, app.profile?.fullName, app.company?.name),
+        waTemplateLocal(contact.name, contact.companyName, app.profile?.fullName, app.company?.name, app.profile?.speaksAs),
     )
     fun copyNumber() {
         clipboard.setText(AnnotatedString(contact.phone))
@@ -1678,19 +1678,19 @@ private fun VoiceNoteRow(
 }
 
 private fun openWhatsAppLocal(context: android.content.Context, phone: String, message: String? = null) {
-    val num = phone.filter { it.isDigit() }.let { if (it.length == 10) "91$it" else it }
-    val base = "https://wa.me/$num"
-    val url = if (message.isNullOrBlank()) base else "$base?text=${android.net.Uri.encode(message)}"
-    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(intent) }
+    com.salesautocall.app.data.WhatsAppLauncher.open(context, phone, message)
 }
 
-private fun waTemplateLocal(name: String?, project: String?, agent: String?, company: String?): String {
+/** [speaksAs] conjugates the opener to the REP — Hindi inflects the first
+ *  person, so a fixed "kar raha hoon" was wrong for every woman on the team. */
+private fun waTemplateLocal(name: String?, project: String?, agent: String?, company: String?, speaksAs: String? = null): String {
+    val sv = com.salesautocall.app.data.SelfVoice
     val hi = name?.trim()?.takeIf { it.isNotBlank() }?.let { "Namaste $it ji," } ?: "Namaste,"
     val who = agent?.trim()?.ifBlank { null } ?: "aapka property advisor"
     val co = company?.trim()?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
     val ref = project?.trim()?.takeIf { it.isNotBlank() }?.let { " Aapne $it ke liye enquiry ki thi." } ?: " Aapki property enquiry ke regarding."
-    return "$hi main $who$co se baat kar raha hoon.$ref Property ki details aur best offer share karna chahta hoon — kya abhi baat kar sakte hain?"
+    return "$hi ${sv.iAm(speaksAs)} $who$co se baat ${sv.doing(speaksAs, "kar")}.$ref " +
+        "Property ki details aur best offer share karna ${sv.want(speaksAs)} — kya abhi baat kar sakte hain?"
 }
 
 /** A clean, professional site-visit confirmation for the buyer's WhatsApp. */

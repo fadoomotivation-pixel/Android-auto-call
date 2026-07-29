@@ -3,8 +3,9 @@ import type { Company, Profile, SalespersonStats } from "@/lib/types";
 import { CompanyPicker } from "../whatsapp/CompanyPicker";
 import { InviteCard } from "./InviteCard";
 import { MemberToggle } from "./MemberToggle";
+import { SpeaksAsPicker } from "./SpeaksAsPicker";
 
-type Member = Pick<Profile, "id" | "full_name" | "is_active">;
+type Member = Pick<Profile, "id" | "full_name" | "is_active"> & { speaks_as: string | null };
 
 function fmtDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -54,7 +55,7 @@ export default async function SalespeoplePage({
     companyId
       ? supabase
           .from("profiles")
-          .select("id, full_name, is_active")
+          .select("id, full_name, is_active, speaks_as")
           .eq("role", "salesperson")
           .eq("company_id", companyId)
           .returns<Member[]>()
@@ -64,6 +65,7 @@ export default async function SalespeoplePage({
   const rows = stats ?? [];
   const memberList = members ?? [];
   const activeById = new Map(memberList.map((m) => [m.id, m.is_active]));
+  const speaksById = new Map(memberList.map((m) => [m.id, m.speaks_as]));
 
   return (
     <>
@@ -90,6 +92,7 @@ export default async function SalespeoplePage({
               <th>No answer</th>
               <th>Talk time</th>
               <th>Last call</th>
+              <th title='Hindi conjugates the first person, so a message reads "kar rahi hoon" or "kar raha hoon" depending on WHO is writing it.'>Writes as</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -105,6 +108,7 @@ export default async function SalespeoplePage({
                   <td>{r.no_answer_calls}</td>
                   <td>{fmtDuration(r.total_talk_seconds)}</td>
                   <td>{r.last_call_at ? new Date(r.last_call_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
+                  <td><SpeaksAsPicker userId={r.salesperson_id} value={speaksById.get(r.salesperson_id) ?? null} /></td>
                   <td>
                     <span className={`badge ${active ? "connected" : "dnc"}`} style={{ marginRight: 8 }}>
                       {active ? "active" : "inactive"}

@@ -57,6 +57,9 @@ data class Profile(
     @SerialName("sip_agent_id") val sipAgentId: String? = null,
     @SerialName("caller_id") val callerId: String? = null,
     val territory: String? = null,
+    /** How this rep refers to themselves in generated Hindi messages:
+     *  "f" = kar rahi hoon, "m" = kar raha hoon, null/"neutral" = kar rahe hain. */
+    @SerialName("speaks_as") val speaksAs: String? = null,
 )
 
 @Serializable

@@ -27,6 +27,9 @@ export interface Profile {
   caller_id: string | null;
   sip_server: string | null;
   sip_port: number | null;
+  /** How this rep refers to themselves in generated Hindi messages:
+   *  "f" = kar rahi hoon, "m" = kar raha hoon, null/"neutral" = kar rahe hain. */
+  speaks_as: string | null;
   created_at: string;
 }
 
