@@ -63,8 +63,13 @@ async function buildCompany(admin: SupabaseClient, companyId: string, date: stri
   const leadName = new Map((contacts ?? []).map((c) => [c.id, c.name || c.phone || "lead"]));
 
   const [calls, notes, acts, visits, fups, hot] = await Promise.all([
+    // started_at, not created_at: the phone's call-log sync backfills a week of
+    // history the first time it runs, and every one of those rows is created
+    // TODAY — which reported a whole week as one day's work. off_crm calls are
+    // the rep's own and never counted as work.
     admin.from("call_logs").select("salesperson_id, outcome, duration_seconds")
-      .eq("company_id", companyId).gte("created_at", start).lte("created_at", end),
+      .eq("company_id", companyId).gte("started_at", start).lte("started_at", end)
+      .or("off_crm.is.null,off_crm.eq.false"),
     admin.from("lead_voice_notes").select("actor_id, contact_id, summary, suggested_disposition")
       .eq("company_id", companyId).gte("created_at", start).lte("created_at", end),
     admin.from("lead_activities").select("actor_id, actor_name, contact_id, detail, type")

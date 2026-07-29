@@ -694,6 +694,21 @@ object Repository {
     }
 
     /** This salesperson's calls since local midnight (for the Today tracker). */
+    /**
+     * Today's WORK calls — the number on the home screen and the daily goal.
+     *
+     * Two things were wrong here. It filtered on created_at, which is when the
+     * row reached the database, not when the call happened: the phone's call-log
+     * sync backfills a week of history the first time it runs, so a rep who
+     * installed the app today saw that whole week counted as today. On a live
+     * phone that read "162 calls today" against 18 real ones.
+     *
+     * And it counted off-CRM calls — the rep's own calls to numbers that aren't
+     * leads. The Calls tab hides those, so the count never matched the list
+     * underneath it.
+     *
+     * So: filter by when the call actually STARTED, and count only lead calls.
+     */
     suspend fun fetchTodayCalls(): List<CallLog> {
         val uid = currentUserId() ?: return emptyList()
         val start = java.time.LocalDate.now()
@@ -702,9 +717,9 @@ object Repository {
         return client.from("call_logs").select {
             filter {
                 eq("salesperson_id", uid)
-                gte("created_at", start)
+                gte("started_at", start)
             }
-        }.decodeList<CallLog>()
+        }.decodeList<CallLog>().filter { !it.offCrm }
     }
 
     /** This salesperson's calls since [sinceIso] (null = no lower bound). Newest first. */
