@@ -187,6 +187,42 @@ fun AppRoot(vm: MainViewModel) {
     }
 }
 
+/**
+ * The update, out of the way. Sits above the bottom bar, shows how far the
+ * download has got, and taps back open — so "an update is running" is visible
+ * without being in the way of the next call.
+ */
+@Composable
+private fun MinimizedUpdateChip(progress: Float, onExpand: () -> Unit) {
+    val pct = (progress * 100).toInt().coerceIn(0, 100)
+    Box(Modifier.fillMaxSize().padding(bottom = 96.dp), contentAlignment = Alignment.BottomCenter) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp,
+            modifier = Modifier.clickable { onExpand() },
+        ) {
+            Row(
+                Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CircularProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                )
+                Text(
+                    "Update $pct%",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+    }
+}
+
 /** A quick single-lead create sheet — the missing "Add Lead" action. */
 @Composable
 private fun AddLeadSheet(vm: MainViewModel) {
@@ -473,10 +509,28 @@ private fun MainShell(vm: MainViewModel) {
 
     // A newer build was published → offer a one-tap in-app update. Forced updates
     // can't be dismissed; once started, the prompt shows a downloading state.
+    //
+    // The download begins on its own the moment an update is found, and it used
+    // to hold the whole screen until it finished — a rep mid-shift simply had to
+    // stop calling and watch a progress bar. It can now be pushed aside: the
+    // download carries on in the background and a small chip shows the progress,
+    // so the shift never pauses for a build.
     state.update?.let { rel ->
         val downloading = state.updateDownloading
+        if (state.updateMinimized) {
+            MinimizedUpdateChip(state.updateProgress) { vm.expandUpdate() }
+            return@let
+        }
         AlertDialog(
-            onDismissRequest = { if (!rel.forced && !downloading) vm.dismissUpdate() },
+            // While downloading, back / outside-tap tucks it away rather than
+            // doing nothing — including for a forced update, which still has to
+            // be installed, just not stared at.
+            onDismissRequest = {
+                when {
+                    downloading -> vm.minimizeUpdate()
+                    !rel.forced -> vm.dismissUpdate()
+                }
+            },
             title = { Text(if (rel.forced) "🔒 Update required" else "🚀 Update available") },
             text = {
                 Column {
@@ -502,7 +556,10 @@ private fun MainShell(vm: MainViewModel) {
                 }
             },
             confirmButton = {
-                if (!downloading) {
+                if (downloading) {
+                    // The one thing a rep on a shift actually needs here.
+                    TextButton(onClick = { vm.minimizeUpdate() }) { Text("Chhota karo — kaam karne do") }
+                } else {
                     TextButton(onClick = { vm.installUpdate() }) { Text("Update now") }
                 }
             },

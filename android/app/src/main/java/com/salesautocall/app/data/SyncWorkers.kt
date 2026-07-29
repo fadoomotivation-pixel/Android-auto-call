@@ -61,10 +61,19 @@ object SyncWorkers {
     /**
      * Fire an IMMEDIATE one-off sync — call this the moment a call ends so the
      * log (and its recording, once the phone finishes writing the file) reaches
-     * the CRM in seconds instead of waiting for the next 15-min window. Expedited
-     * so the OS runs it right away; REPLACE so rapid back-to-back calls coalesce.
+     * the CRM in seconds instead of waiting for the next 15-min window. REPLACE so
+     * rapid back-to-back calls coalesce.
+     *
+     * Wrapped so it can NEVER take the app down: this runs while a call is being
+     * torn down, and the periodic 15-minute workers are the safety net anyway. A
+     * missed nudge costs minutes of freshness; a throw here killed the app on
+     * every single manual call.
      */
     fun syncNow(context: Context) {
+        runCatching { enqueueNow(context) }
+    }
+
+    private fun enqueueNow(context: Context) {
         val wm = WorkManager.getInstance(context)
         val net = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
@@ -74,10 +83,14 @@ object SyncWorkers {
             .build()
         wm.enqueueUniqueWork("CallLogSyncNow", ExistingWorkPolicy.REPLACE, logNow)
 
+        // NOT expedited: WorkManager rejects an expedited request that also carries
+        // a delay ("Expedited jobs cannot be delayed") and throws from build(),
+        // which crashed the app on every manual SIM call. The delay is the point
+        // here — the phone's recorder needs a moment to finish writing the file —
+        // so this one runs as ordinary work.
         val recNow = OneTimeWorkRequestBuilder<RecordingSyncWorker>()
             .setConstraints(net)
-            .setInitialDelay(20, TimeUnit.SECONDS) // let the phone finish writing the recording file
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .setInitialDelay(20, TimeUnit.SECONDS)
             .build()
         wm.enqueueUniqueWork("RecordingSyncNow", ExistingWorkPolicy.REPLACE, recNow)
     }

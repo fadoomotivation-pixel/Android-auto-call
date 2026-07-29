@@ -117,8 +117,12 @@ data class Contact(
     @SerialName("site_visit_verified") val siteVisitVerified: Boolean? = null,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("assigned_at") val assignedAt: String? = null,
-    /** When this lead was last CALLED (any direction) — drives the "Today" view. */
+    /** When this lead was last CALLED (any direction). A call alone is not work:
+     *  a mis-tap stamps this too, which is why it no longer moves a lead. */
     @SerialName("last_contacted_at") val lastContactedAt: String? = null,
+    /** When the rep actually RECORDED an outcome — a funnel status, a voice note,
+     *  a typed note or a booked callback. This is what moves a lead out of New. */
+    @SerialName("handled_at") val handledAt: String? = null,
 )
 
 /** A company project's pinned location, used to geo-fence site-visit arrivals. */
