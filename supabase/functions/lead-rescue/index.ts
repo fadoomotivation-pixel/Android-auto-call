@@ -6,7 +6,8 @@
 // It does NOT take the lead away from anyone. Ownership is untouched — no
 // reassignment, no reshuffling, no commission fights. Instead, when a lead has
 // waited past the company's limit, it sends ONE short holding reply on WhatsApp
-// IN THE REP'S NAME ("main <rep> bol raha hoon, thodi der me call karta hoon"),
+// IN THE REP'S NAME ("main <rep> hoon, thodi der me call karke details bataungi/
+// bataunga/batayenge" — conjugated to that rep, never assumed masculine),
 // so the buyer knows they were heard and stops shopping around. The rep still
 // owns and still calls; the clock just stops killing the lead.
 //
@@ -87,12 +88,20 @@ Deno.serve(async (req) => {
 
       // The reply goes out in the REP'S name — the lead stays theirs.
       let repName = "";
+      let speaksAs: string | null = null;
       if (c.salesperson_id) {
-        const { data: p } = await admin.from("profiles").select("full_name").eq("id", c.salesperson_id).maybeSingle();
+        const { data: p } = await admin.from("profiles")
+          .select("full_name, speaks_as").eq("id", c.salesperson_id).maybeSingle();
         repName = (p?.full_name as string)?.trim() ?? "";
+        speaksAs = (p?.speaks_as as string) ?? null;
       }
+      // Hindi inflects the first person, so this line has to know who is
+      // "speaking". It used to be hard-coded masculine ("bataunga"), which was
+      // wrong for most of the reps it was sent on behalf of. Unset stays on the
+      // neutral plural rather than guessing from a name.
+      const willTell = speaksAs === "f" ? "bataungi" : speaksAs === "m" ? "bataunga" : "batayenge";
       const hi = c.name ? `${String(c.name).split(" ")[0]} ji` : "Namaste";
-      const text = `${hi}, aapki enquiry mil gayi hai — dhanyavaad! ${repName ? `Main ${repName} hoon` : "Hamari team"} aur thodi hi der me aapko call karke poori details bataunga. Tab tak koi sawaal ho to yahin reply kar dijiye. 🙏`;
+      const text = `${hi}, aapki enquiry mil gayi hai — dhanyavaad! ${repName ? `Main ${repName} hoon` : "Hamari team"} aur thodi hi der me aapko call karke poori details ${willTell}. Tab tak koi sawaal ho to yahin reply kar dijiye. 🙏`;
 
       if (dry_run) {
         done.push({ contact: c.id, waited_min: waited, would_send: canSend, text });

@@ -23,12 +23,14 @@ import androidx.compose.foundation.layout.width
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Flag
@@ -111,14 +113,9 @@ private fun shareText(context: android.content.Context, text: String) {
     }
 }
 
-/** Opens a WhatsApp chat with the given number (falls back to wa.me in a browser). */
+/** Opens a WhatsApp chat with the given number, in the rep's chosen WhatsApp. */
 private fun openWhatsApp(context: android.content.Context, phone: String) {
-    val digits = phone.filter { it.isDigit() }
-    val intent = android.content.Intent(
-        android.content.Intent.ACTION_VIEW,
-        android.net.Uri.parse("https://wa.me/$digits"),
-    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(intent) }
+    com.salesautocall.app.data.WhatsAppLauncher.open(context, phone)
 }
 
 // ============================================================
@@ -315,6 +312,102 @@ private fun JoinCompanyCard(vm: MainViewModel, app: AppState) {
             }
             app.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             app.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+    }
+}
+
+/**
+ * Two things the rep — and only the rep — can get right about their own
+ * messages: which WhatsApp they go out from, and how they refer to themselves.
+ *
+ * Both were fixed defaults before. Reps with WhatsApp AND WhatsApp Business were
+ * asked which to use on every single message, and the ready-made openers all
+ * said "kar raha hoon" — the male form — which is wrong for most of the team.
+ * Neither is guessable, so both are asked here once and remembered.
+ */
+@Composable
+private fun MessagingCard(vm: MainViewModel, app: AppState) {
+    val context = LocalContext.current
+    val launcher = com.salesautocall.app.data.WhatsAppLauncher
+    val sv = com.salesautocall.app.data.SelfVoice
+    val installed = remember { launcher.installed(context) }
+    var pkg by remember { mutableStateOf(com.salesautocall.app.data.AppPrefs.getWhatsAppPkg(context)) }
+    val speaks = app.profile?.speaksAs
+
+    PaperCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            SettingHeader(Icons.Default.Chat, "Messages", "Kis WhatsApp se, aur aap apne aap ko kaise likhein")
+
+            // ---- which WhatsApp ----
+            if (installed.size > 1) {
+                Spacer(Modifier.height(14.dp))
+                Text("WhatsApp", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(6.dp))
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    (installed + com.salesautocall.app.data.WhatsAppLauncher.Option("", "Har baar poochho"))
+                        .forEach { opt ->
+                            val on = pkg == opt.pkg
+                            Box(
+                                Modifier.clip(RoundedCornerShape(50))
+                                    .background(
+                                        if (on) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.surfaceVariant,
+                                    )
+                                    .clickable {
+                                        pkg = opt.pkg
+                                        com.salesautocall.app.data.AppPrefs.setWhatsAppPkg(context, opt.pkg)
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                            ) {
+                                Text(
+                                    opt.label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (on) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                }
+            } else if (installed.size == 1) {
+                Spacer(Modifier.height(10.dp))
+                Text("Messages ${installed.first().label} se jaayenge.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            // ---- how the rep speaks about themselves ----
+            Spacer(Modifier.height(18.dp))
+            Text("Message me aap apne aap ko kaise likhein", style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(sv.FEMALE, sv.MALE, sv.NEUTRAL).forEach { key ->
+                    val on = (speaks ?: sv.NEUTRAL) == key
+                    Box(
+                        Modifier.clip(RoundedCornerShape(50))
+                            .background(
+                                if (on) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                            .clickable { vm.setSpeaksAs(key) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            sv.label(key),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (on) MaterialTheme.colorScheme.onPrimary
+                            else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Ready templates aur AI ke likhe message isi hisaab se banenge.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -1075,6 +1168,9 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
 
         // Company: invite code (admin) or join/switch by code (everyone else).
         CompanyCard(vm, app)
+        Spacer(Modifier.height(16.dp))
+
+        MessagingCard(vm, app)
         Spacer(Modifier.height(16.dp))
 
         PaperCard(Modifier.fillMaxWidth()) {

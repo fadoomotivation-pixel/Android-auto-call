@@ -236,23 +236,21 @@ private val avatarColors = listOf(
 private fun colorFor(seed: String): Color = avatarColors[abs(seed.hashCode()) % avatarColors.size]
 
 private fun openWhatsApp(context: android.content.Context, phone: String, message: String? = null) {
-    val digits = phone.filter { it.isDigit() }.let { if (it.length == 10) "91$it" else it }
-    val base = "https://wa.me/$digits"
-    val url = if (message.isNullOrBlank()) base else "$base?text=${android.net.Uri.encode(message)}"
-    val intent = android.content.Intent(
-        android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url),
-    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(intent) }
+    com.salesautocall.app.data.WhatsAppLauncher.open(context, phone, message)
 }
 
-/** A ready-to-send Hinglish opener so the rep doesn't retype the same intro 100×/day. */
-private fun waTemplate(name: String?, project: String?, agent: String?, company: String?): String {
+/** A ready-to-send Hinglish opener so the rep doesn't retype the same intro 100×/day.
+ *  [speaksAs] conjugates it to the REP — Hindi inflects the first person, so a
+ *  fixed "kar raha hoon" was wrong for every woman on the team. */
+private fun waTemplate(name: String?, project: String?, agent: String?, company: String?, speaksAs: String? = null): String {
+    val sv = com.salesautocall.app.data.SelfVoice
     val hi = name?.trim()?.takeIf { it.isNotBlank() }?.let { "Namaste $it ji," } ?: "Namaste,"
     val who = agent?.trim()?.ifBlank { null } ?: "aapka property advisor"
     val co = company?.trim()?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
     val ref = project?.trim()?.takeIf { it.isNotBlank() }?.let { " Aapne $it ke liye enquiry ki thi." }
         ?: " Aapki property enquiry ke regarding."
-    return "$hi main $who$co se baat kar raha hoon.$ref Property ki details aur best offer share karna chahta hoon — kya abhi baat kar sakte hain?"
+    return "$hi ${sv.iAm(speaksAs)} $who$co se baat ${sv.doing(speaksAs, "kar")}.$ref " +
+        "Property ki details aur best offer share karna ${sv.want(speaksAs)} — kya abhi baat kar sakte hain?"
 }
 
 @Composable
@@ -2500,7 +2498,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 FollowUpCard(
                     f = f,
                     onCall = { vm.dialManual(f.phone) },
-                    onWhatsApp = { openWhatsApp(context, f.phone, waTemplate(f.name, null, app.profile?.fullName, app.company?.name)) },
+                    onWhatsApp = { openWhatsApp(context, f.phone, waTemplate(f.name, null, app.profile?.fullName, app.company?.name, app.profile?.speaksAs)) },
                     onSnooze = { f.id?.let { vm.snoozeFollowUp(it, 1) } },
                     onReschedule = { rescheduleFor = f },
                     onDone = { f.id?.let { vm.completeFollowUp(it) } },

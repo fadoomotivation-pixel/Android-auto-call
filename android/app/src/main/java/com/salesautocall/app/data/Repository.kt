@@ -575,7 +575,22 @@ object Repository {
      * RAG brain (company-isolated, Groq — no extra key), so it's a fresh single
      * shot, not part of the coach chat history. Returns the rebuttal, or null.
      */
-    suspend fun objectionRebuttal(contact: Contact, objection: String): String? {
+    /**
+     * Hindi inflects the first person, so anything the AI writes for the rep to
+     * say or send has to know who is speaking. Without this every draft came out
+     * masculine ("kar raha hoon", "bataunga") — wrong for most of the team. When
+     * the rep hasn't said, we ask for the neutral plural rather than guess.
+     */
+    private fun voiceRule(speaksAs: String?): String = when (speaksAs) {
+        SelfVoice.FEMALE ->
+            "The speaker is a WOMAN — use feminine first-person Hindi forms (kar rahi hoon, bataungi, chahti hoon). "
+        SelfVoice.MALE ->
+            "The speaker is a MAN — use masculine first-person Hindi forms (kar raha hoon, bataunga, chahta hoon). "
+        else ->
+            "Do NOT use gendered first-person Hindi verbs — use the neutral plural (kar rahe hain, batayenge, chahte hain). "
+    }
+
+    suspend fun objectionRebuttal(contact: Contact, objection: String, speaksAs: String? = null): String? {
         val prompt = buildString {
             append("On the call, the customer just objected: \"")
             append(objection.trim().take(300))
@@ -584,6 +599,7 @@ object Repository {
             append("(Roman script, how an Indian telecaller actually speaks). 2-3 short lines, ready to say out loud. ")
             append("Address the customer respectfully with 'aap' — never tu/tum. ")
             append("Ground it in our company's real facts (a price, an offer, a project USP, or a line from a call that closed) — ")
+            append(voiceRule(speaksAs))
             append("quote the fact if we have it; if we don't, give the best honest counter and tell me in one line what to confirm. ")
             append("Finish with one question that nudges the customer to the next step. No preamble — just the lines to say.")
         }
@@ -596,7 +612,7 @@ object Repository {
      * counter; the rebuttal is grounded in the company's own playbook (prices,
      * offers, closing lines). Returns the lines to say, or null.
      */
-    suspend fun coachRebuttal(objection: String): String? {
+    suspend fun coachRebuttal(objection: String, speaksAs: String? = null): String? {
         val prompt = buildString {
             append("On a live sales call, the customer just objected: \"")
             append(objection.trim().take(300))
@@ -605,6 +621,7 @@ object Repository {
             append("(Roman script, how an Indian telecaller actually speaks). 2-3 short lines, ready to say out loud. ")
             append("Address the customer respectfully with 'aap' — never tu/tum. ")
             append("Ground it in our company's real facts (a price, an offer, a project USP, or a line from a call that closed) — ")
+            append(voiceRule(speaksAs))
             append("quote the fact if we have it; if we don't, give the best honest counter. ")
             append("Finish with one question that nudges the customer to the next step. No preamble — just the lines to say.")
         }
@@ -618,7 +635,7 @@ object Repository {
      * assistant-chat RAG brain (company-isolated, Groq — no extra key). Returns
      * the message text, or null.
      */
-    suspend fun draftFollowUp(contact: Contact, purpose: String = "follow_up"): String? {
+    suspend fun draftFollowUp(contact: Contact, purpose: String = "follow_up", speaksAs: String? = null): String? {
         // RAG v14 — WhatsApp Smart Templates. Each purpose steers the same
         // company-grounded brain to a different ready-to-send message.
         val goal = when (purpose) {
@@ -633,6 +650,7 @@ object Repository {
             append("Write a short, ready-to-send WhatsApp message to this lead. Purpose: ").append(goal).append(".\n")
             append("Warm and professional Hinglish (Roman script, the way an Indian property advisor actually writes on WhatsApp). ")
             append("Address the customer respectfully with 'aap' — never tu/tum. Keep it to 2-4 short lines, WhatsApp-friendly (one or two emojis are fine). ")
+            append(voiceRule(speaksAs))
             append("Ground it in our company's real facts (a price, an offer, a project USP, or the next step) — ")
             append("quote a real fact if we have it; never invent a price. ")
             append("End by nudging one clear next step. No preamble — just the message to send.")
@@ -958,6 +976,14 @@ object Repository {
     suspend fun updateMyPhone(phone: String) {
         val uid = currentUserId() ?: return
         client.from("profiles").update(buildJsonObject { put("phone", phone.trim()) }) {
+            filter { eq("id", uid) }
+        }
+    }
+
+    /** Saves how this rep refers to themselves in generated Hindi messages. */
+    suspend fun updateSpeaksAs(value: String) {
+        val uid = currentUserId() ?: return
+        client.from("profiles").update(buildJsonObject { put("speaks_as", value) }) {
             filter { eq("id", uid) }
         }
     }

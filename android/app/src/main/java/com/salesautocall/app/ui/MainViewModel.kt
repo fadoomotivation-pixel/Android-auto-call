@@ -426,6 +426,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Saves how the rep refers to themselves in generated Hindi messages. */
+    fun setSpeaksAs(value: String) {
+        set { st -> st.copy(profile = st.profile?.copy(speaksAs = value)) }
+        viewModelScope.launch { runCatching { Repository.updateSpeaksAs(value) } }
+    }
+
     fun dismissUpdate() = set { it.copy(update = null, updateDownloading = false, updateProgress = 0f, updateMinimized = false) }
 
     /** Push the update prompt aside. The download keeps running in viewModelScope,
@@ -1728,7 +1734,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (q.isBlank() || _state.value.coachRebuttalLoading) return
         set { it.copy(coachRebuttalLoading = true, coachRebuttal = null) }
         viewModelScope.launch {
-            val reply = runCatching { Repository.coachRebuttal(q) }.getOrNull()
+            val reply = runCatching { Repository.coachRebuttal(q, _state.value.profile?.speaksAs) }.getOrNull()
             // A failure never lands in the result field — the rep must not read an
             // error as "the line to say".
             set { it.copy(coachRebuttal = reply, coachRebuttalLoading = false) }
@@ -2239,7 +2245,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (q.isBlank() || _state.value.rebuttalLoading) return
         set { it.copy(rebuttalLoading = true, rebuttal = null, coachError = null) }
         viewModelScope.launch {
-            val reply = runCatching { Repository.objectionRebuttal(contact, q) }.getOrNull()
+            val reply = runCatching { Repository.objectionRebuttal(contact, q, _state.value.profile?.speaksAs) }.getOrNull()
             set {
                 // A failure NEVER lands in the result field — the rep must not be
                 // able to copy an error message as "the line to say".
@@ -2263,7 +2269,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_state.value.messageDraftLoading) return
         set { it.copy(messageDraftLoading = true, messageDraft = null, coachError = null) }
         viewModelScope.launch {
-            val reply = runCatching { Repository.draftFollowUp(contact, purpose) }.getOrNull()
+            val reply = runCatching { Repository.draftFollowUp(contact, purpose, _state.value.profile?.speaksAs) }.getOrNull()
             set {
                 // A failure NEVER becomes the draft — otherwise the error text
                 // shows under "READY TO SEND" and could be WhatsApp'd verbatim.
