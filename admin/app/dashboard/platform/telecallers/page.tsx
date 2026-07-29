@@ -3,6 +3,7 @@ import type { TelecallerOverview } from "@/lib/types";
 import Link from "next/link";
 import { AssignCompany } from "./AssignCompany";
 import TelecallerRowActions from "./TelecallerRowActions";
+import { SpeaksAsPicker } from "../../salespeople/SpeaksAsPicker";
 
 export default async function PlatformTelecallersPage() {
   const supabase = await createClient();
@@ -17,17 +18,21 @@ export default async function PlatformTelecallersPage() {
     .maybeSingle();
   if (!pa) return <div className="empty">Not authorized — super admin only.</div>;
 
-  const [{ data, error }, { data: companies }] = await Promise.all([
+  // speaks_as lives on the profile, not on the overview view, so it is read
+  // alongside rather than by widening the view.
+  const [{ data, error }, { data: companies }, { data: voices }] = await Promise.all([
     supabase
       .from("v_telecaller_overview")
       .select("*")
       .order("calls", { ascending: false })
       .returns<TelecallerOverview[]>(),
     supabase.from("companies").select("id, name").order("name", { ascending: true }),
+    supabase.from("profiles").select("id, speaks_as").returns<{ id: string; speaks_as: string | null }[]>(),
   ]);
 
   const rows = data ?? [];
   const companyList = companies ?? [];
+  const speaksById = new Map((voices ?? []).map((v) => [v.id, v.speaks_as]));
 
   return (
     <>
@@ -57,6 +62,7 @@ export default async function PlatformTelecallersPage() {
               <th>Calls</th>
               <th>Connected</th>
               <th>Last call</th>
+              <th title='Hindi conjugates the first person, so a message reads "kar rahi hoon" or "kar raha hoon" depending on WHO is writing it.'>Writes as</th>
               <th>Status</th>
               <th style={{ textAlign: "right" }}>Manage</th>
             </tr>
@@ -78,6 +84,7 @@ export default async function PlatformTelecallersPage() {
                 <td>{t.calls}</td>
                 <td>{t.connected}</td>
                 <td>{t.last_call_at ? new Date(t.last_call_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
+                <td><SpeaksAsPicker userId={t.salesperson_id} value={speaksById.get(t.salesperson_id) ?? null} /></td>
                 <td>
                   <span className={`badge ${t.is_active ? "connected" : "dnc"}`}>
                     {t.is_active ? "active" : "inactive"}

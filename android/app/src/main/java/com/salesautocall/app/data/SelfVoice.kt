@@ -45,8 +45,8 @@ object SelfVoice {
 
     /** Label for the Settings picker. */
     fun label(speaksAs: String?): String = when (speaksAs) {
-        FEMALE -> "Mahila — \"kar rahi hoon\""
-        MALE -> "Purush — \"kar raha hoon\""
+        FEMALE -> "Female — \"kar rahi hoon\""
+        MALE -> "Male — \"kar raha hoon\""
         else -> "Neutral — \"kar rahe hain\""
     }
 }
