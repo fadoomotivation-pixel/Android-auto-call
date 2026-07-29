@@ -1083,7 +1083,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // The graveyard is still data: reps need to SEE their lost/not-interested
     // leads (to revive one, check history, or answer "kya bola tha?"), they just
     // must never clutter the working lists.
-    val closedSet = setOf("lost", "not_interested", "dnc")
+    // "invalid" belonged to no bucket at all, so a lead marked invalid vanished
+    // from every tab except All — it looked deleted. It is a dead lead; it lives
+    // with the other dead ones.
+    val closedSet = setOf("lost", "not_interested", "dnc", "invalid")
     val nowMs = System.currentTimeMillis()
     fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
     fun sleeping(c: Contact): Boolean {
@@ -1180,7 +1183,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         app = app,
                         dueNow = dueNow,
                         hotCount = hotCount,
-                        newCount = app.leads.count { it.status in newSet && !sleeping(it) },
+                        // Same rule as the New tab below. These two used to disagree
+                        // (the card counted leads the tab had already drained into
+                        // Today), so the summary said 12 New and the tab showed 8.
+                        newCount = app.leads.count { it.status in newSet && !sleeping(it) && !inToday(it) },
                         pipelineValue = pipelineValue,
                         scoring = app.aiScoringLeads,
                         reviveCount = reviveCount,
@@ -1255,6 +1261,29 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             bucket = key; stageFilter = null; quick = null
                         }
                     }
+                }
+            }
+            // Reps kept asking what each tab actually holds — "New" contains
+            // no-answers, "Today" deliberately repeats leads that also sit in
+            // another tab, and a lead with a future callback silently moves to
+            // Working. None of that is guessable, so the list says it in one
+            // plain line instead of leaving people to work it out.
+            if (stageFilter == null && quick == null) {
+                val hint = when (bucket) {
+                    "new" -> "Not called yet — plus no answer and busy. Start here."
+                    "today" -> "Today's work: callbacks due today, site visits today, and leads you already handled today. These also stay in their own tab."
+                    "working" -> "You talked to them, deal is on. Also leads waiting for a callback on a later day."
+                    "pipeline" -> "Site visit, negotiating or token paid."
+                    "booked" -> "Deal done."
+                    "closed" -> "Not interested, lost, or do not call."
+                    else -> "Every lead assigned to you."
+                }
+                item {
+                    Text(
+                        hint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             // One quiet line teaching the two gestures that make the list fast.
@@ -2199,53 +2228,76 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(note, { note = it }, label = { Text("Type karke batao (optional)") },
+                    OutlinedTextField(note, { note = it }, label = { Text("Add a note (optional)") },
                         singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                     // Third way to answer the prompt: just say it. Fastest of all
                     // between two calls, and it counts exactly like a status pick.
                     if (app.voiceRecording) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            DispoButton("⏹ Rok kar save karo", Green.copy(alpha = 0.16f), Green, Modifier.weight(1f)) {
+                            DispoButton("⏹  Stop & save", Green.copy(alpha = 0.16f), Green, Modifier.weight(1f)) {
                                 vm.finishPostCallVoiceNote()
                             }
-                            DispoButton("Cancel", Slate.copy(alpha = 0.12f), Slate) { vm.cancelVoiceNote() }
+                            DispoButton("Cancel", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { vm.cancelVoiceNote() }
                         }
                     } else {
-                        DispoButton("🎤 Bol kar batao", Indigo.copy(alpha = 0.12f), Indigo, Modifier.fillMaxWidth()) {
+                        DispoButton("🎤  Record voice note", Indigo.copy(alpha = 0.12f), Indigo, Modifier.fillMaxWidth()) {
                             vm.startVoiceNote()
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
+
+                    Spacer(Modifier.height(14.dp))
+                    // Two different questions, never both at once. A call that never
+                    // connected has no funnel stage to pick — offering "Booked" there
+                    // is what made this screen a wall of buttons nobody read. The app
+                    // already knows whether the call connected, so it asks the one
+                    // question that applies and shows only those answers.
                     Text(
-                        if (connected) "How did the call go? (zaroori)" else "What happened?",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (connected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        if (connected) "Where is this lead now?" else "Why didn't it connect?",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DispoButton("No Answer", Red.copy(alpha = 0.12f), Red, Modifier.weight(1f)) { dispose("no_answer") }
-                        DispoButton("Busy", Amber.copy(alpha = 0.12f), Amber, Modifier.weight(1f)) { dispose("busy") }
+                    Text(
+                        if (connected) "Pick the stage — this moves the lead in your funnel."
+                        else "Pick a reason — the lead stays in your calling list.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+
+                    // Every button the same size, two to a row: nothing wraps, nothing
+                    // looks bigger than anything else.
+                    val choices: List<Triple<String, Color, () -> Unit>> = if (connected) {
+                        listOf(
+                            Triple("⭐  Interested", Green, { scheduleFor = "interested" }),
+                            Triple("↻  Call back later", Indigo, { scheduleFor = "callback" }),
+                            Triple("🏠  Site visit", Purple, { dispose("site_visit") }),
+                            Triple("🤝  Negotiating", Purple, { dispose("negotiation") }),
+                            Triple("💰  Token paid", Teal, { dispose("token_paid") }),
+                            Triple("✅  Booked", Teal, { dispose("booked") }),
+                            Triple("❌  Not interested", Slate, { dispose("not_interested") }),
+                            Triple("🚫  Do not call", Red, { dispose("dnc") }),
+                        )
+                    } else {
+                        listOf(
+                            Triple("📵  No answer", Red, { dispose("no_answer") }),
+                            Triple("⏳  Busy", Amber, { dispose("busy") }),
+                            Triple("📴  Switched off", Slate, { dispose("no_answer") }),
+                            Triple("🙅  Wrong person", Amber, { dispose("wrong_person") }),
+                            Triple("✖️  Wrong number", Red, { dispose("dnc") }),
+                            Triple("↻  Call back later", Indigo, { scheduleFor = "callback" }),
+                        )
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DispoButton("Switched off", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { dispose("no_answer") }
-                        // Kid / family member picked up — the LEAD is still unreached,
-                        // so it rides the same retry ladder as a no-answer.
-                        DispoButton("Wrong person", Amber.copy(alpha = 0.12f), Amber, Modifier.weight(1f)) { dispose("wrong_person") }
-                        DispoButton("Wrong number", Red.copy(alpha = 0.12f), Red, Modifier.weight(1f)) { dispose("dnc") }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DispoButton("Callback ↻", Indigo.copy(alpha = 0.12f), Indigo, Modifier.weight(1f)) { scheduleFor = "callback" }
-                        // Interested NEVER ends without a next touch — it opens the
-                        // schedule chips instead of silently closing the sheet.
-                        DispoButton("Interested ⭐", Green.copy(alpha = 0.12f), Green, Modifier.weight(1f)) { scheduleFor = "interested" }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DispoButton("Not Interested", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { dispose("not_interested") }
-                        DispoButton("Booked ✓", Teal.copy(alpha = 0.12f), Teal, Modifier.weight(1f)) { dispose("booked") }
+                    choices.chunked(2).forEach { pair ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            pair.forEach { (label, color, onTap) ->
+                                DispoButton(label, color.copy(alpha = 0.12f), color, Modifier.weight(1f), onTap)
+                            }
+                            // Keeps the last row's single button the same width as the rest.
+                            if (pair.size == 1) Spacer(Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.height(8.dp))
                     }
                 }
             } else {
@@ -2254,13 +2306,13 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                 // right status so an Interested lead stays "interested".
                 QuickScheduleChips(
                     who = who,
-                    headline = if (interested) "⭐ Interested — lock the next call" else "When should we remind you?",
+                    headline = if (interested) "⭐ Interested — when will you call again?" else "When should we remind you?",
                     onPick = { millis, n ->
                         vm.postCallScheduleFollowUp(millis, n ?: note.ifBlank { null }, temp, scheduleFor ?: "callback")
                     },
                     onBack = { scheduleFor = null },
                     onSkip = if (interested) ({ dispose("interested") }) else null,
-                    skipLabel = "Save interested without reminder",
+                    skipLabel = "Save without a reminder",
                 )
             }
         },
@@ -2271,7 +2323,7 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     // Connected call → no Skip. The lead must not stay "new";
                     // an outcome tap above is the only exit.
                     Text(
-                        "⚠ Ek outcome chuno",
+                        "⚠ Pick one option above",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 8.dp),
@@ -2284,7 +2336,7 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     val hasContext = note.isNotBlank() || temp != null
                     TextButton(onClick = {
                         if (hasContext) vm.postCallSaveContext(temp, note) else vm.dismissPostCall()
-                    }) { Text(if (hasContext) "Save & close" else "Skip — New me hi rahegi") }
+                    }) { Text(if (hasContext) "Save & close" else "Skip — stays in New") }
                 }
             }
         },
