@@ -41,7 +41,7 @@ type RepPulse = {
   calls: number;
   connected: number;
   talkSeconds: number;
-  voiceNotes: { summary: string | null; lead: string; disposition: string | null }[];
+  voiceNotes: { summary: string | null; lead: string; disposition: string | null; audioPath: string | null }[];
   moves: { detail: string; lead: string; byAi: boolean }[];
   siteVisits: string[];
   followUps: number;
@@ -70,7 +70,7 @@ async function buildCompany(admin: SupabaseClient, companyId: string, date: stri
     admin.from("call_logs").select("salesperson_id, outcome, duration_seconds")
       .eq("company_id", companyId).gte("started_at", start).lte("started_at", end)
       .or("off_crm.is.null,off_crm.eq.false"),
-    admin.from("lead_voice_notes").select("actor_id, contact_id, summary, suggested_disposition")
+    admin.from("lead_voice_notes").select("actor_id, contact_id, summary, suggested_disposition, audio_path")
       .eq("company_id", companyId).gte("created_at", start).lte("created_at", end),
     admin.from("lead_activities").select("actor_id, actor_name, contact_id, detail, type")
       .eq("company_id", companyId).gte("created_at", start).lte("created_at", end)
@@ -102,7 +102,10 @@ async function buildCompany(admin: SupabaseClient, companyId: string, date: stri
   }
   for (const n of notes.data ?? []) {
     const r = rep(n.actor_id); if (!r) continue;
-    r.voiceNotes.push({ summary: n.summary, lead: leadName.get(n.contact_id) ?? "lead", disposition: n.suggested_disposition });
+    r.voiceNotes.push({
+      summary: n.summary, lead: leadName.get(n.contact_id) ?? "lead",
+      disposition: n.suggested_disposition, audioPath: n.audio_path ?? null,
+    });
   }
   for (const a of acts.data ?? []) {
     const r = rep(a.actor_id); if (!r) continue;
@@ -129,7 +132,11 @@ async function buildCompany(admin: SupabaseClient, companyId: string, date: stri
         rep: p.name, calls: p.calls, connected: p.connected, talk: fmtDur(p.talkSeconds),
         site_visits: p.siteVisits, follow_ups: p.followUps, hot_leads: p.hotLeads,
         pipeline_moves: p.moves.slice(0, 12).map((m) => `${m.lead}: ${m.detail}${m.byAi ? " [AI]" : ""}`),
-        voice_note_summaries: p.voiceNotes.slice(0, 8).map((v) => `${v.lead}: ${v.summary ?? "(processing)"}`),
+        // Only notes that actually say something. Feeding "(processing)" or an
+        // empty note in is how filler lines ended up in a founder's WhatsApp.
+        voice_note_summaries: p.voiceNotes
+          .filter((v) => (v.summary ?? "").trim().length > 3 && !/^empty note$/i.test((v.summary ?? "").trim()))
+          .slice(0, 8).map((v) => `${v.lead}: ${v.summary}`),
       };
       const ch = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST", headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
@@ -138,10 +145,17 @@ async function buildCompany(admin: SupabaseClient, companyId: string, date: stri
           messages: [
             {
               role: "system",
-              content: "You brief a real-estate company owner on ONE telecaller's day. " +
-                "From the facts JSON write 2-3 crisp sentences (Hinglish ok, plain text, no " +
-                "markdown, no preamble): what they got done, the notable lead movements, and " +
-                "one honest flag or next step. Be specific with names and numbers.",
+              content: "You brief a real-estate company FOUNDER on ONE telecaller's day. " +
+                "This is forwarded as-is on WhatsApp, so every line has to earn its place.\n" +
+                "Write 2-3 short sentences. Simple English with the odd everyday Hindi word is " +
+                "fine; no formal Hindi, no markdown, no preamble, no sign-off.\n" +
+                "NEVER repeat the call/connected/talk-time numbers — they are already printed " +
+                "directly above your text, and repeating them is the first thing the owner " +
+                "deletes. Skip anything with no real content (an empty or unprocessed note is " +
+                "not news). Do not describe the same lead move twice.\n" +
+                "Spend the words on what a founder cannot see from the numbers: which deals " +
+                "actually moved and why, what is at risk, and the single most important next " +
+                "step — with the lead's name.",
             },
             { role: "user", content: JSON.stringify(facts) },
           ],
