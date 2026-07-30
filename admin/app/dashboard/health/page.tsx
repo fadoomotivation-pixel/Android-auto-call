@@ -31,8 +31,12 @@ export default async function HealthPage() {
     <>
       <h2>📶 Phone Health</h2>
       <p className="subtitle">
-        Har telecaller ka phone CRM ko sahi feed kar raha hai ya nahi. Agar incoming ya recording kam dikh rahi
-        hai, wajah aur exact fix yahan milega — phone settings ka, app update ka nahi.
+        <strong>Is each phone actually feeding the CRM?</strong> Outgoing calls always arrive; incoming,
+        missed and off-CRM calls only arrive if the phone&apos;s background sync is alive. When it isn&apos;t,
+        this names the phone and gives the exact settings fix — a phone change, not an app release.
+      </p>
+      <p className="subtitle" style={{ marginTop: -8, fontSize: 12.5 }}>
+        For what a rep actually did today see <a href="/dashboard/pulse" style={{ color: "var(--accent)" }}>Daily Pulse</a>.
       </p>
       <PhoneHealth isSuper={isSuper} />
     </>

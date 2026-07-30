@@ -33,9 +33,13 @@ export default async function XrayPage() {
     <>
       <h2>🩻 Sales X-Ray</h2>
       <p className="subtitle">
-        AI ne aapki saari call conversations ek saath padhi — deals kyun mar rahi hain, buyers kya
-        maang rahe hain, jeetne wali calls me kya common tha, aur kaunsi &quot;dead&quot; leads wapas
-        jeeti ja sakti hain. Refreshes itself every Monday morning.
+        <strong>Why deals die.</strong> AI reads every conversation together and finds the patterns —
+        what kills deals, what buyers keep asking for, what the winning calls had in common, and which
+        &quot;dead&quot; leads are still winnable. Refreshes every Monday.
+      </p>
+      <p className="subtitle" style={{ marginTop: -8, fontSize: 12.5 }}>
+        For one day&apos;s work per rep see <a href="/dashboard/pulse" style={{ color: "var(--accent)" }}>Daily Pulse</a>;
+        for how fast leads get called see <a href="/dashboard/velocity" style={{ color: "var(--accent)" }}>Sales Velocity</a>.
       </p>
       <XrayClient isSuper={isSuper} companies={companies ?? []} />
     </>

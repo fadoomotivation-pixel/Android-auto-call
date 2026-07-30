@@ -194,8 +194,17 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
               <strong style={{ color: "#fff", fontSize: 15 }}>🩸 Paid for, never called</strong>
               <p className="subtitle" style={{ margin: "2px 0 12px" }}>
                 Oldest untouched leads — every one of these cost money to acquire and has never had a single call.
-                {data.unassigned ? ` ${data.unassigned} lead${data.unassigned === 1 ? "" : "s"} in this window have no telecaller assigned at all.` : ""}
               </p>
+              {/* The unassigned ones are the SAME pool Lead Routing hands out.
+                  Saying so — and linking — stops this reading like a second,
+                  separate backlog to chase. */}
+              {!!data.unassigned && (
+                <p className="subtitle" style={{ margin: "-6px 0 12px" }}>
+                  <strong style={{ color: "#fca5a5" }}>{data.unassigned}</strong> of these have no telecaller at all.
+                  Those are the leads waiting in the pool —{" "}
+                  <a href="/dashboard/routing" style={{ color: "var(--accent)" }}>Lead Routing hands them out →</a>
+                </p>
+              )}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {(data.leak_list ?? []).map((l, i) => (
                   <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, padding: "7px 0", borderTop: i ? "1px solid rgba(255,255,255,0.05)" : undefined }}>

@@ -17,6 +17,8 @@ type Report = {
 };
 
 type Company = { id: string; name: string | null };
+/** One company's stored report, for the all-companies overview. */
+type Across = { companyId: string; name: string; report: Report; at: string };
 
 export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: boolean; companies?: Company[] }) {
   const [report, setReport] = useState<Report | null>(null);
@@ -24,7 +26,10 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Super admin picks whose X-Ray to read; regular admin is scoped by RLS.
-  const [companyId, setCompanyId] = useState<string>(isSuper ? (companies[0]?.id ?? "") : "");
+  // "" = every company at once — the platform owner runs several businesses and
+  // should not have to open each one to find which is bleeding.
+  const [companyId, setCompanyId] = useState<string>("");
+  const [across, setAcross] = useState<Across[] | null>(null);
 
   // Open instantly with the latest stored report (the Monday cron keeps it fresh).
   const loadStored = useCallback(async () => {
@@ -48,6 +53,35 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
   }, [isSuper, companyId]);
 
   useEffect(() => { loadStored(); }, [loadStored]);
+
+  // All-companies overview: read the reports the Monday cron already wrote —
+  // newest one per company. No second AI pass and no parallel analysis logic;
+  // it is the same sales_xray table the single-company view reads.
+  const loadAcross = useCallback(async () => {
+    if (!isSuper || companyId) { setAcross(null); return; }
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("sales_xray")
+      .select("company_id, report, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    const seen = new Set<string>();
+    const rows: Across[] = [];
+    for (const r of data ?? []) {
+      const cid = r.company_id as string;
+      if (seen.has(cid)) continue;
+      seen.add(cid);
+      rows.push({
+        companyId: cid,
+        name: companies.find((c) => c.id === cid)?.name ?? "Company",
+        report: r.report as Report,
+        at: r.created_at as string,
+      });
+    }
+    setAcross(rows);
+  }, [isSuper, companyId, companies]);
+
+  useEffect(() => { void loadAcross(); }, [loadAcross]);
 
   // Fresh scan on demand.
   async function regenerate() {
@@ -81,13 +115,15 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
             onChange={(e) => setCompanyId(e.target.value)}
             style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", minWidth: 200 }}
           >
-            {companies.length === 0 && <option value="">No companies</option>}
+            <option value="">🏢 All companies</option>
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
           </select>
         )}
-        <button className="primary" onClick={regenerate} disabled={busy} style={{ padding: "10px 18px" }}>
-          {busy ? "Scanning every conversation…" : "🔄 Run fresh X-Ray"}
-        </button>
+        {!(isSuper && !companyId) && (
+          <button className="primary" onClick={regenerate} disabled={busy} style={{ padding: "10px 18px" }}>
+            {busy ? "Scanning every conversation…" : "🔄 Run fresh X-Ray"}
+          </button>
+        )}
         {generatedAt && (
           <span className="subtitle" style={{ margin: 0 }}>
             Last scan: {new Date(generatedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
@@ -96,9 +132,51 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
         )}
       </div>
       {error && <div className="error" style={{ marginBottom: 16 }}>{error}</div>}
-      {!report && !error && <div className="empty">No X-Ray yet — run your first scan above.</div>}
 
-      {report && (
+      {/* Every company at once — which business is bleeding, without opening each. */}
+      {isSuper && !companyId && (
+        across === null ? <div className="empty">Loading every company&apos;s X-Ray…</div>
+        : across.length === 0 ? <div className="empty">No X-Ray stored yet. Pick a company above and run the first scan.</div>
+        : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 14 }}>
+            {across.map((a) => {
+              const top = (a.report.objections ?? [])[0];
+              const gold = (a.report.gold ?? []).length;
+              return (
+                <div key={a.companyId} className="card" style={{ padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                    <strong style={{ color: "#fff", fontSize: 15 }}>🏢 {a.name}</strong>
+                    <button className="link" onClick={() => setCompanyId(a.companyId)}>Open →</button>
+                  </div>
+                  {a.report.headline && (
+                    <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 8, lineHeight: 1.55 }}>
+                      {a.report.headline}
+                    </div>
+                  )}
+                  {top && (
+                    <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 10 }}>
+                      ☠️ Biggest deal killer: <strong style={{ color: "#fff" }}>{top.label}</strong> ({top.count} leads)
+                    </div>
+                  )}
+                  {gold > 0 && (
+                    <div style={{ fontSize: 13, color: "var(--good)", marginTop: 4 }}>
+                      💰 {gold} dead {gold === 1 ? "lead" : "leads"} the AI thinks are winnable
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10 }}>
+                    Scanned {new Date(a.at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {!isSuper && !report && !error && <div className="empty">No X-Ray yet — run your first scan above.</div>}
+      {isSuper && !!companyId && !report && !error && <div className="empty">No X-Ray for this company yet — run the first scan above.</div>}
+
+      {report && !(isSuper && !companyId) && (
         <>
           {report.headline && (
             <div className="card" style={{ marginBottom: 20, borderLeft: "3px solid var(--accent)" }}>
