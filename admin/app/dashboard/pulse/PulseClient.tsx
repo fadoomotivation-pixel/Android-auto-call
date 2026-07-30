@@ -9,7 +9,7 @@ type Rep = {
   calls: number;
   connected: number;
   talkSeconds: number;
-  voiceNotes: { summary: string | null; lead: string; disposition: string | null }[];
+  voiceNotes: { summary: string | null; lead: string; disposition: string | null; audioPath: string | null }[];
   moves: { detail: string; lead: string; byAi: boolean }[];
   siteVisits: string[];
   followUps: number;
@@ -30,6 +30,72 @@ function istToday(): string {
 function fmtDur(sec: number): string {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/**
+ * A voice note only belongs in a founder's update if it SAYS something. An
+ * unprocessed or empty one is the filler that had to be deleted by hand before
+ * forwarding.
+ */
+function realNotes(r: Rep) {
+  return r.voiceNotes.filter((v) => {
+    const t = (v.summary ?? "").trim();
+    return t.length > 3 && !/^empty note$/i.test(t) && !/^\(processing\)$/i.test(t);
+  });
+}
+
+/**
+ * Pipeline moves the AI made FROM a voice note are already described by that
+ * note's own line ("Sunil Yadav: not searching now ⚡ AI did: Marked cold"), so
+ * printing them again just made the report longer to read and to trim.
+ */
+function newsworthyMoves(r: Rep) {
+  return r.moves.filter((m) => !/\(from voice note\)/i.test(m.detail));
+}
+
+/**
+ * Plays one voice note. The bucket is private, so the URL is signed on demand
+ * and only when the owner actually asks to hear it — no signing a page full of
+ * notes nobody plays. Cross-company playback needs the super-admin storage
+ * policy from migration 0106; without it Supabase returns no URL and this says
+ * so instead of showing a dead player.
+ */
+function VoiceNotePlayer({ path }: { path: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function load() {
+    setBusy(true);
+    setErr(null);
+    const supabase = createClient();
+    const { data, error } = await supabase.storage.from("voice-notes").createSignedUrl(path, 3600);
+    setBusy(false);
+    if (error || !data?.signedUrl) {
+      setErr("Couldn't open this recording.");
+      return;
+    }
+    setUrl(data.signedUrl);
+  }
+
+  if (url) {
+    return <audio controls src={url} style={{ width: "100%", height: 34, marginTop: 4 }} />;
+  }
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button
+        onClick={load}
+        disabled={busy}
+        style={{
+          fontSize: 11.5, padding: "3px 10px", borderRadius: 999, cursor: busy ? "wait" : "pointer",
+          border: "1px solid rgba(139,92,246,0.45)", background: "rgba(139,92,246,0.12)", color: "#c4b5fd",
+        }}
+      >
+        {busy ? "Opening…" : "▶ Play voice note"}
+      </button>
+      {err && <span style={{ fontSize: 11.5, color: "var(--bad)", marginLeft: 8 }}>{err}</span>}
+    </div>
+  );
 }
 
 export function PulseClient({ isSuper }: { isSuper: boolean }) {
@@ -67,17 +133,18 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
         (r.hotLeads > 0 ? ` · 🔥 ${r.hotLeads} hot` : ""),
     );
     if (r.narrative) lines.push(`\n✨ ${r.narrative}`);
-    const notes = r.voiceNotes.filter((v) => v.summary);
+    const notes = realNotes(r);
     if (notes.length) {
       lines.push(`\n🎤 Voice notes:`);
       notes.forEach((v) => lines.push(`• ${v.lead}: ${v.summary}`));
     }
-    if (r.moves.length) {
+    const moves = newsworthyMoves(r);
+    if (moves.length) {
       lines.push(`\n🔄 Lead moves:`);
-      r.moves.forEach((m) => lines.push(`• ${m.lead}: ${m.detail}${m.byAi ? " (AI)" : ""}`));
+      moves.forEach((m) => lines.push(`• ${m.lead}: ${m.detail}${m.byAi ? " (AI)" : ""}`));
     }
     if (r.siteVisits.length) lines.push(`\n📍 Site visits: ${r.siteVisits.join(", ")}`);
-    if (!r.calls && !notes.length && !r.moves.length && !r.siteVisits.length) {
+    if (!r.calls && !notes.length && !moves.length && !r.siteVisits.length) {
       lines.push(`\nAaj koi activity nahi.`);
     }
     lines.push(`\n— via Call Pro AI`);
@@ -92,8 +159,8 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
       for (const r of c.reps) {
         lines.push(`\n• ${r.name} — ${r.calls} calls, ${r.connected} connected, ${fmtDur(r.talkSeconds)} talk`);
         if (r.narrative) lines.push(`  ${r.narrative}`);
-        r.voiceNotes.filter((v) => v.summary).slice(0, 3).forEach((v) => lines.push(`  🎤 ${v.lead}: ${v.summary}`));
-        r.moves.slice(0, 4).forEach((m) => lines.push(`  🔄 ${m.lead}: ${m.detail}`));
+        realNotes(r).slice(0, 3).forEach((v) => lines.push(`  🎤 ${v.lead}: ${v.summary}`));
+        newsworthyMoves(r).slice(0, 4).forEach((m) => lines.push(`  🔄 ${m.lead}: ${m.detail}`));
         if (r.siteVisits.length) lines.push(`  📍 Site visit: ${r.siteVisits.join(", ")}`);
       }
     }
@@ -196,15 +263,19 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                     </div>
                   )}
 
-                  {/* Voice-note summaries */}
-                  {r.voiceNotes.filter((v) => v.summary).slice(0, 3).map((v, i) => (
+                  {/* Voice notes — readable AND playable. The AI summary is a
+                      summary; when the owner wants to judge the call for
+                      themselves, the rep's own voice is the only real evidence. */}
+                  {realNotes(r).slice(0, 3).map((v, i) => (
                     <div key={i} style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
-                      🎤 <strong style={{ color: "var(--text)" }}>{v.lead}:</strong> {v.summary}
+                      <div>🎤 <strong style={{ color: "var(--text)" }}>{v.lead}:</strong> {v.summary}</div>
+                      {v.audioPath && <VoiceNotePlayer path={v.audioPath} />}
                     </div>
                   ))}
 
-                  {/* Pipeline moves */}
-                  {r.moves.slice(0, 5).map((m, i) => (
+                  {/* Pipeline moves (AI moves made from a voice note are already
+                      described by that note above, so they aren't repeated). */}
+                  {newsworthyMoves(r).slice(0, 5).map((m, i) => (
                     <div key={i} style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 4 }}>
                       {m.byAi ? "🤖" : "•"} <strong style={{ color: "var(--text)" }}>{m.lead}:</strong> {m.detail}
                     </div>
@@ -215,7 +286,7 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                     </div>
                   )}
 
-                  {idle && <div style={{ fontSize: 13, color: "var(--muted)" }}>Aaj koi activity nahi.</div>}
+                  {idle && <div style={{ fontSize: 13, color: "var(--muted)" }}>No activity today.</div>}
 
                   {/* Per-telecaller share — send THIS rep's day on its own. */}
                   <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
