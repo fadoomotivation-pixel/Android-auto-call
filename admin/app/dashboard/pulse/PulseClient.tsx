@@ -286,7 +286,17 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                     </div>
                   )}
 
-                  {idle && <div style={{ fontSize: 13, color: "var(--muted)" }}>No activity today.</div>}
+                  {/* Silence has two very different causes, and this page can't
+                      tell them apart: someone who didn't work, or a phone that
+                      stopped feeding the CRM. Phone Health knows which. */}
+                  {idle && (
+                    <div style={{ fontSize: 13, color: "var(--muted)" }}>
+                      No activity today.{" "}
+                      <a href="/dashboard/health" style={{ color: "var(--accent)" }}>
+                        Phone working? →
+                      </a>
+                    </div>
+                  )}
 
                   {/* Per-telecaller share — send THIS rep's day on its own. */}
                   <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>

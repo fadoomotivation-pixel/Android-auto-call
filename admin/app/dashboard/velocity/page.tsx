@@ -31,8 +31,12 @@ export default async function VelocityPage() {
     <>
       <h2>⚡ Sales Velocity</h2>
       <p className="subtitle">
-        Every lead you buy has a clock on it. This is how fast your team actually picks it up — and
-        what the delay is costing you in deals.
+        <strong>How fast does a lead get its first call?</strong> Every lead you buy has a clock on it.
+        This is how fast the team actually picks it up, and what the delay costs you in deals.
+      </p>
+      <p className="subtitle" style={{ marginTop: -8, fontSize: 12.5 }}>
+        This measures the delay. <a href="/dashboard/routing" style={{ color: "var(--accent)" }}>Lead Routing</a> is
+        where you change who gets the lead and when.
       </p>
       <VelocityBoard isSuper={isSuper} />
       <div style={{ marginTop: 18 }}>

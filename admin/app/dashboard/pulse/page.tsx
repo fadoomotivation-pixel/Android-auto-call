@@ -27,8 +27,13 @@ export default async function PulsePage() {
     <>
       <h2>🔔 Daily Pulse</h2>
       <p className="subtitle">
-        Aaj kiski pipeline me kya hua — har telecaller ka din ek nazar me, AI ke shabdon me. Calls,
-        voice notes, aur lead movements se auto-banta hai. Owner ko forward karne layak.
+        <strong>What each telecaller did today.</strong> Built from their calls, voice notes and lead
+        movements — short enough to forward to the owner as it is. Play any voice note to hear the rep
+        in their own words.
+      </p>
+      <p className="subtitle" style={{ marginTop: -8, fontSize: 12.5 }}>
+        A rep showing no activity may not be idle — <a href="/dashboard/health" style={{ color: "var(--accent)" }}>Phone Health</a> says
+        whether their phone is even reporting.
       </p>
       <PulseClient isSuper={isSuper} />
     </>

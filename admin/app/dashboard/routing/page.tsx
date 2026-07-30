@@ -31,8 +31,12 @@ export default async function RoutingPage() {
     <>
       <h2>🎯 Lead Routing</h2>
       <p className="subtitle">
-        Lead tabhi jaaye jab telecaller office se check-in kar le — ek lead ek banda, bari-bari. Jiske paas
-        pehle se bahut si bina chhui leads padi hon, uska number skip ho jaaye.
+        <strong>Who gets the next lead, and when.</strong> A lead can wait until the telecaller checks in
+        at the office — one lead each, in turn — and anyone already sitting on a pile of untouched leads
+        gets skipped.
+      </p>
+      <p className="subtitle" style={{ marginTop: -8, fontSize: 12.5 }}>
+        To see what the waiting is costing you, open <a href="/dashboard/velocity" style={{ color: "var(--accent)" }}>Sales Velocity</a>.
       </p>
       <RoutingBoard isSuper={isSuper} />
     </>
