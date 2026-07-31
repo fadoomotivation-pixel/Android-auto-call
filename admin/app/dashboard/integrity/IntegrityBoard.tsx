@@ -36,6 +36,13 @@ const FLAGS: Record<string, { title: string; why: string; innocent: string; acti
     action: "Recording sunein. Agar customer interested lag raha tha, to lead wapas khol dein.",
     tone: "#ef4444",
   },
+  callback_never_dialled: {
+    title: "Promise kiya callback, call hui hi nahi",
+    why: "Rep ne callback ka time diya, wo time 12 ghante se zyada nikal gaya, aur call log me us lead pe uske baad ek bhi call nahi hai. Ye call log se saabit hota hai — ismein 'bhool gaye' wala shak nahi hai.",
+    innocent: "Lead ne khud pehle call kar liya ho, ya rep ne apne personal number se ki ho (wo CRM me nahi aati).",
+    action: "Rep se poochhein ki in leads ka kya hua, aur aaj hi inhe list ke upar laga dein — customer intezaar kar raha hai.",
+    tone: "#ef4444",
+  },
   visit_unverified: {
     title: "Site visit likhi, GPS ne confirm nahi ki",
     why: "Visit CRM me darj hai par rep ki location project se match nahi hui.",
