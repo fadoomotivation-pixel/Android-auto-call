@@ -2422,7 +2422,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun finishPostCallVoiceNote() {
         val contactId = _state.value.postCallContactId ?: run { cancelVoiceNote(); return }
-        finishVoiceNote(contactId)
+        // A rejected take must leave the sheet open — the rep still has to
+        // answer the prompt, and closing it would look like the note was saved.
+        if (!finishVoiceNote(contactId)) return
         dismissPostCall()
         // handled_at is stamped when the note row lands, so give the upload a
         // moment before re-reading — otherwise the list refreshes just too early
@@ -2433,14 +2435,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Stops the take and ships it: upload → row → AI → refresh the list. */
-    fun finishVoiceNote(targetContactId: String? = null) {
-        val contactId = targetContactId ?: _state.value.leadDetailId ?: run { cancelVoiceNote(); return }
+    /**
+     * Stops the take and ships it: upload → row → AI → refresh the list.
+     * Returns false when nothing was saved, so callers can keep their UI open.
+     *
+     * The guard below is the backstop for the mis-tap the reps kept hitting: the
+     * Save button used to land exactly where the record button had been, so a
+     * second tap — the natural "did that register?" tap — ended the take after a
+     * second and a half. The buttons no longer overlap and Save stays locked for
+     * the first three seconds, but a take that somehow still comes in under the
+     * minimum is thrown away here rather than saved as a note nobody can use.
+     */
+    fun finishVoiceNote(targetContactId: String? = null): Boolean {
+        val contactId = targetContactId ?: _state.value.leadDetailId ?: run { cancelVoiceNote(); return false }
+        if (com.salesautocall.app.data.VoiceNoteRecorder.elapsedMs < com.salesautocall.app.data.VoiceNoteRecorder.MIN_MS) {
+            com.salesautocall.app.data.VoiceNoteRecorder.cancel()
+            set { it.copy(voiceRecording = false, message = "Too short to save — tap record and speak for a few seconds.") }
+            return false
+        }
         val take = com.salesautocall.app.data.VoiceNoteRecorder.stop()
         set { it.copy(voiceRecording = false) }
         if (take == null) {
             set { it.copy(error = "Nothing recorded — try again.") }
-            return
+            return false
         }
         val (file, seconds) = take
         viewModelScope.launch {
@@ -2470,12 +2487,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     set { if (it.leadDetailId == contactId) it.copy(voiceNotes = fresh) else it }
                     val mine = fresh.firstOrNull { it.id == note.id } ?: return@repeat
                     when (mine.aiStatus) {
-                        "ready", "failed" -> {
+                        "ready" -> {
                             refreshLeadDetail()
                             loadLeads(force = true)
                             loadFollowUps(force = true)
                             return@launch
                         }
+                        // "failed" deliberately falls through and keeps polling:
+                        // the server re-dispatches a failed note within a minute
+                        // and it almost always reads fine the second time, so
+                        // showing the rep a dead end would be a lie.
+                        //
                         // Still "pending" after 15s = the server trigger hiccuped; kick once.
                         "pending" -> if (!kicked && attempt >= 2) {
                             kicked = true
@@ -2490,6 +2512,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 set { it.copy(voiceUploading = false, error = "Couldn't save the voice note. Check internet and retry.") }
             }
         }
+        return true
     }
 
     /** Re-pulls notes (e.g. the "AI processing" one) for the open lead, and

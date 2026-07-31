@@ -2234,12 +2234,28 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     // Third way to answer the prompt: just say it. Fastest of all
                     // between two calls, and it counts exactly like a status pick.
                     if (app.voiceRecording) {
+                        // The stop button used to appear under the finger that had
+                        // just started the take, so a second tap saved a note a
+                        // second and a half long. It now counts up first, and
+                        // Cancel — not Stop — sits on the left where Record was.
+                        var secs by remember { mutableStateOf(0) }
+                        LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(1000); secs++ } }
+                        val canSave = secs >= 3
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            DispoButton("⏹  Stop & save", Green.copy(alpha = 0.16f), Green, Modifier.weight(1f)) {
-                                vm.finishPostCallVoiceNote()
-                            }
                             DispoButton("Cancel", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { vm.cancelVoiceNote() }
+                            DispoButton(
+                                if (canSave) "⏹  Stop & save" else "Recording…  ${3 - secs}",
+                                Green.copy(alpha = if (canSave) 0.16f else 0.06f),
+                                if (canSave) Green else Slate,
+                                Modifier.weight(1f),
+                            ) { if (canSave) vm.finishPostCallVoiceNote() }
                         }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Speak for a few seconds — say what the customer told you.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     } else {
                         DispoButton("🎤  Record voice note", Indigo.copy(alpha = 0.12f), Indigo, Modifier.fillMaxWidth()) {
                             vm.startVoiceNote()

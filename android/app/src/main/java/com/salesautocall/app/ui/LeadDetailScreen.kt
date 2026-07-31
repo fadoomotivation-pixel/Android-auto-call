@@ -1416,36 +1416,56 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
         Text("VOICE NOTE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SubInk, letterSpacing = 0.5.sp)
         Spacer(Modifier.height(10.dp))
         when {
-            recording -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(RedL))
-                Spacer(Modifier.width(10.dp))
-                Text("Recording…  %d:%02d".format(seconds / 60, seconds % 60), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = RedL)
-                Spacer(Modifier.weight(1f))
-                Text("Discard", color = SubInk, style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable { vm.cancelVoiceNote() }.padding(horizontal = 10.dp, vertical = 6.dp))
-                Spacer(Modifier.width(6.dp))
-                Box(Modifier.clip(RoundedCornerShape(50)).background(GreenL).clickable { vm.finishVoiceNote() }.padding(horizontal = 14.dp, vertical = 8.dp)) {
-                    Text("✓ Save", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            // Save stays locked until there is actually something to save. Reps
+            // were losing takes after ~1.5s: the old Save button sat exactly
+            // where the record button had been, so the second tap — the natural
+            // "did that register?" tap — ended the note before a word was in it.
+            recording -> Column {
+                val canSave = seconds >= 3
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(RedL))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Recording…  %d:%02d".format(seconds / 60, seconds % 60), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = RedL)
+                    Spacer(Modifier.weight(1f))
+                    Text("Discard", color = SubInk, style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).clickable { vm.cancelVoiceNote() }.padding(horizontal = 10.dp, vertical = 6.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        Modifier.clip(RoundedCornerShape(50))
+                            .background(if (canSave) GreenL else GreenL.copy(alpha = 0.25f))
+                            .clickable(enabled = canSave) { vm.finishVoiceNote() }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            if (canSave) "✓ Save" else "Save in ${3 - seconds}s",
+                            color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                        )
+                    }
                 }
+                Spacer(Modifier.height(8.dp))
+                Text("Keep speaking — say what the customer told you. Save turns on after 3 seconds.",
+                    style = MaterialTheme.typography.labelSmall, color = SubInk)
             }
             uploading -> Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(10.dp))
                 Text("Saving voice note…", style = MaterialTheme.typography.bodyMedium, color = Ink)
             }
-            else -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(44.dp).clip(CircleShape).background(IndigoL).clickable { vm.startVoiceNote() }, contentAlignment = Alignment.Center) {
+            // One target, the whole row — and nothing on the right edge. The old
+            // "▶" button lived there, looked like Play but started recording,
+            // and was replaced by Save the instant it was tapped.
+            else -> Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.startVoiceNote() },
+            ) {
+                Box(Modifier.size(44.dp).clip(CircleShape).background(IndigoL), contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Mic, "Record", tint = Color.White, modifier = Modifier.size(20.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Record voice note", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = IndigoL)
-                    Text("After the call, just speak what happened — AI writes the summary",
+                    Text("Tap and speak for a few seconds — AI writes the summary",
                         style = MaterialTheme.typography.labelSmall, color = SubInk, maxLines = 2)
-                }
-                Spacer(Modifier.width(10.dp))
-                Box(Modifier.size(40.dp).clip(CircleShape).background(IndigoL.copy(alpha = 0.10f)).clickable { vm.startVoiceNote() }, contentAlignment = Alignment.Center) {
-                    Text("▶", color = IndigoL, fontSize = 16.sp)
                 }
             }
         }
