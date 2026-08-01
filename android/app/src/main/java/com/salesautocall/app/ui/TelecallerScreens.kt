@@ -2429,38 +2429,50 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
     LaunchedEffect(Unit) { vm.loadFollowUps(); vm.loadLeads() }
 
-    var filter by remember { mutableStateOf("today") }
     var rescheduleFor by remember { mutableStateOf<FollowUp?>(null) }
     val now = System.currentTimeMillis()
     val all = app.followUpList
-    val due = all.filter { (instantMillis(it.dueAt) ?: Long.MAX_VALUE) <= now }
-    // Map due follow-ups to their lead rows so we can power-dial them back-to-back.
-    val dueContacts = due.mapNotNull { f -> app.leads.find { it.id == f.contactId } }
-    val todayList = all.filter { dayLabel(it.dueAt) == "Today" }
-    val morningList = todayList.filter { f ->
-        val ms = instantMillis(f.dueAt) ?: return@filter false
-        java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).hour < 13
-    }
-    val afternoonList = todayList.filter { f ->
-        val ms = instantMillis(f.dueAt) ?: return@filter false
-        java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).hour >= 13
-    }
-    val overdueStrict = all.filter {
-        val ms = instantMillis(it.dueAt) ?: Long.MAX_VALUE
-        ms < now && dayLabel(it.dueAt) != "Today"
-    }
+    fun at(f: FollowUp) = instantMillis(f.dueAt) ?: Long.MAX_VALUE
 
-    val weekList = all.filter {
-        val ms = instantMillis(it.dueAt) ?: return@filter false
-        ms <= now + 7L * 24 * 3600_000L
+    // ONE list for "what do I call now": every callback whose time has come,
+    // whether it fell due an hour ago or last Tuesday. Oldest first, because
+    // the customer who has waited longest is the one to ring first.
+    //
+    // Splitting these apart is what confused the reps. The screen used to open
+    // on "Today", and "Today" meant only callbacks dated today — so a rep with
+    // nothing dated today but twenty-four waiting from last week opened Follow
+    // Ups and saw an EMPTY LIST. Four of the five reps were in exactly that
+    // state. Nobody trusts a screen that shows nothing while work is piling up.
+    val toCall = all.filter { at(it) <= now }.sortedBy { at(it) }
+    // Map them to lead rows so we can power-dial back-to-back.
+    val dueContacts = toCall.mapNotNull { f -> app.leads.find { it.id == f.contactId } }
+    val laterToday = all.filter { at(it) > now && dayLabel(it.dueAt) == "Today" }.sortedBy { at(it) }
+    // Genuinely ahead of us — a plan, not a backlog. The old "This week" had no
+    // lower bound, so every ancient overdue callback counted as "this week" too.
+    val weekList = all.filter { at(it) > now && at(it) <= now + 7L * 24 * 3600_000L }.sortedBy { at(it) }
+    // Older than today: what the bulk-reschedule button acts on.
+    val overdueStrict = all.filter { at(it) < now && dayLabel(it.dueAt) != "Today" }
+
+    // Land on the list that HAS the work. Only once the rep taps a tab does
+    // their choice take over — so the screen is never empty by default while
+    // something is waiting.
+    var picked by remember { mutableStateOf<String?>(null) }
+    val filter = picked ?: when {
+        toCall.isNotEmpty() -> "tocall"
+        laterToday.isNotEmpty() -> "later"
+        else -> "all"
     }
     val shown = when (filter) {
-        "today" -> todayList
-        "morning" -> morningList
-        "afternoon" -> afternoonList
+        "tocall" -> toCall
+        "later" -> laterToday
         "week" -> weekList
-        "overdue" -> overdueStrict
-        else -> all
+        else -> all.sortedBy { at(it) }
+    }
+    val blurb = when (filter) {
+        "tocall" -> "Their time has come — oldest first. Call these now."
+        "later" -> "Booked for later today. Nothing to do yet."
+        "week" -> "Coming up in the next 7 days."
+        else -> "Every callback you have, soonest first."
     }
 
     LazyColumn(
@@ -2483,20 +2495,26 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // Priority stats
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile("📅", todayList.size.toString(), "Due today", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                StatTile("⚠️", overdueStrict.size.toString(), "Overdue", Red, Modifier.weight(1f))
+                StatTile("📞", toCall.size.toString(), "Call now", Red, Modifier.weight(1f))
+                StatTile("🕒", laterToday.size.toString(), "Later today", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
                 StatTile("🔔", all.size.toString(), "Scheduled", Green, Modifier.weight(1f))
             }
         }
         // filters
         item {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterTab("All", all.size, filter == "all", MaterialTheme.colorScheme.primary) { filter = "all" }
-                FilterTab("Today", todayList.size, filter == "today", MaterialTheme.colorScheme.primary) { filter = "today" }
-                FilterTab("This week", weekList.size, filter == "week", MaterialTheme.colorScheme.primary) { filter = "week" }
-                FilterTab("Morning", morningList.size, filter == "morning", Amber) { filter = "morning" }
-                FilterTab("Afternoon", afternoonList.size, filter == "afternoon", Indigo) { filter = "afternoon" }
-                FilterTab("Overdue", overdueStrict.size, filter == "overdue", Red) { filter = "overdue" }
+            // Four tabs, not six. Morning/Afternoon/Overdue were slices of the
+            // same leads under different names — more ways to see a partial
+            // list, which is what made the screen hard to trust.
+            Column {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterTab("Call now", toCall.size, filter == "tocall", Red) { picked = "tocall" }
+                    FilterTab("Later today", laterToday.size, filter == "later", MaterialTheme.colorScheme.primary) { picked = "later" }
+                    FilterTab("This week", weekList.size, filter == "week", Indigo) { picked = "week" }
+                    FilterTab("All", all.size, filter == "all", MaterialTheme.colorScheme.primary) { picked = "all" }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(blurb, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         // Bulk reschedule: clear an overdue pile-up in one tap.
@@ -2534,7 +2552,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                         Text("Call your due leads back to back", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    val next = due.firstOrNull() ?: all.firstOrNull()
+                    val next = toCall.firstOrNull() ?: all.firstOrNull()
                     val canQueue = dueContacts.isNotEmpty()
                     Box(
                         Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
@@ -2558,8 +2576,17 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
 
         if (shown.isEmpty()) {
             item {
-                Text(if (all.isEmpty()) "No callbacks scheduled. Add one from a lead." else "Nothing here — try another filter.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Say WHICH state we are in. "Nothing here" next to a Call-now
+                // count of 24 is what taught reps to distrust this screen.
+                Text(
+                    when {
+                        all.isEmpty() -> "No callbacks scheduled. Book one from any lead."
+                        toCall.isNotEmpty() -> "Nothing in this list — but ${toCall.size} are waiting in Call now."
+                        filter == "tocall" -> "All caught up. Nothing to call right now. 👍"
+                        else -> "Nothing in this list."
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         } else {
             items(shown, key = { it.id ?: it.phone }) { f ->

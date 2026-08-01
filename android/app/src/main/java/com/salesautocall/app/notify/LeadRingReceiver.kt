@@ -51,18 +51,31 @@ class LeadRingReceiver : BroadcastReceiver() {
                 }
             }
             TelephonyManager.EXTRA_STATE_IDLE -> {
+                // SOME call just ended on this phone. Pull the call log in NOW —
+                // before any question of who it was or which way it went.
+                //
+                // This used to sit below two early returns: `ringingNumber` is
+                // only ever set in the RINGING branch, and outgoing calls never
+                // pass through RINGING, so every call the rep dialled from the
+                // phone's own dialer ended without a sync. A second return
+                // skipped it again for any number not already a lead. The whole
+                // point of off-CRM capture is calls the CRM doesn't know about
+                // yet, so those two guards were switching off the feature for
+                // exactly the calls it exists to catch. One company's calls were
+                // reaching the dashboard a median of four and a half hours late,
+                // all 123 of them dialled outside the app.
+                //
+                // The work is cheap, deduped (REPLACE) and already crash-guarded,
+                // so it is safe on every call. The log lands in seconds and the
+                // recording ~2 min later, once the phone finishes writing it.
+                scheduleImmediateSync(context)
+
                 val num = ringingNumber ?: return
                 val wasAnswered = answered
                 ringingNumber = null
                 answered = false
                 NotificationManagerCompat.from(context).cancel(RING_ID)
                 val hit = LeadRing.lookup(context, num) ?: return
-                // A lead's inbound call just ended on this phone — pull it into
-                // the CRM NOW (log within seconds, recording ~2 min later once
-                // the phone's recorder finishes writing the file) instead of
-                // waiting for the hourly sync. The admin sees the call, its
-                // recording and the AI summary almost live.
-                scheduleImmediateSync(context)
                 if (wasAnswered) {
                     notify(context, LOG_ID, logNotification(context, hit))
                 } else {
