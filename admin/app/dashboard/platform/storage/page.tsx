@@ -53,6 +53,14 @@ export default async function StoragePage({
         <p className="subtitle" style={{ margin: "8px 0 0" }}>
           Every company without its own Drive saves recordings here, each in its own subfolder.
         </p>
+        {!platformConnected && (
+          <div className="error" style={{ marginTop: 10 }}>
+            Not connected yet — so every company has had to be wired up to a Drive of its own,
+            one at a time. Connect this once and each new company gets a subfolder here
+            automatically, with nothing to set up. Companies already on their own Drive stay
+            where they are; their existing recordings live in that account.
+          </div>
+        )}
       </div>
 
       <div className="label">Per-company Drive (optional override)</div>

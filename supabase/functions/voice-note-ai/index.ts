@@ -537,7 +537,13 @@ Deno.serve(async (req) => {
       .eq("id", note_id);
     return json({ ok: true, summary, disposition: disposition ?? undefined, actions, next_step: nextStep ?? undefined });
   } catch (e) {
-    await admin.from("lead_voice_notes").update({ ai_status: "failed" }).eq("id", note_id);
+    // Keep the reason. "failed" on its own sent us hunting for a bug in the
+    // audio when the truth was a daily token quota — one line stored here
+    // would have said so immediately, and the retry needs it to tell "try
+    // again in a minute" apart from "there is no quota until tomorrow".
+    await admin.from("lead_voice_notes")
+      .update({ ai_status: "failed", ai_error: String(e).slice(0, 500) })
+      .eq("id", note_id);
     return json({ ok: false, error: String(e) }, 500);
   }
 });
