@@ -1,4 +1,4 @@
-// One place to ask a model for JSON, with a second provider behind the first
+// One place to ask a model for JSON, with three providers behind each other
 // and support for several keys per provider.
 //
 // Seventeen edge functions share a SINGLE free Groq quota — 100,000 tokens a
@@ -9,38 +9,65 @@
 // arrived. Growing the customer base without changing this makes it worse every
 // week.
 //
-// The fix here is resilience, not a migration: Groq stays the primary, and when
-// it refuses — quota gone, rate limited, timing out — the same request goes to
-// Gemini, which has its own separate free allowance.
+// The fix is resilience, not a migration. The chain, in order:
 //
-// Either key may hold SEVERAL keys separated by commas. Each is a separate
-// daily allowance, so three Gemini keys is three budgets. Note that stacking
-// free accounts to raise a quota is against most providers' terms and the keys
-// can be suspended for it — that is a business call, not a technical one, and
-// the code takes no view. A paid tier on one key is the durable version.
+//   1. Groq      — llama-3.3-70b-versatile, what everything already used
+//   2. Cerebras  — separate allowance, OpenAI-compatible API
+//   3. Gemini    — a different model family again, the last line
 //
-// If GEMINI_API_KEY is not set, behaviour is exactly as before: Groq only. So
-// this is safe to ship before the key exists, and starts protecting the
-// platform the moment it is added — no redeploy needed.
+// Both fallbacks were verified against the real keys rather than assumed, and
+// both defaults had to be corrected as a result:
+//   • Cerebras does NOT serve llama on this account. Its list is gpt-oss-120b,
+//     zai-glm-4.7 and gemma-4-31b — and at the time of writing ALL of them
+//     answer 402 "payment required", so this link is dormant until that account
+//     is on a paid plan. The code path costs nothing while it sits idle.
+//   • Gemini rejected gemini-2.0-flash (429) and gemini-2.5-flash /
+//     gemini-2.5-flash-lite (404) on this key. gemini-flash-latest answers, so
+//     that is the default — the full flash rather than the lite one, since it
+//     is the closer match to the llama 70b it stands in for.
 //
-// Model names are read from env with sane defaults because provider model
-// names change more often than this code should.
+// This is exactly why model names are env-overridable and why chat-shim-check
+// can list and fire at them: a default that has quietly gone stale looks
+// identical to a dead key from a single failed call.
+//
+// Any key may hold SEVERAL keys separated by commas; each carries its own daily
+// allowance. Note that stacking free accounts to raise a quota is against most
+// providers' terms and keys can be suspended for it — that is a business call,
+// not a technical one, and the code takes no view. A paid tier is the durable
+// version.
+//
+// Every provider is optional. With only GROQ_API_KEY set the behaviour is
+// exactly what it always was, so keys can be added one at a time and take
+// effect immediately with no redeploy.
 
-/** "a, b ,c" → ["a","b","c"]. Blank-safe. */
-function keys(name: string): string[] {
-  return (Deno.env.get(name) ?? "")
-    .split(/[,\s]+/)
-    .map((k) => k.trim())
-    .filter(Boolean);
+/** "a, b ,c" → ["a","b","c"], reading the first env name that has anything. */
+function keys(...names: string[]): string[] {
+  for (const n of names) {
+    const list = (Deno.env.get(n) ?? "")
+      .split(/[,\s]+/)
+      .map((k) => k.trim())
+      .filter(Boolean);
+    if (list.length) return list;
+  }
+  return [];
 }
 
 const GROQ_KEYS = keys("GROQ_API_KEY");
+// Accepts the lowercase `cerebras` name too, because that is what the secret
+// was actually created as — a silently ignored key is worse than a tolerant read.
+const CEREBRAS_KEYS = keys("CEREBRAS_API_KEY", "cerebras", "CEREBRAS");
 const GEMINI_KEYS = keys("GEMINI_API_KEY");
+
 const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "llama-3.3-70b-versatile";
-const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-2.0-flash";
+const CEREBRAS_MODEL = Deno.env.get("CEREBRAS_MODEL") ?? "gpt-oss-120b";
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-latest";
 
 export const hasGemini = () => GEMINI_KEYS.length > 0;
-export const keyCounts = () => ({ groq: GROQ_KEYS.length, gemini: GEMINI_KEYS.length });
+export const keyCounts = () => ({
+  groq: GROQ_KEYS.length,
+  cerebras: CEREBRAS_KEYS.length,
+  gemini: GEMINI_KEYS.length,
+});
 
 /** True for the failures worth trying another key or provider on. */
 function worthFailingOver(status: number, body: string): boolean {
@@ -52,25 +79,31 @@ function worthFailingOver(status: number, body: string): boolean {
 
 interface Attempt { ok: boolean; status: number; text: string; raw: string }
 
-async function askGroq(key: string, system: string, user: string, temperature: number): Promise<Attempt> {
-  const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      temperature,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
-  const raw = await r.text();
-  let text = "";
-  try { text = JSON.parse(raw)?.choices?.[0]?.message?.content ?? ""; } catch { /* keep raw for the error */ }
-  return { ok: r.ok && !!text.trim(), status: r.status, text, raw };
+/** Groq and Cerebras both speak the OpenAI chat-completions dialect. */
+function openAiCompatible(url: string, model: string) {
+  return async (key: string, system: string, user: string, temperature: number): Promise<Attempt> => {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        temperature,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    });
+    const raw = await r.text();
+    let text = "";
+    try { text = JSON.parse(raw)?.choices?.[0]?.message?.content ?? ""; } catch { /* keep raw for the error */ }
+    return { ok: r.ok && !!text.trim(), status: r.status, text, raw };
+  };
 }
+
+const askGroq = openAiCompatible("https://api.groq.com/openai/v1/chat/completions", GROQ_MODEL);
+const askCerebras = openAiCompatible("https://api.cerebras.ai/v1/chat/completions", CEREBRAS_MODEL);
 
 async function askGemini(key: string, system: string, user: string, temperature: number): Promise<Attempt> {
   const url =
@@ -127,26 +160,40 @@ async function tryKeys(
   return { errors };
 }
 
+export type Provider = "groq" | "cerebras" | "gemini";
+
 /**
  * Ask for a JSON reply. Returns the raw JSON string the model produced.
+ *
+ * `only` restricts the attempt to one provider — used by the health check to
+ * prove each link of the chain works on its own, which a plain call can never
+ * show while the first provider is still healthy.
+ *
  * Throws with every provider/key error when none could answer, so whatever
  * stores the failure records something a human can act on.
  */
 export async function chatJson(
   system: string,
   user: string,
-  opts: { temperature?: number } = {},
-): Promise<{ text: string; provider: string }> {
+  opts: { temperature?: number; only?: Provider } = {},
+): Promise<{ text: string; provider: Provider }> {
   const temperature = opts.temperature ?? 0.2;
-  if (GROQ_KEYS.length === 0 && GEMINI_KEYS.length === 0) {
-    throw new Error("No model key configured (GROQ_API_KEY / GEMINI_API_KEY).");
+  const chain: Array<[Provider, string[], typeof askGemini]> = [
+    ["groq", GROQ_KEYS, askGroq],
+    ["cerebras", CEREBRAS_KEYS, askCerebras],
+    ["gemini", GEMINI_KEYS, askGemini],
+  ];
+  const use = opts.only ? chain.filter(([name]) => name === opts.only) : chain;
+
+  if (use.every(([, ks]) => ks.length === 0)) {
+    throw new Error(`No key configured for ${opts.only ?? "any provider"}.`);
   }
 
-  const g = await tryKeys(GROQ_KEYS, askGroq, "groq", system, user, temperature);
-  if (g.hit) return { text: g.hit.text, provider: "groq" };
-
-  const m = await tryKeys(GEMINI_KEYS, askGemini, "gemini", system, user, temperature);
-  if (m.hit) return { text: m.hit.text, provider: "gemini" };
-
-  throw new Error([...g.errors, ...m.errors].join(" | ") || "no provider answered");
+  const errors: string[] = [];
+  for (const [name, ks, ask] of use) {
+    const r = await tryKeys(ks, ask, name, system, user, temperature);
+    if (r.hit) return { text: r.hit.text, provider: name };
+    errors.push(...r.errors);
+  }
+  throw new Error(errors.join(" | ") || "no provider answered");
 }
