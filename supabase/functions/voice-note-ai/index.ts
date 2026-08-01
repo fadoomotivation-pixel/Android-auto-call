@@ -14,6 +14,7 @@
 // transcription, which has its own quota and has never been the bottleneck.
 // Optional: GEMINI_API_KEY. The summarising step goes through ../_shared/chat.ts,
 // which falls back to Gemini when Groq's shared daily token budget is spent.
+// Both may hold several comma-separated keys.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { chatJson } from "../_shared/chat.ts";
@@ -30,7 +31,9 @@ function json(o: unknown, s = 200) {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const GROQ = Deno.env.get("GROQ_API_KEY") ?? "";
+// First Groq key only — Whisper transcription has its own quota and has never
+// been the bottleneck. The summarising step uses the full key list via chat.ts.
+const GROQ = (Deno.env.get("GROQ_API_KEY") ?? "").split(/[,\s]+/).filter(Boolean)[0] ?? "";
 
 const DISPOSITIONS = [
   "interested", "site_visit", "negotiation", "token_paid", "booked",
@@ -219,10 +222,9 @@ Deno.serve(async (req) => {
     const transcript: string = trj.text ?? "";
     if (!transcript.trim()) throw new Error(`transcription empty: ${JSON.stringify(trj).slice(0, 200)}`);
 
-    // Groq first, Gemini behind it. This is the step that ran out of daily
-    // tokens by lunchtime and left every afternoon note reading "AI summary
-    // failed" — seventeen functions share that one budget. Two independent free
-    // allowances mean one running dry is no longer the rep's problem.
+    // Groq first, Gemini behind it, several keys each. This is the step that ran
+    // out of daily tokens by lunchtime and left every afternoon note reading "AI
+    // summary failed" — seventeen functions share that one budget.
     // (Transcription above is a separate quota and was never the bottleneck.)
     const { text: raw } = await chatJson(
       systemPrompt(),
