@@ -1270,7 +1270,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // plain line instead of leaving people to work it out.
             if (stageFilter == null && quick == null) {
                 val hint = when (bucket) {
-                    "new" -> "Not called yet — plus no answer and busy. Start here."
+                    // "Not called yet" was only true of the first section. The tab
+                    // also holds every callback whose time has passed, which is why
+                    // the count looked far too big to a rep reading it as "fresh
+                    // leads". Name both halves.
+                    "new" -> "Your calling list: fresh leads, plus anyone you tried and couldn't reach, plus callbacks whose time has passed."
                     "today" -> "Today's work: callbacks due today, site visits today, and leads you already handled today. These also stay in their own tab."
                     "working" -> "You talked to them, deal is on. Also leads waiting for a callback on a later day."
                     "pipeline" -> "Site visit, negotiating or token paid."
