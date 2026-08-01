@@ -60,26 +60,37 @@ export function RecordingSetup({ companyId, enabled, recordAll }: { companyId: s
 
       {/* Step 2 — storage */}
       <div style={row}>
-        <strong style={{ minWidth: 150 }}>2 · Storage (Google Drive)</strong>
+        <strong style={{ minWidth: 150 }}>2 · Storage (optional)</strong>
         {status === null ? (
           <span className="subtitle">Checking…</span>
         ) : connected ? (
           <>
-            <span className="badge connected">Connected</span>
+            <span className="badge connected">Own Drive connected</span>
             {status?.account_email && <span className="subtitle">{status.account_email}</span>}
             <a className="link" style={{ color: "var(--accent)" }} href={`/api/gdrive/start?company=${companyId}`}>Reconnect</a>
           </>
         ) : (
-          <a className="primary" style={{ width: "auto", padding: "8px 14px", textDecoration: "none" }} href={`/api/gdrive/start?company=${companyId}`}>
-            Connect Google Drive
-          </a>
+          <>
+            <span className="badge connected">Saving already</span>
+            <a className="link" style={{ color: "var(--accent)" }} href={`/api/gdrive/start?company=${companyId}`}>
+              Use our own Google Drive instead
+            </a>
+          </>
         )}
       </div>
 
-      {enabled && status !== null && !connected && (
-        <div className="error" style={{ marginTop: 6 }}>
-          ⚠ Recording is on but no storage is connected — calls won&apos;t be saved. Tap “Connect Google Drive”.
-        </div>
+      {/* This step used to shout "calls won't be saved" whenever a company had no
+          Drive of its own, which is simply not true — uploads fall back to the
+          platform Drive and then to built-in storage. That warning is why six
+          separate Drives ended up connected for something that only ever needed
+          one. Connecting your own Drive is a choice about WHERE the files live,
+          never about whether recording works. */}
+      {status !== null && !connected && (
+        <p className="subtitle" style={{ margin: "6px 0 0" }}>
+          Nothing to set up — recordings are already being saved and are playable from the
+          Calls page. Connect a Drive here only if this company wants the audio files kept
+          in its <em>own</em> Google account.
+        </p>
       )}
 
       {/* Step 3 — record ALL calls (anti-theft monitoring) */}
@@ -99,8 +110,9 @@ export function RecordingSetup({ companyId, enabled, recordAll }: { companyId: s
       )}
 
       <p className="subtitle" style={{ margin: "10px 0 0" }}>
-        Recordings are saved to your own Google Drive and auto-deleted after 30 days. Cloud (in-app) calls record
-        reliably; SIM call recording depends on your phone allowing it.
+        Recordings go to this company&apos;s own Google Drive if one is connected above, otherwise to the
+        platform Drive in its own folder — either way they play from the Calls page and are auto-deleted
+        after 30 days. Cloud (in-app) calls record reliably; SIM call recording depends on your phone allowing it.
       </p>
     </div>
   );
