@@ -9,18 +9,125 @@ type Row = {
   ad_id: string; ad_name: string;
   impressions: number; clicks: number; spend: number; ctr: number; cpc: number; frequency?: number;
   meta_leads: number; crm_leads: number; crm_qualified: number; crm_booked: number;
+  // The autopsy behind the grade — what actually happened to this ad's leads.
+  crm_never_called?: number; crm_tried_not_reached?: number; crm_spoke?: number;
+  crm_not_interested?: number; crm_wrong_or_dnc?: number; crm_still_open?: number;
+  crm_first_call_mins?: number;
 };
+
+/**
+ * The grade ladder, written once.
+ *
+ * leadQuality() reads it to award the letter and gapToGrade() reads it to say
+ * what the next letter costs, so the page can never tell you you're a C and
+ * then quote a target that wouldn't actually make you a B.
+ *
+ * Walked top-down; D's thresholds are zero so something always matches.
+ */
+const GRADES: { grade: string; tone: string; qr: number; br: number }[] = [
+  { grade: "A", tone: "#22c55e", qr: 0.40, br: 0.03 },
+  { grade: "B", tone: "#84cc16", qr: 0.25, br: Infinity },
+  { grade: "C", tone: "#f59e0b", qr: 0.10, br: Infinity },
+  { grade: "D", tone: "#ef4444", qr: 0, br: Infinity },
+];
 
 /** Lead quality from CRM outcomes — the thing Meta can't see. 0-100 + a grade. */
 function leadQuality(leads: number, qualified: number, booked: number): { score: number; grade: string; tone: string } | null {
   if (!leads) return null;
   const qr = qualified / leads, br = booked / leads;
   const score = Math.max(0, Math.min(100, Math.round(qr * 100 + br * 300)));
-  const [grade, tone] = br >= 0.03 || qr >= 0.4 ? ["A", "#22c55e"]
-    : qr >= 0.25 ? ["B", "#84cc16"]
-    : qr >= 0.1 ? ["C", "#f59e0b"]
-    : ["D", "#ef4444"];
-  return { score, grade, tone };
+  const g = GRADES.find((x) => qr >= x.qr || br >= x.br) ?? GRADES[GRADES.length - 1];
+  return { score, grade: g.grade, tone: g.tone };
+}
+
+/**
+ * How many more of these same leads had to reach Interested for the next grade
+ * up. "D" on its own is a verdict you can't act on; "four more of these 68 and
+ * it's a C" is a target.
+ */
+function gapToGrade(leads: number, qualified: number, booked: number): { grade: string; tone: string; need: number } | null {
+  const now = leadQuality(leads, qualified, booked);
+  if (!now) return null;
+  const i = GRADES.findIndex((g) => g.grade === now.grade);
+  if (i <= 0) return null; // already an A — nothing above it.
+  const next = GRADES[i - 1];
+  return { grade: next.grade, tone: next.tone, need: Math.max(1, Math.ceil(next.qr * leads) - qualified) };
+}
+
+/**
+ * What happened to an ad's leads. never/missed/spoke are mutually exclusive and
+ * add up to leads exactly, because they come from one question asked in order:
+ * was it dialled, did it connect for 30s.
+ */
+type Autopsy = {
+  leads: number; never: number; missed: number; spoke: number;
+  qualified: number; booked: number; no: number; junk: number; open: number; mins: number;
+};
+
+function autopsyOf(r: {
+  crm_leads: number; crm_qualified: number; crm_booked: number;
+  crm_never_called?: number; crm_tried_not_reached?: number; crm_spoke?: number;
+  crm_not_interested?: number; crm_wrong_or_dnc?: number; crm_still_open?: number;
+  crm_first_call_mins?: number;
+}): Autopsy {
+  return {
+    leads: r.crm_leads, never: r.crm_never_called ?? 0, missed: r.crm_tried_not_reached ?? 0,
+    spoke: r.crm_spoke ?? 0, qualified: r.crm_qualified, booked: r.crm_booked,
+    no: r.crm_not_interested ?? 0, junk: r.crm_wrong_or_dnc ?? 0, open: r.crm_still_open ?? 0,
+    mins: r.crm_first_call_mins ?? 0,
+  };
+}
+
+function fmtMins(m: number): string {
+  if (!m) return "—";
+  if (m < 60) return `${m} min`;
+  const h = m / 60;
+  if (h < 24) return `${h < 10 ? h.toFixed(1) : Math.round(h)} hr`;
+  return `${Math.round(h / 24)} days`;
+}
+
+/**
+ * The one move that would lift this ad's grade the most, in priority order.
+ *
+ * The order is deliberate: everything above "the ad is bringing the wrong
+ * people" is something WE did, and each one drags the grade down while looking
+ * exactly like a bad ad. Pausing an ad because nobody called its leads is the
+ * expensive mistake this is here to prevent.
+ */
+function nextMove(a: Autopsy): { tone: string; icon: string; title: string; detail: string } | null {
+  if (!a.leads) return null;
+  const pct = (n: number) => Math.round((n / a.leads) * 100);
+
+  if (a.never >= 3 && a.never / a.leads >= 0.15) {
+    return { tone: "#ef4444", icon: "📞", title: `${a.never} leads were never called at all`,
+      detail: `That is ${pct(a.never)}% of what this ad already paid for, sitting untouched. Assign and dial them before you judge the ad — until they are called, this grade is measuring the team, not the ad. This is the cheapest lift on the page: the money is already spent.` };
+  }
+  if (a.mins >= 60) {
+    return { tone: "#f59e0b", icon: "⏱", title: `First call goes out after ${fmtMins(a.mins)}`,
+      detail: `A Meta lead is warm for minutes, not hours. Half of these were rung ${fmtMins(a.mins)} after they filled the form, so a lot of the "not interested" below is really "too late". Get the first dial under 30 minutes and the same ad, unchanged, will grade higher.` };
+  }
+  if (a.junk / a.leads >= 0.15) {
+    return { tone: "#f59e0b", icon: "🧹", title: `${pct(a.junk)}% wrong numbers or do-not-call`,
+      detail: `The form is collecting junk taps. Switch the lead form to the higher-intent version, turn on phone confirmation, or add one qualifying question (budget or location) so the casual taps drop out before you pay for them.` };
+  }
+  if (a.missed / a.leads >= 0.4) {
+    return { tone: "#f59e0b", icon: "📵", title: `${pct(a.missed)}% picked up nobody`,
+      detail: `They were dialled but never connected. Either the numbers are poor or the calling hour is wrong. Try this ad's leads inside the first hour and again in the 7-9pm slot before spending more on it.` };
+  }
+  if (a.spoke >= 5 && a.no / a.spoke >= 0.6) {
+    return { tone: "#ef4444", icon: "🎯", title: `${a.no} of the ${a.spoke} who answered said no`,
+      detail: `They picked up, so the numbers are real and the follow-up happened — this one is genuinely the ad. It is reaching the wrong audience, or promising something the project doesn't deliver. Change the targeting or the creative; more calls will not fix it.` };
+  }
+  if (a.open >= 5 && a.open / a.leads >= 0.4) {
+    return { tone: "#f59e0b", icon: "🔁", title: `${a.open} leads are still sitting open`,
+      detail: `Not lost and not won — no decision yet. This ad's real grade is not knowable until they close, so give them their follow-up calls before deciding to pause or scale it.` };
+  }
+  if (a.booked > 0 || a.qualified / a.leads >= 0.25) {
+    return { tone: "#22c55e", icon: "🚀", title: `This ad is working — put more budget behind it`,
+      detail: `${a.qualified} of ${a.leads} reached Interested or better${a.booked ? ` and ${a.booked} booked` : ""}, with the leads properly worked. This is the one to scale, and the one to copy the creative and audience from.` };
+  }
+  return { tone: "#f59e0b", icon: "🔬", title: `Worked properly, but few turned into anything`,
+      detail: `The leads were called and reached, so follow-up isn't the gap. Test a different audience or a sharper creative on this one before adding budget.` };
 }
 
 /** Creative fatigue: seen too often, clicks drying up. */
@@ -49,20 +156,44 @@ type Agg = {
   campaign_id: string; campaign_name: string; campaign_status: string;
   impressions: number; clicks: number; spend: number;
   meta_leads: number; crm_leads: number; crm_qualified: number; crm_booked: number;
+  crm_never_called: number; crm_tried_not_reached: number; crm_spoke: number;
+  crm_not_interested: number; crm_wrong_or_dnc: number; crm_still_open: number;
+  crm_first_call_mins: number;
   ads: Row[];
 };
 
 function rollUp(rows: Row[]): Agg[] {
   const by = new Map<string, Agg>();
+  // Medians don't add up, so the campaign's first-call time is the ads' medians
+  // weighted by how many leads each contributed — the typical lead's wait, which
+  // is what a decision about the campaign actually turns on.
+  const wait = new Map<string, { mins: number; leads: number }>();
   for (const r of rows) {
     const a = by.get(r.campaign_id) ?? {
       campaign_id: r.campaign_id, campaign_name: r.campaign_name, campaign_status: r.campaign_status,
-      impressions: 0, clicks: 0, spend: 0, meta_leads: 0, crm_leads: 0, crm_qualified: 0, crm_booked: 0, ads: [],
+      impressions: 0, clicks: 0, spend: 0, meta_leads: 0, crm_leads: 0, crm_qualified: 0, crm_booked: 0,
+      crm_never_called: 0, crm_tried_not_reached: 0, crm_spoke: 0,
+      crm_not_interested: 0, crm_wrong_or_dnc: 0, crm_still_open: 0, crm_first_call_mins: 0, ads: [],
     };
     a.impressions += r.impressions; a.clicks += r.clicks; a.spend += r.spend;
     a.meta_leads += r.meta_leads; a.crm_leads += r.crm_leads; a.crm_qualified += r.crm_qualified; a.crm_booked += r.crm_booked;
+    a.crm_never_called += r.crm_never_called ?? 0;
+    a.crm_tried_not_reached += r.crm_tried_not_reached ?? 0;
+    a.crm_spoke += r.crm_spoke ?? 0;
+    a.crm_not_interested += r.crm_not_interested ?? 0;
+    a.crm_wrong_or_dnc += r.crm_wrong_or_dnc ?? 0;
+    a.crm_still_open += r.crm_still_open ?? 0;
+    if (r.crm_first_call_mins && r.crm_leads) {
+      const w = wait.get(r.campaign_id) ?? { mins: 0, leads: 0 };
+      w.mins += r.crm_first_call_mins * r.crm_leads; w.leads += r.crm_leads;
+      wait.set(r.campaign_id, w);
+    }
     a.ads.push(r);
     by.set(r.campaign_id, a);
+  }
+  for (const [id, w] of wait) {
+    const a = by.get(id);
+    if (a && w.leads) a.crm_first_call_mins = Math.round(w.mins / w.leads);
   }
   return Array.from(by.values()).sort((x, y) => y.spend - x.spend);
 }
@@ -253,7 +384,13 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   const aggs = rollUp(rows);
   const totals = aggs.reduce((t, a) => ({
     spend: t.spend + a.spend, leads: t.leads + a.crm_leads, qualified: t.qualified + a.crm_qualified, booked: t.booked + a.crm_booked,
-  }), { spend: 0, leads: 0, qualified: 0, booked: 0 });
+    never: t.never + a.crm_never_called,
+  }), { spend: 0, leads: 0, qualified: 0, booked: 0, never: 0 });
+  // Leads already bought and never dialled — the only number on this page that
+  // costs nothing to fix, so it sits above everything else.
+  const unworked = aggs
+    .filter((a) => a.crm_never_called > 0)
+    .sort((x, y) => y.crm_never_called - x.crm_never_called);
 
   const card: React.CSSProperties = { background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", borderRadius: 16, padding: 24 };
   const input: React.CSSProperties = { width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none" };
@@ -343,10 +480,36 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
               delta={deltaFor(totals.booked ? totals.spend / totals.booked : 0, prevTotals && prevTotals.booked ? prevTotals.spend / prevTotals.booked : undefined, false)} />
             {(() => {
               const q = leadQuality(totals.leads, totals.qualified, totals.booked);
-              return <Stat label="Lead Quality" value={q ? `${q.grade} · ${q.score}` : "—"} tone={q?.tone ?? "#86868B"} />;
+              const gap = gapToGrade(totals.leads, totals.qualified, totals.booked);
+              return <Stat label="Lead Quality" value={q ? `${q.grade} · ${q.score}` : "—"} tone={q?.tone ?? "#86868B"}
+                hint={gap ? `${gap.need} more qualified → ${gap.grade}` : q ? "Top grade — copy this everywhere" : undefined} />;
             })()}
           </div>
           {prevTotals && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: -6 }}>▲▼ = change vs the previous {preset === "custom" ? "period" : (PRESETS.find((p) => p.key === preset)?.label ?? "period").toLowerCase()}.</div>}
+
+          {/* Leads you have already paid for and nobody rang.
+              Every other fix on this page costs money or a new creative. This one
+              costs a phone call, and it silently drags the grade of the ad that
+              produced them — so it goes first, before the advisor and the table. */}
+          {unworked.length > 0 && (
+            <div style={{ ...card, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.35)", padding: 18 }}>
+              <strong style={{ color: "#fca5a5", fontSize: 15 }}>
+                📞 {totals.never} lead{totals.never === 1 ? "" : "s"} you paid for were never called
+              </strong>
+              <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text)", lineHeight: 1.6 }}>
+                {Math.round((totals.never / Math.max(1, totals.leads)) * 100)}% of this period&apos;s leads never got a single dial.
+                They still count against the ad&apos;s grade, so these campaigns are scoring worse than they really are —
+                call them before pausing or judging anything here.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                {unworked.slice(0, 5).map((a) => (
+                  <span key={a.campaign_id} style={{ fontSize: 12.5, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", borderRadius: 999, padding: "4px 12px", color: "var(--text)" }}>
+                    {a.campaign_name} · <b style={{ color: "#fca5a5" }}>{a.crm_never_called}</b> of {a.crm_leads}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* AI Ad Advisor — reads the loaded campaigns and advises across the funnel. */}
           <div style={{ ...card, background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.25)" }}>
@@ -572,6 +735,12 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
                                   </span>
                                 );
                               })()}
+                              {a.crm_never_called > 0 && (
+                                <span title={`${a.crm_never_called} of this campaign's ${a.crm_leads} leads have never been dialled — they drag the grade down without ever getting a chance`}
+                                  style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "#ef4444", border: "1px solid #ef4444", borderRadius: 999, padding: "1px 7px" }}>
+                                  {a.crm_never_called} not called
+                                </span>
+                              )}
                               {anyFatigued && (
                                 <span title="A creative here is fatiguing — high frequency, falling CTR"
                                   style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "#f59e0b" }}>🔥 fatigue</span>
@@ -589,6 +758,11 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
                             <td style={{ ...td, color: "#22c55e", fontWeight: 600 }}>{a.crm_booked}</td>
                             <td style={{ ...td, color: "#ef4444" }}>{a.crm_booked ? money(sym, a.spend / a.crm_booked) : "—"}</td>
                           </tr>
+                          {open && a.crm_leads > 0 && (
+                            <tr style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                              <td colSpan={9} style={{ padding: 0 }}><WhyThisGrade a={autopsyOf(a)} /></td>
+                            </tr>
+                          )}
                           {open && a.ads.map((r) => {
                             const actr = r.impressions ? (r.clicks / r.impressions) * 100 : 0;
                             const fat = fatigue(r.frequency, actr);
@@ -626,7 +800,9 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
 
           <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0, lineHeight: 1.6 }}>
             <b style={{ color: "var(--text)" }}>Leads / Qualified / Booked</b> come from YOUR CRM (matched to each ad by its Meta ad id), so
-            you see which ads bring real buyers — not just form-fills. Read-only for now; edit mode (pause / budgets) is next.
+            you see which ads bring real buyers — not just form-fills. <b style={{ color: "var(--text)" }}>Open any campaign</b> to see why it
+            got its grade: how many of its leads were never dialled, how long the first call took, and what the people who answered actually
+            said — so you can tell a bad ad from a lead nobody worked. Read-only for now; edit mode (pause / budgets) is next.
           </p>
         </>
       )}
@@ -634,7 +810,101 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   );
 }
 
-function Stat({ label, value, tone, delta }: { label: string; value: string; tone: string; delta?: { pct: number; good: boolean } | null }) {
+/**
+ * The autopsy behind one campaign's letter.
+ *
+ * A grade tells you an ad was bad. It never tells you whether the ad brought
+ * the wrong people or whether nobody worked the leads it brought — and those
+ * are opposite problems with opposite fixes, both scoring D. So this shows the
+ * three things that decide it: were the leads dialled, how long they waited,
+ * and what the ones who answered actually said.
+ *
+ * The second grade — the same leadQuality() rule run only on the leads someone
+ * genuinely spoke to — is the point of the whole panel. When it comes out well
+ * above the headline grade, the ad was fine and the follow-up wasn't, and
+ * pausing that ad would have thrown away the good one.
+ */
+function WhyThisGrade({ a }: { a: Autopsy }) {
+  const raw = leadQuality(a.leads, a.qualified, a.booked);
+  // Capped at `spoke` so this can only ever be a fair reading of the worked
+  // leads, never an inflated one.
+  const worked = a.spoke > 0 ? leadQuality(a.spoke, Math.min(a.qualified, a.spoke), Math.min(a.booked, a.spoke)) : null;
+  const gap = gapToGrade(a.leads, a.qualified, a.booked);
+  const move = nextMove(a);
+  const pct = (n: number) => (n / Math.max(1, a.leads)) * 100;
+
+  const bar: { n: number; tone: string; label: string }[] = [
+    { n: a.never, tone: "#ef4444", label: "Never called" },
+    { n: a.missed, tone: "#f59e0b", label: "Called, no answer" },
+    { n: a.spoke, tone: "#22c55e", label: "Actually spoke" },
+  ];
+  const chip: React.CSSProperties = {
+    fontSize: 12, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)",
+    borderRadius: 999, padding: "4px 11px", color: "var(--text)", whiteSpace: "nowrap",
+  };
+
+  return (
+    <div style={{ padding: "16px 18px 18px 30px", background: "rgba(255,255,255,0.02)", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        Why this is a {raw?.grade ?? "—"}
+      </div>
+
+      {/* Was the lead even reached? These three add up to every lead. */}
+      <div>
+        <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.06)" }}>
+          {bar.map((s) => s.n > 0 ? <div key={s.label} title={`${s.label}: ${s.n}`} style={{ width: `${pct(s.n)}%`, background: s.tone }} /> : null)}
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
+          {bar.map((s) => (
+            <span key={s.label} style={{ fontSize: 12.5, color: "var(--muted)" }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: s.tone, marginRight: 6 }} />
+              {s.label} <b style={{ color: "var(--text)" }}>{s.n}</b>
+              <span style={{ opacity: 0.7 }}> · {Math.round(pct(s.n))}%</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* The grade with our own follow-up taken out of it. */}
+      {worked && a.never + a.missed > 0 && (
+        <div style={{ fontSize: 13.5, color: "var(--text)", lineHeight: 1.6 }}>
+          Judged only on the <b>{a.spoke}</b> leads someone actually spoke to, this ad is a{" "}
+          <b style={{ color: worked.tone }}>{worked.grade}</b>
+          {raw && worked.grade !== raw.grade
+            ? <> — not a <b style={{ color: raw.tone }}>{raw.grade}</b>. The gap between those two letters is our follow-up, not the ad.</>
+            : <> — the same as its headline grade, so the follow-up isn&apos;t what&apos;s holding it back.</>}
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <span style={{ ...chip, borderColor: a.mins >= 60 ? "rgba(245,158,11,0.5)" : undefined }}>
+          ⏱ First call after <b style={{ color: a.mins >= 60 ? "#f59e0b" : "#22c55e" }}>{fmtMins(a.mins)}</b>
+        </span>
+        <span style={chip}>✅ Qualified <b style={{ color: "#a855f7" }}>{a.qualified}</b></span>
+        <span style={chip}>🏆 Booked <b style={{ color: "#22c55e" }}>{a.booked}</b></span>
+        <span style={chip}>🙅 Said no <b>{a.no}</b></span>
+        <span style={chip}>🚫 Wrong number / DNC <b>{a.junk}</b></span>
+        <span style={chip}>🔁 Still open <b>{a.open}</b></span>
+      </div>
+
+      {gap && (
+        <div style={{ fontSize: 13.5, color: "var(--text)" }}>
+          <b style={{ color: gap.tone }}>{gap.need} more</b> of these {a.leads} leads reaching Interested would have made this a{" "}
+          <b style={{ color: gap.tone }}>{gap.grade}</b>.
+        </div>
+      )}
+
+      {move && (
+        <div style={{ background: `${move.tone}12`, border: `1px solid ${move.tone}55`, borderRadius: 12, padding: "12px 14px" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: move.tone }}>{move.icon} {move.title}</div>
+          <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 5, lineHeight: 1.6 }}>{move.detail}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, tone, delta, hint }:{ label: string; value: string; tone: string; delta?: { pct: number; good: boolean } | null; hint?: string }) {
   return (
     <div style={{ background: `${tone}0d`, border: `1px solid ${tone}22`, borderRadius: 14, padding: "16px 18px" }}>
       <div style={{ color: tone, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
@@ -644,6 +914,7 @@ function Stat({ label, value, tone, delta }: { label: string; value: string; ton
           {delta.pct >= 0 ? "▲" : "▼"} {Math.abs(delta.pct)}% <span style={{ color: "var(--muted)", fontWeight: 400 }}>vs prev</span>
         </div>
       )}
+      {hint && <div style={{ marginTop: 4, fontSize: 11.5, color: "var(--muted)" }}>{hint}</div>}
     </div>
   );
 }
