@@ -1,6 +1,6 @@
 // The AI twist on lead voice notes — now an assistant that ACTS:
 // 1. Transcribes the telecaller's spoken note (Groq Whisper — Hindi/Hinglish OK)
-// 2. Summarizes + suggests the lead's stage (Groq Llama)
+// 2. Summarizes + suggests the lead's stage (see ../_shared/chat.ts)
 // 3. AUTO-ACTIONS from what was said:
 //    • "27 tarik ko site visit" → lead moves to Site Visit with that date, and
 //      the rep gets reminders: day-before 10:00 IST ("Tomorrow is X's site
@@ -10,9 +10,14 @@
 //    Every action lands in the lead's Journey timeline as "AI Assistant".
 // Body: { note_id }
 // Auth: any signed-in user who can see the note (RLS), or the service role.
-// Secret required: GROQ_API_KEY (same as call summaries).
+// Secret required: GROQ_API_KEY — used for Whisper transcription, which has its
+// own quota and has never been the bottleneck.
+// Optional: MISTRAL_API_KEY / GEMINI_API_KEY / CEREBRAS_API_KEY. The summarising
+// step goes through ../_shared/chat.ts and falls through the whole chain; any
+// may hold several comma-separated keys.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { chatJson } from "../_shared/chat.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -26,7 +31,9 @@ function json(o: unknown, s = 200) {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const GROQ = Deno.env.get("GROQ_API_KEY") ?? "";
+// First Groq key only — Whisper transcription has its own quota and has never
+// been the bottleneck. The summarising step uses the full chain via chat.ts.
+const GROQ = (Deno.env.get("GROQ_API_KEY") ?? "").split(/[,\s]+/).filter(Boolean)[0] ?? "";
 
 const DISPOSITIONS = [
   "interested", "site_visit", "negotiation", "token_paid", "booked",
@@ -215,20 +222,15 @@ Deno.serve(async (req) => {
     const transcript: string = trj.text ?? "";
     if (!transcript.trim()) throw new Error(`transcription empty: ${JSON.stringify(trj).slice(0, 200)}`);
 
-    const ch = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST", headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt() },
-          { role: "user", content: `Voice note transcript:\n\n${transcript.slice(0, 12000)}` },
-        ],
-      }),
-    });
-    const chj = await ch.json();
-    const raw: string = chj.choices?.[0]?.message?.content ?? "";
-    if (!raw.trim()) throw new Error(`summary empty: ${JSON.stringify(chj).slice(0, 200)}`);
+    // Mistral → Groq → Gemini → Cerebras, several keys each (see chat.ts for why
+    // Mistral leads). This is the step that ran out of daily tokens by lunchtime
+    // and left every afternoon note reading "AI summary failed".
+    // (Transcription above is a separate quota and was never the bottleneck.)
+    const { text: raw } = await chatJson(
+      systemPrompt(),
+      `Voice note transcript:\n\n${transcript.slice(0, 12000)}`,
+      { temperature: 0.2 },
+    );
 
     let summary = raw.trim();
     let disposition: string | null = null;
