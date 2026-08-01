@@ -1,4 +1,4 @@
-// One place to ask a model for JSON, with three providers behind each other
+// One place to ask a model for JSON, with four providers behind each other
 // and support for several keys per provider.
 //
 // Seventeen edge functions share a SINGLE free Groq quota — 100,000 tokens a
@@ -13,10 +13,11 @@
 //
 //   1. Groq      — llama-3.3-70b-versatile, what everything already used
 //   2. Cerebras  — separate allowance, OpenAI-compatible API
-//   3. Gemini    — a different model family again, the last line
+//   3. Mistral   — separate allowance again, also OpenAI-compatible
+//   4. Gemini    — a different model family, the last line
 //
-// Both fallbacks were verified against the real keys rather than assumed, and
-// both defaults had to be corrected as a result:
+// Every fallback is verified against the real key before being trusted, not
+// assumed — and doing that has already caught two wrong defaults:
 //   • Cerebras does NOT serve llama on this account. Its list is gpt-oss-120b,
 //     zai-glm-4.7 and gemma-4-31b — and at the time of writing ALL of them
 //     answer 402 "payment required", so this link is dormant until that account
@@ -25,6 +26,10 @@
 //     gemini-2.5-flash-lite (404) on this key. gemini-flash-latest answers, so
 //     that is the default — the full flash rather than the lite one, since it
 //     is the closer match to the llama 70b it stands in for.
+//   • Mistral was the one that just worked: large, medium, small, nemo and
+//     ministral all answered. mistral-large-latest is the default because when
+//     every option is available there is no reason to take a weaker one for
+//     work that has to read dates and callbacks out of Hinglish correctly.
 //
 // This is exactly why model names are env-overridable and why chat-shim-check
 // can list and fire at them: a default that has quietly gone stale looks
@@ -56,16 +61,19 @@ const GROQ_KEYS = keys("GROQ_API_KEY");
 // Accepts the lowercase `cerebras` name too, because that is what the secret
 // was actually created as — a silently ignored key is worse than a tolerant read.
 const CEREBRAS_KEYS = keys("CEREBRAS_API_KEY", "cerebras", "CEREBRAS");
+const MISTRAL_KEYS = keys("MISTRAL_API_KEY", "mistral", "MISTRAL");
 const GEMINI_KEYS = keys("GEMINI_API_KEY");
 
 const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "llama-3.3-70b-versatile";
 const CEREBRAS_MODEL = Deno.env.get("CEREBRAS_MODEL") ?? "gpt-oss-120b";
+const MISTRAL_MODEL = Deno.env.get("MISTRAL_MODEL") ?? "mistral-large-latest";
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-latest";
 
 export const hasGemini = () => GEMINI_KEYS.length > 0;
 export const keyCounts = () => ({
   groq: GROQ_KEYS.length,
   cerebras: CEREBRAS_KEYS.length,
+  mistral: MISTRAL_KEYS.length,
   gemini: GEMINI_KEYS.length,
 });
 
@@ -79,7 +87,7 @@ function worthFailingOver(status: number, body: string): boolean {
 
 interface Attempt { ok: boolean; status: number; text: string; raw: string }
 
-/** Groq and Cerebras both speak the OpenAI chat-completions dialect. */
+/** Groq, Cerebras and Mistral all speak the OpenAI chat-completions dialect. */
 function openAiCompatible(url: string, model: string) {
   return async (key: string, system: string, user: string, temperature: number): Promise<Attempt> => {
     const r = await fetch(url, {
@@ -104,6 +112,7 @@ function openAiCompatible(url: string, model: string) {
 
 const askGroq = openAiCompatible("https://api.groq.com/openai/v1/chat/completions", GROQ_MODEL);
 const askCerebras = openAiCompatible("https://api.cerebras.ai/v1/chat/completions", CEREBRAS_MODEL);
+const askMistral = openAiCompatible("https://api.mistral.ai/v1/chat/completions", MISTRAL_MODEL);
 
 async function askGemini(key: string, system: string, user: string, temperature: number): Promise<Attempt> {
   const url =
@@ -160,7 +169,7 @@ async function tryKeys(
   return { errors };
 }
 
-export type Provider = "groq" | "cerebras" | "gemini";
+export type Provider = "groq" | "cerebras" | "mistral" | "gemini";
 
 /**
  * Ask for a JSON reply. Returns the raw JSON string the model produced.
@@ -181,6 +190,7 @@ export async function chatJson(
   const chain: Array<[Provider, string[], typeof askGemini]> = [
     ["groq", GROQ_KEYS, askGroq],
     ["cerebras", CEREBRAS_KEYS, askCerebras],
+    ["mistral", MISTRAL_KEYS, askMistral],
     ["gemini", GEMINI_KEYS, askGemini],
   ];
   const use = opts.only ? chain.filter(([name]) => name === opts.only) : chain;

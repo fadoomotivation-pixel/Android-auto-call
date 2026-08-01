@@ -12,9 +12,9 @@
 // Auth: any signed-in user who can see the note (RLS), or the service role.
 // Secret required: GROQ_API_KEY (same as call summaries) — used for Whisper
 // transcription, which has its own quota and has never been the bottleneck.
-// Optional: CEREBRAS_API_KEY / GEMINI_API_KEY. The summarising step goes through
-// ../_shared/chat.ts, which falls through to them when Groq's shared daily token
-// budget is spent. Any of them may hold several comma-separated keys.
+// Optional: CEREBRAS_API_KEY / MISTRAL_API_KEY / GEMINI_API_KEY. The summarising
+// step goes through ../_shared/chat.ts, which falls through to them when Groq's
+// shared daily token budget is spent. Any may hold several comma-separated keys.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { chatJson } from "../_shared/chat.ts";
@@ -222,9 +222,9 @@ Deno.serve(async (req) => {
     const transcript: string = trj.text ?? "";
     if (!transcript.trim()) throw new Error(`transcription empty: ${JSON.stringify(trj).slice(0, 200)}`);
 
-    // Groq, then Cerebras, then Gemini — several keys each. This is the step that
-    // ran out of daily tokens by lunchtime and left every afternoon note reading
-    // "AI summary failed"; seventeen functions share that one budget.
+    // Groq, then Cerebras, then Mistral, then Gemini — several keys each. This is
+    // the step that ran out of daily tokens by lunchtime and left every afternoon
+    // note reading "AI summary failed"; seventeen functions share that one budget.
     // (Transcription above is a separate quota and was never the bottleneck.)
     const { text: raw } = await chatJson(
       systemPrompt(),
