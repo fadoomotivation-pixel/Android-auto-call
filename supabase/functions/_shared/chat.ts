@@ -9,12 +9,25 @@
 // arrived. Growing the customer base without changing this makes it worse every
 // week.
 //
-// The fix is resilience, not a migration. The chain, in order:
+// The fix is resilience, not a migration. The default order:
 //
-//   1. Groq      — llama-3.3-70b-versatile, what everything already used
-//   2. Cerebras  — separate allowance, OpenAI-compatible API
-//   3. Mistral   — separate allowance again, also OpenAI-compatible
-//   4. Gemini    — a different model family, the last line
+//   1. Mistral   — mistral-large, the primary for this work
+//   2. Groq      — llama-3.3-70b-versatile, fast and proven
+//   3. Gemini    — a different model family
+//   4. Cerebras  — LAST, because it currently answers 402 on every model, and
+//                  a dead provider high in the chain costs a wasted round-trip
+//                  on every single call that reaches it
+//
+// Mistral leads for a quota reason, not a quality one. Groq's 100k tokens/day
+// is shared by SEVENTEEN functions and is the thing that actually runs out;
+// voice notes are its single biggest consumer. Moving them to Mistral leaves
+// that scarce budget for the other sixteen. The work itself — turn a ~31
+// character Hinglish transcript into a fixed 18-field JSON — is structured
+// extraction, where these models barely differ, and it runs in the background
+// off a DB trigger, so nobody is waiting on latency either.
+//
+// INTERACTIVE functions (rep-assistant, assistant-chat) should pass
+// prefer:["groq",...] when they adopt this, because there speed IS the feature.
 //
 // Every fallback is verified against the real key before being trusted, not
 // assumed — and doing that has already caught two wrong defaults:
@@ -171,6 +184,12 @@ async function tryKeys(
 
 export type Provider = "groq" | "cerebras" | "mistral" | "gemini";
 
+/** Overridable without a deploy: CHAT_ORDER="groq,gemini" etc. */
+const DEFAULT_ORDER: Provider[] = ((Deno.env.get("CHAT_ORDER") ?? "")
+  .split(/[,\s]+/).map((s) => s.trim()).filter(Boolean) as Provider[])
+  .filter((p) => ["groq", "cerebras", "mistral", "gemini"].includes(p));
+if (DEFAULT_ORDER.length === 0) DEFAULT_ORDER.push("mistral", "groq", "gemini", "cerebras");
+
 /**
  * Ask for a JSON reply. Returns the raw JSON string the model produced.
  *
@@ -178,21 +197,28 @@ export type Provider = "groq" | "cerebras" | "mistral" | "gemini";
  * prove each link of the chain works on its own, which a plain call can never
  * show while the first provider is still healthy.
  *
+ * `prefer` overrides the order for one call, so a latency-sensitive caller can
+ * put Groq first without changing it for everyone.
+ *
  * Throws with every provider/key error when none could answer, so whatever
  * stores the failure records something a human can act on.
  */
 export async function chatJson(
   system: string,
   user: string,
-  opts: { temperature?: number; only?: Provider } = {},
+  opts: { temperature?: number; only?: Provider; prefer?: Provider[] } = {},
 ): Promise<{ text: string; provider: Provider }> {
   const temperature = opts.temperature ?? 0.2;
-  const chain: Array<[Provider, string[], typeof askGemini]> = [
-    ["groq", GROQ_KEYS, askGroq],
-    ["cerebras", CEREBRAS_KEYS, askCerebras],
-    ["mistral", MISTRAL_KEYS, askMistral],
-    ["gemini", GEMINI_KEYS, askGemini],
-  ];
+  const byName: Record<Provider, [string[], typeof askGemini]> = {
+    mistral: [MISTRAL_KEYS, askMistral],
+    groq: [GROQ_KEYS, askGroq],
+    gemini: [GEMINI_KEYS, askGemini],
+    cerebras: [CEREBRAS_KEYS, askCerebras],
+  };
+  const order = opts.prefer?.length ? opts.prefer : DEFAULT_ORDER;
+  const chain = order
+    .filter((n) => byName[n])
+    .map((n) => [n, ...byName[n]] as [Provider, string[], typeof askGemini]);
   const use = opts.only ? chain.filter(([name]) => name === opts.only) : chain;
 
   if (use.every(([, ks]) => ks.length === 0)) {
