@@ -3,6 +3,7 @@ import { WhatsAppSetup } from "./WhatsAppSetup";
 import { CompanyPicker } from "./CompanyPicker";
 import { WhatsAppHealth } from "./WhatsAppHealth";
 import { WhatsAppInbox } from "./WhatsAppInbox";
+import { PlatformSender } from "./PlatformSender";
 
 const WEBHOOK_URL = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/whatsapp-webhook";
 
@@ -77,7 +78,12 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
       </p>
 
       {isSuper && (
-        <CompanyPicker companies={companies ?? []} selected={companyId} />
+        <>
+          <CompanyPicker companies={companies ?? []} selected={companyId} />
+          {/* Platform-wide, so it sits outside the company picker: changing the
+              selected company must not look like it changes this. */}
+          <PlatformSender companies={companies ?? []} />
+        </>
       )}
 
       <WhatsAppHealth isSuper={isSuper} companyId={companyId} />

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { AutoSend } from "./AutoSend";
 
 type Rep = {
   id: string;
@@ -15,6 +16,8 @@ type Rep = {
   followUps: number;
   hotLeads: number;
   narrative?: string;
+  /** Ready-to-send wording, written server-side (see _shared/pulse.ts). */
+  text?: string;
 };
 type Company = {
   company_id: string;
@@ -22,6 +25,8 @@ type Company = {
   date: string;
   totals: { calls: number; connected: number; notes: number; visits: number };
   reps: Rep[];
+  /** Exactly what the 7pm WhatsApp will contain. */
+  text?: string;
 };
 
 function istToday(): string {
@@ -124,48 +129,21 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // One telecaller's full day — shareable on its own ("har telecaller ka alag").
-  function repReport(r: Rep, companyName?: string | null): string {
-    const lines: string[] = [`📊 ${r.name} — Daily Pulse (${date})`];
-    if (companyName) lines.push(`🏢 ${companyName}`);
-    lines.push(
-      `📞 ${r.calls} calls · ${r.connected} connected · ${fmtDur(r.talkSeconds)} talk` +
-        (r.hotLeads > 0 ? ` · 🔥 ${r.hotLeads} hot` : ""),
-    );
-    if (r.narrative) lines.push(`\n✨ ${r.narrative}`);
-    const notes = realNotes(r);
-    if (notes.length) {
-      lines.push(`\n🎤 Voice notes:`);
-      notes.forEach((v) => lines.push(`• ${v.lead}: ${v.summary}`));
-    }
-    const moves = newsworthyMoves(r);
-    if (moves.length) {
-      lines.push(`\n🔄 Lead moves:`);
-      moves.forEach((m) => lines.push(`• ${m.lead}: ${m.detail}${m.byAi ? " (AI)" : ""}`));
-    }
-    if (r.siteVisits.length) lines.push(`\n📍 Site visits: ${r.siteVisits.join(", ")}`);
-    if (!r.calls && !notes.length && !moves.length && !r.siteVisits.length) {
-      lines.push(`\nAaj koi activity nahi.`);
-    }
-    lines.push(`\n— via Call Pro AI`);
-    return lines.join("\n");
+  /**
+   * The wording is NOT written here any more.
+   *
+   * team-pulse returns the exact text pulse-broadcast will send at 7pm (both
+   * come from _shared/pulse.ts), so "Copy report" and the automatic WhatsApp are
+   * the same words. When this page wrote its own version, the two slowly drifted
+   * and the founder ended up with a message that disagreed with the dashboard
+   * they had just been reading.
+   */
+  function repReport(r: Rep): string {
+    return r.text ?? "";
   }
 
   function shareText(): string {
-    const lines: string[] = [`📊 Daily Pulse — ${date}`];
-    for (const c of companies) {
-      if (isSuper && c.company_name) lines.push(`\n🏢 ${c.company_name}`);
-      lines.push(`Team: ${c.totals.calls} calls · ${c.totals.connected} connected · ${c.totals.notes} voice notes · ${c.totals.visits} site visits`);
-      for (const r of c.reps) {
-        lines.push(`\n• ${r.name} — ${r.calls} calls, ${r.connected} connected, ${fmtDur(r.talkSeconds)} talk`);
-        if (r.narrative) lines.push(`  ${r.narrative}`);
-        realNotes(r).slice(0, 3).forEach((v) => lines.push(`  🎤 ${v.lead}: ${v.summary}`));
-        newsworthyMoves(r).slice(0, 4).forEach((m) => lines.push(`  🔄 ${m.lead}: ${m.detail}`));
-        if (r.siteVisits.length) lines.push(`  📍 Site visit: ${r.siteVisits.join(", ")}`);
-      }
-    }
-    lines.push(`\n— via Call Pro AI`);
-    return lines.join("\n");
+    return companies.map((c) => c.text ?? "").filter(Boolean).join("\n\n");
   }
 
   async function copyReport() {
@@ -177,13 +155,13 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
     window.open(`https://wa.me/?text=${encodeURIComponent(shareText())}`, "_blank");
   }
 
-  async function copyRep(r: Rep, companyName?: string | null) {
-    await navigator.clipboard.writeText(repReport(r, companyName));
+  async function copyRep(r: Rep) {
+    await navigator.clipboard.writeText(repReport(r));
     setCopiedRep(r.id);
     setTimeout(() => setCopiedRep((id) => (id === r.id ? null : id)), 2000);
   }
-  function whatsappRep(r: Rep, companyName?: string | null) {
-    window.open(`https://wa.me/?text=${encodeURIComponent(repReport(r, companyName))}`, "_blank");
+  function whatsappRep(r: Rep) {
+    window.open(`https://wa.me/?text=${encodeURIComponent(repReport(r))}`, "_blank");
   }
 
   const anyReps = companies.some((c) => c.reps.length > 0);
@@ -226,6 +204,10 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
           {isSuper && c.company_name && (
             <h3 style={{ margin: "0 0 6px", color: "#fff" }}>🏢 {c.company_name}</h3>
           )}
+          {/* Per company, always — the super admin sets a customer's founder up
+              the same way they set up their own, and a subscriber can only ever
+              receive the company it sits under. */}
+          <AutoSend companyId={c.company_id} companyName={c.company_name} />
           {c.reps.length > 0 && (
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14, color: "var(--muted)", fontSize: 13 }}>
               <span><strong style={{ color: "var(--text)" }}>{c.totals.calls}</strong> calls</span>
@@ -301,13 +283,13 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                   {/* Per-telecaller share — send THIS rep's day on its own. */}
                   <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                     <button
-                      onClick={() => copyRep(r, c.company_name)}
+                      onClick={() => copyRep(r)}
                       style={{ flex: 1, fontSize: 12, padding: "6px 10px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "var(--text)", cursor: "pointer" }}
                     >
                       {copiedRep === r.id ? "✓ Copied" : "📋 Copy"}
                     </button>
                     <button
-                      onClick={() => whatsappRep(r, c.company_name)}
+                      onClick={() => whatsappRep(r)}
                       style={{ flex: 1, fontSize: 12, padding: "6px 10px", borderRadius: 7, border: "none", background: "#25D366", color: "#032b17", fontWeight: 600, cursor: "pointer" }}
                     >
                       💬 WhatsApp

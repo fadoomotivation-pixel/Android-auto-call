@@ -71,8 +71,9 @@ function keys(...names: string[]): string[] {
 }
 
 const GROQ_KEYS = keys("GROQ_API_KEY");
-// Accepts the lowercase `cerebras` name too, because that is what the secret
-// was actually created as — a silently ignored key is worse than a tolerant read.
+// Accepts the lowercase `cerebras` / `mistral` names too, because that is what
+// the secrets were actually created as — a silently ignored key is worse than a
+// tolerant read.
 const CEREBRAS_KEYS = keys("CEREBRAS_API_KEY", "cerebras", "CEREBRAS");
 const MISTRAL_KEYS = keys("MISTRAL_API_KEY", "mistral", "MISTRAL");
 const GEMINI_KEYS = keys("GEMINI_API_KEY");
