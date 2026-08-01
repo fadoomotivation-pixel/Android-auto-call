@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { CoachPanel } from "./CoachPanel";
 import { KnowledgeBase } from "./KnowledgeBase";
+import { BestCalls } from "./BestCalls";
 
 type Digest = {
   id: string;
@@ -57,6 +58,8 @@ export default async function CoachPage() {
       </p>
 
       <CoachPanel />
+
+      <BestCalls isSuper={isSuper} />
 
       <KnowledgeBase />
 

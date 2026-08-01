@@ -1089,10 +1089,6 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val closedSet = setOf("lost", "not_interested", "dnc", "invalid")
     val nowMs = System.currentTimeMillis()
     fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
-    fun sleeping(c: Contact): Boolean {
-        val due = fuOf(c)?.let { instantMillis(it.dueAt) } ?: return false
-        return due > nowMs
-    }
     // "Today" = the day's action list. A lead belongs here when the rep RECORDED
     // an outcome for it today (drains it out of New so New stays purely fresh),
     // OR its follow-up is due TODAY (earlier-today still counts — it's today's
@@ -1119,16 +1115,33 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     fun inToday(c: Contact): Boolean =
         c.status !in closedSet && c.status != "booked" &&
             (isToday(c.handledAt) || dueToday(c) || isToday(c.siteVisitAt))
+
+    // A lead with a callback booked on it. Reps kept finding these in New and
+    // said so: "follow up ki lead new me padi hai". They were right — an overdue
+    // callback used to fall back into the New pile and a future one hid inside
+    // Working, so the one thing a rep most needs to see as a group was scattered
+    // across two tabs that are about something else.
+    //
+    // It now has its own tab, and this single rule is what fills it. New and
+    // Working simply exclude it, so no lead is counted in two places and there
+    // is only ever one definition of "has a follow-up". Closed and booked leads
+    // are out because 0112 closes their callbacks anyway.
+    fun hasFollowUp(c: Contact): Boolean =
+        fuOf(c) != null && c.status !in closedSet && c.status != "booked"
     val base = when {
         stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
         quick == "retry" -> app.leads.filter { it.status in setOf("no_answer", "busy", "wrong_person", "callback", "follow_up") }
         else -> when (bucket) {
-            // New = truly fresh: a calling-pile status, not sleeping, and NOT
-            // already handled today (called / due / visiting).
-            "new" -> app.leads.filter { it.status in newSet && !sleeping(it) && !inToday(it) }
+            // New = truly fresh: a calling-pile status, no callback booked on
+            // it (those live in Follow-up), and NOT already handled today.
+            "new" -> app.leads.filter { it.status in newSet && !hasFollowUp(it) && !inToday(it) }
             "today" -> app.leads.filter { inToday(it) }
-            "working" -> app.leads.filter { it.status in workingSet || (it.status in newSet && sleeping(it)) }
+            // Due first, oldest first — the same order the Follow Ups screen
+            // uses, so the two never disagree about what to call next.
+            "followup" -> app.leads.filter { hasFollowUp(it) }
+                .sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
+            "working" -> app.leads.filter { it.status in workingSet }
             "pipeline" -> app.leads.filter { it.status in pipelineSet }
             "booked" -> app.leads.filter { it.status == "booked" }
             "closed" -> app.leads.filter { it.status in closedSet }
@@ -1186,7 +1199,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         // Same rule as the New tab below. These two used to disagree
                         // (the card counted leads the tab had already drained into
                         // Today), so the summary said 12 New and the tab showed 8.
-                        newCount = app.leads.count { it.status in newSet && !sleeping(it) && !inToday(it) },
+                        // Must stay character-for-character the same rule as the New
+                        // tab below — a summary card that disagrees with the tab it
+                        // links to has already caused one "12 vs 8" bug report.
+                        newCount = app.leads.count { it.status in newSet && !hasFollowUp(it) && !inToday(it) },
                         pipelineValue = pipelineValue,
                         scoring = app.aiScoringLeads,
                         reviveCount = reviveCount,
@@ -1243,14 +1259,17 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            // Five buckets a rep thinks in — one calm row, no chip wall.
+            // The buckets a rep thinks in — one calm row, no chip wall.
+            // Follow-up sits right after Today because that is the order the day
+            // runs in: what's fresh, what's due today, what I promised to call back.
             item {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val segments = listOf(
                         "all" to Triple("All", app.leads.size, MaterialTheme.colorScheme.primary),
-                        "new" to Triple("New", app.leads.count { it.status in newSet && !sleeping(it) && !inToday(it) }, MaterialTheme.colorScheme.primary),
+                        "new" to Triple("New", app.leads.count { it.status in newSet && !hasFollowUp(it) && !inToday(it) }, MaterialTheme.colorScheme.primary),
                         "today" to Triple("Today", app.leads.count { inToday(it) }, Cyan),
-                        "working" to Triple("Working", app.leads.count { it.status in workingSet || (it.status in newSet && sleeping(it)) }, Indigo),
+                        "followup" to Triple("Follow-up", app.leads.count { hasFollowUp(it) }, Amber),
+                        "working" to Triple("Working", app.leads.count { it.status in workingSet }, Indigo),
                         "pipeline" to Triple("Pipeline", app.leads.count { it.status in pipelineSet }, Purple),
                         "booked" to Triple("Booked", app.leads.count { it.status == "booked" }, Green),
                         "closed" to Triple("Closed", app.leads.count { it.status in closedSet }, Slate),
@@ -1264,19 +1283,19 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 }
             }
             // Reps kept asking what each tab actually holds — "New" contains
-            // no-answers, "Today" deliberately repeats leads that also sit in
-            // another tab, and a lead with a future callback silently moves to
-            // Working. None of that is guessable, so the list says it in one
-            // plain line instead of leaving people to work it out.
+            // no-answers, and "Today" deliberately repeats leads that also sit
+            // in another tab. None of that is guessable, so the list says it in
+            // one plain line instead of leaving people to work it out.
             if (stageFilter == null && quick == null) {
                 val hint = when (bucket) {
                     // "Not called yet" was only true of the first section. The tab
                     // also holds every callback whose time has passed, which is why
                     // the count looked far too big to a rep reading it as "fresh
                     // leads". Name both halves.
-                    "new" -> "Your calling list: fresh leads, plus anyone you tried and couldn't reach, plus callbacks whose time has passed."
+                    "new" -> "Fresh leads, plus anyone you tried and couldn't reach. Callbacks are in Follow-up now."
                     "today" -> "Today's work: callbacks due today, site visits today, and leads you already handled today. These also stay in their own tab."
-                    "working" -> "You talked to them, deal is on. Also leads waiting for a callback on a later day."
+                    "followup" -> "Every lead you promised to call back. Overdue at the top, then today, then later."
+                    "working" -> "You talked to them, deal is on."
                     "pipeline" -> "Site visit, negotiating or token paid."
                     "booked" -> "Deal done."
                     "closed" -> "Not interested, lost, or do not call."
