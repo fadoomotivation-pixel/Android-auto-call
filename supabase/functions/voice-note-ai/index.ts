@@ -10,9 +10,13 @@
 //    Every action lands in the lead's Journey timeline as "AI Assistant".
 // Body: { note_id }
 // Auth: any signed-in user who can see the note (RLS), or the service role.
-// Secret required: GROQ_API_KEY (same as call summaries).
+// Secret required: GROQ_API_KEY (same as call summaries) — used for Whisper
+// transcription, which has its own quota and has never been the bottleneck.
+// Optional: GEMINI_API_KEY. The summarising step goes through ../_shared/chat.ts,
+// which falls back to Gemini when Groq's shared daily token budget is spent.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { chatJson } from "../_shared/chat.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -215,20 +219,16 @@ Deno.serve(async (req) => {
     const transcript: string = trj.text ?? "";
     if (!transcript.trim()) throw new Error(`transcription empty: ${JSON.stringify(trj).slice(0, 200)}`);
 
-    const ch = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST", headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt() },
-          { role: "user", content: `Voice note transcript:\n\n${transcript.slice(0, 12000)}` },
-        ],
-      }),
-    });
-    const chj = await ch.json();
-    const raw: string = chj.choices?.[0]?.message?.content ?? "";
-    if (!raw.trim()) throw new Error(`summary empty: ${JSON.stringify(chj).slice(0, 200)}`);
+    // Groq first, Gemini behind it. This is the step that ran out of daily
+    // tokens by lunchtime and left every afternoon note reading "AI summary
+    // failed" — seventeen functions share that one budget. Two independent free
+    // allowances mean one running dry is no longer the rep's problem.
+    // (Transcription above is a separate quota and was never the bottleneck.)
+    const { text: raw } = await chatJson(
+      systemPrompt(),
+      `Voice note transcript:\n\n${transcript.slice(0, 12000)}`,
+      { temperature: 0.2 },
+    );
 
     let summary = raw.trim();
     let disposition: string | null = null;
