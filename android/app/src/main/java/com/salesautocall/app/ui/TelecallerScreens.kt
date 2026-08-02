@@ -1447,16 +1447,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     )
                 }
             }
-            // One quiet line teaching the two gestures that make the list fast.
-            if (!selectMode) {
-                item {
-                    Text(
-                        "Swipe right to call  ·  swipe left for WhatsApp",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    )
-                }
-            }
+            // The line that taught the swipe gestures is gone with them. Call and
+            // WhatsApp are buttons on every row now, so there is nothing left to
+            // teach — and a hint for a gesture that no longer exists is worse
+            // than no hint at all.
             // Active sheet-filters show as dismissible chips — tap ✕ to clear.
             run {
                 val active = buildList {
@@ -1941,19 +1935,6 @@ private fun LeadCard(
     val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
-    // Speed-first gestures: swipe right → call, swipe left → WhatsApp. The state
-    // never actually dismisses (confirmValueChange returns false → snaps back).
-    val swipeState = androidx.compose.material3.rememberSwipeToDismissBoxState(
-        confirmValueChange = { v ->
-            when (v) {
-                androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd -> if (cloudOn) onCloudCall() else onCall()
-                androidx.compose.material3.SwipeToDismissBoxValue.EndToStart -> onWhatsApp()
-                else -> {}
-            }
-            false
-        },
-    )
-
     // The one line the rep actually needs — what the customer said / promised.
     val now = System.currentTimeMillis()
     val visitMs = c.siteVisitAt?.let { instantMillis(it) }
@@ -1986,123 +1967,128 @@ private fun LeadCard(
         else -> "" to Slate
     }
 
-    androidx.compose.material3.SwipeToDismissBox(
-        state = swipeState,
-        enableDismissFromStartToEnd = !selectMode,
-        enableDismissFromEndToStart = !selectMode,
-        backgroundContent = {
-            val toCall = swipeState.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd
-            val bg = if (toCall) jade else WaGreen
-            Row(
-                Modifier.fillMaxSize().clip(RoundedCornerShape(18.dp)).background(bg.copy(alpha = 0.92f))
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = if (toCall) Arrangement.Start else Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(if (toCall) Icons.Default.Call else Icons.Default.Chat, contentDescription = if (toCall) "Call" else "WhatsApp",
-                    tint = Color.White, modifier = Modifier.size(24.dp))
-            }
-        },
+    // No swipe.
+    //
+    // Swipe-right called and swipe-left opened WhatsApp. On a fast-scrolling
+    // list that is a trap: the gesture that scrolls and the gesture that dials a
+    // customer differ only by angle, and reps were setting calls off by accident
+    // all day. A dialler you can trigger by mis-scrolling is not a shortcut.
+    //
+    // WhatsApp was ONLY reachable by that swipe, so it becomes a button next to
+    // Call — visible instead of hidden, and impossible to trigger by dragging.
+    //
+    // It also makes the list cheaper: every row was carrying a
+    // SwipeToDismissBox, which means an anchored-draggable state and a whole
+    // background layer per lead, composed and measured whether or not anyone
+    // ever swipes.
+    // A calm paper row — a stage dot, the name, the phone, one intent line, a
+    // jade call button. Dense: 5–6 leads to a screen, no boxed-in cards.
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(container)
+            .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
+            .padding(horizontal = 15.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // A calm paper row — a stage dot, the name, the phone, one intent line, a
-        // jade call button. Dense: 5–6 leads to a screen, no boxed-in cards.
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(container)
-                .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
-                .padding(horizontal = 15.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // Initials avatar — calm graphite by default (zero visual noise). The
+        // ONLY colour it can wear is a temperature ring for a hot/warm lead;
+        // otherwise the green Call button is the single accent on the row.
+        val ring = when (c.temperature) { "hot" -> Red; "warm" -> Amber; else -> null }
+        val discInk = MaterialTheme.colorScheme.onSurfaceVariant
+        Box(
+            Modifier.size(44.dp).clip(CircleShape)
+                .background(discInk.copy(alpha = 0.08f))
+                .then(ring?.let { Modifier.border(2.dp, it, CircleShape) } ?: Modifier),
+            contentAlignment = Alignment.Center,
         ) {
-            // Initials avatar — calm graphite by default (zero visual noise). The
-            // ONLY colour it can wear is a temperature ring for a hot/warm lead;
-            // otherwise the green Call button is the single accent on the row.
-            val ring = when (c.temperature) { "hot" -> Red; "warm" -> Amber; else -> null }
-            val discInk = MaterialTheme.colorScheme.onSurfaceVariant
+            Text(initialsOf(c.name), style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold, color = ring ?: discInk)
+        }
+        Spacer(Modifier.width(12.dp))
+
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(c.name ?: prettyPhone(c.phone), style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                Spacer(Modifier.width(7.dp))
+                // Stage + lead age. A New lead sitting untouched past a day
+                // turns the age amber — the quiet speed-to-lead nudge.
+                val age = ageLabel(c.createdAt ?: c.assignedAt)
+                // Hoisted set: this runs once per visible card, every frame
+                // a card is composed during a scroll.
+                val stale = age != null && c.status in UNCALLED && c.attempts == 0 && age != "Today"
+                Text("· ${stage.label}", style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
+                age?.let {
+                    Text(" · $it", style = MaterialTheme.typography.labelSmall,
+                        color = if (stale) Amber else muted,
+                        fontWeight = if (stale) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
+                }
+            }
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted, letterSpacing = 0.3.sp)
+                // Budget rides on the phone line so it's ALWAYS visible —
+                // especially on New leads where the intent line is busy.
+                budgetLabel(c.budget)?.let {
+                    Text("  ·  ₹ $it", style = MaterialTheme.typography.bodySmall, color = jade, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                // Where the lead is — the city/area the rep asks first. Shown
+                // right on the row so it's never a tap away.
+                c.territory?.takeIf { it.isNotBlank() }?.let {
+                    Text("  ·  📍 $it", style = MaterialTheme.typography.bodySmall, color = muted,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false))
+                }
+                if (c.attempts > 0) {
+                    // "Attempt 2/3" — which try comes NEXT, loud when its time is due.
+                    val due = followUp?.let { instantMillis(it.dueAt) }
+                    val dueNow = due != null && due <= now
+                    Text(
+                        "  ·  🔁 Attempt ${c.attempts + 1}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (dueNow) Red else Amber,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    )
+                }
+                // Which project they enquired for — the one fact a rep wants
+                // in hand BEFORE the customer picks up.
+                c.companyName?.takeIf { it.isNotBlank() }?.let {
+                    Text("  ·  🏢 $it", style = MaterialTheme.typography.bodySmall, color = muted,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false))
+                }
+            }
+            intent?.let { (label, color) ->
+                Spacer(Modifier.height(4.dp))
+                Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+
+        if (selectMode) {
+            val ring = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
             Box(
-                Modifier.size(44.dp).clip(CircleShape)
-                    .background(discInk.copy(alpha = 0.08f))
-                    .then(ring?.let { Modifier.border(2.dp, it, CircleShape) } ?: Modifier),
+                Modifier.size(26.dp).clip(CircleShape)
+                    .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .border(2.dp, ring, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(initialsOf(c.name), style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold, color = ring ?: discInk)
+                if (isSelected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
             }
-            Spacer(Modifier.width(12.dp))
-
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(c.name ?: prettyPhone(c.phone), style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-                    Spacer(Modifier.width(7.dp))
-                    // Stage + lead age. A New lead sitting untouched past a day
-                    // turns the age amber — the quiet speed-to-lead nudge.
-                    val age = ageLabel(c.createdAt ?: c.assignedAt)
-                    // Hoisted set: this runs once per visible card, every frame
-                    // a card is composed during a scroll.
-                    val stale = age != null && c.status in UNCALLED && c.attempts == 0 && age != "Today"
-                    Text("· ${stage.label}", style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
-                    age?.let {
-                        Text(" · $it", style = MaterialTheme.typography.labelSmall,
-                            color = if (stale) Amber else muted,
-                            fontWeight = if (stale) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
-                    }
-                }
-                Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted, letterSpacing = 0.3.sp)
-                    // Budget rides on the phone line so it's ALWAYS visible —
-                    // especially on New leads where the intent line is busy.
-                    budgetLabel(c.budget)?.let {
-                        Text("  ·  ₹ $it", style = MaterialTheme.typography.bodySmall, color = jade, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    }
-                    // Where the lead is — the city/area the rep asks first. Shown
-                    // right on the row so it's never a tap away.
-                    c.territory?.takeIf { it.isNotBlank() }?.let {
-                        Text("  ·  📍 $it", style = MaterialTheme.typography.bodySmall, color = muted,
-                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false))
-                    }
-                    if (c.attempts > 0) {
-                        // "Attempt 2/3" — which try comes NEXT, loud when its time is due.
-                        val due = followUp?.let { instantMillis(it.dueAt) }
-                        val dueNow = due != null && due <= now
-                        Text(
-                            "  ·  🔁 Attempt ${c.attempts + 1}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (dueNow) Red else Amber,
-                            fontWeight = FontWeight.SemiBold, maxLines = 1,
-                        )
-                    }
-                    // Which project they enquired for — the one fact a rep wants
-                    // in hand BEFORE the customer picks up.
-                    c.companyName?.takeIf { it.isNotBlank() }?.let {
-                        Text("  ·  🏢 $it", style = MaterialTheme.typography.bodySmall, color = muted,
-                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false))
-                    }
-                }
-                intent?.let { (label, color) ->
-                    Spacer(Modifier.height(4.dp))
-                    Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium,
-                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                }
-            }
-            Spacer(Modifier.width(10.dp))
-
-            if (selectMode) {
-                val ring = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                Box(
-                    Modifier.size(26.dp).clip(CircleShape)
-                        .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
-                        .border(2.dp, ring, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (isSelected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
-                }
-            } else {
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (tempLabel.isNotEmpty())
-                        Text(tempLabel, style = MaterialTheme.typography.labelSmall, color = tempColor, fontWeight = FontWeight.SemiBold)
-                    else c.createdAt?.let { Text(dayLabel(it), style = MaterialTheme.typography.labelSmall, color = muted) }
+        } else {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (tempLabel.isNotEmpty())
+                    Text(tempLabel, style = MaterialTheme.typography.labelSmall, color = tempColor, fontWeight = FontWeight.SemiBold)
+                else c.createdAt?.let { Text(dayLabel(it), style = MaterialTheme.typography.labelSmall, color = muted) }
+                // Both actions, both visible. WhatsApp used to be the hidden
+                // swipe-left; a rep should not have to know a gesture exists
+                // to reach half the row's functions.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        Modifier.size(38.dp).clip(CircleShape).background(WaGreen.copy(alpha = 0.14f))
+                            .clickable { onWhatsApp() },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WaGreen, modifier = Modifier.size(17.dp)) }
                     Box(
                         Modifier.size(38.dp).clip(CircleShape).background(jade)
                             .clickable { if (cloudOn) onCloudCall() else onCall() },
@@ -2547,6 +2533,27 @@ private fun DispoButton(label: String, bg: Color, fg: Color, modifier: Modifier 
     }
 }
 
+/** One tappable time. Big enough to hit without looking, quiet enough to scan. */
+@Composable
+private fun TimeChip(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .height(46.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+        )
+    }
+}
+
 /** Reusable quick-schedule chips used in both PostCallDisposition and ScheduleFollowUpDialog. */
 @Composable
 private fun QuickScheduleChips(
@@ -2561,30 +2568,53 @@ private fun QuickScheduleChips(
     fun at(days: Long, hour: Int) = now.plusDays(days).withHour(hour).withMinute(0).withSecond(0).toInstant().toEpochMilli()
     val currentHour = now.hour
 
+    // This is the screen a rep sees between two calls, so it is measured in
+    // seconds. It used to be seven FULL-WIDTH buttons stacked down the page —
+    // taller than the dialog, so the rep scrolled to find "tomorrow", read seven
+    // near-identical lines to pick one, and did that after every single call.
+    //
+    // Same choices, laid out the way they are actually thought about: "how soon"
+    // on one row, then the fixed times grouped under the day they belong to.
+    // Everything fits without scrolling and the target is a whole chip.
     Column {
-        Text(headline, style = MaterialTheme.typography.labelLarge)
-        Spacer(Modifier.height(8.dp))
-        // Smart presets — hide options that are already in the past.
-        OutlinedButton(onClick = { onPick(now.plusMinutes(30).toInstant().toEpochMilli(), null) },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("In 30 minutes") }
-        OutlinedButton(onClick = { onPick(now.plusHours(1).toInstant().toEpochMilli(), null) },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("In 1 hour") }
-        OutlinedButton(onClick = { onPick(now.plusHours(3).toInstant().toEpochMilli(), null) },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("In 3 hours") }
-        if (currentHour < 10) {
-            OutlinedButton(onClick = { onPick(at(0, 10), null) },
-                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Today 10 AM") }
+        Text(headline, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+
+        Text("Soon", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(5.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            TimeChip("30 min", Modifier.weight(1f)) { onPick(now.plusMinutes(30).toInstant().toEpochMilli(), null) }
+            TimeChip("1 hour", Modifier.weight(1f)) { onPick(now.plusHours(1).toInstant().toEpochMilli(), null) }
+            TimeChip("3 hours", Modifier.weight(1f)) { onPick(now.plusHours(3).toInstant().toEpochMilli(), null) }
         }
+
+        // A time that has already gone by is not an option — the row disappears
+        // entirely once both of today's slots are behind us.
         if (currentHour < 16) {
-            OutlinedButton(onClick = { onPick(at(0, 16), null) },
-                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Today 4 PM") }
+            Spacer(Modifier.height(10.dp))
+            Text("Today", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(5.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                if (currentHour < 10) TimeChip("10 AM", Modifier.weight(1f)) { onPick(at(0, 10), null) }
+                TimeChip("4 PM", Modifier.weight(1f)) { onPick(at(0, 16), null) }
+                // Every row is three columns wide whatever it holds, so a chip is
+                // always the same size and always in the same place — the rep's
+                // thumb learns one target, not one per row.
+                Spacer(Modifier.weight(if (currentHour < 10) 1f else 2f))
+            }
         }
-        OutlinedButton(onClick = { onPick(at(1, 10), null) },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Tomorrow 10 AM") }
-        OutlinedButton(onClick = { onPick(at(1, 16), null) },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) { Text("Tomorrow 4 PM") }
+
+        Spacer(Modifier.height(10.dp))
+        Text("Tomorrow", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(5.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            TimeChip("10 AM", Modifier.weight(1f)) { onPick(at(1, 10), null) }
+            TimeChip("4 PM", Modifier.weight(1f)) { onPick(at(1, 16), null) }
+            Spacer(Modifier.weight(1f))
+        }
+
         if (onSkip != null) {
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(6.dp))
             TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text(skipLabel) }
         }
         if (onBack != null) {
