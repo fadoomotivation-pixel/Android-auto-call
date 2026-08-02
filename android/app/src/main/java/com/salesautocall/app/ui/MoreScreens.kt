@@ -87,10 +87,11 @@ private val BadRed = Color(0xFFC0452C)
 // OffsetDateTime first: the API sends "+00:00", which Instant.parse rejects.
 // Instant-only meant this returned null for real timestamps, and threw an
 // exception to do it.
+// NOT recoverCatching: inside its lambda `it` is the Throwable, not the string
+// from the enclosing let. An elvis chain keeps `it` meaning what it reads like.
 private fun ms(iso: String?): Long? = iso?.let {
-    runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }
-        .recoverCatching { java.time.Instant.parse(it).toEpochMilli() }
-        .getOrNull()
+    runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+        ?: runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
 }
 
 private fun hhmm(iso: String?): String {

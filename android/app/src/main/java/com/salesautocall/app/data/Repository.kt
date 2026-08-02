@@ -239,9 +239,11 @@ object Repository {
                     // failed, this returned null and the candidate was dropped —
                     // so a phone recording could find no call log to attach to
                     // and simply never got matched. OffsetDateTime first.
-                    val sbStart = runCatching { java.time.OffsetDateTime.parse(it.startedAt).toInstant() }
-                        .recoverCatching { Instant.parse(it.startedAt) }
-                        .getOrNull() ?: return@mapNotNull null
+                    // Elvis, not recoverCatching — inside recoverCatching `it`
+                    // is the Throwable, not this call log.
+                    val sbStart = runCatching { java.time.OffsetDateTime.parse(it.startedAt).toInstant() }.getOrNull()
+                        ?: runCatching { Instant.parse(it.startedAt) }.getOrNull()
+                        ?: return@mapNotNull null
                     val diff = Math.abs(sbStart.epochSecond - nativeCall.startedAt.epochSecond)
                     if (diff < 120) it to diff else null
                 }
