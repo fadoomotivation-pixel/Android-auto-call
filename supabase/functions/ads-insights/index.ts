@@ -25,9 +25,10 @@ function json(o: unknown, s = 200) {
   return new Response(JSON.stringify(o), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 }
 
-// Qualifying funnel stages for CRM attribution.
-const QUALIFIED = new Set(["interested", "site_visit", "negotiation", "token_paid", "booked"]);
-const BOOKED = new Set(["booked"]);
+// Which funnel stages count as Qualified / Booked now lives in ONE place — the
+// ad_lead_autopsy SQL function — because the same question is asked by the
+// autopsy breakdown. Two copies of "what counts as qualified" is how two panels
+// on the same page start disagreeing about the same ad.
 
 const PRESET_SINCE: Record<string, () => number> = {
   today: () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); },
@@ -122,35 +123,35 @@ Deno.serve(async (req) => {
     const insRes = await fetch(`${GRAPH}/act_${acct}/insights?level=ad&${timeParam}&fields=${fields}&limit=500&access_token=${encodeURIComponent(token)}`).then((r) => r.json()).catch(() => ({}));
     if (insRes.error) return json({ ok: false, error: insRes.error.message ?? "Couldn't read ad insights (ads_read permission?)." });
 
-    // CRM attribution: leads created in this window, grouped by their ad_id.
+    // CRM attribution + the autopsy behind each ad's grade, in one call.
+    //
+    // This used to page through contacts here and count leads/qualified/booked
+    // by hand. It now asks ad_lead_autopsy, which counts the same rows by the
+    // same rule (facebook source, extra.ad_id, same window) and ALSO returns
+    // what happened to the leads that didn't qualify — never called, called but
+    // never reached, said no — plus how long the first dial took.
+    //
+    // That extra detail is the difference between "this ad is a D" and knowing
+    // whether the ad brought the wrong people or nobody worked the leads. Both
+    // score D; only one is fixed by changing the ad.
     const since = new Date(sinceMs).toISOString();
-    const crm: Record<string, { leads: number; qualified: number; booked: number }> = {};
-    const PAGE = 1000;
-    for (let from = 0; ; from += PAGE) {
-      let q = admin
-        .from("contacts")
-        .select("status, extra")
-        .eq("lead_source", "facebook")
-        .gte("created_at", since);
-      if (untilIso) q = q.lte("created_at", untilIso);
-      const { data: rows, error } = await q.range(from, from + PAGE - 1);
-      if (error) break;
-      for (const r of rows ?? []) {
-        const adId = (r.extra as { ad_id?: string } | null)?.ad_id;
-        if (!adId) continue;
-        const k = String(adId);
-        const c = crm[k] ?? { leads: 0, qualified: 0, booked: 0 };
-        c.leads++;
-        if (QUALIFIED.has(r.status)) c.qualified++;
-        if (BOOKED.has(r.status)) c.booked++;
-        crm[k] = c;
-      }
-      if (!rows || rows.length < PAGE) break;
+    type Autopsy = {
+      ad_id: string; leads: number; never_called: number; tried_not_reached: number;
+      spoke: number; qualified: number; booked: number; not_interested: number;
+      wrong_or_dnc: number; still_open: number; median_first_call_mins: number;
+    };
+    const crm: Record<string, Autopsy> = {};
+    {
+      const { data: ap } = await admin.rpc("ad_lead_autopsy", {
+        p_since: since,
+        p_until: untilIso ?? null,
+      });
+      for (const r of (ap ?? []) as Autopsy[]) crm[String(r.ad_id)] = r;
     }
 
     const rows = (insRes.data ?? []).map((r: Record<string, unknown>) => {
       const adId = String(r.ad_id ?? "");
-      const c = crm[adId] ?? { leads: 0, qualified: 0, booked: 0 };
+      const c = crm[adId];
       const campId = String(r.campaign_id ?? "");
       return {
         campaign_id: campId,
@@ -167,9 +168,17 @@ Deno.serve(async (req) => {
         cpc: num(r.cpc),
         frequency: num(r.frequency),
         meta_leads: metaLeads(r.actions as { action_type?: string; value?: string }[] | undefined),
-        crm_leads: c.leads,
-        crm_qualified: c.qualified,
-        crm_booked: c.booked,
+        crm_leads: c?.leads ?? 0,
+        crm_qualified: c?.qualified ?? 0,
+        crm_booked: c?.booked ?? 0,
+        // The "why" behind the grade. Absent when an ad produced no CRM leads.
+        crm_never_called: c?.never_called ?? 0,
+        crm_tried_not_reached: c?.tried_not_reached ?? 0,
+        crm_spoke: c?.spoke ?? 0,
+        crm_not_interested: c?.not_interested ?? 0,
+        crm_wrong_or_dnc: c?.wrong_or_dnc ?? 0,
+        crm_still_open: c?.still_open ?? 0,
+        crm_first_call_mins: c?.median_first_call_mins ?? 0,
       };
     });
 
