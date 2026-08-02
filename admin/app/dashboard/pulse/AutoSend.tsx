@@ -56,6 +56,10 @@ function verdict(status: string | null): { label: string; color: string; hint: s
       return { label: "✓ Sent by WhatsApp", color: "#4ade80", hint: "WhatsApp has sent it on; delivery not confirmed yet." };
     case "accepted":
       return { label: "· Handed to WhatsApp", color: "#fbbf24", hint: "Meta accepted it. Delivery is not confirmed." };
+    // Not a failure, and shown as its own thing so nobody chases a report that
+    // is about to arrive on its own. The drain cron runs every five minutes.
+    case "queued":
+      return { label: "⏳ Waiting to send", color: "#60a5fa", hint: "WhatsApp was down. It is held and retried automatically." };
     case "failed":
       return { label: "✗ Failed", color: "#f87171", hint: "WhatsApp refused to deliver it." };
     default:
@@ -207,6 +211,12 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
               is a specific thing the owner has to go and do. Printing it here,
               next to the number it happened to, is the difference between a
               feature they fix and one they quietly give up on. */}
+          {s.last_status === "queued" && (
+            <div style={{ flexBasis: "100%", fontSize: 12.5, color: "#93c5fd", lineHeight: 1.5 }}>
+              WhatsApp wasn&apos;t reachable, so this report is being held and retried every few minutes.
+              {s.last_error ? ` (${s.last_error})` : ""}
+            </div>
+          )}
           {s.last_status === "failed" && s.last_error && (
             <div style={{ flexBasis: "100%", fontSize: 12.5, color: "#fca5a5", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
               {s.last_error}
