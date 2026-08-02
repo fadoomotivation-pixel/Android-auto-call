@@ -123,10 +123,32 @@ Deno.serve(async (req) => {
         }
 
         // Delivery/read status updates for our outbound messages.
+        //
+        // This is the ONLY place WhatsApp ever tells the truth about delivery.
+        // The reply to a send says {"message_status":"accepted"} and returns a
+        // message id even for a message Meta will refuse to hand over — the
+        // refusal arrives here, minutes later, and nowhere else. So a status we
+        // fail to record is a failure the owner never learns about.
         for (const s of v.statuses ?? []) {
           if (!s.id) continue;
+          // errors[] carries WHY. Dropping it left "failed" as a bare word, and
+          // "they must message you first" needs a completely different action
+          // from "your token expired" — the reason is the whole value.
+          const e = s.errors?.[0];
+          const reason = e
+            ? [e.title, e.error_data?.details ?? e.message].filter(Boolean).join(" — ").slice(0, 500)
+            : null;
+
           await admin.from("whatsapp_messages")
-            .update({ status: s.status }).eq("wa_message_id", s.id);
+            .update({ status: s.status, error: reason }).eq("wa_message_id", s.id);
+
+          // If that message was somebody's daily pulse, move the verdict onto
+          // the subscriber row too. Otherwise the Pulse page keeps showing the
+          // tick it drew on send while whatsapp_messages quietly holds the
+          // failure, which is the same lie in a second place.
+          await admin.from("pulse_subscribers")
+            .update({ last_status: s.status, last_error: reason })
+            .eq("last_wa_message_id", s.id);
         }
       }
     }

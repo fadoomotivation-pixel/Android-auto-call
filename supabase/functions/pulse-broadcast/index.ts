@@ -145,7 +145,16 @@ async function resolveSender(
   };
 }
 
-async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
+/**
+ * Spelled out rather than inferred, so `if (r.ok)` actually narrows. TypeScript
+ * widens a literal `true` in an object literal to `boolean`, which would leave
+ * every caller reading `r.wamid` off a union that has no such member.
+ */
+type Delivery =
+  | { ok: true; via: "text" | "template"; parts: number; wamid?: string | null; borrowed_number?: boolean }
+  | { ok: false; error: string; sent_parts?: number };
+
+async function deliver(admin: SupabaseClient, sub: Sub, date: string): Promise<Delivery> {
   const { data: company } = await admin.from("companies").select("name").eq("id", sub.company_id).maybeSingle();
   const companyName = company?.name ?? null;
 
@@ -179,7 +188,7 @@ async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
         ]);
         if (t.id) {
           await logMessage(admin, sub, t.id, `[template ${sub.template_name}] ${text}`, sub.template_name);
-          return { ok: true, via: "template", parts: 1 };
+          return { ok: true, via: "template", parts: 1, wamid: t.id };
         }
         return { ok: false, error: humanError(t.code, t.error ?? "template send failed") };
       }
@@ -190,7 +199,7 @@ async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
   }
 
   await logMessage(admin, sub, firstId ?? null, sentBody, null);
-  return { ok: true, via: "text", parts: parts.length, borrowed_number: from.borrowed };
+  return { ok: true, via: "text", parts: parts.length, borrowed_number: from.borrowed, wamid: firstId };
 }
 
 /**
@@ -210,13 +219,29 @@ async function logMessage(
     body,
     msg_type: template ? "template" : "text",
     template_name: template,
-    status: "sent",
+    // "accepted", not "sent" — Meta's own word for what a 200 means. It has
+    // taken the message and issued an id; whether it will actually hand it over
+    // is decided later and announced only in a status webhook. Writing "sent"
+    // here is what let a founder see a green tick for a report that never
+    // arrived. The webhook overwrites this with Meta's real verdict.
+    status: "accepted",
   });
 }
 
-async function record(admin: SupabaseClient, id: string, status: string, error: string | null) {
+/**
+ * @param waId Meta's message id, so a later status webhook can find this
+ *   subscriber and replace an optimistic "accepted" with what really happened.
+ */
+async function record(
+  admin: SupabaseClient, id: string, status: string, error: string | null, waId?: string | null,
+) {
   await admin.from("pulse_subscribers")
-    .update({ last_sent_at: new Date().toISOString(), last_status: status, last_error: error })
+    .update({
+      last_sent_at: new Date().toISOString(),
+      last_status: status,
+      last_error: error,
+      last_wa_message_id: waId ?? null,
+    })
     .eq("id", id);
 }
 
@@ -241,7 +266,7 @@ Deno.serve(async (req) => {
     for (const s of (subs ?? []) as Sub[]) {
       try {
         const r = await deliver(admin, s, date);
-        if (r.ok) { sent++; await record(admin, s.id, "sent", null); }
+        if (r.ok) { sent++; await record(admin, s.id, "accepted", null, r.wamid); }
         else { failed++; await record(admin, s.id, "failed", r.error ?? "unknown"); }
       } catch (e) {
         // One company's broken WhatsApp must never stop the other companies'
@@ -277,7 +302,8 @@ Deno.serve(async (req) => {
   const date = typeof body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : istDate(0);
   try {
     const r = await deliver(admin, sub as Sub, date);
-    await record(admin, sub.id, r.ok ? "sent" : "failed", r.ok ? null : (r.error ?? "unknown"));
+    if (r.ok) await record(admin, sub.id, "accepted", null, r.wamid);
+    else await record(admin, sub.id, "failed", r.error ?? "unknown");
     return json(r);
   } catch (e) {
     await record(admin, sub.id, "failed", String(e).slice(0, 500));

@@ -46,9 +46,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dialpad
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
@@ -1242,10 +1240,19 @@ internal fun FloatingCallBar(
                 .background(pill).border(1.dp, hair, RoundedCornerShape(22.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Follow Ups takes the slot Call history had.
+            //
+            // A telecaller's most frequent question is "who do I ring next", and
+            // its answer lived two taps deep in the drawer. Call history is a
+            // once-a-week, look-something-up screen and it had a permanent slot.
+            // The bar has four places; they should go to the four things done
+            // most often, and this swap is worth more than any amount of
+            // rearranging the screens themselves. History is still one tap away
+            // under More → Calls & Recordings.
             NavSlot("Home", Icons.Default.Home, current == "home", jade, unsel, Modifier.weight(1f)) { onTab("home") }
             NavSlot("Leads", Icons.Default.People, current == "leads", jade, unsel, Modifier.weight(1f)) { onTab("leads") }
             Spacer(Modifier.width(66.dp)) // room for the raised dial
-            NavSlot("Calls", Icons.Default.History, current == "calls", jade, unsel, Modifier.weight(1f)) { onTab("calls") }
+            NavSlot("Follow Ups", Icons.Default.AccessTime, current == "followups", jade, unsel, Modifier.weight(1f)) { onTab("followups") }
             NavSlot("More", Icons.Default.Menu, false, jade, unsel, Modifier.weight(1f)) { onMore() }
         }
         // Raised centre Dial — the primary job, straddling the bar's top edge. A
@@ -1346,11 +1353,14 @@ private fun AppDrawer(
         QuickAction("Schedule Follow-up", Icons.Default.CalendarMonth, "calendar"),
         QuickAction("Import Call List", Icons.Default.Campaign, "campaign"),
     )
+    // "Projects" is gone from here. It routed nowhere and answered a tap with
+    // "coming soon" — a menu entry whose only behaviour is to say no. A rep who
+    // taps it once learns the menu lies; a rep who taps it twice stops reading
+    // the menu. It comes back when there is a screen behind it.
     val more = listOf(
         NavRow("Follow Ups", "Your due-now worklist", Icons.Default.AccessTime, "followups"),
         NavRow("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance"),
         NavRow("Calls & Recordings", "History and recordings", Icons.Default.Call, "calls"),
-        NavRow("Projects", "Manage projects & inventory", Icons.Default.Description, null),
     )
 
     ModalDrawerSheet(
@@ -1427,7 +1437,16 @@ private fun AppDrawer(
                     Text(userName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MenuText)
                     Text(
                         buildString {
-                            append(if (role == "admin") "Super Admin" else "Telecaller")
+                            // "Admin", not "Super Admin".
+                            //
+                            // Every company's own admin was being shown "Super
+                            // Admin", which is a different and much larger thing:
+                            // the platform owner, who sees every company. Telling
+                            // six separate customers they are the super admin of
+                            // the platform is a plain untruth on the first line
+                            // of the menu, and after today's privilege-escalation
+                            // work it is the exact word that must mean one thing.
+                            append(if (role == "admin") "Admin" else "Telecaller")
                             companyName?.let { append(" · "); append(it) }
                         },
                         style = MaterialTheme.typography.bodySmall, color = MenuMuted,
