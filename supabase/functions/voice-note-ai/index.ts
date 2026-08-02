@@ -100,9 +100,14 @@ function systemPrompt(): string {
     "interested after talking), 'lost', 'dnc' (customer said DO NOT call again). " +
     "IMPORTANT: a call that did not connect is 'callback', NEVER 'not_interested' " +
     "or 'dnc'. Use 'unknown' ONLY if the note is empty/a test with no signal. " +
-    "site_visit_date: ONLY if a site visit was agreed/planned, resolve phrases " +
-    'like "27 tarik", "agle Sunday", "parso" to YYYY-MM-DD (future). ' +
-    "site_visit_time: HH:MM 24h if a time was said, else null. " +
+    "site_visit_date: ONLY if the customer actually COMMITTED to visiting, " +
+    'resolve phrases like "27 tarik", "agle Sunday", "parso" to YYYY-MM-DD ' +
+    "(future). A maybe is not a booking: if they only might come " +
+    "('shayad', 'dekhte hain', 'try karenge', 'sochkar batata hoon'), leave " +
+    "this null and use disposition 'interested' instead. " +
+    "site_visit_time: HH:MM 24h ONLY if a clock time was actually said. If they " +
+    'just named a day ("Sunday visit", "do din me aayenge"), this is null — ' +
+    "never guess a time. " +
     "site_visit_cancelled: true ONLY if the note says a planned visit is " +
     "cancelled/postponed indefinitely ('visit cancel ho gayi', 'nahi aa rahe'). " +
     "callback_date/callback_time: ONLY if the lead asked to be called back at " +
@@ -388,6 +393,18 @@ Deno.serve(async (req) => {
     }
 
     // Site visit agreed → set the stage + date, and arm both reminders.
+    //
+    // The TIME is only the customer's if the customer gave one. They usually
+    // don't — "do din me visit ke liye aayenge", "Sunday visit" — and 11:00 is
+    // this function's placeholder so the reminders have a moment to fire
+    // against. It is NOT an appointment anybody agreed to. Printing it as one
+    // ("Site visit set for 30 Jul, 11:00 AM") turned a customer's rough plan
+    // into a booking with a clock time, and the rep who made the note knew
+    // perfectly well no time had been fixed.
+    //
+    // So an unfixed time is now said out loud everywhere the visit is
+    // mentioned, and the day-before reminder becomes the job it actually is:
+    // ring them and fix the time.
     let visitApplied = false;
     if (contact && !phoneInvalid && svDate && svDate >= today) {
       const visitAt = istIso(svDate, svTime ?? "11:00");
@@ -395,13 +412,17 @@ Deno.serve(async (req) => {
         status: "site_visit", site_visit_at: visitAt,
       }).eq("id", contact.id);
       visitApplied = true;
-      const pretty = prettyIst(svDate, svTime ?? "11:00");
-      actions.push(`Site visit set for ${pretty}`);
-      await logAct("site_visit", `Site visit set for ${pretty} (from voice note)`);
+      // prettyIst prints date-only when time is null — never the placeholder.
+      const pretty = prettyIst(svDate, svTime);
+      const loose = svTime ? "" : " (time not fixed)";
+      actions.push(`Site visit planned for ${pretty}${loose}`);
+      await logAct("site_visit", `Site visit planned for ${pretty}${loose} (from voice note)`);
       await remind(istIso(addDays(svDate, -1), "10:00"), "🏠 Tomorrow: site visit",
-        `Tomorrow is ${who}'s site visit (${pretty}). Confirm on WhatsApp & prep the documents.`);
+        svTime
+          ? `Tomorrow is ${who}'s site visit (${pretty}). Confirm on WhatsApp & prep the documents.`
+          : `${who} said they would visit tomorrow (${pretty}) but no time was fixed. Call and fix the time.`);
       await remind(istIso(svDate, "08:30"), "🏠 Today: site visit",
-        `Today is ${who}'s site visit (${pretty}). All the best!`);
+        `Today is ${who}'s site visit (${pretty})${loose}. All the best!`);
       actions.push("Reminders scheduled (day before 10 AM + visit morning)");
     }
 
@@ -431,9 +452,10 @@ Deno.serve(async (req) => {
     }
 
     // Call didn't connect → it counts as a NO-CONNECT ATTEMPT. Bump the attempts
-    // ladder so the lead shows "🔁 Attempt N" and lands in the New tab's
-    // "Tried before — call again" section instead of looking brand-new. Capped so
-    // it can't run away, and only for a lead that's still in the calling pile.
+    // ladder so the lead shows "🔁 Attempt N". Since 0120 the lead has also
+    // already left New for 'no_answer', which puts it in Follow-up's "didn't
+    // pick up — try again" section; this just says how many tries it has taken.
+    // Capped so it can't run away, and only for a lead still in the calling pile.
     if (contact && notConnected && !phoneInvalid &&
         !["booked", "token_paid", "site_visit", "negotiation", "dnc"].includes(contact.status)) {
       const nextAttempts = Math.min((contact.attempts ?? 0) + 1, 9);

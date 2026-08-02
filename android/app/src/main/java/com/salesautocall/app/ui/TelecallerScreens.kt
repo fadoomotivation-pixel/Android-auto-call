@@ -190,6 +190,8 @@ private val BOOKED_OR_DNC = setOf("booked", "dnc")
 /** Never dialled — the same meaning as the New tab. */
 private val UNCALLED = setOf("new", "queued")
 private val NEEDS_REMINDER = setOf("interested", "callback")
+/** Stages a lead only reaches AFTER a site visit really happened. */
+private val AFTER_VISIT = setOf("negotiation", "proposal", "token_paid")
 
 private fun leadScore(c: Contact): Int {
     val base = when (c.status) {
@@ -594,10 +596,25 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     val visitsPlanned = app.leads
         .mapNotNull { c -> c.siteVisitAt?.let { instantMillis(it) }?.let { ms -> c to ms } }
         .filter { it.second >= nowMs }.sortedBy { it.second }
-    val visitsDone = app.leads
+    // A date that has gone by is NOT proof anybody turned up.
+    //
+    // Reported exactly this way: "Rajbir aur Rajesh ne bola shayad site visit
+    // karenge, par app ne dikha diya site visit ho gayi." A voice note had
+    // pencilled a visit in for a day, that day passed, and Home then listed
+    // them under "Visit done — close them". Nobody had confirmed anything. The
+    // rep is then told to close a customer who may never have come.
+    //
+    // Something has to actually SAY it happened: the rep tapped Arrived on site
+    // (the geofenced check-in), or the lead moved further down the funnel,
+    // which only happens after a real visit. Everything else is just a day that
+    // went past, and the app asks about it instead of asserting it.
+    val pastVisits = app.leads
         .mapNotNull { c -> c.siteVisitAt?.let { instantMillis(it) }?.let { ms -> c to ms } }
         .filter { it.second < nowMs && it.first.status !in DEAD_OR_BOOKED }
         .sortedByDescending { it.second }
+    val (visitsDone, visitsUnconfirmed) = pastVisits.partition {
+        it.first.siteVisitArrivedAt != null || it.first.status in AFTER_VISIT
+    }
 
     Refreshable(onRefresh = { vm.loadHome(force = true); vm.loadLeads(force = true) }, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
@@ -676,7 +693,9 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // TODAY'S PLAN — the rep's whole day, by what the customer said:
         // who asked for a callback, whose site visit is fixed, whose visit
         // happened (and now needs closing). Names first, statuses never.
-        if (callbacks.isNotEmpty() || visitsPlanned.isNotEmpty() || visitsDone.isNotEmpty()) {
+        if (callbacks.isNotEmpty() || visitsPlanned.isNotEmpty() || visitsDone.isNotEmpty() ||
+            visitsUnconfirmed.isNotEmpty()
+        ) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -710,6 +729,16 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                 PlanRow(c.name ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone)
                             },
                             more = visitsDone.size - 3, onCall = { vm.dialManual(it) },
+                        )
+                        // Asked, never asserted. These are the ones where the
+                        // planned day came and went with nothing to show that
+                        // anyone actually visited.
+                        PlanBucket(
+                            emoji = "❓", title = "Visit day gone — did they come?", color = Amber,
+                            rows = visitsUnconfirmed.take(3).map { (c, _) ->
+                                PlanRow(c.name ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone)
+                            },
+                            more = visitsUnconfirmed.size - 3, onCall = { vm.dialManual(it) },
                         )
                     }
                 }
