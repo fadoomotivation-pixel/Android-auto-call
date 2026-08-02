@@ -2,6 +2,14 @@
 
 package com.salesautocall.app.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -824,9 +832,67 @@ private fun CoachBubble(
             .clickable { if (mini) onExpand() else onOpen() },
         contentAlignment = Alignment.Center,
     ) {
-        if (!mini) {
-            Text("🎯", style = MaterialTheme.typography.titleLarge)
+        if (!mini) AiSpark(Modifier.size(24.dp))
+    }
+}
+
+/**
+ * The coach's mark: a four-point spark that breathes, and one small companion
+ * that drifts around it.
+ *
+ * It was a 🎯 dartboard emoji. That reads as "target"/"goal", not as a thinking
+ * assistant, and an emoji is whatever font the handset ships — a different
+ * picture on every phone, at whatever weight the vendor drew it.
+ *
+ * Drawn rather than shipped as an SVG or PNG: it is four lines of geometry, so
+ * it stays sharp at any density, needs no asset per bucket, adds nothing to the
+ * APK, and recolours itself for dark mode for free. The animation is one
+ * infinite transition driving a scale and a rotation — it says "this is alive
+ * and listening" without spinning like a loader, which would say "wait".
+ */
+@Composable
+private fun AiSpark(modifier: Modifier = Modifier) {
+    val t = rememberInfiniteTransition(label = "ai")
+    val pulse by t.animateFloat(
+        initialValue = 0.82f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "pulse",
+    )
+    val spin by t.animateFloat(
+        initialValue = 0f, targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Restart),
+        label = "spin",
+    )
+    Canvas(modifier) {
+        val c = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+        val r = size.minDimension / 2f
+
+        // A four-point star, built from two curves that pinch at the waist —
+        // the "sparkle" shape an assistant is read as everywhere.
+        fun spark(centre: androidx.compose.ui.geometry.Offset, radius: Float, alpha: Float) {
+            val waist = radius * 0.30f
+            val p = androidx.compose.ui.graphics.Path().apply {
+                moveTo(centre.x, centre.y - radius)
+                quadraticBezierTo(centre.x + waist, centre.y - waist, centre.x + radius, centre.y)
+                quadraticBezierTo(centre.x + waist, centre.y + waist, centre.x, centre.y + radius)
+                quadraticBezierTo(centre.x - waist, centre.y + waist, centre.x - radius, centre.y)
+                quadraticBezierTo(centre.x - waist, centre.y - waist, centre.x, centre.y - radius)
+                close()
+            }
+            drawPath(p, Color.White.copy(alpha = alpha))
         }
+
+        spark(c, r * 0.92f * pulse, 0.97f)
+
+        // The companion, orbiting slowly. Half a turn behind so the two are
+        // never at their brightest together — it keeps the mark from reading
+        // as a symmetrical logo and makes the movement noticeable at 24dp.
+        val rad = Math.toRadians(spin.toDouble())
+        val orbit = androidx.compose.ui.geometry.Offset(
+            c.x + (r * 0.74f) * kotlin.math.cos(rad).toFloat(),
+            c.y + (r * 0.74f) * kotlin.math.sin(rad).toFloat(),
+        )
+        spark(orbit, r * 0.26f * (1.82f - pulse), 0.85f)
     }
 }
 
