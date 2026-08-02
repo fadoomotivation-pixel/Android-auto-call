@@ -452,9 +452,10 @@ Deno.serve(async (req) => {
     }
 
     // Call didn't connect → it counts as a NO-CONNECT ATTEMPT. Bump the attempts
-    // ladder so the lead shows "🔁 Attempt N" and lands in the New tab's
-    // "Tried before — call again" section instead of looking brand-new. Capped so
-    // it can't run away, and only for a lead that's still in the calling pile.
+    // ladder so the lead shows "🔁 Attempt N". Since 0120 the lead has also
+    // already left New for 'no_answer', which puts it in Follow-up's "didn't
+    // pick up — try again" section; this just says how many tries it has taken.
+    // Capped so it can't run away, and only for a lead still in the calling pile.
     if (contact && notConnected && !phoneInvalid &&
         !["booked", "token_paid", "site_visit", "negotiation", "dnc"].includes(contact.status)) {
       const nextAttempts = Math.min((contact.attempts ?? 0) + 1, 9);
