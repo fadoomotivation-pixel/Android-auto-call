@@ -2321,6 +2321,11 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
     val app by vm.state.collectAsState()
     val who = app.postCallName ?: app.postCallPhone ?: return
     val connected = app.postCallConnected
+    // Opened by hand from a follow-up's Update button rather than by a call
+    // ending. Same questions, one difference: it can be closed. A prompt the
+    // rep opened themselves must never trap them — that lock exists to stop a
+    // REAL call going unrecorded, and there was no call here.
+    val manual = app.postCallManual
     // Which flow the schedule chips are serving: plain callback vs. an
     // Interested lead whose next touch we refuse to leave unscheduled.
     var scheduleFor by remember { mutableStateOf<String?>(null) }
@@ -2337,10 +2342,11 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
         // lead silently stays "new" and looks untouched the next day. Outside-tap
         // / back are ignored; one outcome tap is the only way out. A missed call
         // stays freely dismissable (its "new" status is correct).
-        onDismissRequest = { if (!connected) vm.dismissPostCall() },
+        onDismissRequest = { if (!connected || manual) vm.dismissPostCall() },
         title = {
             Column {
-                Text("Call ended", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(if (manual) "Update lead" else "Call ended",
+                    style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(who, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -2495,7 +2501,11 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
         confirmButton = {},
         dismissButton = {
             if (scheduleFor == null) {
-                if (connected) {
+                if (manual) {
+                    // Opened by hand, so it closes by hand. Nothing is recorded
+                    // and the callback stays exactly where it was.
+                    TextButton(onClick = { vm.dismissPostCall() }) { Text("Close") }
+                } else if (connected) {
                     // Connected call → no Skip. The lead must not stay "new";
                     // an outcome tap above is the only exit.
                     Text(
@@ -2651,6 +2661,13 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     // Map them to lead rows so we can power-dial back-to-back.
     val dueContacts = toCall.mapNotNull { f -> app.leads.find { it.id == f.contactId } }
     val laterToday = all.filter { at(it) > now && dayLabel(it.dueAt) == "Today" }.sortedBy { at(it) }
+    // Tomorrow gets its own tab because that is how a telecaller plans — "kal
+    // kisko karna hai" is a real question, and it was buried inside a 7-day
+    // list. It also makes the movement VISIBLE: book a callback for tomorrow,
+    // watch it sit here, and find it in Call now when its time comes. Nothing
+    // schedules that hop — the tabs are just today's clock read against due_at,
+    // so a lead lands in the right one on its own, every time the screen opens.
+    val tomorrow = all.filter { dayLabel(it.dueAt) == "Tomorrow" }.sortedBy { at(it) }
     // Genuinely ahead of us — a plan, not a backlog. The old "This week" had no
     // lower bound, so every ancient overdue callback counted as "this week" too.
     val weekList = all.filter { at(it) > now && at(it) <= now + 7L * 24 * 3600_000L }.sortedBy { at(it) }
@@ -2669,12 +2686,14 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val shown = when (filter) {
         "tocall" -> toCall
         "later" -> laterToday
+        "tomorrow" -> tomorrow
         "week" -> weekList
         else -> all.sortedBy { at(it) }
     }
     val blurb = when (filter) {
         "tocall" -> "Their time has come — oldest first. Call these now."
         "later" -> "Booked for later today. Nothing to do yet."
+        "tomorrow" -> "Booked for tomorrow. These move into Call now on their own, at their time."
         "week" -> "Coming up in the next 7 days."
         else -> "Every callback you have, soonest first."
     }
@@ -2706,13 +2725,21 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
         // filters
         item {
-            // Four tabs, not six. Morning/Afternoon/Overdue were slices of the
-            // same leads under different names — more ways to see a partial
-            // list, which is what made the screen hard to trust.
+            // Tabs, not a dropdown.
+            //
+            // A dropdown would hide four counts behind a tap and put the rep in
+            // a mode they have to remember they are in. These read as one line
+            // — "24 to call, 3 later today, 6 tomorrow" — and switching costs
+            // one tap with the number already in front of you.
+            //
+            // Still no Morning/Afternoon/Overdue: those were slices of the same
+            // leads under different names, which is what made this screen hard
+            // to trust in the first place. Each tab here is a different WHEN.
             Column {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterTab("Call now", toCall.size, filter == "tocall", Red) { picked = "tocall" }
                     FilterTab("Later today", laterToday.size, filter == "later", MaterialTheme.colorScheme.primary) { picked = "later" }
+                    FilterTab("Tomorrow", tomorrow.size, filter == "tomorrow", Amber) { picked = "tomorrow" }
                     FilterTab("This week", weekList.size, filter == "week", Indigo) { picked = "week" }
                     FilterTab("All", all.size, filter == "all", MaterialTheme.colorScheme.primary) { picked = "all" }
                 }
@@ -2794,12 +2821,14 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
         } else {
             items(shown, key = { it.id ?: it.phone }) { f ->
+                val cid = f.contactId
                 FollowUpCard(
                     f = f,
                     onCall = { vm.dialManual(f.phone) },
                     onWhatsApp = { openWhatsApp(context, f.phone, waTemplate(f.name, null, app.profile?.fullName, app.company?.name, app.profile?.speaksAs)) },
                     onSnooze = { f.id?.let { vm.snoozeFollowUp(it, 1) } },
                     onReschedule = { rescheduleFor = f },
+                    onUpdate = if (cid == null) null else fun() { vm.openFollowUpUpdate(cid, f.phone, f.name, f.id) },
                     onDone = { f.id?.let { vm.completeFollowUp(it) } },
                 )
             }
@@ -2819,8 +2848,15 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     }
 }
 
+/**
+ * [onUpdate] is null when the callback isn't linked to a lead — there is no
+ * funnel to move, so it falls back to plainly ticking the callback off. Every
+ * pending callback on the platform is currently linked, but the column is
+ * nullable and a button that silently does nothing is worse than one that
+ * isn't there.
+ */
 @Composable
-private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onSnooze: () -> Unit, onReschedule: () -> Unit, onDone: () -> Unit) {
+private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onSnooze: () -> Unit, onReschedule: () -> Unit, onUpdate: (() -> Unit)?, onDone: () -> Unit) {
     val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= System.currentTimeMillis()
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -2856,10 +2892,38 @@ private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit
                 ActionButton(Icons.Default.Chat, "WhatsApp", Color(0xFF25D366), Modifier.weight(1f), onClick = onWhatsApp)
             }
             Spacer(Modifier.height(8.dp))
+            // Update REPLACES the old "Done".
+            //
+            // Done ticked the callback off and recorded nothing — which is
+            // exactly how a customer who said "interested, call Friday" ended up
+            // as a closed callback on a lead that never moved. Update asks the
+            // one question and then does all of it: the stage moves, the note and
+            // temperature save, the next callback books itself, and THIS callback
+            // closes. Two buttons that both looked like "finish" but meant
+            // different things is the confusion; now there is one.
+            if (onUpdate != null) {
+                Box(
+                    Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable { onUpdate() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Update", color = MaterialTheme.colorScheme.onPrimary,
+                            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                ActionButton(Icons.Default.CheckCircle, "Done", MaterialTheme.colorScheme.primary,
+                    Modifier.fillMaxWidth(), onClick = onDone)
+            }
+            Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionButton(Icons.Default.Schedule, "Snooze", Amber, Modifier.weight(1f), onClick = onSnooze)
                 ActionButton(Icons.Default.CalendarMonth, "Pick Time", Slate, Modifier.weight(1f), onClick = onReschedule)
-                ActionButton(Icons.Default.CheckCircle, "Done", MaterialTheme.colorScheme.primary, Modifier.weight(1f), onClick = onDone)
             }
         }
     }
