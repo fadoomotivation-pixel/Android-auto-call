@@ -1130,6 +1130,23 @@ object Repository {
     suspend fun downloadVoiceNote(path: String): ByteArray =
         client.storage.from("voice-notes").downloadAuthenticated(path)
 
+    /**
+     * The rep says the visit DID happen, after the fact.
+     *
+     * markSiteArrival() needs GPS because it proves the rep stood at the site.
+     * This is the other half: answering "did they come?" from the office the
+     * next morning, where there is no location to read and never will be. It
+     * stamps the arrival so the visit stops looking unanswered, and deliberately
+     * writes verified = false — it is a rep's word, not a geofence, and the two
+     * must never be confused in the numbers.
+     */
+    suspend fun confirmSiteVisitHappened(contactId: String) {
+        client.from("contacts").update(buildJsonObject {
+            put("site_visit_arrived_at", java.time.Instant.now().toString())
+            put("site_visit_verified", false)
+        }) { filter { eq("id", contactId) } }
+    }
+
     /** Buyer changed their mind: wipe the planned site visit date + project. */
     suspend fun clearSiteVisit(contactId: String) {
         client.from("contacts").update(mapOf<String, String?>("site_visit_at" to null, "site_visit_project" to null)) {

@@ -1450,6 +1450,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * "Did they come?" answered in one tap from Home.
+     *
+     * This is the most valuable unanswered question in the whole funnel: a
+     * site_visit lead counts as QUALIFIED in the ad autopsy, so every visit
+     * nobody confirms is a lead-quality number built on a guess. It used to be
+     * answerable only by opening the lead and hunting for a stage.
+     *
+     * came = true  → the visit really happened; the lead reads "Visit done"
+     *                everywhere instead of "did they come?", and the Update
+     *                prompt opens so the rep says what's next while it's fresh.
+     * came = false → the visit did not happen; the planned date is cleared so
+     *                it stops asking, and the prompt opens to book the next step.
+     */
+    fun answerVisitHappened(contactId: String, phone: String, name: String?, came: Boolean) {
+        viewModelScope.launch {
+            runCatching {
+                if (came) Repository.confirmSiteVisitHappened(contactId)
+                else Repository.clearSiteVisit(contactId)
+            }.onSuccess {
+                val nowIso = java.time.Instant.now().toString()
+                set { st ->
+                    st.copy(
+                        leads = st.leads.map { c ->
+                            if (c.id != contactId) c
+                            else if (came) c.copy(siteVisitArrivedAt = nowIso, siteVisitVerified = false)
+                            else c.copy(siteVisitAt = null, siteVisitProject = null)
+                        },
+                        message = if (came) "✅ Visit confirmed — what's next?" else "Visit didn't happen — book the next step.",
+                    )
+                }
+                launchActivityLog(contactId) {
+                    add("site_visit" to if (came) "Rep confirmed the site visit happened"
+                                        else "Rep confirmed the customer did not come")
+                }
+                // Straight into the same prompt everything else uses, so the
+                // answer and the next step are one action, not two.
+                openFollowUpUpdate(contactId, phone, name, null)
+            }.onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
     private fun applyArrival(contactId: String, verified: Boolean, distance: Int) {
         val nowIso = java.time.Instant.now().toString()
         set { st ->

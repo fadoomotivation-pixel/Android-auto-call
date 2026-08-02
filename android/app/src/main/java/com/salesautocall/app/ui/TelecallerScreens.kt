@@ -756,7 +756,16 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                         PlanBucket(
                             emoji = "❓", title = "Visit day gone — did they come?", color = Amber,
                             rows = visitsUnconfirmed.take(3).map { (c, _) ->
-                                PlanRow(c.name ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone)
+                                PlanRow(
+                                    c.name ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone,
+                                    // Answering here is the whole point. A visit
+                                    // nobody confirms still counts as QUALIFIED
+                                    // in the ad report, so an unanswered question
+                                    // is not a gap in the UI — it is a number the
+                                    // owner is making ad decisions on.
+                                    onYes = c.id?.let { id -> { vm.answerVisitHappened(id, c.phone, c.name, true) } },
+                                    onNo = c.id?.let { id -> { vm.answerVisitHappened(id, c.phone, c.name, false) } },
+                                )
                             },
                             more = visitsUnconfirmed.size - 3, onCall = { vm.dialManual(it) },
                         )
@@ -952,6 +961,13 @@ private data class PlanRow(
     val detail: String?,
     val phone: String,
     val overdue: Boolean = false,
+    /**
+     * A yes/no the row is ASKING. Set only on "Visit day gone — did they come?",
+     * where a Call button alone left the most important question in the funnel
+     * unanswerable from the one screen a rep actually opens.
+     */
+    val onYes: (() -> Unit)? = null,
+    val onNo: (() -> Unit)? = null,
 )
 
 /** A titled bucket inside Today's Plan (callbacks / visits fixed / visits done). */
@@ -974,26 +990,57 @@ private fun PlanBucket(
     Spacer(Modifier.height(6.dp))
     rows.forEachIndexed { i, r ->
         if (i > 0) Spacer(Modifier.height(6.dp))
-        Row(
+        Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                 .background(color.copy(alpha = 0.07f))
                 .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(r.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Spacer(Modifier.width(8.dp))
-                    Text(r.whenLabel, style = MaterialTheme.typography.labelSmall,
-                        color = if (r.overdue) Red else color, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(r.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false))
+                        Spacer(Modifier.width(8.dp))
+                        Text(r.whenLabel, style = MaterialTheme.typography.labelSmall,
+                            color = if (r.overdue) Red else color, fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
+                    r.detail?.takeIf { it.isNotBlank() }?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
                 }
-                r.detail?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                IconButton(onClick = { onCall(r.phone) }, modifier = Modifier.size(34.dp).clip(CircleShape).background(Green.copy(alpha = 0.12f))) {
+                    Icon(Icons.Default.Call, contentDescription = "Call ${r.name}", tint = Green, modifier = Modifier.size(17.dp))
                 }
             }
-            IconButton(onClick = { onCall(r.phone) }, modifier = Modifier.size(34.dp).clip(CircleShape).background(Green.copy(alpha = 0.12f))) {
-                Icon(Icons.Default.Call, contentDescription = "Call ${r.name}", tint = Green, modifier = Modifier.size(17.dp))
+            // The answer, right where the question is asked. Two taps' worth of
+            // information — did they turn up, and what now — collapsed into one.
+            if (r.onYes != null && r.onNo != null) {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                            .background(Green.copy(alpha = 0.16f))
+                            .clickable { r.onYes.invoke() }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("✅  Yes, they came", style = MaterialTheme.typography.labelMedium,
+                            color = Green, fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                            .background(Slate.copy(alpha = 0.14f))
+                            .clickable { r.onNo.invoke() }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("✖  Didn't come", style = MaterialTheme.typography.labelMedium,
+                            color = Slate, fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
+                }
             }
         }
     }
@@ -1965,8 +2012,23 @@ private fun LeadCard(
     val intent: Pair<String, Color>? = when {
         followUp != null -> {
             val late = (instantMillis(followUp.dueAt) ?: Long.MAX_VALUE) <= now
-            (if (late) "↻ Call back · ${relativeDue(followUp.dueAt)}"
-             else "↻ Call back · ${dayLabel(followUp.dueAt)} ${timeOnly(followUp.dueAt)}") to (if (late) Red else jade)
+            // WHY this lead is waiting, not just that it is.
+            //
+            // "↻ Call back · Overdue 3d" told a rep the clock and nothing else,
+            // so opening Follow-up felt like a list of strangers — "ye yahan kyun
+            // hai". The app always knew who booked it and what was said; the note
+            // carries that and was simply never shown here.
+            val note = (followUp.note ?: "").trim()
+            val why = when {
+                note.startsWith("AI:", ignoreCase = true) ->
+                    "🎤 ${note.removePrefix("AI:").removePrefix("ai:").trim()}"
+                note.contains("Attempt", ignoreCase = true) -> "🔁 Nobody picked up"
+                note.isNotEmpty() -> "📝 $note"
+                else -> "↻ You promised a call back"
+            }
+            val whenText = if (late) relativeDue(followUp.dueAt)
+                           else "${dayLabel(followUp.dueAt)} ${timeOnly(followUp.dueAt)}"
+            "$why · $whenText" to (if (late) Red else jade)
         }
         visitMs != null && visitMs >= now -> "🏠 Site visit · ${dayLabel(c.siteVisitAt)}" to Purple
         // The same "a passed date is not attendance" rule Home uses. This line
@@ -2082,16 +2144,40 @@ private fun LeadCard(
                 c.companyName?.takeIf { it.isNotBlank() }?.let { "🏢 $it" },
             )
             if (extras.isNotEmpty()) {
+                // Two lines, not one. "🏢 Kunj Vihari, Bridge Vat…" is a project
+                // name cut mid-word, which tells a rep less than nothing — they
+                // cannot tell which of two similar sites this lead asked about.
+                // Real project names are long; give them the room to be read.
                 Text(
                     extras.joinToString("  ·  "),
                     style = MaterialTheme.typography.bodySmall, color = muted,
-                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
             }
             intent?.let { (label, color) ->
                 Spacer(Modifier.height(4.dp))
+                // Also two lines: this now carries the REASON a callback exists,
+                // and a reason clipped at "🎤 budget 85L, Friday vi…" is the same
+                // problem in a new place.
                 Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium,
-                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            // Update lives on the LEFT, under the lead's own details.
+            //
+            // Tucked into the right-hand action column it sat under two round
+            // buttons and read as a third, smaller sibling of Call — an
+            // afterthought squeezed against the edge. It belongs with the lead's
+            // information, where the eye already is, and the text column has the
+            // width to give it a proper target.
+            Spacer(Modifier.height(7.dp))
+            Box(
+                Modifier.clip(RoundedCornerShape(9.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                    .clickable { onUpdate() }
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                Text("✎  Update", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1)
             }
         }
         Spacer(Modifier.width(10.dp))
@@ -2125,23 +2211,6 @@ private fun LeadCard(
                             .clickable { if (cloudOn) onCloudCall() else onCall() },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(17.dp)) }
-                }
-                // Update, on EVERY lead — the funnel is filled from the list a
-                // rep already lives in, not from a screen they have to go find.
-                //
-                // It sits UNDER the two round buttons rather than beside them:
-                // three 38dp circles plus their gaps eat about 130dp, which on
-                // a 4-inch phone is a third of the width and is exactly what was
-                // squeezing the text into "Yesterda" and "₹ 3 –". A short wide
-                // pill costs no width the column wasn't already using.
-                Box(
-                    Modifier.clip(RoundedCornerShape(9.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                        .clickable { onUpdate() }
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                ) {
-                    Text("Update", style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         }
