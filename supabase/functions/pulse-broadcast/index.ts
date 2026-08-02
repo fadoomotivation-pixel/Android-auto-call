@@ -6,19 +6,18 @@
 //   • Admin "Send now" (JWT) — one subscriber, for testing. An automation you
 //     cannot test until 7pm tomorrow is an automation nobody switches on.
 //
-// The report itself comes from ../_shared/pulse.ts, the same builder the Pulse
-// page reads, so what lands on the phone is what the dashboard shows.
-//
-// ONE HONEST LIMIT, worth knowing before switching this on: WhatsApp's Cloud
-// API only allows free-form text within 24 hours of that person's last message
-// to the business number. A 7pm push is outside that window on a normal day, so
-// Meta rejects it (error 131047) unless an approved TEMPLATE is used. This tries
-// free text, falls back to the configured template, and when neither is possible
-// it stores the reason in plain words rather than failing silently — because a
-// digest that quietly stopped arriving is worse than one that never started.
+// The report comes from ../_shared/pulse.ts, the same builder the Pulse page
+// reads, so what lands on the phone is what the dashboard shows. Getting it
+// there is ../_shared/notify.ts's problem, not this file's: this used to hold
+// Meta's Graph URL, Meta's token lookup, Meta's 24-hour rule and Meta's
+// template fallback inline, which meant "send the founder their report" and
+// "talk to the Cloud API" were one lump of code and a second transport could
+// only be added by forking it. Now it asks for the report to be sent and does
+// not know, or need to know, which WhatsApp pipe carried it.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { buildCompany, istDate, istHour, pulseText, splitForWhatsApp } from "../_shared/pulse.ts";
+import { buildCompany, istDate, istHour, pulseText } from "../_shared/pulse.ts";
+import { notifyFounder } from "../_shared/notify.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -32,136 +31,15 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
-const GRAPH = "https://graph.facebook.com/v21.0";
 
 type Sub = {
   id: string; company_id: string; label: string; phone: string;
   send_hour_ist: number; template_name: string | null;
 };
 
-/**
- * Meta answers the 24-hour rule with a code and a paragraph of API English.
- * Turn it into the one sentence that says what to actually do — this string is
- * shown to the person who set the number up, not to a developer.
- */
-function humanError(code: number | undefined, msg: string): string {
-  if (code === 131047 || /re-engagement|24 hour|24-hour/i.test(msg)) {
-    return "WhatsApp only allows a plain message within 24 hours of that person messaging your business number. " +
-      "For a daily 7pm report you need an approved WhatsApp template — get one approved in Meta Business Manager, " +
-      "then put its name in the Template field here. Quick workaround until then: have them send any message to " +
-      "your WhatsApp business number, and today's report will go through.";
-  }
-  if (code === 131030 || /not in allowed list/i.test(msg)) {
-    return "This number isn't on your WhatsApp app's allowed test-recipient list. Add it in Meta (API Setup → " +
-      "recipient phone number), or take the app out of test mode.";
-  }
-  if (/token/i.test(msg) && /expire|invalid/i.test(msg)) {
-    return "The WhatsApp access token has expired — reconnect WhatsApp in admin, then try again.";
-  }
-  return msg;
-}
-
-/** One WhatsApp send. Returns the message id, or the error to store. */
-async function sendText(
-  phoneNumberId: string, token: string, to: string, body: string,
-): Promise<{ id?: string; error?: string; code?: number }> {
-  const r = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp", to,
-      type: "text", text: { preview_url: false, body },
-    }),
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) return { error: d?.error?.message ?? "send failed", code: d?.error?.code };
-  return { id: d?.messages?.[0]?.id };
-}
-
-/**
- * The out-of-window fallback.
- *
- * Meta forbids newlines in a template's PARAMETERS, so the full multi-line
- * report physically cannot be pushed through one. What fits is the headline —
- * which is still the sentence the founder actually reads — and it re-opens the
- * 24-hour window the moment they reply, so the detail can follow.
- */
-async function sendTemplate(
-  phoneNumberId: string, token: string, to: string, name: string, params: string[],
-): Promise<{ id?: string; error?: string; code?: number }> {
-  const r = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp", to, type: "template",
-      template: {
-        name, language: { code: "en" },
-        components: params.length
-          ? [{ type: "body", parameters: params.map((t) => ({ type: "text", text: t })) }]
-          : [],
-      },
-    }),
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) return { error: d?.error?.message ?? "template send failed", code: d?.error?.code };
-  return { id: d?.messages?.[0]?.id };
-}
-
-/**
- * Which WhatsApp number sends this company's report.
- *
- * Their own, if they have one — a founder would rather hear from their own
- * brand. Otherwise the platform's shared number, the same way one central
- * Facebook ad account already runs ads for every company. Seven of eight
- * companies have no Cloud API app of their own, and making each new customer
- * build one before their founder gets a report is how a feature ships and then
- * nobody uses it.
- *
- * Sharing the pipe is not sharing the data: the report itself is still built
- * from sub.company_id and nothing else.
- */
-async function resolveSender(
-  admin: SupabaseClient, companyId: string,
-): Promise<{ phoneNumberId: string; token: string; borrowed: boolean } | { error: string }> {
-  const pick = async (cid: string) => {
-    const { data: i } = await admin.from("whatsapp_integrations")
-      .select("phone_number_id, active").eq("company_id", cid).maybeSingle();
-    if (!i?.active || !i.phone_number_id) return null;
-    const { data: t } = await admin.rpc("get_whatsapp_token", { p_company: cid });
-    return t ? { phoneNumberId: String(i.phone_number_id), token: String(t) } : null;
-  };
-
-  const own = await pick(companyId);
-  if (own) return { ...own, borrowed: false };
-
-  const { data: pw } = await admin.from("platform_whatsapp").select("company_id").maybeSingle();
-  if (pw?.company_id) {
-    const shared = await pick(pw.company_id);
-    if (shared) return { ...shared, borrowed: true };
-  }
-  return {
-    error: "No WhatsApp number can send this. Either connect WhatsApp for this company, or pick a " +
-      "platform sending number on the WhatsApp page (super admin) so every company can share one.",
-  };
-}
-
-/**
- * Spelled out rather than inferred, so `if (r.ok)` actually narrows. TypeScript
- * widens a literal `true` in an object literal to `boolean`, which would leave
- * every caller reading `r.wamid` off a union that has no such member.
- */
-type Delivery =
-  | { ok: true; via: "text" | "template"; parts: number; wamid?: string | null; borrowed_number?: boolean }
-  | { ok: false; error: string; sent_parts?: number };
-
-async function deliver(admin: SupabaseClient, sub: Sub, date: string): Promise<Delivery> {
+async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
   const { data: company } = await admin.from("companies").select("name").eq("id", sub.company_id).maybeSingle();
   const companyName = company?.name ?? null;
-
-  const from = await resolveSender(admin, sub.company_id);
-  if ("error" in from) return { ok: false, error: from.error };
-  const integ = { phone_number_id: from.phoneNumberId };
-  const token = from.token;
 
   const pulse = await buildCompany(admin, sub.company_id, date);
   // Nothing happened all day: say that in one line rather than sending an
@@ -170,61 +48,12 @@ async function deliver(admin: SupabaseClient, sub: Sub, date: string): Promise<D
     ? `📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse\n${date}\n\nNo calls logged today.\n\n— via Call Pro AI`
     : pulseText(pulse, companyName);
 
-  const parts = splitForWhatsApp(text);
-  let firstId: string | undefined;
-  let sentBody = "";
-  for (const [i, part] of parts.entries()) {
-    const tagged = parts.length > 1 ? `${part}\n\n(${i + 1}/${parts.length})` : part;
-    const res = await sendText(integ.phone_number_id, String(token), sub.phone, tagged);
-    if (res.error) {
-      // Out of the 24-hour window on the FIRST part: fall back to the template
-      // so the founder still gets the headline. Failing mid-way through a split
-      // report is different — the earlier parts already landed, so stop and say
-      // so rather than following them with an unrelated template.
-      if (i === 0 && sub.template_name) {
-        const t = await sendTemplate(integ.phone_number_id, String(token), sub.phone, sub.template_name, [
-          companyName ?? "Your team",
-          `${pulse.totals.calls} calls, ${pulse.totals.connected} connected, ${pulse.totals.visits} site visits`,
-        ]);
-        if (t.id) {
-          await logMessage(admin, sub, t.id, `[template ${sub.template_name}] ${text}`, sub.template_name);
-          return { ok: true, via: "template", parts: 1, wamid: t.id };
-        }
-        return { ok: false, error: humanError(t.code, t.error ?? "template send failed") };
-      }
-      return { ok: false, error: humanError(res.code, res.error ?? "send failed"), sent_parts: i };
-    }
-    firstId ??= res.id;
-    sentBody = sentBody ? `${sentBody}\n${part}` : part;
-  }
-
-  await logMessage(admin, sub, firstId ?? null, sentBody, null);
-  return { ok: true, via: "text", parts: parts.length, borrowed_number: from.borrowed, wamid: firstId };
-}
-
-/**
- * Logged into whatsapp_messages like every other outbound, so the super admin
- * sees the founder's digest in the same place as the reps' messages instead of
- * having to know a second table exists. salesperson_id stays null: nobody sent
- * this, the schedule did.
- */
-async function logMessage(
-  admin: SupabaseClient, sub: Sub, waId: string | null, body: string, template: string | null,
-) {
-  await admin.from("whatsapp_messages").insert({
-    company_id: sub.company_id,
-    direction: "out",
-    wa_message_id: waId,
-    counterparty: sub.phone,
-    body,
-    msg_type: template ? "template" : "text",
-    template_name: template,
-    // "accepted", not "sent" — Meta's own word for what a 200 means. It has
-    // taken the message and issued an id; whether it will actually hand it over
-    // is decided later and announced only in a status webhook. Writing "sent"
-    // here is what let a founder see a green tick for a report that never
-    // arrived. The webhook overwrites this with Meta's real verdict.
-    status: "accepted",
+  return await notifyFounder(admin, {
+    companyId: sub.company_id,
+    to: sub.phone,
+    body: text,
+    kind: "pulse",
+    subscriberId: sub.id,
   });
 }
 
@@ -245,6 +74,21 @@ async function record(
     .eq("id", id);
 }
 
+/**
+ * What we are allowed to claim, in one place.
+ *
+ * "queued" is its own state and not a failure: the pipe was down, the message is
+ * held, and the drain cron will try again within five minutes. Calling that
+ * failed would have the founder chasing something that is about to arrive.
+ */
+function verdictOf(r: Awaited<ReturnType<typeof deliver>>): { status: string; error: string | null } {
+  if (!r.ok) return { status: "failed", error: r.error ?? "unknown" };
+  if (r.queued) return { status: "queued", error: r.error ?? "Waiting for WhatsApp to come back." };
+  // Baileys sends from a real logged-in account, so a send that returned really
+  // did go. Meta only "accepted" it — the verdict arrives later by webhook.
+  return { status: r.via === "baileys" ? "sent" : "accepted", error: null };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const admin = createClient(SUPABASE_URL, SERVICE);
@@ -262,12 +106,15 @@ Deno.serve(async (req) => {
       .select("id, company_id, label, phone, send_hour_ist, template_name")
       .eq("active", true).eq("send_hour_ist", hour);
 
-    let sent = 0, failed = 0;
+    let sent = 0, failed = 0, queued = 0;
     for (const s of (subs ?? []) as Sub[]) {
       try {
         const r = await deliver(admin, s, date);
-        if (r.ok) { sent++; await record(admin, s.id, "accepted", null, r.wamid); }
-        else { failed++; await record(admin, s.id, "failed", r.error ?? "unknown"); }
+        const v = verdictOf(r);
+        if (v.status === "failed") failed++;
+        else if (v.status === "queued") queued++;
+        else sent++;
+        await record(admin, s.id, v.status, v.error, r.ok ? r.wamid : null);
       } catch (e) {
         // One company's broken WhatsApp must never stop the other companies'
         // reports going out.
@@ -275,7 +122,7 @@ Deno.serve(async (req) => {
         await record(admin, s.id, "failed", String(e).slice(0, 500));
       }
     }
-    return json({ ok: true, hour, date, considered: subs?.length ?? 0, sent, failed });
+    return json({ ok: true, hour, date, considered: subs?.length ?? 0, sent, queued, failed });
   }
 
   // ---- Admin "Send now" ----
@@ -302,8 +149,8 @@ Deno.serve(async (req) => {
   const date = typeof body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : istDate(0);
   try {
     const r = await deliver(admin, sub as Sub, date);
-    if (r.ok) await record(admin, sub.id, "accepted", null, r.wamid);
-    else await record(admin, sub.id, "failed", r.error ?? "unknown");
+    const v = verdictOf(r);
+    await record(admin, sub.id, v.status, v.error, r.ok ? r.wamid : null);
     return json(r);
   } catch (e) {
     await record(admin, sub.id, "failed", String(e).slice(0, 500));

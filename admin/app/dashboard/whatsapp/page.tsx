@@ -4,6 +4,7 @@ import { CompanyPicker } from "./CompanyPicker";
 import { WhatsAppHealth } from "./WhatsAppHealth";
 import { WhatsAppInbox } from "./WhatsAppInbox";
 import { PlatformSender } from "./PlatformSender";
+import { ProviderPicker } from "./ProviderPicker";
 
 const WEBHOOK_URL = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/whatsapp-webhook";
 
@@ -98,6 +99,11 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
       ) : (
         <div className="empty">{isSuper ? "Create a company first, then connect its WhatsApp here." : "Your account isn't linked to a company yet."}</div>
       )}
+
+      {/* Founder notifications only, and kept in its own card below the Cloud
+          API setup on purpose: the setup above is how CUSTOMERS are messaged,
+          and an experimental provider must never read as a swap for that. */}
+      {companyId && <ProviderPicker companyId={companyId} companyName={companies?.find((c) => c.id === companyId)?.name ?? null} />}
 
       <h3 style={{ marginTop: 28, marginBottom: 16 }}>Team Inbox</h3>
       {rows.length === 0 ? (

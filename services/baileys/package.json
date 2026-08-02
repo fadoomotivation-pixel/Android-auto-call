@@ -1,0 +1,16 @@
+{
+  "name": "callpro-baileys",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Founder-notification WhatsApp sender for Call Pro AI, over the WhatsApp Web protocol.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4"
+  }
+}

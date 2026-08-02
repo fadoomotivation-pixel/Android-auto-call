@@ -120,9 +120,39 @@ Deno.serve(async (req) => {
   if (!accessToken) return json({ ok: false, error: "could not authenticate with FCM" }, 502);
 
   const url = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
+  // DATA-ONLY. There must be no `notification` block below, and this is the
+  // reason why.
+  //
+  // Firebase treats the two payload shapes completely differently on Android:
+  // if a message carries a `notification` block, the FCM SDK draws the
+  // notification ITSELF whenever the app is not in the foreground, and
+  // onMessageReceived() is never called. Our own handler — the cha-ching
+  // channel, the "📞 Call Now" button, the tap that opens that exact lead — was
+  // therefore running only while the rep already had the app open, and being
+  // skipped entirely the rest of the time. That is precisely backwards: a rep
+  // staring at the app does not need to be told a lead arrived.
+  //
+  // It is also why the same event looked like two different features. Reps said
+  // "sometimes our notification rings, sometimes it's the phone's one" — app
+  // open gave them ours, app in the pocket gave them Android's plain one with
+  // no Call button and no lead behind the tap. One push, two behaviours,
+  // depending on something the rep cannot see.
+  //
+  // With data-only, onMessageReceived() runs in every state and draws the same
+  // notification every time. The title and body travel in `data` because that
+  // is now the only place the handler can read them from.
+  //
+  // The honest cost: Android does not deliver data-only messages to an app the
+  // user has force-stopped, and aggressive OEM battery managers can delay them.
+  // A notification payload would still have shown in those cases — but it would
+  // have shown as the wrong notification, without the Call button, which is the
+  // bug being fixed. Consistency is worth more here than the rare force-stopped
+  // phone, and `priority: high` is what keeps the delay honest.
   const payloadData: Record<string, string> = { ...(data ?? {}) };
   if (contact_id) payloadData.contact_id = String(contact_id);
-  payloadData.channel = channelId; // so foreground handler picks the same channel
+  payloadData.channel = channelId; // which channel the handler should ring on
+  payloadData.title = String(title);
+  payloadData.body = String(text);
 
   let sent = 0;
   const dead: string[] = [];
@@ -133,9 +163,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         message: {
           token,
-          notification: { title, body: text },
           data: payloadData,
-          android: { priority: "high", notification: { channel_id: channelId } },
+          android: { priority: "high" },
         },
       }),
     });
