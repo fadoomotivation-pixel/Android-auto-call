@@ -247,10 +247,29 @@ class AutoDialerService : Service() {
                         recordingSource = if (recordingPath != null) "sim" else null,
                     ),
                 )
-                contactId?.let {
-                    val newStatus = if (outcome == "connected") "called" else "no_answer"
-                    Repository.updateContactStatus(it, newStatus)
-                }
+                // The lead's stage is NOT written here, deliberately.
+                //
+                // This used to do, unconditionally:
+                //     val newStatus = if (outcome == "connected") "called" else "no_answer"
+                //     Repository.updateContactStatus(contactId, newStatus)
+                //
+                // with no look at where the lead already was. So auto-dialling a
+                // customer who was Interested, at Site Visit, Negotiating or even
+                // Booked dragged them back to "called" — a rep's recorded work,
+                // erased by a machine that only knows whether a phone was
+                // answered. 64 leads sit in those stages right now. It also
+                // raced the after-call prompt: the service wrote its guess while
+                // the rep was tapping "Interested" on screen, and whichever
+                // landed last won.
+                //
+                // A call result is not a sales stage. The call log above is the
+                // record of the attempt, and inserting it fires
+                // apply_call_to_new_lead() (migration 0120), which applies the
+                // one rule the whole platform shares: a lead still in the calling
+                // pile moves to called / no_answer with the attempt counted, and
+                // a lead whose rep has already said what happened is never
+                // touched. Every call path — auto-dial, manual, cloud — gets that
+                // same rule for free by simply not second-guessing it here.
                 // Ship the recording (if any) to Drive via the edge function.
                 if (logId != null && recordingPath != null) {
                     val f = File(recordingPath)

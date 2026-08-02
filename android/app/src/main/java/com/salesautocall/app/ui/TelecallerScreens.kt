@@ -1011,8 +1011,12 @@ private fun PlanBucket(
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
                 }
-                IconButton(onClick = { onCall(r.phone) }, modifier = Modifier.size(34.dp).clip(CircleShape).background(Green.copy(alpha = 0.12f))) {
-                    Icon(Icons.Default.Call, contentDescription = "Call ${r.name}", tint = Green, modifier = Modifier.size(17.dp))
+                // 44dp, not 34. IconButton is 48dp by default precisely so a
+                // thumb can hit it; setting .size(34.dp) threw that away, and
+                // this is the button a rep jabs at while holding a phone in one
+                // hand. There is room on this row — it was small for looks.
+                IconButton(onClick = { onCall(r.phone) }, modifier = Modifier.size(44.dp).clip(CircleShape).background(Green.copy(alpha = 0.12f))) {
+                    Icon(Icons.Default.Call, contentDescription = "Call ${r.name}", tint = Green, modifier = Modifier.size(19.dp))
                 }
             }
             // The answer, right where the question is asked. Two taps' worth of
