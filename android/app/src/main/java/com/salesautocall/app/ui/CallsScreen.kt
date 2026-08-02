@@ -597,7 +597,9 @@ private fun formatDurationShort(sec: Int): String {
 
 /** ISO-8601 → "h:mm AM/PM" like the native dialer. */
 private fun prettyTime(iso: String): String = runCatching {
-    val t = java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
+    // "+00:00" is what the API sends; Instant.parse only takes "Z".
+    val t = runCatching { java.time.OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.systemDefault()) }
+        .getOrElse { java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault()) }
     val h12 = ((t.hour + 11) % 12) + 1
     "%d:%02d %s".format(h12, t.minute, if (t.hour < 12) "AM" else "PM")
 }.getOrDefault(iso.take(16))

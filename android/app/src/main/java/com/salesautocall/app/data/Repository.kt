@@ -235,7 +235,13 @@ object Repository {
                     sbPhone.endsWith(nativeCall.cleanNum) || nativeCall.cleanNum.endsWith(sbPhone)
                 }
                 .mapNotNull {
-                    val sbStart = runCatching { Instant.parse(it.startedAt) }.getOrNull() ?: return@mapNotNull null
+                    // Instant.parse rejects the API's "+00:00" offset. When it
+                    // failed, this returned null and the candidate was dropped —
+                    // so a phone recording could find no call log to attach to
+                    // and simply never got matched. OffsetDateTime first.
+                    val sbStart = runCatching { java.time.OffsetDateTime.parse(it.startedAt).toInstant() }
+                        .recoverCatching { Instant.parse(it.startedAt) }
+                        .getOrNull() ?: return@mapNotNull null
                     val diff = Math.abs(sbStart.epochSecond - nativeCall.startedAt.epochSecond)
                     if (diff < 120) it to diff else null
                 }
@@ -350,9 +356,11 @@ object Repository {
         return Triple(attached, failed, firstError)
     }
 
+    // The API's "+00:00" shape first — Instant.parse throws on it, and this runs
+    // once per recording being matched.
     private fun recIsoMs(iso: String?): Long? = iso?.let {
-        runCatching { Instant.parse(it).toEpochMilli() }.getOrNull()
-            ?: runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+        runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+            ?: runCatching { Instant.parse(it).toEpochMilli() }.getOrNull()
     }
 
     /** Downloads a recording's audio bytes (RLS-gated) for in-app playback. */

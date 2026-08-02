@@ -84,7 +84,14 @@ private val OkGreen = Color(0xFF4353B8)
 private val WarnAmber = Color(0xFFB8860B)
 private val BadRed = Color(0xFFC0452C)
 
-private fun ms(iso: String?): Long? = iso?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+// OffsetDateTime first: the API sends "+00:00", which Instant.parse rejects.
+// Instant-only meant this returned null for real timestamps, and threw an
+// exception to do it.
+private fun ms(iso: String?): Long? = iso?.let {
+    runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }
+        .recoverCatching { java.time.Instant.parse(it).toEpochMilli() }
+        .getOrNull()
+}
 
 private fun hhmm(iso: String?): String {
     val m = ms(iso) ?: return "—"

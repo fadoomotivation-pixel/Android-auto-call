@@ -219,8 +219,28 @@ private fun fmtSec(seconds: Int): String {
     }
 }
 
-private fun instantMillis(iso: String?): Long? =
-    iso?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+/**
+ * Milliseconds from an ISO timestamp — the single most-called helper in the
+ * list. Every card asks it for a follow-up due time and a site-visit date, the
+ * deck asks it for every follow-up, and the sorts ask it once per comparison.
+ *
+ * It used to try Instant.parse ONLY, which wants a "Z". Postgres sends
+ * "+00:00", and isToday() right below already documents that and parses
+ * OffsetDateTime first for exactly this reason. So on the format the API
+ * actually returns, this took the failure path: runCatching means every single
+ * one of those calls THREW and caught a DateTimeParseException, and filling in
+ * a stack trace is one of the most expensive things you can do per frame — on a
+ * long list, thousands of times a scroll.
+ *
+ * Same order as isToday now, so the common format is a clean parse with no
+ * exception at all, and the two helpers can never disagree about a timestamp.
+ */
+private fun instantMillis(iso: String?): Long? {
+    if (iso.isNullOrBlank()) return null
+    return runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }
+        .recoverCatching { java.time.Instant.parse(iso).toEpochMilli() }
+        .getOrNull()
+}
 
 /** True if an ISO timestamp falls on today's local date (for the "Added today"
  *  filter). Handles both "…Z" and Postgres "…+00:00" offsets. */
@@ -1224,8 +1244,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // The Follow-up tab's one rule: a callback is booked on it, OR it was
     // dialled and nobody was reached. Both mean "call this again", and a rep
     // hunting for the second kind should never have to know which of the two
-    // the CRM happened to record. New and Working both exclude this, so no lead
-    // is ever counted in two tabs.
+    // the CRM happened to record.
+    //
+    // New and Working BOTH have to exclude it, and Working did not: a lead at
+    // 'called', 'follow_up' or 'interested' with a callback booked on it was
+    // being listed in Follow-up and in Working at the same time. Fifteen leads
+    // were double-counted, ten of them on one rep — which is the same "follow-up
+    // ki lead doosri jagah padi hai" confusion in a new place, and the Working
+    // count simply did not add up against the others.
     fun needsAnotherCall(c: Contact): Boolean =
         (hasFollowUp(c) || c.status in retrySet) && c.status !in closedSet && c.status != "booked"
     val base = when {
@@ -1243,7 +1269,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // have one: a promised callback beats a retry whenever both are due.
             "followup" -> app.leads.filter { needsAnotherCall(it) }
                 .sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
-            "working" -> app.leads.filter { it.status in workingSet }
+            // Working = deal in motion with nothing booked to call back. The
+            // moment a callback exists, Follow-up owns the lead — one lead, one
+            // tab, so the counts across the row always add up.
+            "working" -> app.leads.filter { it.status in workingSet && !needsAnotherCall(it) }
             "pipeline" -> app.leads.filter { it.status in pipelineSet }
             "booked" -> app.leads.filter { it.status == "booked" }
             "closed" -> app.leads.filter { it.status in closedSet }
@@ -1379,7 +1408,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         "new" to Triple("New", app.leads.count { it.status in newSet && !hasFollowUp(it) && !inToday(it) }, MaterialTheme.colorScheme.primary),
                         "today" to Triple("Today", app.leads.count { inToday(it) }, Cyan),
                         "followup" to Triple("Follow-up", app.leads.count { needsAnotherCall(it) }, Amber),
-                        "working" to Triple("Working", app.leads.count { it.status in workingSet }, Indigo),
+                        "working" to Triple("Working", app.leads.count { it.status in workingSet && !needsAnotherCall(it) }, Indigo),
                         "pipeline" to Triple("Pipeline", app.leads.count { it.status in pipelineSet }, Purple),
                         "booked" to Triple("Booked", app.leads.count { it.status == "booked" }, Green),
                         "closed" to Triple("Closed", app.leads.count { it.status in closedSet }, Slate),
@@ -1404,7 +1433,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     "new" -> "Never called. The moment you dial one, it moves to Follow-up."
                     "today" -> "Today's work: callbacks due today, site visits today, and leads you already handled today. These also stay in their own tab."
                     "followup" -> "Everyone to call again — callbacks you promised, plus anyone who didn't pick up. Overdue at the top, then today, then later."
-                    "working" -> "You talked to them, deal is on."
+                    "working" -> "You talked to them, deal is on, nothing booked to call back."
                     "pipeline" -> "Site visit, negotiating or token paid."
                     "booked" -> "Deal done."
                     "closed" -> "Not interested, lost, or do not call."
@@ -1935,7 +1964,16 @@ private fun LeadCard(
              else "↻ Call back · ${dayLabel(followUp.dueAt)} ${timeOnly(followUp.dueAt)}") to (if (late) Red else jade)
         }
         visitMs != null && visitMs >= now -> "🏠 Site visit · ${dayLabel(c.siteVisitAt)}" to Purple
-        visitMs != null && c.status !in setOf("booked", "lost", "not_interested", "dnc") -> "✅ Visit done — close them" to Teal
+        // The same "a passed date is not attendance" rule Home uses. This line
+        // was the second place claiming a visit had happened when all that had
+        // happened was the date going by, and it is the one a rep reads on every
+        // single row. Done needs the on-site check-in or a stage that only
+        // follows a real visit; otherwise it asks.
+        visitMs != null && c.status !in DEAD_OR_BOOKED &&
+            (c.siteVisitArrivedAt != null || c.status in AFTER_VISIT) ->
+            "✅ Visit done — close them" to Teal
+        visitMs != null && c.status !in DEAD_OR_BOOKED ->
+            "❓ Visit day gone (${dayLabel(c.siteVisitAt)}) — did they come?" to Amber
         !c.aiNextAction.isNullOrBlank() -> "✦ ${c.aiNextAction}" to Indigo
         !c.notes.isNullOrBlank() -> c.notes!! to muted
         // (budget lives on the phone line now — never repeated here)
@@ -1998,7 +2036,9 @@ private fun LeadCard(
                     // Stage + lead age. A New lead sitting untouched past a day
                     // turns the age amber — the quiet speed-to-lead nudge.
                     val age = ageLabel(c.createdAt ?: c.assignedAt)
-                    val stale = age != null && c.status in setOf("new", "queued") && c.attempts == 0 && age != "Today"
+                    // Hoisted set: this runs once per visible card, every frame
+                    // a card is composed during a scroll.
+                    val stale = age != null && c.status in UNCALLED && c.attempts == 0 && age != "Today"
                     Text("· ${stage.label}", style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
                     age?.let {
                         Text(" · $it", style = MaterialTheme.typography.labelSmall,
