@@ -120,10 +120,13 @@ private val Teal = Color(0xFF5A62C9)    // jade-adjacent: token money
 /** Real-estate pipeline, in order. "Negotiation" folds in the older "proposal"
  *  status; "Token Paid" is the booking-token money milestone before a full booking. */
 private val STAGES = listOf(
-    // No-answer / busy live in NEW: nobody actually spoke to them yet, so they
-    // come straight back into the calling pile (the attempt ladder re-books them).
-    Stage("new", "New", setOf("new", "queued", "no_answer", "busy", "wrong_person"), Color(0xFF6A7B85)),
-    Stage("contacted", "Contacted", setOf("called", "callback", "follow_up"), Cyan),
+    // New means NEVER CALLED. No-answer and busy used to sit here on the grounds
+    // that nobody had spoken to those people yet — but the rep did dial them,
+    // and being shown their own finished work as "New" is the thing they have
+    // now reported twice. Tried-and-missed belongs with the rest of the
+    // call-again pile, not with leads nobody has touched.
+    Stage("new", "New", setOf("new", "queued"), Color(0xFF6A7B85)),
+    Stage("contacted", "Contacted", setOf("called", "callback", "follow_up", "no_answer", "busy", "wrong_person"), Cyan),
     Stage("interested", "Interested", setOf("interested"), Amber),
     Stage("site_visit", "Site Visit", setOf("site_visit"), Purple),
     Stage("negotiation", "Negotiation", setOf("negotiation", "proposal"), Bronze),
@@ -153,6 +156,40 @@ private val SETTABLE_STAGES = listOf(
 )
 
 private val TEMPERATURES = listOf("hot" to "🔥 Hot", "warm" to "🌤 Warm", "cold" to "❄️ Cold")
+
+/** The deck's four counters, computed together and cached as one value. */
+private data class DeckStats(
+    val dueNow: Int,
+    val hotCount: Int,
+    val reviveCount: Int,
+    val pipelineValue: Double,
+)
+
+/** Everything Home counts off the lead list, computed once per load. */
+private data class HomeStats(
+    val newLeads: Int,
+    val stageCounts: List<Pair<Stage, Int>>,
+    val pipelineValue: Double,
+    val tokenCollected: Double,
+    val hotUncontacted: Int,
+    val unprotected: List<Contact>,
+)
+
+// Status sets that live INSIDE per-lead filters.
+//
+// Written inline, `it.status !in setOf("lost", "not_interested", "dnc")` builds
+// a brand-new set for every lead it tests — on a 900-lead list that is hundreds
+// of throwaway sets per pass, and Home and the deck run several such passes each
+// time they recompose. It is invisible on a fast phone and it is exactly the
+// kind of work that makes an older one feel like it is dragging. Hoisted here,
+// they are allocated once for the life of the process.
+private val DEAD_STATUSES = setOf("lost", "not_interested", "dnc")
+private val DEAD_OR_BOOKED = setOf("lost", "not_interested", "dnc", "booked")
+private val SAID_NO = setOf("lost", "not_interested")
+private val BOOKED_OR_DNC = setOf("booked", "dnc")
+/** Never dialled — the same meaning as the New tab. */
+private val UNCALLED = setOf("new", "queued")
+private val NEEDS_REMINDER = setOf("interested", "callback")
 
 private fun leadScore(c: Contact): Int {
     val base = when (c.status) {
@@ -523,18 +560,33 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
 
     val firstName = app.profile?.fullName?.substringBefore(' ')?.takeIf { it.isNotBlank() } ?: "there"
     val due = vm.dueNowCount()
-    val newLeads = app.leads.count { it.status in setOf("new", "queued") }
-    val stageCounts = STAGES.map { st -> st to app.leads.count { it.status in st.statuses } }
-    val pipelineValue = app.leads.filter { it.status !in setOf("lost", "not_interested", "dnc") }.sumOf { parseBudgetRupees(it.budget) }
-    val tokenCollected = app.leads.sumOf { it.tokenAmount ?: 0.0 }
-    val hotUncontacted = app.leads.count { it.temperature == "hot" && it.status in setOf("new", "queued") }
-    // Safety net: interested/callback leads with NO pending follow-up are
-    // "unprotected" — one tap gives each a reminder so none can slip away.
-    val protectedIds = app.followUpList.mapNotNull { it.contactId }.toSet()
-    val protectedPhones = app.followUpList.map { it.phone }.toSet()
-    val unprotected = app.leads.filter {
-        it.status in setOf("interested", "callback") && it.id !in protectedIds && it.phone !in protectedPhones
+    // Home is the screen a rep opens fifty times a day, and every one of these
+    // walks the whole lead list. They only change when the leads do, so they are
+    // computed once per load instead of on every recomposition — and the status
+    // sets are hoisted out of the per-lead lambdas, which were each building a
+    // fresh set for every lead they tested.
+    val home = remember(app.leads, app.followUpList) {
+        val protectedIds = app.followUpList.mapNotNull { it.contactId }.toSet()
+        val protectedPhones = app.followUpList.map { it.phone }.toSet()
+        HomeStats(
+            newLeads = app.leads.count { it.status in UNCALLED },
+            stageCounts = STAGES.map { st -> st to app.leads.count { it.status in st.statuses } },
+            pipelineValue = app.leads.filter { it.status !in DEAD_STATUSES }.sumOf { parseBudgetRupees(it.budget) },
+            tokenCollected = app.leads.sumOf { it.tokenAmount ?: 0.0 },
+            hotUncontacted = app.leads.count { it.temperature == "hot" && it.status in UNCALLED },
+            // Safety net: interested/callback leads with NO pending follow-up are
+            // "unprotected" — one tap gives each a reminder so none can slip away.
+            unprotected = app.leads.filter {
+                it.status in NEEDS_REMINDER && it.id !in protectedIds && it.phone !in protectedPhones
+            },
+        )
     }
+    val newLeads = home.newLeads
+    val stageCounts = home.stageCounts
+    val pipelineValue = home.pipelineValue
+    val tokenCollected = home.tokenCollected
+    val hotUncontacted = home.hotUncontacted
+    val unprotected = home.unprotected
     // Today's Plan buckets — WHO asked for a callback, WHOSE visit is fixed,
     // WHOSE visit already happened. Names up front, not buried in statuses.
     val nowMs = System.currentTimeMillis()
@@ -544,7 +596,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         .filter { it.second >= nowMs }.sortedBy { it.second }
     val visitsDone = app.leads
         .mapNotNull { c -> c.siteVisitAt?.let { instantMillis(it) }?.let { ms -> c to ms } }
-        .filter { it.second < nowMs && it.first.status !in setOf("booked", "lost", "not_interested", "dnc") }
+        .filter { it.second < nowMs && it.first.status !in DEAD_OR_BOOKED }
         .sortedByDescending { it.second }
 
     Refreshable(onRefresh = { vm.loadHome(force = true); vm.loadLeads(force = true) }, modifier = Modifier.fillMaxSize()) {
@@ -1071,13 +1123,24 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // Buckets a rep actually thinks in. Sheet filters (exact stage / quick views)
     // override the bucket when active.
     //
-    // NEW = "aaj kiska number lagana hai". A lead nobody reached yet (fresh,
-    // no-answer, busy, wrong person) or one that said "kal call karna"
-    // (callback) belongs here — but only when its time has COME. A lead whose
-    // retry/callback is booked for later is asleep in Working; the moment the
-    // due time passes it wakes up back in New, pinned to the top, wearing its
-    // attempt tag. The rep never plans this — the list breathes on its own.
-    val newSet = setOf("new", "queued", "no_answer", "busy", "wrong_person", "callback")
+    // NEW = never called. Nothing else.
+    //
+    // It used to also hold no-answer, busy, wrong-person and callback, on the
+    // reasoning that nobody had actually SPOKEN to those people so they still
+    // needed dialling. Reps read the tab's own label instead — "never called
+    // yet" — saw numbers they had personally rung sitting in it, and reported it
+    // twice: "jo number call kar liye the wo abhi bhi New me pade hain."
+    //
+    // They are right. A rep who dialled a number and heard it ring has called
+    // it. The list they want it in is the one they already said out loud: they
+    // keep call-again data in Follow-up. So New is now only what its label
+    // promises, and everything tried lives in Follow-up next to the booked
+    // callbacks — one pile of "call these", instead of the work being split
+    // across the tab for untouched leads and the tab for booked ones.
+    val newSet = setOf("new", "queued")
+    // Dialled, nobody reached — or a callback the rep booked by hand. Same
+    // meaning to a rep ("ise dobara call karna hai"), so the same tab.
+    val retrySet = setOf("no_answer", "busy", "wrong_person", "callback")
     val workingSet = setOf("called", "follow_up", "interested")
     val pipelineSet = setOf("site_visit", "negotiation", "proposal", "token_paid")
     // The graveyard is still data: reps need to SEE their lost/not-interested
@@ -1128,18 +1191,28 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // are out because 0112 closes their callbacks anyway.
     fun hasFollowUp(c: Contact): Boolean =
         fuOf(c) != null && c.status !in closedSet && c.status != "booked"
+
+    // The Follow-up tab's one rule: a callback is booked on it, OR it was
+    // dialled and nobody was reached. Both mean "call this again", and a rep
+    // hunting for the second kind should never have to know which of the two
+    // the CRM happened to record. New and Working both exclude this, so no lead
+    // is ever counted in two tabs.
+    fun needsAnotherCall(c: Contact): Boolean =
+        (hasFollowUp(c) || c.status in retrySet) && c.status !in closedSet && c.status != "booked"
     val base = when {
         stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
-        quick == "retry" -> app.leads.filter { it.status in setOf("no_answer", "busy", "wrong_person", "callback", "follow_up") }
+        quick == "retry" -> app.leads.filter { it.status in retrySet || it.status == "follow_up" }
         else -> when (bucket) {
-            // New = truly fresh: a calling-pile status, no callback booked on
-            // it (those live in Follow-up), and NOT already handled today.
+            // New = never called, no callback booked on it, and not already
+            // handled today.
             "new" -> app.leads.filter { it.status in newSet && !hasFollowUp(it) && !inToday(it) }
             "today" -> app.leads.filter { inToday(it) }
             // Due first, oldest first — the same order the Follow Ups screen
-            // uses, so the two never disagree about what to call next.
-            "followup" -> app.leads.filter { hasFollowUp(it) }
+            // uses, so the two never disagree about what to call next. Leads
+            // with no booked time (a plain no-answer) sort after the ones that
+            // have one: a promised callback beats a retry whenever both are due.
+            "followup" -> app.leads.filter { needsAnotherCall(it) }
                 .sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
             "working" -> app.leads.filter { it.status in workingSet }
             "pipeline" -> app.leads.filter { it.status in pipelineSet }
@@ -1182,20 +1255,28 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // The hero: a brand-gradient command deck — pipeline ₹ value
                     // plus three live counters that are also one-tap filters.
                     // Utilities (refresh / AI score / select) ride on the deck.
-                    val dueNow = app.followUpList.count { (instantMillis(it.dueAt) ?: Long.MAX_VALUE) <= nowMs }
-                    val hotCount = app.leads.count { it.temperature == "hot" && it.status !in setOf("lost", "not_interested", "dnc", "booked") }
-                    val pipelineValue = app.leads
-                        .filter { it.status !in setOf("lost", "not_interested", "dnc") }
-                        .sumOf { parseBudgetRupees(it.budget) }
-                    // RAG v13 candidates: said-no + tried-and-gone-cold. Never DNC.
-                    val reviveCount = app.leads.count {
-                        it.status in setOf("lost", "not_interested") ||
-                            (it.temperature == "cold" && it.attempts >= 2 && it.status !in setOf("booked", "dnc"))
+                    // Four full sweeps of the lead list, one of them parsing a
+                    // rupee string per lead. None of it changes unless the leads
+                    // themselves do, so it must not re-run on every keystroke in
+                    // the search box or every tap of a filter chip — which is
+                    // what it did, on the main thread, before this remember.
+                    val deck = remember(app.leads, app.followUpList, nowMs / 60_000) {
+                        val dueNow = app.followUpList.count { (instantMillis(it.dueAt) ?: Long.MAX_VALUE) <= nowMs }
+                        val hotCount = app.leads.count { it.temperature == "hot" && it.status !in DEAD_OR_BOOKED }
+                        val pipelineValue = app.leads
+                            .filter { it.status !in DEAD_STATUSES }
+                            .sumOf { parseBudgetRupees(it.budget) }
+                        // RAG v13 candidates: said-no + tried-and-gone-cold. Never DNC.
+                        val reviveCount = app.leads.count {
+                            it.status in SAID_NO ||
+                                (it.temperature == "cold" && it.attempts >= 2 && it.status !in BOOKED_OR_DNC)
+                        }
+                        DeckStats(dueNow, hotCount, reviveCount, pipelineValue)
                     }
                     LeadsDeck(
                         app = app,
-                        dueNow = dueNow,
-                        hotCount = hotCount,
+                        dueNow = deck.dueNow,
+                        hotCount = deck.hotCount,
                         // Same rule as the New tab below. These two used to disagree
                         // (the card counted leads the tab had already drained into
                         // Today), so the summary said 12 New and the tab showed 8.
@@ -1203,9 +1284,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         // tab below — a summary card that disagrees with the tab it
                         // links to has already caused one "12 vs 8" bug report.
                         newCount = app.leads.count { it.status in newSet && !hasFollowUp(it) && !inToday(it) },
-                        pipelineValue = pipelineValue,
+                        pipelineValue = deck.pipelineValue,
                         scoring = app.aiScoringLeads,
-                        reviveCount = reviveCount,
+                        reviveCount = deck.reviveCount,
                         onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
                         onScore = { vm.scoreLeads() },
                         onSelect = { selectMode = true },
@@ -1268,7 +1349,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         "all" to Triple("All", app.leads.size, MaterialTheme.colorScheme.primary),
                         "new" to Triple("New", app.leads.count { it.status in newSet && !hasFollowUp(it) && !inToday(it) }, MaterialTheme.colorScheme.primary),
                         "today" to Triple("Today", app.leads.count { inToday(it) }, Cyan),
-                        "followup" to Triple("Follow-up", app.leads.count { hasFollowUp(it) }, Amber),
+                        "followup" to Triple("Follow-up", app.leads.count { needsAnotherCall(it) }, Amber),
                         "working" to Triple("Working", app.leads.count { it.status in workingSet }, Indigo),
                         "pipeline" to Triple("Pipeline", app.leads.count { it.status in pipelineSet }, Purple),
                         "booked" to Triple("Booked", app.leads.count { it.status == "booked" }, Green),
@@ -1282,19 +1363,18 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            // Reps kept asking what each tab actually holds — "New" contains
-            // no-answers, and "Today" deliberately repeats leads that also sit
-            // in another tab. None of that is guessable, so the list says it in
-            // one plain line instead of leaving people to work it out.
+            // Reps kept asking what each tab actually holds, and "Today"
+            // deliberately repeats leads that also sit in another tab. None of
+            // that is guessable, so the list says it in one plain line instead
+            // of leaving people to work it out.
             if (stageFilter == null && quick == null) {
                 val hint = when (bucket) {
-                    // "Not called yet" was only true of the first section. The tab
-                    // also holds every callback whose time has passed, which is why
-                    // the count looked far too big to a rep reading it as "fresh
-                    // leads". Name both halves.
-                    "new" -> "Fresh leads, plus anyone you tried and couldn't reach. Callbacks are in Follow-up now."
+                    // Now literally true, so it can be said in four words. It
+                    // used to also hold no-answers, which is exactly why the
+                    // count kept looking too big to a rep reading it as "fresh".
+                    "new" -> "Never called. The moment you dial one, it moves to Follow-up."
                     "today" -> "Today's work: callbacks due today, site visits today, and leads you already handled today. These also stay in their own tab."
-                    "followup" -> "Every lead you promised to call back. Overdue at the top, then today, then later."
+                    "followup" -> "Everyone to call again — callbacks you promised, plus anyone who didn't pick up. Overdue at the top, then today, then later."
                     "working" -> "You talked to them, deal is on."
                     "pipeline" -> "Site visit, negotiating or token paid."
                     "booked" -> "Deal done."
@@ -1404,34 +1484,36 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             onOpen = { c.id?.let { vm.openLeadDetail(it) } },
                         )
                     }
-                    // In the plain New pile, a lead that BOUNCED BACK (yesterday's
-                    // callback / no-answer retry) looks identical to a genuinely
-                    // fresh lead — so the list splits into two labelled sections:
-                    // "tried before, call again" on top, untouched fresh below.
-                    val plainNew = bucket == "new" && stageFilter == null && quick == null &&
+                    // The two-section split moved from New to Follow-up, because
+                    // that is where the two kinds of work now live together. New
+                    // is one thing again (never called) and needs no headings;
+                    // Follow-up holds both a callback the rep PROMISED at a time
+                    // and a number that simply didn't pick up, and those are not
+                    // the same job. The promised ones go first — a person waiting
+                    // for a call at 4pm outranks a redial with no time on it.
+                    val plainFollowUp = bucket == "followup" && stageFilter == null && quick == null &&
                         tempFilter == null && query.isBlank() && sortBy == "default"
-                    val isFresh = { c: Contact -> c.status in setOf("new", "queued") && c.attempts == 0 }
-                    val retryPile = if (plainNew) filtered.filterNot(isFresh) else emptyList()
-                    val freshPile = if (plainNew) filtered.filter(isFresh) else emptyList()
-                    if (plainNew && retryPile.isNotEmpty() && freshPile.isNotEmpty()) {
-                        item(key = "hdr_retry") {
+                    val promised = if (plainFollowUp) filtered.filter { hasFollowUp(it) } else emptyList()
+                    val redial = if (plainFollowUp) filtered.filterNot { hasFollowUp(it) } else emptyList()
+                    if (plainFollowUp && promised.isNotEmpty() && redial.isNotEmpty()) {
+                        item(key = "hdr_promised") {
                             Text(
-                                "🔁 Tried before — call again (${retryPile.size})",
+                                "⏰ You promised to call back (${promised.size})",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = Amber, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(top = 4.dp),
                             )
                         }
-                        items(retryPile, key = { it.id ?: it.phone }) { c -> leadCard(c) }
-                        item(key = "hdr_fresh") {
+                        items(promised, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                        item(key = "hdr_redial") {
                             Text(
-                                "✨ Fresh — never called yet (${freshPile.size})",
+                                "🔁 Didn't pick up — try again (${redial.size})",
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(top = 8.dp),
                             )
                         }
-                        items(freshPile, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                        items(redial, key = { it.id ?: it.phone }) { c -> leadCard(c) }
                     } else {
                         items(filtered, key = { it.id ?: it.phone }) { c -> leadCard(c) }
                     }
