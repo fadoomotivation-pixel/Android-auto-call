@@ -2595,14 +2595,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
     }
 
+    /**
+     * OffsetDateTime FIRST, because that is the shape the API actually sends.
+     *
+     * Instant.parse wants a "Z"; Postgres sends "+00:00". This drove
+     * dueNowCount(), so on the real format every follow-up fell to the
+     * Long.MAX_VALUE default and none of them ever counted as due — the "Due
+     * now" tile could sit on 0 with overdue callbacks right underneath it. The
+     * fallback keeps "Z" timestamps working.
+     */
     private fun parseInstant(iso: String): Long =
-        runCatching { java.time.Instant.parse(iso).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
+        runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }
+            .recoverCatching { java.time.Instant.parse(iso).toEpochMilli() }
+            .getOrDefault(Long.MAX_VALUE)
 
     private fun shortWhen(millis: Long): String =
         java.time.ZonedDateTime.ofInstant(java.time.Instant.ofEpochMilli(millis), java.time.ZoneId.systemDefault())
             .format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, h:mm a"))
 
     private fun prettyDateTime(iso: String): String = runCatching {
+        java.time.OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("d MMM, h:mm a"))
+    }.recoverCatching {
         java.time.Instant.parse(iso).atZone(java.time.ZoneId.systemDefault())
             .format(java.time.format.DateTimeFormatter.ofPattern("d MMM, h:mm a"))
     }.getOrDefault(iso.take(16).replace('T', ' '))

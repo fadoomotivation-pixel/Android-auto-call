@@ -127,9 +127,12 @@ private val QUICK_NOTES = listOf(
     "Ready to book", "Not interested right now", "Sent details on WhatsApp", "Do not call again",
 )
 
+// Order matters for speed, not just correctness: the API's "+00:00" makes
+// Instant.parse throw, and a thrown exception per timestamp is expensive. The
+// shape we actually receive is tried first; the others stay as fallbacks.
 private fun isoMs(iso: String?): Long? = iso?.let {
-    runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
-        ?: runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+    runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+        ?: runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
         ?: runCatching {
             java.time.LocalDateTime.parse(it).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
         }.getOrNull()
