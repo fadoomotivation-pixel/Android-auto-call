@@ -1530,9 +1530,34 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             onToggleSelect = { c.id?.let { id -> selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id } },
                             onCall = { vm.dialManual(c.phone) },
                             onCloudCall = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
-                            onWhatsApp = { vm.openWaChat(c) },
-                            onSchedule = { scheduleFor = c },
-                            onMore = { actionFor = c },
+                            // Straight into WhatsApp with the message ready, the
+                            // way the Follow Ups screen already does it.
+                            //
+                            // This used to open an in-app chat sheet that sends
+                            // through the COMPANY's WhatsApp Cloud number — and
+                            // no company on the platform has that token saved,
+                            // so its Send button could not work at all. A rep
+                            // tapping WhatsApp got a dead box instead of
+                            // WhatsApp. The tracked inbox still exists for the
+                            // admin; the row button now just does what it says.
+                            onWhatsApp = {
+                                openWhatsApp(context, c.phone,
+                                    waTemplate(c.name, c.companyName, app.profile?.fullName,
+                                        app.company?.name, app.profile?.speaksAs))
+                            },
+                            // The same prompt the Follow Ups screen opens, and
+                            // the same one that appears after a call. There is
+                            // exactly one place a stage can be set from, so it
+                            // behaves identically wherever the rep reaches it.
+                            // The lead's pending callback rides along, so picking
+                            // "call back later" here replaces it instead of
+                            // stacking a second one on the same lead.
+                            onUpdate = {
+                                c.id?.let { id ->
+                                    vm.openFollowUpUpdate(id, c.phone, c.name,
+                                        (fuByContact[id] ?: fuByPhone[c.phone])?.id)
+                                }
+                            },
                             onOpen = { c.id?.let { vm.openLeadDetail(it) } },
                         )
                     }
@@ -1926,8 +1951,7 @@ private fun LeadCard(
     onCall: () -> Unit,
     onCloudCall: () -> Unit,
     onWhatsApp: () -> Unit,
-    onSchedule: () -> Unit,
-    onMore: () -> Unit,
+    onUpdate: () -> Unit,
     onOpen: () -> Unit = {},
 ) {
     val stage = stageOf(c.status)
@@ -2024,38 +2048,45 @@ private fun LeadCard(
                 }
             }
             Spacer(Modifier.height(2.dp))
+            // Phone + budget always; they are what a rep reads before dialling.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted, letterSpacing = 0.3.sp)
-                // Budget rides on the phone line so it's ALWAYS visible —
-                // especially on New leads where the intent line is busy.
+                Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted,
+                    letterSpacing = 0.3.sp, maxLines = 1)
                 budgetLabel(c.budget)?.let {
-                    Text("  ·  ₹ $it", style = MaterialTheme.typography.bodySmall, color = jade, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                }
-                // Where the lead is — the city/area the rep asks first. Shown
-                // right on the row so it's never a tap away.
-                c.territory?.takeIf { it.isNotBlank() }?.let {
-                    Text("  ·  📍 $it", style = MaterialTheme.typography.bodySmall, color = muted,
-                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false))
+                    Text("  ·  ₹ $it", style = MaterialTheme.typography.bodySmall, color = jade,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
                 if (c.attempts > 0) {
                     // "Attempt 2/3" — which try comes NEXT, loud when its time is due.
                     val due = followUp?.let { instantMillis(it.dueAt) }
                     val dueNow = due != null && due <= now
                     Text(
-                        "  ·  🔁 Attempt ${c.attempts + 1}",
+                        "  ·  🔁 ${c.attempts + 1}",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (dueNow) Red else Amber,
                         fontWeight = FontWeight.SemiBold, maxLines = 1,
                     )
                 }
-                // Which project they enquired for — the one fact a rep wants
-                // in hand BEFORE the customer picks up.
-                c.companyName?.takeIf { it.isNotBlank() }?.let {
-                    Text("  ·  🏢 $it", style = MaterialTheme.typography.bodySmall, color = muted,
-                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false))
-                }
+            }
+            // Place and project used to ride on the phone line too. Five facts
+            // on one line is fine on a big screen and unreadable on a 4-inch
+            // one: the phone number, the budget, the day, the attempt count and
+            // the project all fought for the same row and everything ended up
+            // clipped mid-word — "Overdue 8h…", "Yesterda", "₹ 3 –".
+            //
+            // They get their own line, joined into ONE string so the ellipsis
+            // falls at the end of the sentence instead of chopping a field in
+            // half, and the line simply isn't there when there's nothing to say.
+            val extras = listOfNotNull(
+                c.territory?.takeIf { it.isNotBlank() }?.let { "📍 $it" },
+                c.companyName?.takeIf { it.isNotBlank() }?.let { "🏢 $it" },
+            )
+            if (extras.isNotEmpty()) {
+                Text(
+                    extras.joinToString("  ·  "),
+                    style = MaterialTheme.typography.bodySmall, color = muted,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
             }
             intent?.let { (label, color) ->
                 Spacer(Modifier.height(4.dp))
@@ -2094,6 +2125,23 @@ private fun LeadCard(
                             .clickable { if (cloudOn) onCloudCall() else onCall() },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(17.dp)) }
+                }
+                // Update, on EVERY lead — the funnel is filled from the list a
+                // rep already lives in, not from a screen they have to go find.
+                //
+                // It sits UNDER the two round buttons rather than beside them:
+                // three 38dp circles plus their gaps eat about 130dp, which on
+                // a 4-inch phone is a third of the width and is exactly what was
+                // squeezing the text into "Yesterda" and "₹ 3 –". A short wide
+                // pill costs no width the column wasn't already using.
+                Box(
+                    Modifier.clip(RoundedCornerShape(9.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .clickable { onUpdate() }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                ) {
+                    Text("Update", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         }
@@ -2849,6 +2897,30 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
 }
 
 /**
+ * One plain line saying why this callback exists and what it is waiting on.
+ *
+ * The note is written by whoever booked it — the rep, the voice-note AI, or the
+ * attempt ladder — so it already says why. This just gives it a sentence around
+ * it, and says something useful when there is no note at all instead of showing
+ * nothing.
+ */
+private fun whyThisCallback(f: FollowUp, overdue: Boolean): String {
+    val note = (f.note ?: "").trim()
+    val when_ = if (overdue) "was due ${relativeDue(f.dueAt)}" else "due ${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}"
+    return when {
+        // The AI's own wording; strip its prefix and let it speak for itself.
+        note.startsWith("AI:", ignoreCase = true) ->
+            "🎤 From your voice note — ${note.removePrefix("AI:").removePrefix("ai:").trim()} · $when_"
+        // The no-answer ladder books these, and the note already counts the try.
+        note.contains("Attempt", ignoreCase = true) ->
+            "🔁 Nobody picked up — $note · $when_"
+        note.isNotEmpty() -> "📝 You said: $note · $when_"
+        overdue -> "↻ You booked a call back, and it $when_"
+        else -> "↻ You booked a call back · $when_"
+    }
+}
+
+/**
  * [onUpdate] is null when the callback isn't linked to a lead — there is no
  * funnel to move, so it falls back to plainly ticking the callback off. Every
  * pending callback on the platform is currently linked, but the column is
@@ -2882,10 +2954,22 @@ private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit
                     }
                 }
             }
-            f.note?.takeIf { it.isNotBlank() }?.let {
-                Spacer(Modifier.height(8.dp))
-                Text("📝 $it", style = MaterialTheme.typography.bodySmall)
-            }
+            // WHY this callback is sitting here, in one line, on every card.
+            //
+            // A rep opening Follow Ups saw a name, a phone and a time and had to
+            // remember what any of it was about — so the honest reaction was
+            // "this shouldn't be here". It is never a mystery to the app: either
+            // the rep booked it themselves, or the AI booked it from a voice
+            // note, or the attempt ladder booked it because nobody picked up.
+            // The note already carries that; it was just printed as a bare 📝
+            // line and only when a note existed at all.
+            Spacer(Modifier.height(8.dp))
+            Text(
+                whyThisCallback(f, overdue),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (overdue) Red else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (overdue) FontWeight.SemiBold else FontWeight.Normal,
+            )
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActionButton(Icons.Default.Call, "Call", Green, Modifier.weight(1f), onClick = onCall)
