@@ -160,6 +160,12 @@ data class AppState(
     val postCallName: String? = null,
     val postCallCampaignId: String? = null,
     val postCallConnected: Boolean = false,
+    // The SAME prompt, opened by hand from a follow-up's Update button rather
+    // than by a call ending. Manual means it is dismissable (a mis-tap must not
+    // trap the rep) while still asking the funnel question. The follow-up id
+    // rides along so answering the prompt closes the callback it came from.
+    val postCallManual: Boolean = false,
+    val postCallFollowUpId: String? = null,
     // In-app update: set when a newer build is published; drives the update prompt.
     val update: AppUpdater.Release? = null,
     val checkingUpdate: Boolean = false,
@@ -1983,6 +1989,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val contactId = _state.value.postCallContactId ?: return
         val phone = _state.value.postCallPhone
         val name = _state.value.postCallName
+        // Answering the prompt IS finishing the callback it was opened from, so
+        // the old one closes. Read before the work below, because the reschedule
+        // path routes through here after booking the NEXT one — closing by id
+        // can then never take the new callback down with the old.
+        val fromFollowUp = _state.value.postCallFollowUpId
         val cleanNote = note?.trim()?.ifBlank { null }
         viewModelScope.launch {
             runCatching { Repository.setDisposition(contactId, status, cleanNote) }
@@ -2028,6 +2039,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
         }
+        fromFollowUp?.let { completeFollowUp(it) }
         dismissPostCall()
     }
 
@@ -2043,12 +2055,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return cal.timeInMillis
     }
 
+    /**
+     * Open that same prompt by hand, from a follow-up's Update button.
+     *
+     * A rep ringing their callbacks had no way to say what happened without
+     * leaving the list and opening the lead. "Done" only ticked the callback
+     * off; it never moved the funnel, so a customer who said "interested, call
+     * Friday" needed a screen change, a stage tap, a back, and a fresh
+     * follow-up. This is the same one-screen answer the post-call prompt
+     * already gives, reached from where the work actually is.
+     *
+     * Deliberately the SAME sheet, not a copy: one prompt means the funnel
+     * moves, the temperature, the note, the voice note and the rescheduling all
+     * behave identically whether the rep answers it after a call or from here.
+     */
+    fun openFollowUpUpdate(contactId: String?, phone: String, name: String?, followUpId: String?) = set {
+        it.copy(
+            postCallContactId = contactId, postCallPhone = phone,
+            postCallName = name, postCallCampaignId = null,
+            postCallConnected = true, postCallManual = true,
+            postCallFollowUpId = followUpId,
+        )
+    }
+
     /** Dismiss the post-call popup without logging any disposition. */
     fun dismissPostCall() = set {
         it.copy(
             postCallContactId = null, postCallPhone = null,
             postCallName = null, postCallCampaignId = null,
-            postCallConnected = false,
+            postCallConnected = false, postCallManual = false,
+            postCallFollowUpId = null,
         )
     }
 
