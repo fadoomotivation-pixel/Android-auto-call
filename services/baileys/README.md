@@ -21,7 +21,41 @@ number is an annoyance — losing the number your leads reply to is losing the
 business. The CRM's customer-facing senders deliberately ignore the provider
 setting so this can never happen by accident.
 
-## Deploy
+## Deploy on Hostinger (what we actually use)
+
+Hostinger's **Web Apps** run a real long-lived Node process on a real
+filesystem, which is exactly what this needs — and better than most container
+hosts, where the session has to be kept on a separately mounted volume or it is
+wiped on every deploy. Here the WhatsApp login survives a restart on its own.
+
+1. **hPanel → Websites → Add website → Deploy Web App**, from this GitHub repo.
+2. Set the **application root** to `services/baileys` — this repo is the whole
+   product, and the worker is one directory inside it.
+3. **Node 20 or newer.** Baileys uses modern crypto APIs and will not start on 18.
+4. Entry point: `app.js` (already here) or `npm start` — both land in the same place.
+5. Environment:
+   - `BAILEYS_SECRET` — a long random string. The service refuses to start
+     without one, because the worker's URL is public and an unprotected `/send`
+     is a "send WhatsApp as this company" button.
+   - `AUTH_DIR` — set to a path **inside the app directory**, e.g.
+     `/home/<user>/domains/<domain>/baileys-auth`. Do not use `/tmp`.
+   - `PORT` — leave it alone; Hostinger sets it and the server reads it.
+6. Note the app's URL (e.g. `https://something.hostingersite.com`) — that is the
+   worker address you paste into Call Pro AI.
+
+Then: **Dashboard → WhatsApp → Founder notifications → Baileys (Experimental)**,
+paste the URL and the same secret, Save, and scan the QR.
+
+Two Hostinger-specific things to watch:
+
+- **Shared plans can idle a process out.** If the app sleeps, the WhatsApp
+  socket drops and reconnects when it wakes; the outbox holds the report and
+  retries every five minutes, so a sleeping worker delays the pulse rather than
+  losing it. `/health` exists to be pinged if you want to keep it warm.
+- **Outbound is over wss:443**, the same port a browser uses, so the usual
+  shared-hosting port restrictions do not apply.
+
+## Deploy anywhere else
 
 1. Point your host at this directory (it has a Dockerfile).
 2. Set the environment:

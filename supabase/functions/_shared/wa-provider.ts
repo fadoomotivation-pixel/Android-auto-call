@@ -48,8 +48,17 @@ export function humanError(code: number | undefined, msg: string): string {
     return "This number isn't on your WhatsApp app's allowed test-recipient list. Add it in Meta (API Setup → " +
       "recipient phone number), or take the app out of test mode.";
   }
-  if (/token/i.test(msg) && /expire|invalid/i.test(msg)) {
-    return "The WhatsApp access token has expired — reconnect WhatsApp in admin, then try again.";
+  // Meta says "Authentication Error" and code 190 for a dead token, and neither
+  // word is "expired" — so the old test for /token/ + /expire|invalid/ missed
+  // the single most common failure this platform has. A temporary token from
+  // Meta's API Setup page is good for 24 hours, and in practice much less: it
+  // dies the moment that page is reloaded. A founder reading "Authentication
+  // Error" next to their missing report learns nothing they can act on.
+  if (code === 190 || code === 102 || /authentication error|access token/i.test(msg) ||
+      (/token/i.test(msg) && /expire|invalid/i.test(msg))) {
+    return "The WhatsApp access token has expired. Temporary tokens from Meta's API Setup page only last a " +
+      "few hours — generate a permanent one (Business Settings → Users → System users) and paste it on the " +
+      "WhatsApp page, or switch this company to the Baileys provider, which does not use tokens at all.";
   }
   return msg;
 }
