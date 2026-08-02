@@ -36,6 +36,33 @@ function normalise(raw: string): string {
   return d.length === 10 ? `91${d}` : d;
 }
 
+/**
+ * What we are actually allowed to claim.
+ *
+ * A 200 from Meta means "accepted" — it has taken the message and given it an
+ * id, nothing more. Whether it may be handed over is decided afterwards and
+ * announced only in a status webhook, so "delivered" and "read" are the only
+ * two words here that prove a phone buzzed. Everything else is a stage, and
+ * showing it as one is the difference between a founder who knows to go and
+ * fix something and a founder who trusts a tick and never gets the report.
+ */
+function verdict(status: string | null): { label: string; color: string; hint: string } {
+  switch (status) {
+    case "read":
+      return { label: "✓✓ Read", color: "#22c55e", hint: "They opened it." };
+    case "delivered":
+      return { label: "✓✓ Delivered", color: "#22c55e", hint: "It reached their phone." };
+    case "sent":
+      return { label: "✓ Sent by WhatsApp", color: "#4ade80", hint: "WhatsApp has sent it on; delivery not confirmed yet." };
+    case "accepted":
+      return { label: "· Handed to WhatsApp", color: "#fbbf24", hint: "Meta accepted it. Delivery is not confirmed." };
+    case "failed":
+      return { label: "✗ Failed", color: "#f87171", hint: "WhatsApp refused to deliver it." };
+    default:
+      return { label: "· Last try", color: "#9ca3af", hint: "No result recorded." };
+  }
+}
+
 function hourLabel(h: number): string {
   const ampm = h < 12 ? "AM" : "PM";
   const twelve = h % 12 === 0 ? 12 : h % 12;
@@ -92,9 +119,12 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
     );
     setSendingId(null);
     if (error || !data?.ok) setMsg(data?.error || error?.message || "Couldn't send.");
-    else setMsg(`Sent to ${s.phone}${(data.parts ?? 1) > 1 ? ` in ${data.parts} messages` : ""}` +
+    // Not "Sent to" — we only know WhatsApp accepted it. Saying more than that
+    // is what made tonight's silent failure look like a success.
+    else setMsg(`Handed to WhatsApp for ${s.phone}${(data.parts ?? 1) > 1 ? ` in ${data.parts} messages` : ""}` +
       `${data.via === "template" ? " (as a template — the 24-hour window was closed)" : ""}` +
-      `${data.borrowed_number ? " · sent from the platform number" : ""}.`);
+      `${data.borrowed_number ? " · from the platform number" : ""}. ` +
+      `Check the phone — if nothing arrives, WhatsApp refused it and the reason will show here shortly.`);
     void load();
   }
 
@@ -152,11 +182,26 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
             style={{ fontSize: 12, padding: "5px 10px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "var(--muted)", cursor: "pointer" }}>
             Remove
           </button>
-          {s.last_sent_at && (
-            <span style={{ fontSize: 12, color: s.last_status === "sent" ? "#22c55e" : "#f87171" }}>
-              {s.last_status === "sent" ? "✓ Last sent" : "✗ Last try"}{" "}
-              {new Date(s.last_sent_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
-            </span>
+          {s.last_sent_at && (() => {
+            const v = verdict(s.last_status);
+            return (
+              <span style={{ fontSize: 12, color: v.color }} title={v.hint}>
+                {v.label}{" "}
+                {new Date(s.last_sent_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+              </span>
+            );
+          })()}
+          {/* "Handed to WhatsApp" is not "arrived", and saying so is the whole
+              point. A green tick over a report that never reached the phone is
+              worse than no tick — the founder stops checking, and nobody finds
+              out for a week. This line stays amber until WhatsApp itself says
+              delivered. */}
+          {s.last_status === "accepted" && (
+            <div style={{ flexBasis: "100%", fontSize: 12.5, color: "#fcd34d", lineHeight: 1.5 }}>
+              WhatsApp took this message but hasn&apos;t confirmed it reached the phone. If it didn&apos;t
+              arrive, it&apos;s almost always the 24-hour rule: ask them to send any message to your
+              WhatsApp business number, then press Send now again.
+            </div>
           )}
           {/* The failure is almost always WhatsApp's 24-hour rule, and the fix
               is a specific thing the owner has to go and do. Printing it here,
@@ -170,7 +215,7 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
         </div>
       ))}
 
-      {msg && <div style={{ marginTop: 10, fontSize: 12.5, color: msg.startsWith("Sent") ? "#22c55e" : "#f87171" }}>{msg}</div>}
+      {msg && <div style={{ marginTop: 10, fontSize: 12.5, color: msg.startsWith("Handed") ? "#fbbf24" : "#f87171" }}>{msg}</div>}
     </div>
   );
 }
