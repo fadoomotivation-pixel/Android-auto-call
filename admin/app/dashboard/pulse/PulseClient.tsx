@@ -16,6 +16,15 @@ type Rep = {
   followUps: number;
   hotLeads: number;
   narrative?: string;
+  /** The decision half of the report, written server-side alongside the text
+   *  so the page and the 7pm WhatsApp can never say different things. */
+  visitsFixed?: number;
+  bookings?: number;
+  revenue?: number;
+  win?: string;
+  risk?: string;
+  aiUpdates?: string[];
+  nextSteps?: { lead: string; when: string; note: string | null }[];
   /** Ready-to-send wording, written server-side (see _shared/pulse.ts). */
   text?: string;
 };
@@ -35,6 +44,15 @@ function istToday(): string {
 function fmtDur(sec: number): string {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+/** Indian money, the way it is read out loud. Mirrors the same helper in
+ *  _shared/pulse.ts so the card and the WhatsApp format a figure identically. */
+function rupees(n: number): string {
+  if (n >= 10_000_000) return `₹${(n / 10_000_000).toFixed(n % 10_000_000 === 0 ? 0 : 2)}Cr`;
+  if (n >= 100_000) return `₹${(n / 100_000).toFixed(n % 100_000 === 0 ? 0 : 2)}L`;
+  // Never a timeZone on a NUMBER's toLocaleString — Intl.NumberFormat rejects
+  // it and the Vercel build fails.
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }
 
 /**
@@ -231,40 +249,89 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                     )}
                   </div>
 
-                  {/* Stat strip */}
-                  <div style={{ display: "flex", gap: 14, fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
+                  {/* Business first, dial count last — the same order as the
+                      WhatsApp. A card that opens with calls is a call-centre
+                      card, and the owner has to read to the bottom to find out
+                      whether anything was actually sold. */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 14, fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
+                    {(r.bookings ?? 0) > 0 && (
+                      <span><strong style={{ color: "#22c55e" }}>🎉 {r.bookings}</strong> booked
+                        {(r.revenue ?? 0) > 0 && <> · <strong style={{ color: "#22c55e" }}>{rupees(r.revenue!)}</strong></>}
+                      </span>
+                    )}
+                    {(r.visitsFixed ?? 0) > 0 && (
+                      <span><strong style={{ color: "#f59e0b" }}>📍 {r.visitsFixed}</strong> visits fixed</span>
+                    )}
                     <span><strong style={{ color: "var(--text)" }}>{r.calls}</strong> calls</span>
                     <span><strong style={{ color: "#22c55e" }}>{r.connected}</strong> conn.</span>
                     <span><strong style={{ color: "var(--text)" }}>{fmtDur(r.talkSeconds)}</strong> talk</span>
                   </div>
 
-                  {/* AI narrative */}
-                  {r.narrative && (
+                  {/* The win and the risk — the two things a founder cannot get
+                      from the numbers. `narrative` is the older single-blob
+                      version and only shows on days the new fields are absent,
+                      so an un-redeployed function still renders something. */}
+                  {r.win && (
+                    <div style={{ fontSize: 14, color: "var(--text)", background: "rgba(34,197,94,0.08)", padding: "9px 12px", borderRadius: 8, borderLeft: "3px solid #22c55e", marginBottom: 8 }}>
+                      <strong style={{ color: "#86efac" }}>✅ </strong>{r.win}
+                    </div>
+                  )}
+                  {r.risk && (
+                    <div style={{ fontSize: 14, color: "var(--text)", background: "rgba(245,158,11,0.08)", padding: "9px 12px", borderRadius: 8, borderLeft: "3px solid #f59e0b", marginBottom: 8 }}>
+                      <strong style={{ color: "#fcd34d" }}>⚠️ </strong>{r.risk}
+                    </div>
+                  )}
+                  {!r.win && !r.risk && r.narrative && (
                     <div style={{ fontSize: 14, color: "var(--text)", background: "rgba(139,92,246,0.08)", padding: "10px 12px", borderRadius: 8, borderLeft: "3px solid #8b5cf6", marginBottom: 10 }}>
                       <strong style={{ color: "#c4b5fd" }}>✨ </strong>{r.narrative}
                     </div>
                   )}
 
-                  {/* Voice notes — readable AND playable. The AI summary is a
-                      summary; when the owner wants to judge the call for
-                      themselves, the rep's own voice is the only real evidence. */}
-                  {realNotes(r).slice(0, 3).map((v, i) => (
-                    <div key={i} style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
-                      <div>🎤 <strong style={{ color: "var(--text)" }}>{v.lead}:</strong> {v.summary}</div>
-                      {v.audioPath && <VoiceNotePlayer path={v.audioPath} />}
+                  {/* What is booked next — the half of the report that can still
+                      be acted on. The day's numbers are history by 7pm. */}
+                  {(r.nextSteps ?? []).slice(0, 3).map((s, i) => (
+                    <div key={i} style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 3 }}>
+                      🎯 <strong style={{ color: "var(--text)" }}>{s.lead}</strong> — {s.when}
                     </div>
                   ))}
 
-                  {/* Pipeline moves (AI moves made from a voice note are already
-                      described by that note above, so they aren't repeated). */}
-                  {newsworthyMoves(r).slice(0, 5).map((m, i) => (
-                    <div key={i} style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 4 }}>
-                      {m.byAi ? "🤖" : "•"} <strong style={{ color: "var(--text)" }}>{m.lead}:</strong> {m.detail}
-                    </div>
+                  {/* What the AI did, counted. This used to be one line per
+                      automatic action, so four unanswered calls printed four
+                      identical "Marked cold" rows and one lead that got two
+                      callbacks a minute apart printed both. */}
+                  {(r.aiUpdates ?? []).map((u, i) => (
+                    <div key={i} style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>🤖 {u}</div>
                   ))}
+
+                  {/* The evidence, behind a click.
+                      Voice notes and the lead-move log are the reason this page
+                      exists rather than just forwarding the WhatsApp — but they
+                      are what a manager opens to check a specific call, not what
+                      a founder reads first. Collapsed, they stop being the forty
+                      lines you scroll past to reach the decision. */}
+                  {(realNotes(r).length > 0 || newsworthyMoves(r).length > 0) && (
+                    <details style={{ marginTop: 10 }}>
+                      <summary style={{ fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>
+                        Call detail — {realNotes(r).length} voice {realNotes(r).length === 1 ? "note" : "notes"}, {newsworthyMoves(r).length} lead {newsworthyMoves(r).length === 1 ? "move" : "moves"}
+                      </summary>
+                      <div style={{ marginTop: 8 }}>
+                        {realNotes(r).slice(0, 5).map((v, i) => (
+                          <div key={i} style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
+                            <div>🎤 <strong style={{ color: "var(--text)" }}>{v.lead}:</strong> {v.summary}</div>
+                            {v.audioPath && <VoiceNotePlayer path={v.audioPath} />}
+                          </div>
+                        ))}
+                        {newsworthyMoves(r).slice(0, 8).map((m, i) => (
+                          <div key={i} style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 4 }}>
+                            {m.byAi ? "🤖" : "•"} <strong style={{ color: "var(--text)" }}>{m.lead}:</strong> {m.detail}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                   {r.siteVisits.length > 0 && (
                     <div style={{ fontSize: 12.5, color: "#f59e0b", marginTop: 6 }}>
-                      📍 Site visit set: {r.siteVisits.join(", ")}
+                      📍 Visit today: {r.siteVisits.join(", ")}
                     </div>
                   )}
 
