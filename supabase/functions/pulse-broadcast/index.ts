@@ -16,7 +16,7 @@
 // not know, or need to know, which WhatsApp pipe carried it.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { buildCompany, istDate, istHour, pulseText } from "../_shared/pulse.ts";
+import { buildCompany, istDate, istHour, PULSE_FOOTER, pulseText } from "../_shared/pulse.ts";
 import { notifyFounder } from "../_shared/notify.ts";
 
 const cors = {
@@ -45,7 +45,7 @@ async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
   // Nothing happened all day: say that in one line rather than sending an
   // elaborate report full of zeroes, which reads like the CRM is broken.
   const text = pulse.totals.calls === 0 && pulse.totals.notes === 0
-    ? `📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse\n${date}\n\nNo calls logged today.\n\n— via Call Pro AI`
+    ? `📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse\n${date}\n\nNo calls logged today.\n\n${PULSE_FOOTER}`
     : pulseText(pulse, companyName);
 
   return await notifyFounder(admin, {

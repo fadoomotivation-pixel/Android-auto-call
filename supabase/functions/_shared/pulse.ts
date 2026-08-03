@@ -72,6 +72,12 @@ export type RepPulse = {
   nextSteps: NextStep[];
   /** Leads whose site visit was BOOKED or moved today — the day's real wins. */
   visitsFixed: number;
+  /** Deals closed today. The number a founder scrolls for. */
+  bookings: number;
+  /** Token money against today's bookings, in rupees. 0 when none was recorded
+   *  — never estimated from a lead's budget, which is what the customer said
+   *  they could spend, not what they paid. */
+  revenue: number;
   /** What the AI did on its own, aggregated. Never one line per lead. */
   aiUpdates: string[];
   /** The single best thing that happened today, in one sentence. */
@@ -83,7 +89,10 @@ export type RepPulse = {
 
 export type CompanyPulse = {
   date: string;
-  totals: { calls: number; connected: number; notes: number; visits: number; talkSeconds: number };
+  totals: {
+    calls: number; connected: number; notes: number; visits: number; talkSeconds: number;
+    visitsFixed: number; bookings: number; revenue: number; hotLeads: number;
+  };
   reps: RepPulse[];
 };
 
@@ -180,7 +189,8 @@ export async function buildCompany(
       map.set(id, {
         id, name: nameById.get(id)!, calls: 0, connected: 0, talkSeconds: 0,
         voiceNotes: [], moves: [], siteVisits: [], followUps: 0, hotLeads: 0,
-        topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, aiUpdates: [],
+        topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, bookings: 0,
+        revenue: 0, aiUpdates: [],
       });
     }
     return map.get(id)!;
@@ -235,6 +245,38 @@ export async function buildCompany(
   }
   for (const [repId, leads] of visitLeads) {
     const r = map.get(repId); if (r) r.visitsFixed = leads.size;
+  }
+
+  // Bookings, and the money actually recorded against them.
+  //
+  // Read from today's status activities rather than "contacts where status =
+  // booked", because that column answers "is this lead booked" and not "did it
+  // book TODAY" — a founder's evening report that counts every booking the
+  // company has ever made is a number that only goes up and means nothing.
+  //
+  // Revenue is the token PAID (contacts.token_amount), never the lead's budget.
+  // Budget is what a customer said they could spend; reporting it as revenue
+  // would be inventing money, and a founder who catches that once stops
+  // believing the whole report.
+  const bookedByRep = new Map<string, Set<string>>();
+  for (const a of acts.data ?? []) {
+    const r = rep(a.actor_id); if (!r || !a.contact_id) continue;
+    if (a.type === "status" && /\bbook(ed|ing)\b/i.test(String(a.detail ?? ""))) {
+      if (!bookedByRep.has(r.id)) bookedByRep.set(r.id, new Set());
+      bookedByRep.get(r.id)!.add(String(a.contact_id));
+    }
+  }
+  const bookedIds = [...bookedByRep.values()].flatMap((s) => [...s]);
+  const tokenById = new Map<string, number>();
+  if (bookedIds.length) {
+    const { data: tokens } = await admin.from("contacts")
+      .select("id, token_amount").in("id", bookedIds);
+    for (const t of tokens ?? []) tokenById.set(String(t.id), Number(t.token_amount ?? 0) || 0);
+  }
+  for (const [repId, leads] of bookedByRep) {
+    const r = map.get(repId); if (!r) continue;
+    r.bookings = leads.size;
+    r.revenue = [...leads].reduce((s, id) => s + (tokenById.get(id) ?? 0), 0);
   }
   for (const v of visits.data ?? []) {
     const r = rep(v.salesperson_id); if (!r) continue;
@@ -325,7 +367,12 @@ export async function buildCompany(
     calls: t.calls + p.calls, connected: t.connected + p.connected,
     notes: t.notes + realNotes(p).length, visits: t.visits + p.siteVisits.length,
     talkSeconds: t.talkSeconds + p.talkSeconds,
-  }), { calls: 0, connected: 0, notes: 0, visits: 0, talkSeconds: 0 });
+    visitsFixed: t.visitsFixed + p.visitsFixed, bookings: t.bookings + p.bookings,
+    revenue: t.revenue + p.revenue, hotLeads: t.hotLeads + p.hotLeads,
+  }), {
+    calls: 0, connected: 0, notes: 0, visits: 0, talkSeconds: 0,
+    visitsFixed: 0, bookings: 0, revenue: 0, hotLeads: 0,
+  });
 
   return { date, totals, reps: pulses };
 }
@@ -335,6 +382,49 @@ function connectedLine(calls: number, connected: number): string {
   const pct = calls > 0 ? Math.round((connected / calls) * 100) : 0;
   return `${connected}${calls > 0 ? ` (${pct}%)` : ""}`;
 }
+
+/** Indian money, the way it is read out loud: ₹50,000 · ₹4.5L · ₹1.2Cr. */
+function rupees(n: number): string {
+  if (n >= 10_000_000) return `₹${(n / 10_000_000).toFixed(n % 10_000_000 === 0 ? 0 : 2)}Cr`;
+  if (n >= 100_000) return `₹${(n / 100_000).toFixed(n % 100_000 === 0 ? 0 : 2)}L`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+/**
+ * What a founder looks for first, in the order they look for it.
+ *
+ * Bookings and site visits come before calls because the business is bookings
+ * and site visits — a report that opens with dial counts is a call-centre
+ * report, and the owner has to read to the bottom to find out whether anything
+ * was actually sold. Zero bookings still prints: a zero the founder can see is
+ * the point of the line.
+ *
+ * "Visit rate" names its own denominator. An unlabelled conversion % is a
+ * number two people read as two different things in the same meeting.
+ */
+function kpiBlock(k: {
+  bookings: number; revenue: number; visitsFixed: number; hotLeads: number;
+  calls: number; connected: number;
+}): string[] {
+  const L = [`• Bookings: ${k.bookings}`];
+  if (k.revenue > 0) L.push(`• Token collected: ${rupees(k.revenue)}`);
+  L.push(`• Site visits fixed: ${k.visitsFixed}`);
+  if (k.hotLeads) L.push(`• Hot leads: ${k.hotLeads}`);
+  L.push(`• Calls: ${k.calls} · connected ${connectedLine(k.calls, k.connected)}`);
+  if (k.connected > 0) {
+    L.push(`• Visit rate: ${Math.round((k.visitsFixed / k.connected) * 100)}% of everyone talked to`);
+  }
+  return L;
+}
+
+/**
+ * The sign-off, on every message this file writes.
+ *
+ * One constant, because a footer that drifts between the single-rep report and
+ * the team roll-up is the sort of thing nobody notices until a founder forwards
+ * two of them into the same WhatsApp group.
+ */
+export const PULSE_FOOTER = "Auto Generated by Call Pro AI • Executive Intelligence";
 
 /**
  * ONE rep's day, as the founder reads it.
@@ -357,15 +447,11 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
   const idle = !r.calls && !r.voiceNotes.length && !r.moves.length && !r.siteVisits.length;
   if (idle) {
     L.push("", "No calls, no notes, no lead moves today.");
-    L.push("", "— via Call Pro AI");
+    L.push("", PULSE_FOOTER);
     return L.join("\n");
   }
 
-  L.push("", "🟢 Performance");
-  L.push(`• Calls: ${r.calls}`);
-  L.push(`• Connected: ${connectedLine(r.calls, r.connected)}`);
-  if (r.hotLeads) L.push(`• Hot leads: ${r.hotLeads}`);
-  if (r.visitsFixed) L.push(`• Site visits fixed: ${r.visitsFixed}`);
+  L.push("", "🟢 Today", ...kpiBlock(r));
 
   if (r.win) L.push("", "🎯 Biggest win", `✅ ${r.win}`);
   if (r.risk) L.push("", "⚠️ Risk", `🔸 ${r.risk}`);
@@ -382,7 +468,7 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
     r.aiUpdates.forEach((u) => L.push(`• ${u}`));
   }
 
-  L.push("", "— via Call Pro AI");
+  L.push("", PULSE_FOOTER);
   return L.join("\n");
 }
 
@@ -397,8 +483,7 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
  */
 export function pulseText(p: CompanyPulse, companyName?: string | null): string {
   const L: string[] = [`📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse`, prettyDate(p.date)];
-  L.push("", `Team: ${p.totals.calls} calls | ${connectedLine(p.totals.calls, p.totals.connected)} connected | ` +
-    `${p.totals.visits} site visit${p.totals.visits === 1 ? "" : "s"}`);
+  L.push("", "🟢 Today", ...kpiBlock(p.totals));
 
   const worked = p.reps.filter((r) => r.calls || r.voiceNotes.length || r.moves.length || r.siteVisits.length);
   const idle = p.reps.filter((r) => !worked.includes(r));
@@ -411,7 +496,8 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
     L.push("", "━━━━━━━━━━━━━━━", `👤 ${r.name}`);
     L.push(`${r.calls} calls | ${connectedLine(r.calls, r.connected)} connected` +
       (r.hotLeads ? ` | 🔥 ${r.hotLeads} hot` : "") +
-      (r.visitsFixed ? ` | 📍 ${r.visitsFixed} visit${r.visitsFixed > 1 ? "s" : ""} fixed` : ""));
+      (r.visitsFixed ? ` | 📍 ${r.visitsFixed} visit${r.visitsFixed > 1 ? "s" : ""} fixed` : "") +
+      (r.bookings ? ` | 🎉 ${r.bookings} booked${r.revenue ? ` ${rupees(r.revenue)}` : ""}` : ""));
     if (r.win) L.push(`✅ ${r.win}`);
     if (r.risk) L.push(`🔸 ${r.risk}`);
     r.nextSteps.slice(0, 2).forEach((s) => L.push(`🎯 Next: ${s.lead} — ${s.when}`));
@@ -422,7 +508,7 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
     L.push("", "━━━━━━━━━━━━━━━", `⚠️ No activity today: ${idle.map((r) => r.name).join(", ")}`);
   }
 
-  L.push("", "— via Call Pro AI");
+  L.push("", PULSE_FOOTER);
   return L.join("\n");
 }
 
