@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -1203,6 +1205,41 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                         "Review the call, set an outcome, or WhatsApp before the next number.")
                 }
                 Switch(checked = app.reviewAfterCall, onCheckedChange = { vm.setReviewAfterCall(it) })
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        // How the app asks after a SIM call. Off (the default) the Update button
+        // shakes instead of a sheet appearing — the sheet cannot land until
+        // Android hands focus back from the phone's own in-call screen, which is
+        // a second or two after the rep has already moved on.
+        PaperCard(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    SettingHeader(Icons.Default.Notifications, "Popup right after a SIM call",
+                        "Off: the lead's Update button shakes instead — no waiting for the popup to open.")
+                }
+                Switch(checked = app.postCallPopup, onCheckedChange = { vm.setPostCallPopup(it) })
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        // The assistant's own questions. One switch for all of them, because a
+        // rep who wants quiet wants quiet — offering three sub-toggles just
+        // makes turning it off harder.
+        PaperCard(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    SettingHeader(Icons.Default.Lightbulb, "Let the app ask me things",
+                        "A few questions a day: did the customer come to the site, did you make that callback, how did today go.")
+                }
+                Switch(checked = app.assistantOn, onCheckedChange = { vm.setAssistantOn(it) })
             }
         }
         Spacer(Modifier.height(16.dp))

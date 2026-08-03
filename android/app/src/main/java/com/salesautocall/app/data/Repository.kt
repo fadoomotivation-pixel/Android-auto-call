@@ -1147,6 +1147,58 @@ object Repository {
         }) { filter { eq("id", contactId) } }
     }
 
+    /**
+     * The rep's own 0-100 read on a lead they have now met at the site.
+     *
+     * Kept apart from the stage on purpose. "site_visit" says where the lead is;
+     * this says how close they are, and those are different facts — two leads
+     * can both be "negotiating" with one at 20% and one at 85%. Written the
+     * moment the rep moves the slider, with a timestamp, so a forecast can be
+     * read as stale ("he said 80% three weeks ago") instead of as current truth.
+     */
+    suspend fun setCloseProbability(contactId: String, percent: Int) {
+        client.from("contacts").update(buildJsonObject {
+            put("close_probability", percent.coerceIn(0, 100))
+            put("close_probability_at", java.time.Instant.now().toString())
+        }) { filter { eq("id", contactId) } }
+    }
+
+    /**
+     * Records one question the app asked and what the rep said back.
+     *
+     * Best-effort by design: the caller never waits on it and never fails
+     * because of it. The rep's actual work — the stage move, the callback, the
+     * note — is already saved by the time this runs; this is only the record of
+     * having been asked, and losing one row of that must never cost the rep
+     * their answer.
+     */
+    suspend fun logRepPrompt(
+        contactId: String?,
+        kind: String,
+        answer: String?,
+        reason: String? = null,
+        probability: Int? = null,
+        secondsToAnswer: Int? = null,
+        dismissed: Boolean = false,
+    ) {
+        val uid = currentUserId() ?: return
+        val company = myProfile()?.companyId ?: return
+        client.from("rep_prompts").insert(
+            RepPrompt(
+                companyId = company,
+                salespersonId = uid,
+                contactId = contactId,
+                kind = kind,
+                answer = answer,
+                reason = reason,
+                probability = probability,
+                secondsToAnswer = secondsToAnswer,
+                dismissed = dismissed,
+                answeredAt = if (answer != null) java.time.Instant.now().toString() else null,
+            ),
+        )
+    }
+
     /** Buyer changed their mind: wipe the planned site visit date + project. */
     suspend fun clearSiteVisit(contactId: String) {
         client.from("contacts").update(mapOf<String, String?>("site_visit_at" to null, "site_visit_project" to null)) {

@@ -1186,6 +1186,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // Pending follow-up per lead, so every card can say "call back · Today 4 PM".
     val fuByContact = remember(app.followUpList) { app.followUpList.filter { it.contactId != null }.associateBy { it.contactId } }
     val fuByPhone = remember(app.followUpList) { app.followUpList.associateBy { it.phone } }
+    // Calls that ended with nothing written down. Hoisted out of the row so the
+    // lookup is a set hit per lead, not a list scan on every recomposition.
+    val pendingUpdateIds = remember(app.pendingUpdates) { app.pendingUpdates.map { it.contactId }.toSet() }
 
     var query by remember { mutableStateOf("") }
     // One simple question on screen: "which bucket?" — the fine-grained stage /
@@ -1578,6 +1581,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
                             selectMode = selectMode,
                             isSelected = c.id != null && c.id in selectedIds,
+                            needsUpdate = c.id != null && c.id in pendingUpdateIds,
                             onToggleSelect = { c.id?.let { id -> selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id } },
                             onCall = { vm.dialManual(c.phone) },
                             onCloudCall = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
@@ -1998,6 +2002,8 @@ private fun LeadCard(
     cloudOn: Boolean,
     selectMode: Boolean = false,
     isSelected: Boolean = false,
+    /** This lead was just called and nothing was recorded — its Update shakes. */
+    needsUpdate: Boolean = false,
     onToggleSelect: () -> Unit = {},
     onCall: () -> Unit,
     onCloudCall: () -> Unit,
@@ -2122,6 +2128,15 @@ private fun LeadCard(
                     Text("  ·  ₹ $it", style = MaterialTheme.typography.bodySmall, color = jade,
                         fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
+                // The rep's own read on this lead, given after they met at the
+                // site. It earns a place on the line a rep reads before dialling
+                // because it answers "who do I call first" better than the stage
+                // does — two leads both "negotiating" are not the same call.
+                c.closeProbability?.let { pct ->
+                    Text("  ·  🎯 $pct%", style = MaterialTheme.typography.bodySmall,
+                        color = if (pct >= 60) Teal else if (pct >= 40) Amber else Slate,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
                 if (c.attempts > 0) {
                     // "Attempt 2/3" — which try comes NEXT, loud when its time is due.
                     val due = followUp?.let { instantMillis(it.dueAt) }
@@ -2173,15 +2188,24 @@ private fun LeadCard(
             // afterthought squeezed against the edge. It belongs with the lead's
             // information, where the eye already is, and the text column has the
             // width to give it a proper target.
+            //
+            // And when this lead's call has just ended with nothing recorded,
+            // it shakes. That gentle wobble is the whole replacement for the
+            // post-call popup on SIM calls: the rep is pointed at the one button
+            // that finishes the job, without a modal landing on them two seconds
+            // after they've put the phone down and moved on.
             Spacer(Modifier.height(7.dp))
+            val updateTint = if (needsUpdate) Amber else MaterialTheme.colorScheme.primary
             Box(
-                Modifier.clip(RoundedCornerShape(9.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                Modifier.nudgeShake(needsUpdate)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(updateTint.copy(alpha = if (needsUpdate) 0.20f else 0.12f))
                     .clickable { onUpdate() }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
-                Text("✎  Update", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(if (needsUpdate) "✎  Update this call" else "✎  Update",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = updateTint, fontWeight = FontWeight.Bold, maxLines = 1)
             }
         }
         Spacer(Modifier.width(10.dp))
@@ -2951,6 +2975,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     onReschedule = { rescheduleFor = f },
                     onUpdate = if (cid == null) null else fun() { vm.openFollowUpUpdate(cid, f.phone, f.name, f.id) },
                     onDone = { f.id?.let { vm.completeFollowUp(it) } },
+                    needsUpdate = cid != null && app.pendingUpdates.any { it.contactId == cid },
                 )
             }
         }
@@ -3001,7 +3026,7 @@ private fun whyThisCallback(f: FollowUp, overdue: Boolean): String {
  * isn't there.
  */
 @Composable
-private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onSnooze: () -> Unit, onReschedule: () -> Unit, onUpdate: (() -> Unit)?, onDone: () -> Unit) {
+private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onSnooze: () -> Unit, onReschedule: () -> Unit, onUpdate: (() -> Unit)?, onDone: () -> Unit, needsUpdate: Boolean = false) {
     val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= System.currentTimeMillis()
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -3059,17 +3084,22 @@ private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit
             // closes. Two buttons that both looked like "finish" but meant
             // different things is the confusion; now there is one.
             if (onUpdate != null) {
+                // A just-finished call turns it amber and sets it wobbling —
+                // the same reminder the Leads list gives, in the place a rep
+                // ringing their callbacks is actually looking.
                 Box(
-                    Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.primary)
+                    Modifier.fillMaxWidth().height(46.dp).nudgeShake(needsUpdate)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (needsUpdate) Amber else MaterialTheme.colorScheme.primary)
                         .clickable { onUpdate() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val ink = if (needsUpdate) Color.White else MaterialTheme.colorScheme.onPrimary
                         Icon(Icons.Default.CheckCircle, contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                            tint = ink, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Update", color = MaterialTheme.colorScheme.onPrimary,
+                        Text(if (needsUpdate) "Update this call" else "Update", color = ink,
                             style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                     }
                 }

@@ -133,10 +133,26 @@ fun AppRoot(vm: MainViewModel) {
         val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
         androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
             val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) vm.checkNewAssignments()
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                    vm.checkNewAssignments()
+                    // Restarts the assistant's "stay quiet for a bit" timer, so
+                    // coming back to the app never lands straight on a question.
+                    vm.onForeground()
+                }
             }
             lifecycleOwner.lifecycle.addObserver(observer)
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+
+        // The assistant's heartbeat. Everything that decides whether to ask
+        // anything lives in tickAssistant(), and on almost every beat the answer
+        // is no — a minute is slow enough to cost nothing and quick enough that
+        // a callback going red is noticed while it still matters.
+        LaunchedEffect(state.assistantOn) {
+            while (state.assistantOn) {
+                kotlinx.coroutines.delay(60_000L)
+                vm.tickAssistant()
+            }
         }
     }
 
@@ -156,6 +172,12 @@ fun AppRoot(vm: MainViewModel) {
     // Post-call disposition overlay.
     if (state.signedIn && state.postCallContactId != null) {
         PostCallDispositionSheet(vm)
+    }
+
+    // The assistant's own question — never at the same time as the sheet above
+    // (tickAssistant refuses to arm one while a disposition is open).
+    if (state.signedIn && state.assistantAsk != null) {
+        AssistantPromptSheet(vm)
     }
 
     // Full-screen Settings overlay (below lead detail, so a lead opened from
@@ -648,12 +670,20 @@ private fun MainShell(vm: MainViewModel) {
                         restoreState = true
                     }
                 }
-                FloatingCallBar(
-                    current = route,
-                    onTab = { go(it) },
-                    onDial = { go(Tab.Dialer.route) },
-                    onMore = { scope.launch { drawerState.open() } },
-                )
+                Column {
+                    // The call that hasn't been written up yet, one line above
+                    // the bottom bar. It sits here rather than inside a tab so
+                    // it follows the rep wherever they go next — which is the
+                    // whole point: the old popup caught them because it blocked
+                    // the screen, and this has to catch them without doing that.
+                    PendingUpdateBar(vm)
+                    FloatingCallBar(
+                        current = route,
+                        onTab = { go(it) },
+                        onDial = { go(Tab.Dialer.route) },
+                        onMore = { scope.launch { drawerState.open() } },
+                    )
+                }
             },
         ) { padding ->
             // Floating AI Coach bubble — top-right, above every tab. It never

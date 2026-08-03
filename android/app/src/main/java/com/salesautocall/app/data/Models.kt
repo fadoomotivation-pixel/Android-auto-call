@@ -118,6 +118,11 @@ data class Contact(
     @SerialName("site_visit_arrived_at") val siteVisitArrivedAt: String? = null,
     @SerialName("site_visit_distance_m") val siteVisitDistanceM: Int? = null,
     @SerialName("site_visit_verified") val siteVisitVerified: Boolean? = null,
+    /** The rep's own 0-100 read on how likely this lead is to buy, given after
+     *  they have met at the site. A stage says where the lead IS; this says how
+     *  close they are, which is the number a manager actually sorts by. */
+    @SerialName("close_probability") val closeProbability: Int? = null,
+    @SerialName("close_probability_at") val closeProbabilityAt: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("assigned_at") val assignedAt: String? = null,
     /** When this lead was last CALLED (any direction). A call alone is not work:
@@ -234,6 +239,31 @@ data class LeadVoiceNote(
     /** pending | processing | ready | failed */
     @SerialName("ai_status") val aiStatus: String = "pending",
     @SerialName("created_at") val createdAt: String? = null,
+)
+
+/**
+ * One question the app asked the rep, and what came back.
+ *
+ * Stored for two reasons and only two: so a question is never asked twice, and
+ * so the pattern of answers ("busy" every time a callback slips, 90% on every
+ * site visit that never books) can be read back as coaching material. It is a
+ * discipline record, not a scoreboard.
+ */
+@Serializable
+data class RepPrompt(
+    val id: String? = null,
+    @SerialName("company_id") val companyId: String,
+    @SerialName("salesperson_id") val salespersonId: String,
+    @SerialName("contact_id") val contactId: String? = null,
+    /** "visit_check" | "callback_check" | "day_review" */
+    val kind: String,
+    /** "came" | "no_show" | "postponed" | "called" | "not_yet" | "reviewed" | "skipped" */
+    val answer: String? = null,
+    val reason: String? = null,
+    val probability: Int? = null,
+    @SerialName("seconds_to_answer") val secondsToAnswer: Int? = null,
+    val dismissed: Boolean = false,
+    @SerialName("answered_at") val answeredAt: String? = null,
 )
 
 /** One entry in a lead's activity timeline (what the telecaller did, and when). */
