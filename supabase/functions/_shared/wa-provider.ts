@@ -202,17 +202,15 @@ export async function resolveProvider(
   admin: SupabaseClient,
   companyId: string,
 ): Promise<WhatsAppProvider | { error: string }> {
-  const { data: integ } = await admin.from("whatsapp_integrations")
-    .select("provider, phone_number_id, active").eq("company_id", companyId).maybeSingle();
-
-  if (integ?.provider === "baileys") {
+  const baileys = async (cid: string) => {
+    const { data: i } = await admin.from("whatsapp_integrations")
+      .select("provider").eq("company_id", cid).maybeSingle();
+    if (i?.provider !== "baileys") return null;
     const { data: b } = await admin.from("whatsapp_baileys")
-      .select("base_url").eq("company_id", companyId).maybeSingle();
-    const { data: secret } = await admin.rpc("get_baileys_secret", { p_company: companyId });
-    if (b?.base_url && secret) return new BaileysProvider(String(b.base_url), String(secret));
-    // Deliberately falls through to Meta rather than failing: half-configured
-    // should degrade, not go silent.
-  }
+      .select("base_url").eq("company_id", cid).maybeSingle();
+    const { data: secret } = await admin.rpc("get_baileys_secret", { p_company: cid });
+    return b?.base_url && secret ? new BaileysProvider(String(b.base_url), String(secret)) : null;
+  };
 
   const meta = async (cid: string, borrowed: boolean) => {
     const { data: i } = await admin.from("whatsapp_integrations")
@@ -222,15 +220,34 @@ export async function resolveProvider(
     return t ? new MetaProvider(String(i.phone_number_id), String(t), borrowed) : null;
   };
 
+  // Own Baileys, then own Meta. A half-configured Baileys degrades to Meta
+  // rather than going silent.
+  const ownBaileys = await baileys(companyId);
+  if (ownBaileys) return ownBaileys;
   const own = await meta(companyId, false);
   if (own) return own;
 
   // The platform's shared number, the same way one central Facebook ad account
   // already runs ads for every company. Sharing the pipe is not sharing the
   // data — the report is still built from this company_id and nothing else.
+  //
+  // BAILEYS FIRST, AND BAILEYS AT ALL. This used to try only Meta, which made
+  // the whole borrow path dead for this platform: the one number actually
+  // connected here is a Baileys session, so every company without its own
+  // integration got "No WhatsApp number can send this" no matter what the
+  // super admin picked as the platform sender. Borrowing has to work with
+  // whatever the lending company actually runs.
+  //
+  // Baileys is also the better lender: it sends from a real logged-in account
+  // with no 24-hour window, while a borrowed Meta number can only open a
+  // conversation with an approved template — so a founder who has never
+  // messaged the business number gets nothing.
   const { data: pw } = await admin.from("platform_whatsapp").select("company_id").maybeSingle();
   if (pw?.company_id) {
-    const shared = await meta(String(pw.company_id), true);
+    const lender = String(pw.company_id);
+    const sharedBaileys = await baileys(lender);
+    if (sharedBaileys) return sharedBaileys;
+    const shared = await meta(lender, true);
     if (shared) return shared;
   }
 

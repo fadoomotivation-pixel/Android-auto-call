@@ -1,0 +1,65 @@
+# Which functions are allowed to be called WITHOUT a Supabase JWT.
+#
+# This file exists because deploying without it is destructive, and nothing in
+# the repo said so.
+#
+# Seventeen of this project's functions run with verify_jwt disabled, and that
+# setting lived ONLY in the Supabase dashboard. The CLI does not read the
+# dashboard — it reads this file, and defaults every function to verify_jwt =
+# true when the file is silent. So `supabase functions deploy` from a clean
+# checkout would have switched authentication ON for every webhook here in one
+# command: Facebook lead capture, the WhatsApp webhook, CallerDesk CDR, the PBX
+# feed, and every cron target. They would not have errored loudly; they would
+# have started answering 401 to Meta and to the telephony providers, and leads
+# would simply have stopped arriving.
+#
+# Each entry below is a caller that CANNOT hold a Supabase JWT — an external
+# webhook, or a cron that authenticates itself another way (a shared secret or
+# the service-role key checked inside the function). Anything not listed keeps
+# the safe default of requiring a JWT.
+#
+# Before adding a function here, check that it authenticates itself. verify_jwt
+# = false means the whole internet can invoke it.
+project_id = "rqgkzamuohdvttnkluzn"
+
+# ── External webhooks. The sender is Meta or a telephony provider and cannot
+#    present a Supabase token; each verifies its own signature or secret.
+[functions.facebook-webhook]
+verify_jwt = false
+[functions.whatsapp-webhook]
+verify_jwt = false
+[functions.callerdesk-webhook]
+verify_jwt = false
+[functions.pbx-cdr]
+verify_jwt = false
+[functions.lead-capture]
+verify_jwt = false
+[functions.meta-capi]
+verify_jwt = false
+
+# ── Cron targets. Invoked by pg_cron over pg_net with the service-role key or a
+#    CRON_SECRET header, both checked inside the function.
+[functions.pulse-broadcast]
+verify_jwt = false
+[functions.founder-alerts]
+verify_jwt = false
+[functions.facebook-poll]
+verify_jwt = false
+[functions.manager-digest]
+verify_jwt = false
+[functions.lead-sla]
+verify_jwt = false
+[functions.lead-rescue]
+verify_jwt = false
+[functions.recording-prune]
+verify_jwt = false
+[functions.amr-convert]
+verify_jwt = false
+[functions.notify-rep]
+verify_jwt = false
+[functions.notify-provider]
+verify_jwt = false
+[functions.rep-assistant]
+verify_jwt = false
+[functions.sales-xray]
+verify_jwt = false
