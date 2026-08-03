@@ -2542,7 +2542,23 @@ private fun LeadActionSheet(
                     }
                     Spacer(Modifier.height(12.dp))
                 }
-                if ((stage ?: c.status) == "token_paid") {
+                // The money question, asked on BOOKED as well as Token Paid.
+                //
+                // It used to appear only on "Token Paid" — a stage no rep has
+                // ever used. Across 738 leads and two months there is not one
+                // token_paid row, not one booked row, and token_amount is empty
+                // on every single lead. So the one field that turns this CRM
+                // from a dialler into a sales system was hidden behind a step
+                // nobody takes, and a rep marking a deal WON was never once
+                // asked what it was worth.
+                //
+                // Not mandatory. A rep who has genuinely closed a deal must be
+                // able to record that fact at 9pm without knowing the exact
+                // figure, and a form that refuses to save is a form that sends
+                // them back to writing it on paper. It says what the blank
+                // costs instead, which is the honest way round.
+                val bookingStage = (stage ?: c.status) in setOf("booked", "token_paid")
+                if (bookingStage) {
                     OutlinedTextField(
                         token, { token = it.filter { ch -> ch.isDigit() } },
                         label = { Text("Token / booking amount (₹)") },
@@ -2551,6 +2567,14 @@ private fun LeadActionSheet(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    if (token.isBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Put the amount in. The owner's daily report counts this — blank means the sale shows as ₹0.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Amber,
+                        )
+                    }
                     Spacer(Modifier.height(12.dp))
                 }
                 OutlinedTextField(budget, { budget = it }, label = { Text("Budget (e.g. ₹45L)") },

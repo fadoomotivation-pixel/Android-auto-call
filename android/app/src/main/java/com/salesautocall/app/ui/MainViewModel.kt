@@ -1912,8 +1912,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null, tokenAmount: String? = null) {
         viewModelScope.launch {
-            // Persist a positive token amount whenever it's supplied (callers only
-            // pass it for token-paid leads). Stamp paid-at on the stage transition.
+            // Persist a positive token amount whenever it's supplied. The sheet
+            // asks for it on BOOKED as well as Token Paid, so paid-at has to be
+            // stamped on both — otherwise money recorded against a won deal has
+            // no date on it, and every report that asks "what did we collect
+            // this month" silently misses it.
             val token = tokenAmount?.toDoubleOrNull()?.takeIf { it > 0 }
             val patch = buildMap<String, String> {
                 if (status != null) put("status", status)
@@ -1924,7 +1927,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (svAt != null) put("site_visit_at", svAt)
                 if (token != null) {
                     put("token_amount", token.toString())
-                    if (status == "token_paid") put("token_paid_at", java.time.Instant.now().toString())
+                    if (status == "token_paid" || status == "booked") {
+                        put("token_paid_at", java.time.Instant.now().toString())
+                    }
                 }
             }
             runCatching { Repository.updateContact(contactId, patch) }
