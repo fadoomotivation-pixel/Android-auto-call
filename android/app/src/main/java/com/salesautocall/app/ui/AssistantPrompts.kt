@@ -23,7 +23,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,6 +80,17 @@ private val Plum = Color(0xFF75629B)
 private val Sea = Color(0xFF4E7A8C)
 private val WarmSlate = Color(0xFF5D6862)
 private val Token = Color(0xFF5A62C9)
+
+/**
+ * ONE colour for every site-visit outcome button.
+ *
+ * A green "Booked" beside a red "Didn't work out" tells the rep which answer
+ * the app is pleased with, and over a few weeks they drift towards it. That
+ * drift lands in the one table the company is about to make pricing and
+ * project decisions from, so neutrality here is not styling — it is what makes
+ * the data worth reading.
+ */
+private val VisitNeutral = Color(0xFF4E5A66)
 
 /**
  * A short wiggle, then a long pause. Repeat.
@@ -291,21 +306,35 @@ fun AssistantPromptSheet(vm: MainViewModel) {
 // says whether this particular rep's optimism can be trusted.
 @Composable
 private fun VisitCheckPrompt(vm: MainViewModel, ask: AssistantAsk) {
-    // "ask" → "rate" (they came) → "why" (they didn't) → "when" (moved the date)
+    // ask → came | absent → token | why | when
+    //
+    // Three taps to the end of every path, and the whole thing has to finish in
+    // under fifteen seconds. Past that, reps stop answering honestly and start
+    // answering fast, and a fast lie is worse than a blank.
+    //
+    // EVERY OUTCOME BUTTON IS THE SAME COLOUR. A green "Booked" next to a red
+    // "Didn't work out" tells the rep which answer the app is hoping for, and
+    // they will drift towards it — which quietly poisons the one dataset the
+    // company is about to make pricing decisions from. Neutral is not a styling
+    // choice here, it is the data-integrity feature.
     var step by remember { mutableStateOf("ask") }
-    var percent by remember { mutableStateOf(50f) }
+    var token by remember { mutableStateOf("") }
+    var otherNote by remember { mutableStateOf("") }
+    // Which alive-branch the date screen was reached from.
+    var whenFor by remember { mutableStateOf("thinking") }
     val who = ask.name ?: ask.phone ?: return
 
     AlertDialog(
         onDismissRequest = { vm.assistantDismiss() },
         title = {
             AssistantHeader(
-                emoji = when (step) { "rate" -> "📈"; "why" -> "🤔"; else -> "🏠" },
+                emoji = when (step) { "token" -> "💰"; "why" -> "🤔"; "when" -> "📅"; else -> "🏠" },
                 title = when (step) {
-                    "rate" -> "How close are they?"
-                    "why" -> "What happened?"
-                    "when" -> "When is the new date?"
-                    else -> "Site visit — did they come?"
+                    "came", "absent" -> "What happened?"
+                    "token" -> "How much token?"
+                    "why" -> "What was the reason?"
+                    "when" -> "When will you call them?"
+                    else -> "Did they come?"
                 },
                 who = who,
             )
@@ -329,85 +358,147 @@ private fun VisitCheckPrompt(vm: MainViewModel, ask: AssistantAsk) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(12.dp))
-                        Choice("✅  Yes, they came", Jade, Modifier.fillMaxWidth()) { step = "rate" }
+                        Choice("Yes, they came", VisitNeutral, Modifier.fillMaxWidth()) { step = "came" }
                         Spacer(Modifier.height(8.dp))
-                        Choice("❌  No, they didn't", Terracotta, Modifier.fillMaxWidth()) { step = "why" }
+                        Choice("No, they didn't", VisitNeutral, Modifier.fillMaxWidth()) { step = "absent" }
                         Spacer(Modifier.height(8.dp))
-                        Choice("📅  They moved the date", Brass, Modifier.fillMaxWidth()) { step = "when" }
+                        // A real answer, not a dismissal. The rep often does not
+                        // know the same evening, and forcing a guess is how the
+                        // table fills up with confident nonsense. Logged, so the
+                        // lead surfaces to the manager if it stays unanswered.
+                        Choice("Not yet — I'll find out", VisitNeutral, Modifier.fillMaxWidth()) {
+                            vm.assistantVisitUnknown()
+                        }
                     }
 
-                    "rate" -> {
-                        val pct = percent.toInt()
-                        val (band, bandColor) = closeBand(pct)
-                        Box(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                                .background(bandColor.copy(alpha = 0.10f))
-                                .padding(vertical = 14.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("$pct%", style = MaterialTheme.typography.displaySmall,
-                                    fontWeight = FontWeight.Bold, color = bandColor)
-                                Text(band, style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold, color = bandColor)
-                            }
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Slider(
-                            value = percent,
-                            // Snapped to 5s. Nobody's gut says 63% — pretending
-                            // the number is that precise just makes it harder to set.
-                            onValueChange = { percent = (Math.round(it / 5f) * 5).toFloat() },
-                            valueRange = 0f..100f,
-                            colors = SliderDefaults.colors(thumbColor = bandColor, activeTrackColor = bandColor),
-                        )
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Just looking", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("Ready to book", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Spacer(Modifier.height(14.dp))
-                        Text("Where does that leave them?",
+                    "came" -> {
+                        Text("They came. What happened?",
                             style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("Pick one — the visit is saved with it.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(10.dp))
-                        ChoiceGrid(
-                            listOf(
-                                Triple("🤝  Negotiating", Plum, { vm.assistantVisitCame(pct, "negotiation") }),
-                                Triple("⭐  Still deciding", Sea, { vm.assistantVisitCame(pct, "interested") }),
-                                Triple("💰  Token paid", Token, { vm.assistantVisitCame(pct, "token_paid") }),
-                                Triple("✅  Booked", Jade, { vm.assistantVisitCame(pct, "booked") }),
-                                Triple("🏠  Wants another visit", Brass, { step = "when" }),
-                                Triple("❌  Not interested", WarmSlate, { vm.assistantVisitCame(pct, "not_interested") }),
-                            ),
-                        )
-                        TextButton(onClick = { step = "ask" }) { Text("Back") }
-                    }
-
-                    "why" -> {
-                        Text("Why didn't $who come?",
-                            style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("The date gets cleared either way — pick where the lead goes.",
+                        Text("One tap. This is the answer the whole company is waiting on.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(12.dp))
                         ChoiceGrid(
                             listOf(
-                                Triple("📅  Postponed", Brass, { step = "when" }),
-                                Triple("📵  Not reachable", Sea, { vm.assistantVisitNoShow("not_reachable") }),
-                                Triple("🙅  Lost interest", WarmSlate, { vm.assistantVisitNoShow("lost_interest") }),
-                                Triple("🏳️  Went elsewhere", Terracotta, { vm.assistantVisitNoShow("competitor") }),
+                                Triple("Booked", VisitNeutral, { step = "token" }),
+                                Triple("Still thinking", VisitNeutral, { whenFor = "thinking"; step = "when" }),
+                                Triple("Needs follow-up", VisitNeutral, { whenFor = "follow_up"; step = "when" }),
+                                Triple("Didn't work out", VisitNeutral, { step = "why" }),
                             ),
                         )
                         TextButton(onClick = { step = "ask" }) { Text("Back") }
                     }
 
+                    "absent" -> {
+                        Text("What happened?",
+                            style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("The visit date gets cleared and the lead stays with you.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(12.dp))
+                        ChoiceGrid(
+                            listOf(
+                                Triple("No show", VisitNeutral, { vm.assistantVisitOutcome("no_show") }),
+                                Triple("They cancelled", VisitNeutral, { vm.assistantVisitOutcome("cancelled") }),
+                                Triple("Moved to a new date", VisitNeutral, { whenFor = "rescheduled"; step = "when" }),
+                                Triple("Couldn't reach them", VisitNeutral, { vm.assistantVisitOutcome("not_reachable") }),
+                            ),
+                        )
+                        TextButton(onClick = { step = "ask" }) { Text("Back") }
+                    }
+
+                    // The money, in one tap for the usual figures.
+                    //
+                    // Skippable on purpose. A rep closing a deal at 9pm may not
+                    // know the exact number, and a form that refuses to save is
+                    // a form that sends the booking back to paper — where the
+                    // company has kept all of them so far. It says what the
+                    // blank costs and lets them through.
+                    "token" -> {
+                        Text("How much token did they pay?",
+                            style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("The owner's daily report counts this. Blank shows the sale as ₹0.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(12.dp))
+                        ChoiceGrid(
+                            listOf(
+                                Triple("₹50,000", VisitNeutral, { vm.assistantVisitOutcome("booked", tokenAmount = 50_000.0) }),
+                                Triple("₹1 lakh", VisitNeutral, { vm.assistantVisitOutcome("booked", tokenAmount = 100_000.0) }),
+                                Triple("₹2 lakh", VisitNeutral, { vm.assistantVisitOutcome("booked", tokenAmount = 200_000.0) }),
+                                Triple("₹5 lakh", VisitNeutral, { vm.assistantVisitOutcome("booked", tokenAmount = 500_000.0) }),
+                            ),
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            token, { token = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("Or type the amount") },
+                            leadingIcon = { Text("₹", style = MaterialTheme.typography.titleMedium) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { vm.assistantVisitOutcome("booked") }, modifier = Modifier.weight(1f)) {
+                                Text("Skip for now")
+                            }
+                            Button(
+                                onClick = { vm.assistantVisitOutcome("booked", tokenAmount = token.toDoubleOrNull()) },
+                                enabled = token.isNotBlank(),
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Save") }
+                        }
+                    }
+
+                    "why" -> {
+                        Text("What was the reason?",
+                            style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("This is the sentence that tells the owner whether it's the price or the project.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(12.dp))
+                        ChoiceGrid(
+                            listOf(
+                                Triple("Price", VisitNeutral, { vm.assistantVisitOutcome("price") }),
+                                Triple("Location", VisitNeutral, { vm.assistantVisitOutcome("location") }),
+                                Triple("Family discussion", VisitNeutral, { vm.assistantVisitOutcome("family") }),
+                                Triple("Finance / loan", VisitNeutral, { vm.assistantVisitOutcome("finance") }),
+                                Triple("Went to a competitor", VisitNeutral, { vm.assistantVisitOutcome("competitor") }),
+                                Triple("Trust", VisitNeutral, { vm.assistantVisitOutcome("trust") }),
+                            ),
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        // Other costs a sentence. An escape hatch cheaper than
+                        // the truth becomes 90% of the data inside a fortnight,
+                        // and then none of the six buttons above mean anything.
+                        OutlinedTextField(
+                            otherNote, { otherNote = it },
+                            label = { Text("Something else? Write it here") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Button(
+                            onClick = { vm.assistantVisitOutcome("other", note = otherNote) },
+                            enabled = otherNote.trim().length >= 3,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Save reason") }
+                        TextButton(onClick = { step = "came" }) { Text("Back") }
+                    }
+
+                    // Never optional. 146 active leads already sit with no next
+                    // step booked — the largest leak in the pipeline — and every
+                    // one of them got there by someone leaving this screen
+                    // without a date. There is no skip button here on purpose.
                     else -> DayChips(
-                        headline = "When is $who coming?",
-                        onPick = { vm.assistantVisitPostponed(it) },
+                        headline = "When will you call $who?",
+                        onPick = { millis ->
+                            vm.assistantVisitOutcome(
+                                outcome = whenFor,
+                                nextDueMillis = millis,
+                            )
+                        },
                         onBack = { step = "ask" },
                     )
                 }

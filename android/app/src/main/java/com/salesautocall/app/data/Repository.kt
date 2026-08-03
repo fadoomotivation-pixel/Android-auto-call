@@ -1248,6 +1248,46 @@ object Repository {
     }
 
     /** Buyer changed their mind: wipe the planned site visit date + project. */
+    /**
+     * What actually happened at a site visit — the row the whole funnel hangs on.
+     *
+     * Written to its own table rather than a column, because a serious buyer
+     * visits twice and the second visit's reason is the interesting one.
+     * [visitedAt] pins the row to a specific visit so a second one does not
+     * silently overwrite the first (unique on contact + visited_at).
+     *
+     * The company is read from the rep's own profile, never passed in: this is
+     * the row that decides which project gets called mispriced, and it must not
+     * be possible to file it against another tenant.
+     */
+    suspend fun recordSiteVisitOutcome(
+        contactId: String,
+        outcome: String,
+        note: String? = null,
+        visitedAtIso: String? = null,
+    ) {
+        val profile = myProfile() ?: error("No profile yet.")
+        val companyId = profile.companyId ?: error("You are not linked to a company yet.")
+        client.from("site_visit_outcomes").upsert(
+            buildJsonObject {
+                put("company_id", companyId)
+                put("contact_id", contactId)
+                put("salesperson_id", profile.id)
+                put("outcome", outcome)
+                note?.trim()?.takeIf { it.isNotBlank() }?.let { put("note", it) }
+                put("visited_at", visitedAtIso ?: java.time.Instant.now().toString())
+            },
+        ) { onConflict = "contact_id,visited_at" }
+    }
+
+    /** The money against a won deal, with the date it was taken. */
+    suspend fun setTokenAmount(contactId: String, amount: Double) {
+        client.from("contacts").update(buildJsonObject {
+            put("token_amount", amount)
+            put("token_paid_at", java.time.Instant.now().toString())
+        }) { filter { eq("id", contactId) } }
+    }
+
     suspend fun clearSiteVisit(contactId: String) {
         client.from("contacts").update(mapOf<String, String?>("site_visit_at" to null, "site_visit_project" to null)) {
             filter { eq("id", contactId) }

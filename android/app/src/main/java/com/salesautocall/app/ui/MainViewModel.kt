@@ -1912,8 +1912,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null, tokenAmount: String? = null) {
         viewModelScope.launch {
-            // Persist a positive token amount whenever it's supplied (callers only
-            // pass it for token-paid leads). Stamp paid-at on the stage transition.
+            // Persist a positive token amount whenever it's supplied. The sheet
+            // asks for it on BOOKED as well as Token Paid, so paid-at has to be
+            // stamped on both — otherwise money recorded against a won deal has
+            // no date on it, and every report that asks "what did we collect
+            // this month" silently misses it.
             val token = tokenAmount?.toDoubleOrNull()?.takeIf { it > 0 }
             val patch = buildMap<String, String> {
                 if (status != null) put("status", status)
@@ -1924,7 +1927,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (svAt != null) put("site_visit_at", svAt)
                 if (token != null) {
                     put("token_amount", token.toString())
-                    if (status == "token_paid") put("token_paid_at", java.time.Instant.now().toString())
+                    if (status == "token_paid" || status == "booked") {
+                        put("token_paid_at", java.time.Instant.now().toString())
+                    }
                 }
             }
             runCatching { Repository.updateContact(contactId, patch) }
@@ -2441,15 +2446,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The oldest site visit whose day has gone by with nothing to show for it. */
     private fun visitCheckAsk(asked: Set<String>, now: Long): AssistantAsk? {
+        val ctx = getApplication<Application>()
         val dead = setOf("lost", "not_interested", "dnc", "booked")
         val afterVisit = setOf("negotiation", "proposal", "token_paid")
         val c = _state.value.leads
             .asSequence()
             .filter { it.id != null && "visit_check:${it.id}" !in asked }
             .filter { it.status !in dead && it.status !in afterVisit && it.siteVisitArrivedAt == null }
+            // Asked twice already and still no answer. Stop. A third prompt
+            // teaches the rep that these can be ignored, and after that they
+            // ignore the useful ones too. It is the manager's problem now —
+            // the lead is sitting in v_pending_site_visit_outcomes with
+            // needs_manager set, waiting for a person rather than a popup.
+            .filter { AppPrefs.getVisitAsks(ctx, it.id!!) < 2 }
             .mapNotNull { lead -> parseInstantOrNull(lead.siteVisitAt)?.let { lead to it } }
             .filter { (_, ms) -> ms < now - VISIT_SETTLE_MS && ms > now - VISIT_STALE_MS }
             .minByOrNull { it.second } ?: return null
+        c.first.id?.let { AppPrefs.bumpVisitAsks(ctx, it) }
         return AssistantAsk(
             kind = "visit_check",
             key = "visit_check:${c.first.id}",
@@ -2674,6 +2687,148 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
         logPrompt(ask, answer = "postponed")
+    }
+
+    /**
+     * The whole site-visit answer, in one call.
+     *
+     * Every branch of the approved flow lands here — came or didn't, booked or
+     * lost — because the four things that must happen afterwards are the same
+     * every time and must never depend on which button was pressed: the outcome
+     * is recorded, the lead's stage moves, a next action is booked if the lead
+     * is still alive, and the whole thing is written to the activity log.
+     *
+     * NO NEXT ACTION IS THE BUG THIS FIXES. The data showed 146 active leads
+     * with nothing booked next — the single largest leak in the pipeline. So
+     * "still thinking", "needs follow-up" and "moved the date" all create the
+     * follow-up here, automatically. A rep who has just told the app the lead is
+     * alive must never then have to remember to book the call themselves.
+     *
+     * The 0-100 slider is gone. It was one question too many for a flow that
+     * has to finish in fifteen seconds, and the answer was always implied by
+     * the outcome anyway — so it is inferred, and the column still fills.
+     */
+    fun assistantVisitOutcome(
+        outcome: String,
+        note: String? = null,
+        tokenAmount: Double? = null,
+        nextDueMillis: Long? = null,
+    ) {
+        val ask = _state.value.assistantAsk ?: return
+        val contactId = ask.contactId ?: return
+        val phone = ask.phone
+        set { it.copy(assistantAsk = null) }
+
+        // Where the lead sits afterwards. "Didn't work out" reasons all close it
+        // — that is what the rep just said — while a visit that never happened
+        // leaves the lead alive and owed another call.
+        val nextStatus = when (outcome) {
+            "booked" -> "booked"
+            "thinking" -> "interested"
+            "follow_up" -> "callback"
+            "rescheduled" -> "site_visit"
+            "no_show", "cancelled", "not_reachable" -> "callback"
+            else -> "lost"           // price · location · family · finance · competitor · trust · other
+        }
+        // Inferred, not asked. A booking is certainty; a named objection is not.
+        val probability = when (outcome) {
+            "booked" -> 100
+            "thinking" -> 50
+            "follow_up" -> 40
+            "rescheduled", "no_show", "cancelled", "not_reachable" -> 20
+            else -> 0
+        }
+        val stillAlive = outcome in setOf("thinking", "follow_up", "rescheduled", "no_show", "cancelled", "not_reachable")
+
+        viewModelScope.launch {
+            runCatching {
+                // The outcome row goes FIRST. Migration 0131 refuses to let a
+                // visited lead be closed without one, so writing the status
+                // before the reason would fail on exactly the branches that
+                // matter most — the lost ones.
+                Repository.recordSiteVisitOutcome(contactId, outcome, note)
+                if (outcome == "rescheduled" && nextDueMillis != null) {
+                    Repository.updateContact(
+                        contactId,
+                        mapOf("site_visit_at" to java.time.Instant.ofEpochMilli(nextDueMillis).toString()),
+                    )
+                } else if (outcome in setOf("no_show", "cancelled")) {
+                    Repository.clearSiteVisit(contactId)
+                }
+                if (tokenAmount != null && tokenAmount > 0) Repository.setTokenAmount(contactId, tokenAmount)
+                Repository.setCloseProbability(contactId, probability)
+                Repository.setDisposition(contactId, nextStatus, null)
+            }.onSuccess {
+                val nowIso = java.time.Instant.now().toString()
+                set { st ->
+                    st.copy(
+                        leads = st.leads.map { c ->
+                            if (c.id != contactId) c
+                            else c.copy(
+                                status = nextStatus, closeProbability = probability,
+                                closeProbabilityAt = nowIso, handledAt = nowIso,
+                                tokenAmount = tokenAmount ?: c.tokenAmount,
+                            )
+                        },
+                        message = visitOutcomeToast(outcome, tokenAmount),
+                    )
+                }
+                launchActivityLog(contactId) {
+                    add("site_visit" to "Visit outcome: ${visitOutcomeLabel(outcome)}${note?.let { " — $it" } ?: ""}")
+                }
+                loadLeads(force = true)
+            }.onFailure { e -> set { it.copy(error = e.message) } }
+        }
+
+        // The next action, booked without being asked for. A lead the rep has
+        // just called alive leaves this screen with a real date on it or the
+        // whole flow has failed at its one job.
+        if (stillAlive && phone != null) {
+            val due = nextDueMillis ?: java.time.ZonedDateTime.now().plusDays(1)
+                .withHour(11).withMinute(0).withSecond(0).toInstant().toEpochMilli()
+            scheduleFollowUp(contactId, phone, ask.name, due, visitOutcomeLabel(outcome), mirrorStatus = false)
+        }
+        logPrompt(ask, answer = outcome, probability = probability, reason = note)
+    }
+
+    /**
+     * "Not yet" — the rep genuinely does not know.
+     *
+     * A legitimate answer, and logged as one. The prompt engine's one-per-lead
+     * -per-day rule means it comes back tomorrow on its own; after the second
+     * ask the lead appears in v_pending_site_visit_outcomes with needs_manager
+     * set, and it stops being the rep's problem. Nagging a third time is how
+     * reps learn to dismiss prompts unread.
+     */
+    fun assistantVisitUnknown() {
+        val ask = _state.value.assistantAsk ?: return
+        set { it.copy(assistantAsk = null, message = "Theek hai — kal phir poochenge.") }
+        logPrompt(ask, answer = "not_yet")
+    }
+
+    private fun visitOutcomeLabel(o: String): String = when (o) {
+        "booked" -> "Booked"
+        "thinking" -> "Still thinking"
+        "follow_up" -> "Needs follow-up"
+        "price" -> "Price"
+        "location" -> "Location"
+        "family" -> "Family discussion"
+        "finance" -> "Finance / loan"
+        "competitor" -> "Went to a competitor"
+        "trust" -> "Trust"
+        "no_show" -> "Did not come"
+        "cancelled" -> "Cancelled"
+        "rescheduled" -> "Moved to a new date"
+        "not_reachable" -> "Could not reach them"
+        else -> "Other"
+    }
+
+    private fun visitOutcomeToast(o: String, token: Double?): String = when {
+        o == "booked" && token != null && token > 0 ->
+            "🎉 Booking saved · ₹${token.toLong()}"
+        o == "booked" -> "🎉 Booking saved — add the amount when you know it"
+        o in setOf("thinking", "follow_up", "rescheduled") -> "Saved · next call booked"
+        else -> "Saved — thanks for writing it down"
     }
 
     /** "Yes, I called" → straight into the one Update sheet the whole app uses. */
