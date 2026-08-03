@@ -187,9 +187,17 @@ data class DayReview(
     val improve: DayReviewImprove?,
     /** Tomorrow's first calls, most urgent first. */
     val priorities: List<DayReviewPriority>,
+    /** The day's highest- and lowest-rated call. Both null unless at least two
+     *  calls were rated and they actually differ — with one rated call, the
+     *  "worst call of the day" is also the best one. */
+    val bestCall: DayReviewCall? = null,
+    val worstCall: DayReviewCall? = null,
 )
 data class DayReviewImprove(val pattern: String, val say: String)
 data class DayReviewPriority(val lead: String, val why: String)
+/** One end of the day's call range: who it was with, its honest 1-5 rating, and
+ *  the line the coach already wrote about it. */
+data class DayReviewCall(val lead: String?, val rating: Int, val why: String?)
 
 /** A single rating row from coach_feedback — used to compute the Home calling score. */
 @Serializable

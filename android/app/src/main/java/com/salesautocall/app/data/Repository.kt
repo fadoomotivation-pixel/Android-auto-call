@@ -592,6 +592,17 @@ object Repository {
                 val lead = o["lead"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
                 DayReviewPriority(lead, o["why"]?.jsonPrimitive?.contentOrNull ?: "")
             } ?: emptyList(),
+            bestCall = reviewCall(r["bestCall"] as? JsonObject),
+            worstCall = reviewCall(r["worstCall"] as? JsonObject),
+        )
+    }
+
+    private fun reviewCall(o: JsonObject?): DayReviewCall? {
+        val rating = o?.get("rating")?.jsonPrimitive?.intOrNull ?: return null
+        return DayReviewCall(
+            lead = o["lead"]?.jsonPrimitive?.contentOrNull,
+            rating = rating,
+            why = o["why"]?.jsonPrimitive?.contentOrNull?.trim()?.ifBlank { null },
         )
     }
 

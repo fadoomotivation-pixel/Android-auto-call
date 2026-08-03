@@ -341,6 +341,47 @@ Deno.serve(async (req) => {
       priorities.push({ lead, why: `Callback ${at} — aapne time diya tha.` });
     }
 
+    // Best and worst call of the day — a sort, not a second AI pass.
+    //
+    // Every call over 30s with a transcript already gets an honest 1-5 rating
+    // and a good/improve line written into coach_feedback the first time the
+    // coach panel opens. Asking a model to pick the best call again would cost
+    // a generation to re-derive a number we already stored, and would be free
+    // to disagree with the rating the rep saw on that same call this morning.
+    //
+    // Both only appear when there is something to compare: with one rated call
+    // the "worst call of the day" is also the best one, and telling a rep their
+    // only real conversation was the worst thing they did all day is the exact
+    // opposite of coaching.
+    let bestCall: Record<string, unknown> | null = null;
+    let worstCall: Record<string, unknown> | null = null;
+    {
+      const { data: rated } = await admin.from("coach_feedback")
+        .select("rating, good, improve, call_id, call_logs!inner(contact_id, started_at)")
+        .eq("salesperson_id", uid)
+        .not("rating", "is", null)
+        .gte("call_logs.started_at", from).lt("call_logs.started_at", to)
+        .limit(60);
+      const rows = (rated ?? []) as Array<Record<string, unknown>>;
+      if (rows.length >= 2) {
+        const score = (r: Record<string, unknown>) => Number(r.rating ?? 0);
+        const sorted = [...rows].sort((a, b) => score(b) - score(a));
+        const top = sorted[0], bottom = sorted[sorted.length - 1];
+        // A flat day — every call rated the same — has no best and no worst.
+        if (score(top) > score(bottom)) {
+          const nameOf = async (r: Record<string, unknown>) => {
+            const cl = r.call_logs as { contact_id?: string } | undefined;
+            if (!cl?.contact_id) return null;
+            const { data: c } = await admin.from("contacts").select("name, phone")
+              .eq("id", cl.contact_id).maybeSingle();
+            return (c?.name as string) || (c?.phone as string) || null;
+          };
+          bestCall = { lead: await nameOf(top), rating: score(top), why: top.good ?? null };
+          worstCall = { lead: await nameOf(bottom), rating: score(bottom), why: bottom.improve ?? null };
+        }
+      }
+    }
+
     const counts = { calls: total, connected, conversations, visitsFixed, bookings, talkMin };
     let wins: string[] = [];
     let improve: { pattern: string; say: string } | null = null;
@@ -375,11 +416,11 @@ Deno.serve(async (req) => {
       if (pattern) improve = { pattern, say };
     }
 
-    const review = { date: reviewDate, score, ...counts, wins, improve, priorities };
+    const review = { date: reviewDate, score, ...counts, wins, improve, priorities, bestCall, worstCall };
     // Only cache once the model has answered. Caching a half-empty review
     // because Groq was rate-limited at 7:01pm would freeze that rep's whole
     // evening into a card with no coaching on it.
-    if (wins.length || improve) {
+    if (wins.length || improve || bestCall) {
       await admin.from("coach_briefs").upsert({
         salesperson_id: uid, brief_date: reviewDate, slot: "review",
         company_id: company, content: JSON.stringify(review),

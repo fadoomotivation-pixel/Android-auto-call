@@ -2410,7 +2410,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         // After 7pm the calling day is effectively over, so the review comes
         // first — a callback we ask about at 8pm is one the rep can't act on.
-        val ask = (if (zone.hour >= 19) dayReviewAsk(asked, now) else null)
+        val ask = (if (zone.hour >= AppPrefs.getDayReviewHour(ctx)) dayReviewAsk(asked, now) else null)
             ?: (if (overCap) null else visitCheckAsk(asked, now))
             ?: (if (overCap) null else callbackCheckAsk(asked, now))
         if (ask == null) return

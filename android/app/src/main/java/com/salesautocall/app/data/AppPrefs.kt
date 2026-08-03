@@ -120,6 +120,21 @@ object AppPrefs {
     fun getAssistantOn(context: Context): Boolean = prefs(context).getBoolean("assistant_on", true)
     fun setAssistantOn(context: Context, v: Boolean) = prefs(context).edit().putBoolean("assistant_on", v).apply()
 
+    /**
+     * The hour the day review is allowed to appear, 24h local. Default 7pm.
+     *
+     * A setting rather than a constant because the right hour is a question
+     * about how a particular team works, not about the code: a company whose
+     * reps stop calling at 6 wants it at 6, and one that runs till 8:30 does
+     * not want the day summed up while there are still calls in it. Clamped to
+     * the assistant's own working window — a review that fires at 2am is a
+     * notification nobody asked for, whatever the setting says.
+     */
+    fun getDayReviewHour(context: Context): Int =
+        prefs(context).getInt("day_review_hour", 19).coerceIn(12, 21)
+    fun setDayReviewHour(context: Context, h: Int) =
+        prefs(context).edit().putInt("day_review_hour", h.coerceIn(12, 21)).apply()
+
     /** Epoch millis of the last prompt shown — enforces the quiet gap between two. */
     fun getPromptLastAt(context: Context): Long = prefs(context).getLong("prompt_last_at", 0L)
     fun setPromptLastAt(context: Context, v: Long) = prefs(context).edit().putLong("prompt_last_at", v).apply()

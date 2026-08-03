@@ -581,6 +581,20 @@ private fun DayReviewPrompt(vm: MainViewModel, ask: AssistantAsk) {
                     }
                 }
 
+                // The day's range, both ends together. Shown as a pair on
+                // purpose: the worst call never appears on its own, so a rep
+                // opening this is always reminded of their best one in the same
+                // glance. Neither is a fresh judgement — both quote the rating
+                // and the line the coach already wrote on that call.
+                if (review?.bestCall != null || review?.worstCall != null) {
+                    Spacer(Modifier.height(14.dp))
+                    Text("🎧 Aaj ki calls",
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    review.bestCall?.let { CallOfDay("🏆", "Best call", it.lead, it.rating, it.why, Jade) }
+                    review.worstCall?.let { CallOfDay("📉", "Sabse kamzor", it.lead, it.rating, it.why, Brass) }
+                }
+
                 // Two names, not a list. This is the last thing a rep reads
                 // before they close the app, and it has to survive the night.
                 review?.priorities?.takeIf { it.isNotEmpty() }?.let { picks ->
@@ -636,6 +650,24 @@ private fun DayReviewPrompt(vm: MainViewModel, ask: AssistantAsk) {
         confirmButton = {},
         dismissButton = { TextButton(onClick = { vm.assistantDismiss() }) { Text("Close") } },
     )
+}
+
+/** One end of the day's call range. "Sabse kamzor", never "worst" — the label a
+ *  rep reads about their own work should describe the call, not sentence them. */
+@Composable
+private fun CallOfDay(emoji: String, label: String, lead: String?, rating: Int, why: String?, tone: Color) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Text(emoji, fontSize = 14.sp)
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text("$label · ${lead ?: "lead"} · ${"★".repeat(rating.coerceIn(0, 5))}",
+                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = tone)
+            if (!why.isNullOrBlank()) {
+                Text(why, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 }
 
 /**
