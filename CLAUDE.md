@@ -44,6 +44,15 @@ migrations in `supabase/migrations/`).
   explaining twice, the screen is wrong, not the rep.
 
 ## Operational notes
+- **The Follow-up tab is three groups, one clock** (`LeadsScreen`): **Call now**
+  (`due_at` ≤ now, or no time ever booked), **Done today** (rep recorded an
+  outcome today, next call is later), **Booked for later** — mutually exclusive,
+  and due always beats done. The tab chip AND the home deck's "Due now" count
+  **only Call now**; the other two carry their counts on their own collapsed
+  headers. Finishing a callback books the NEXT one, so a finished lead is
+  instantly back in the tab looking untouched — that is how a rep who had called
+  everyone still read "Follow-up 107" and stopped believing the number. Never put
+  the row total back on the chip, and never power-dial anything but Call now.
 - **Floating AI Coach brain** (`rep-coach` fn): returns `{coaching, brief, tip}`
   and a `mode:"ask"` two-way Q&A (rep asks anything → grounded answer, saved to
   `coach_qa`). Daily `tip` cached in `coach_briefs` slot `'tip'`. The **shared
