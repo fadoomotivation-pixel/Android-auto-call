@@ -135,6 +135,21 @@ object AppPrefs {
     fun setDayReviewHour(context: Context, h: Int) =
         prefs(context).edit().putInt("day_review_hour", h.coerceIn(12, 21)).apply()
 
+    /**
+     * How many times we have asked this lead's "did they come?" question.
+     *
+     * The app asks, waits a day, asks once more, and then stops. A third ask
+     * teaches the rep that prompts can be ignored, and once they have learned
+     * that they ignore the useful ones too. After two the lead shows up in
+     * v_pending_site_visit_outcomes with needs_manager set — an unanswered
+     * visit stops being a notification and becomes a person's job.
+     */
+    fun getVisitAsks(context: Context, contactId: String): Int =
+        prefs(context).getInt("visit_asks_$contactId", 0)
+    fun bumpVisitAsks(context: Context, contactId: String) =
+        prefs(context).edit()
+            .putInt("visit_asks_$contactId", getVisitAsks(context, contactId) + 1).apply()
+
     /** Epoch millis of the last prompt shown — enforces the quiet gap between two. */
     fun getPromptLastAt(context: Context): Long = prefs(context).getLong("prompt_last_at", 0L)
     fun setPromptLastAt(context: Context, v: Long) = prefs(context).edit().putLong("prompt_last_at", v).apply()
