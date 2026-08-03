@@ -30,6 +30,7 @@
 // "send WhatsApp as this company" button — the sort of thing that gets a number
 // banned by someone else's script within a day of being indexed.
 import http from "node:http";
+import { rm } from "node:fs/promises";
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
@@ -67,13 +68,34 @@ let reconnectTimer = null;
 // the pattern WhatsApp bans a number for.
 let backoffMs = 2_000;
 const MAX_BACKOFF_MS = 5 * 60_000;
+// Has this install ever completed a pairing? The answer changes what a
+// "logged out" close MEANS, and getting that wrong is what stranded the first
+// deploy — see the connection.close handler.
+let paired = false;
 
-async function start() {
+/**
+ * Throw the stored session away.
+ *
+ * Only ever called when there is nothing worth keeping: a pairing that never
+ * completed, or an explicit reset from the admin page. Baileys will not offer a
+ * new QR while half-written credentials are on disk, so the files have to go
+ * before a fresh pairing can start.
+ */
+async function wipeAuth() {
+  await rm(AUTH_DIR, { recursive: true, force: true }).catch(() => {});
+  paired = false;
+  state.number = null;
+  log.warn("cleared stored session");
+}
+
+async function start({ reset = false } = {}) {
   clearTimeout(reconnectTimer);
+  if (reset) await wipeAuth();
   state.status = "connecting";
   state.lastError = null;
 
   const { state: auth, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  paired = !!auth?.creds?.registered;
   const { version } = await fetchLatestBaileysVersion();
 
   sock = makeWASocket({
@@ -83,6 +105,11 @@ async function start() {
     // founder's phone stop showing notifications for these messages, because
     // WhatsApp thinks the account is already reading them somewhere.
     markOnlineOnConnect: false,
+    // The default is 60s split across several QRs, which in practice means a
+    // code has already died by the time someone has unlocked their phone and
+    // found Linked devices. A full minute PER code makes it scannable at human
+    // speed.
+    qrTimeout: 60_000,
     logger: pino({ level: "silent" }),
     browser: ["Call Pro AI", "Chrome", "1.0.0"],
   });
@@ -107,6 +134,7 @@ async function start() {
       state.lastSeen = new Date().toISOString();
       state.lastError = null;
       backoffMs = 2_000;
+      paired = true;
       state.number = sock?.user?.id ? String(sock.user.id).split(":")[0] : null;
       log.info({ number: state.number }, "connected");
     }
@@ -114,19 +142,36 @@ async function start() {
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = code === DisconnectReason.loggedOut;
+      log.warn({ code, loggedOut, paired }, "connection closed");
       state.status = "disconnected";
-      state.lastError = loggedOut
-        ? "WhatsApp logged this session out. Scan the QR again."
-        : `Connection closed (${code ?? "unknown"}). Retrying.`;
-      log.warn({ code, loggedOut }, "connection closed");
 
       if (loggedOut) {
-        // Reconnecting with dead credentials just fails forever and looks like
-        // a flapping service. Wait for a human to scan.
+        // "Logged out" means two completely different things, and treating them
+        // as one stranded the first deploy.
+        //
+        // If this install had PAIRED, a real session was ended from the phone
+        // (Linked devices → log out) or by WhatsApp. Reconnecting with dead
+        // credentials fails forever, looks like a flapping service, and is the
+        // pattern that gets a number banned. Stop, and wait for a human.
+        //
+        // If it had NEVER paired, nothing was logged out at all: the QR simply
+        // expired unscanned, and WhatsApp reports that with the same code. The
+        // old code stopped here and cleared the QR, so the page showed "Scan the
+        // QR again" while offering no QR to scan and no way to get one back.
+        // Nothing was wrong except that the human was slower than the code.
+        if (!paired) {
+          state.lastError = "The QR expired before it was scanned. Making a new one…";
+          await wipeAuth();
+          reconnectTimer = setTimeout(() => start(), 1_000);
+          return;
+        }
+        state.lastError = "WhatsApp logged this session out. Press Reconnect to scan a new QR.";
         state.qrDataUrl = null;
         return;
       }
-      reconnectTimer = setTimeout(start, backoffMs);
+
+      state.lastError = `Connection closed (${code ?? "unknown"}). Retrying.`;
+      reconnectTimer = setTimeout(() => start(), backoffMs);
       backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
     }
   });
@@ -184,9 +229,17 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, status: state.status, qr: state.qrDataUrl });
   }
 
+  // "Reconnect" has to mean "get me connected", because that is what the person
+  // pressing it wants. So it resets when there is nothing to preserve — no
+  // completed pairing — and reconnects normally when there IS a real session,
+  // where wiping would cost a QR scan for no reason.
+  //
+  // ?reset=1 forces the wipe, for the case where a session exists but is wedged
+  // and the admin has decided to re-pair.
   if (url.pathname === "/reconnect" && req.method === "POST") {
-    start().catch((e) => log.error(e));
-    return send(res, 200, { ok: true, status: "connecting" });
+    const force = url.searchParams.get("reset") === "1";
+    start({ reset: force || !paired }).catch((e) => log.error(e));
+    return send(res, 200, { ok: true, status: "connecting", reset: force || !paired });
   }
 
   if (url.pathname === "/send" && req.method === "POST") {

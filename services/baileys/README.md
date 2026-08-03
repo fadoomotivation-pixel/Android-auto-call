@@ -86,10 +86,20 @@ Everything except `/health` needs `Authorization: Bearer $BAILEYS_SECRET`.
 
 ## Operating notes
 
-- **The QR expires in seconds.** The page re-polls; that is normal.
-- **`logged out` needs a human.** When WhatsApp ends the session the worker stops
-  retrying on purpose — reconnecting with dead credentials forever is the exact
-  pattern that gets a number banned. Scan again.
+- **Each QR lasts a minute** (`qrTimeout`), and the page re-polls for the next
+  one. Scan whatever is on screen.
+- **"Logged out" means two different things**, and the worker tells them apart:
+  - *Never paired* — the QR expired unscanned. WhatsApp reports this with the
+    same code as a real logout. The worker clears the half-written session and
+    offers a **new QR automatically**. No action needed beyond scanning.
+  - *Was paired* — a real session ended, from the phone's Linked devices or by
+    WhatsApp. The worker stops retrying on purpose: reconnecting forever with
+    dead credentials is the exact pattern that gets a number banned. Press
+    **Reconnect** to pair again.
+- **Reconnect means "get me connected."** It wipes and re-pairs when there is no
+  completed pairing to preserve, and reconnects normally when there is a real
+  session — so pressing it on a healthy connection never costs you a QR scan.
+  `POST /reconnect?reset=1` forces a wipe when a session exists but is wedged.
 - **Reconnects back off** from 2s to 5 minutes for the same reason.
 - **The account is kept "offline"** (`markOnlineOnConnect: false`) so the
   founder's phone still shows a notification for these messages.
