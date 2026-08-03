@@ -245,6 +245,149 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ---------- DAY REVIEW mode: the 7pm card the rep actually gets ----------
+  //
+  // The assistant already asks one honest question at 7pm and shows four
+  // counters next to it. This is the same moment doing more work: the numbers a
+  // rep is judged on, what genuinely went well, the ONE habit that cost them
+  // deals today with the exact line to say instead, and tomorrow's first two
+  // calls.
+  //
+  // The split of labour matters. Every number here is COUNTED — a rep will
+  // argue with a score, and they have to be able to win that argument by
+  // pointing at their own call list. The model is only asked for the two things
+  // arithmetic cannot produce: what to praise, and the pattern across the day's
+  // calls that the rep cannot see from inside them.
+  //
+  // Cached per rep per date, so closing the card and reopening the app does not
+  // regenerate it, does not cost a second Groq call, and never shows a rep two
+  // different reviews of the same day.
+  if (body.mode === "day_review") {
+    const reviewDate = istDate();
+    const from = istDayStartIso(0);
+    const to = new Date().toISOString();
+
+    const { data: cachedReview } = await admin.from("coach_briefs")
+      .select("content").eq("salesperson_id", uid)
+      .eq("brief_date", reviewDate).eq("slot", "review").maybeSingle();
+    if (cachedReview?.content) {
+      try { return json({ ok: true, review: JSON.parse(String(cachedReview.content)) }); } catch { /* regenerate */ }
+    }
+
+    const [{ data: calls }, { data: acts }, { data: notes }, { data: due }, { data: awaitingFeedback }] =
+      await Promise.all([
+        admin.from("call_logs").select("duration_seconds, outcome, summary")
+          .eq("salesperson_id", uid).gte("started_at", from).lt("started_at", to).limit(200),
+        admin.from("lead_activities").select("type, detail, contact_id")
+          .eq("actor_id", uid).gte("created_at", from).lt("created_at", to).limit(200),
+        admin.from("lead_voice_notes").select("summary").eq("salesperson_id", uid)
+          .gte("created_at", from).lt("created_at", to).limit(40),
+        // Tomorrow's first calls. Anything already overdue counts too — that is
+        // the call they most need to make first thing.
+        admin.from("follow_ups").select("name, phone, due_at, note")
+          .eq("salesperson_id", uid).eq("status", "pending")
+          .lte("due_at", `${istDate(1)}T23:59:59+05:30`)
+          .order("due_at", { ascending: true }).limit(8),
+        // The customer walked the site and nobody has asked them what they
+        // thought. Nothing in the pipeline goes cold faster.
+        admin.from("contacts").select("name, phone")
+          .eq("salesperson_id", uid).eq("status", "site_visit")
+          .not("site_visit_arrived_at", "is", null)
+          .or("site_visit_verified.is.null,site_visit_verified.eq.false").limit(3),
+      ]);
+
+    const callRows = calls ?? [];
+    const total = callRows.length;
+    const connected = callRows.filter((c) => (c.duration_seconds ?? 0) >= MIN_COACH_SECONDS).length;
+    // "Meaningful" is not "connected". Ninety seconds is roughly where a real
+    // estate call stops being "haan bhaijaan baad me baat karte hain" and
+    // becomes a conversation someone could book a visit out of.
+    const conversations = callRows.filter((c) => (c.duration_seconds ?? 0) >= 90).length;
+    const talkMin = Math.round(callRows.reduce((s, c) => s + (c.duration_seconds ?? 0), 0) / 60);
+
+    const actRows = acts ?? [];
+    const distinct = (rows: typeof actRows) => new Set(rows.map((a) => String(a.contact_id ?? ""))).size;
+    const visitsFixed = distinct(actRows.filter((a) => a.type === "site_visit"));
+    const bookings = distinct(actRows.filter((a) => /\bbook(ed|ing)\b/i.test(String(a.detail ?? ""))));
+
+    // A score a rep can check against their own call list, out of 10. Weighted
+    // the way the business actually works: getting through matters, real
+    // conversations matter more, and a fixed visit or a booking is the day.
+    // Deliberately not a curve against other reps — comparing a rep to the team
+    // is a different (worse) feeling, and this card is theirs alone.
+    const rate = total ? connected / total : 0;
+    const score = total === 0 ? null : Math.round(Math.min(10,
+      rate * 3 +
+      Math.min(conversations / 8, 1) * 2 +
+      Math.min(visitsFixed * 1.5, 3) +
+      Math.min(bookings * 2, 2),
+    ) * 10) / 10;
+
+    const priorities: { lead: string; why: string }[] = [];
+    for (const c of awaitingFeedback ?? []) {
+      if (priorities.length >= 2) break;
+      priorities.push({
+        lead: String(c.name ?? c.phone ?? "lead"),
+        why: "Site visit ho chuki hai — feedback lena sabse zaroori hai.",
+      });
+    }
+    for (const f of due ?? []) {
+      if (priorities.length >= 3) break;
+      const lead = String(f.name ?? f.phone ?? "lead");
+      if (priorities.some((p) => p.lead === lead)) continue;
+      const at = new Date(String(f.due_at)).toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", hour12: true,
+      });
+      priorities.push({ lead, why: `Callback ${at} — aapne time diya tha.` });
+    }
+
+    const counts = { calls: total, connected, conversations, visitsFixed, bookings, talkMin };
+    let wins: string[] = [];
+    let improve: { pattern: string; say: string } | null = null;
+
+    if (total > 0) {
+      const out = await groqJson(
+        "You coach ONE real-estate telecaller at the end of their day. Input summaries may be in " +
+        "Hindi, English or Hinglish, any script — understand all three. Reply ONLY as JSON " +
+        '{"wins": string[], "improve": {"pattern": string, "say": string}}.\n' +
+        "wins = 1-3 short lines on what they genuinely did well today, easy Roman Hinglish (aap-form). " +
+        "Base each one on the actual summaries, never on the counts — the numbers are already printed " +
+        "on the card above your text.\n" +
+        "improve.pattern = the ONE habit across today's calls that cost them deals, named plainly " +
+        "(\"9 customers ne kaha baad mein baat karte hain — aap next date confirm kiye bina call end " +
+        "kar dete hain\"). Look for what REPEATS; one bad call is not a pattern.\n" +
+        "improve.say = the exact sentence to say instead, ready to speak, in Hinglish. Not advice — " +
+        "the words.\n" +
+        "If today shows no real repeated weakness, set improve to null. A rep who did well should be " +
+        "motivated, not handed an invented fault. Never scold. NEVER invent details.",
+        `Rep: ${prof.full_name ?? "telecaller"}\n` +
+        `Calls: ${total}, real conversations: ${conversations}, site visits fixed: ${visitsFixed}, bookings: ${bookings}.\n` +
+        `Call summaries:\n${callRows.map((c) => c.summary).filter(Boolean).slice(0, 20).map((s) => `- ${s}`).join("\n") || "(none)"}\n` +
+        `Voice notes:\n${(notes ?? []).map((n) => n.summary).filter(Boolean).slice(0, 12).map((s) => `- ${s}`).join("\n") || "(none)"}`,
+        0.5,
+      );
+      wins = Array.isArray(out?.wins)
+        ? (out.wins as unknown[]).map((w) => String(w).trim()).filter(Boolean).slice(0, 3)
+        : [];
+      const imp = out?.improve as { pattern?: unknown; say?: unknown } | null | undefined;
+      const pattern = String(imp?.pattern ?? "").trim();
+      const say = String(imp?.say ?? "").trim();
+      if (pattern) improve = { pattern, say };
+    }
+
+    const review = { date: reviewDate, score, ...counts, wins, improve, priorities };
+    // Only cache once the model has answered. Caching a half-empty review
+    // because Groq was rate-limited at 7:01pm would freeze that rep's whole
+    // evening into a card with no coaching on it.
+    if (wins.length || improve) {
+      await admin.from("coach_briefs").upsert({
+        salesperson_id: uid, brief_date: reviewDate, slot: "review",
+        company_id: company, content: JSON.stringify(review),
+      }).catch(() => {});
+    }
+    return json({ ok: true, review });
+  }
+
   // ONE fresh Groq generation per request max — coaching, brief and tip each
   // make an LLM call, and doing all three at once blew the edge time budget
   // (HTTP 546). Cached results are always free; anything uncached gets filled in

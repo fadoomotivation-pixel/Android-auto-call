@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 
 // ════════════════════════════════════════════════════════════
 //  THE ASSISTANT'S OWN QUESTIONS
@@ -514,11 +515,19 @@ private fun CallbackCheckPrompt(vm: MainViewModel, ask: AssistantAsk) {
 // a discipline problem, and it is invisible unless somebody asks.
 @Composable
 private fun DayReviewPrompt(vm: MainViewModel, ask: AssistantAsk) {
+    val app by vm.state.collectAsState()
+    val review = app.dayReview
     AlertDialog(
         onDismissRequest = { vm.assistantDismiss() },
         title = { AssistantHeader("🌙", "That's your day", "Quick look before you close") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                // The score sits above the counters because it is the one line a
+                // rep repeats to themselves on the way home. It is arithmetic on
+                // their own call list, not an opinion — connect rate, real
+                // conversations, visits fixed, bookings — so the sub-line says
+                // what it is made of and they can check it.
+                review?.score?.let { s -> DayScore(s, review.conversations, review.visitsFixed, review.bookings) }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DayStat("📞", ask.calls.toString(), "Calls", Jade, Modifier.weight(1f))
                     DayStat("🗣️", ask.connected.toString(), "Talked", Sea, Modifier.weight(1f))
@@ -527,6 +536,64 @@ private fun DayReviewPrompt(vm: MainViewModel, ask: AssistantAsk) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DayStat("⭐", ask.interested.toString(), "Interested", Brass, Modifier.weight(1f))
                     DayStat("🏠", ask.visitsBooked.toString(), "Visits ahead", Plum, Modifier.weight(1f))
+                }
+
+                // Praise first, and only for things that actually happened —
+                // the coach is told to base every line on the day's real call
+                // summaries, never on the counters printed right above it.
+                review?.wins?.takeIf { it.isNotEmpty() }?.let { wins ->
+                    Spacer(Modifier.height(14.dp))
+                    Text("🏆 What you did well",
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    wins.forEach { w ->
+                        Text("✅  $w", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                // The habit, then the words. A rep told "improve your closing"
+                // changes nothing; a rep handed the sentence to say tomorrow
+                // morning can use it on their first call. Absent entirely when
+                // the day showed no repeated weakness — an invented fault is
+                // how a coaching card stops being read.
+                review?.improve?.let { imp ->
+                    Spacer(Modifier.height(14.dp))
+                    Text("⚠️ One thing to fix",
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(imp.pattern, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (imp.say.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Box(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                .background(Sea.copy(alpha = 0.10f))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                        ) {
+                            Column {
+                                Text("Kal ye bolkar dekhiye",
+                                    style = MaterialTheme.typography.labelSmall, color = Sea)
+                                Text("“${imp.say}”", style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+
+                // Two names, not a list. This is the last thing a rep reads
+                // before they close the app, and it has to survive the night.
+                review?.priorities?.takeIf { it.isNotEmpty() }?.let { picks ->
+                    Spacer(Modifier.height(14.dp))
+                    Text("🎯 Kal sabse pehle",
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    picks.take(2).forEach { p ->
+                        Text("• ${p.lead}", style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold)
+                        Text("   ${p.why}", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 if (ask.notUpdated > 0) {
                     Spacer(Modifier.height(10.dp))
@@ -569,6 +636,44 @@ private fun DayReviewPrompt(vm: MainViewModel, ask: AssistantAsk) {
         confirmButton = {},
         dismissButton = { TextButton(onClick = { vm.assistantDismiss() }) { Text("Close") } },
     )
+}
+
+/**
+ * The day out of ten, with what it is made of written underneath.
+ *
+ * A score with no explanation is a score a rep argues with once and then stops
+ * reading. Every part of this is countable off their own call list: how many
+ * people picked up, how many of those were real conversations, visits fixed,
+ * bookings. Deliberately not a rank against the team — this card is theirs.
+ */
+@Composable
+private fun DayScore(score: Double, conversations: Int, visitsFixed: Int, bookings: Int) {
+    val stars = (score / 2).roundToInt().coerceIn(0, 5)
+    val tone = when {
+        score >= 7.5 -> Jade
+        score >= 5 -> Brass
+        else -> Terracotta
+    }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(tone.copy(alpha = 0.10f))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("★".repeat(stars) + "☆".repeat(5 - stars), fontSize = 15.sp, color = tone)
+        Spacer(Modifier.height(2.dp))
+        Text("${"%.1f".format(score)}/10",
+            style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = tone)
+        Text(
+            buildList {
+                add("$conversations real ${if (conversations == 1) "conversation" else "conversations"}")
+                if (visitsFixed > 0) add("$visitsFixed visit${if (visitsFixed == 1) "" else "s"} fixed")
+                if (bookings > 0) add("$bookings booking${if (bookings == 1) "" else "s"}")
+            }.joinToString(" · "),
+            style = MaterialTheme.typography.labelSmall, color = tone.copy(alpha = 0.85f),
+        )
+    }
+    Spacer(Modifier.height(10.dp))
 }
 
 @Composable

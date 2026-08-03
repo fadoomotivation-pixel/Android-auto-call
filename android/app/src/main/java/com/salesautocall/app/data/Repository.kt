@@ -20,6 +20,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -555,6 +556,42 @@ object Repository {
             rating = c["rating"]?.jsonPrimitive?.intOrNull,
             callAt = c["callAt"]?.jsonPrimitive?.contentOrNull,
             leadName = null,
+        )
+    }
+
+    /**
+     * The 7pm day review that fills the assistant's day card.
+     *
+     * rep-coach counts the day, scores it and caches the whole thing per rep per
+     * date, so opening the app three times in an evening costs one generation
+     * and shows one review. Null when it could not be built — the card then
+     * falls back to the four counters it has always had, which are computed on
+     * the phone and never need the network.
+     */
+    suspend fun dayReview(): DayReview? {
+        val resp = client.functions.invoke("rep-coach", buildJsonObject { put("mode", "day_review") })
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull() ?: return null
+        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return null
+        val r = obj["review"] as? JsonObject ?: return null
+        val imp = r["improve"] as? JsonObject
+        return DayReview(
+            score = r["score"]?.jsonPrimitive?.doubleOrNull,
+            calls = r["calls"]?.jsonPrimitive?.intOrNull ?: 0,
+            connected = r["connected"]?.jsonPrimitive?.intOrNull ?: 0,
+            conversations = r["conversations"]?.jsonPrimitive?.intOrNull ?: 0,
+            visitsFixed = r["visitsFixed"]?.jsonPrimitive?.intOrNull ?: 0,
+            bookings = r["bookings"]?.jsonPrimitive?.intOrNull ?: 0,
+            wins = (r["wins"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
+            improve = imp?.let {
+                val pattern = it["pattern"]?.jsonPrimitive?.contentOrNull?.trim()
+                if (pattern.isNullOrBlank()) null
+                else DayReviewImprove(pattern, it["say"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty())
+            },
+            priorities = (r["priorities"] as? JsonArray)?.mapNotNull { el ->
+                val o = el as? JsonObject ?: return@mapNotNull null
+                val lead = o["lead"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                DayReviewPriority(lead, o["why"]?.jsonPrimitive?.contentOrNull ?: "")
+            } ?: emptyList(),
         )
     }
 
