@@ -166,6 +166,16 @@ data class AppState(
     // rides along so answering the prompt closes the callback it came from.
     val postCallManual: Boolean = false,
     val postCallFollowUpId: String? = null,
+    /** When false (the default), a finished SIM call shakes the lead's Update
+     *  button instead of throwing the disposition sheet up a beat too late. */
+    val postCallPopup: Boolean = false,
+    /** Calls that have ended with nothing recorded yet — these are the leads
+     *  whose Update button is shaking, and the ones the nudge bar counts. */
+    val pendingUpdates: List<PendingUpdate> = emptyList(),
+    /** Master switch for the assistant's own questions. */
+    val assistantOn: Boolean = true,
+    /** The one question the assistant is asking right now (null = silent). */
+    val assistantAsk: AssistantAsk? = null,
     // In-app update: set when a newer build is published; drives the update prompt.
     val update: AppUpdater.Release? = null,
     val checkingUpdate: Boolean = false,
@@ -230,6 +240,62 @@ data class AppState(
     val playingNoteId: String? = null,
 )
 
+/**
+ * A call that has finished with no outcome recorded against it.
+ *
+ * The lead is not lost — it still sits in New / Follow-up with nothing stamped
+ * on it, exactly as before. This just remembers WHICH one so the app can point
+ * at it (a shaking Update button, one line above the bottom bar) instead of
+ * blocking the screen to ask.
+ */
+data class PendingUpdate(
+    val contactId: String,
+    val phone: String,
+    val name: String? = null,
+    val connected: Boolean = false,
+    val at: Long = System.currentTimeMillis(),
+)
+
+/**
+ * One question the assistant is asking the rep right now.
+ *
+ * There is never more than one. Everything about this feature that could go
+ * wrong goes wrong by asking too much, so the whole design is a single slot: if
+ * it is full, nothing else can be asked, and it only refills after the rep has
+ * answered and the quiet gap has passed.
+ */
+data class AssistantAsk(
+    /** "visit_check" | "callback_check" | "day_review" */
+    val kind: String,
+    /**
+     * The once-a-day identity of this question ("visit_check:<lead>").
+     *
+     * Carried on the ask rather than rebuilt from its fields, because the two
+     * have to agree exactly: the candidate search skips anything already asked,
+     * and the marker records what was asked. Derive it in two places and a
+     * callback with no linked lead gets asked over and over.
+     */
+    val key: String,
+    val contactId: String? = null,
+    val phone: String? = null,
+    val name: String? = null,
+    /** Which project's site visit is in question. */
+    val project: String? = null,
+    /** Human phrase for when it was due / booked ("45 minutes ago", "Tuesday"). */
+    val whenLabel: String = "",
+    /** Why the callback exists, in the rep's own words. */
+    val why: String? = null,
+    val followUpId: String? = null,
+    /** For measuring how long the rep leaves the question sitting there. */
+    val shownAt: Long = System.currentTimeMillis(),
+    // ---- day_review payload ----
+    val calls: Int = 0,
+    val connected: Int = 0,
+    val interested: Int = 0,
+    val visitsBooked: Int = 0,
+    val notUpdated: Int = 0,
+)
+
 enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
 
 /** Lead-pipeline filters shown on the Leads tab. */
@@ -266,6 +332,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             cloudSipPort = AppPrefs.getSipPort(app),
             callerdeskCalling = AppPrefs.getCallerdeskCalling(app),
             autoAnswer = AppPrefs.getAutoAnswer(app),
+            postCallPopup = AppPrefs.getPostCallPopup(app),
+            assistantOn = AppPrefs.getAssistantOn(app),
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -310,6 +378,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     it.phone.filter { c -> c.isDigit() }.takeLast(10) == key
                 } ?: return@collect
                 val contactId = lead.id ?: return@collect
+                val didConnect = prev.activeAtMillis > 0
+                // A SIM call ends behind the phone's own in-call screen, so the
+                // sheet cannot land until Android hands focus back — which is
+                // the "popup aata hai kaafi slow" the reps described, followed by
+                // a modal landing on whatever they had already moved on to.
+                //
+                // Default is to ask quietly instead: remember the call, shake the
+                // lead's Update button, and let the rep answer when they look. The
+                // lead is no better off than before — still no outcome, still
+                // unanswered everywhere — so nothing is lost by not blocking.
+                if (!AppPrefs.getPostCallPopup(getApplication())) {
+                    set {
+                        it.copy(
+                            pendingUpdates = it.pendingUpdates.filterNot { p -> p.contactId == contactId } +
+                                PendingUpdate(contactId, phone, lead.name, didConnect),
+                        )
+                    }
+                    return@collect
+                }
                 set {
                     it.copy(
                         postCallContactId = contactId,
@@ -317,7 +404,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         postCallName = lead.name,
                         postCallCampaignId = null,
                         // Off-hook (activeAtMillis>0) = a real conversation → force an outcome.
-                        postCallConnected = prev.activeAtMillis > 0,
+                        postCallConnected = didConnect,
                     )
                 }
             }
@@ -2037,6 +2124,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // can then never take the new callback down with the old.
         val fromFollowUp = _state.value.postCallFollowUpId
         val cleanNote = note?.trim()?.ifBlank { null }
+        // The question has been answered, so the Update button stops shaking —
+        // whether it was asked by a popup, by the nudge bar, or by the rep
+        // opening the lead themselves.
+        clearPendingUpdate(contactId)
         viewModelScope.launch {
             runCatching { Repository.setDisposition(contactId, status, cleanNote) }
                 .onSuccess {
@@ -2157,6 +2248,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun postCallSaveContext(temperature: String?, note: String?) {
         val contactId = _state.value.postCallContactId
         val cleanNote = note?.trim()?.ifBlank { null }
+        if (contactId != null && (cleanNote != null || temperature != null)) clearPendingUpdate(contactId)
         if (contactId != null && (cleanNote != null || temperature != null)) {
             viewModelScope.launch {
                 runCatching {
@@ -2199,6 +2291,473 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             set { it.copy(message = "🛡️ ${items.size} lead${if (items.size == 1) "" else "s"} protected — follow-up tomorrow 10 AM") }
             loadFollowUps(force = true)
         }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  THE ASSISTANT — the app asking, instead of only recording
+    // ════════════════════════════════════════════════════════════
+    //
+    // Two questions decide more deals than anything else in this CRM, and until
+    // now neither was ever asked:
+    //
+    //   "The visit was Tuesday. Did they actually come — and how close are they?"
+    //   "That callback was due at 4. Did you make it? If not, what stopped you?"
+    //
+    // Both were answerable only by the rep going and looking, and nobody looks.
+    // So the app asks. Once, at the right moment, about one lead, with the
+    // answer wired straight into the funnel so answering it IS the work.
+    //
+    // Everything below exists to stop this becoming spam. A rep who learns that
+    // the app interrupts them will dismiss the next prompt without reading it,
+    // and then the feature is worse than nothing — it has trained them to ignore
+    // us. The rules are therefore deliberately strict and all of them are hard
+    // limits, not preferences:
+    //
+    //   · one prompt on screen, ever — the slot is a single nullable field
+    //   · never over a call, the dialler, the disposition sheet or an update
+    //   · a quiet gap between any two prompts
+    //   · a hard daily cap
+    //   · one question per lead per day, whatever the answer — including
+    //     "dismissed", because re-asking something the rep just waved away is
+    //     the single fastest way to lose them
+    //   · working hours only, and never in the first minute and a half after
+    //     the app opens: let them start their day before we start talking
+
+    /** Minimum quiet time between any two assistant prompts. */
+    private val PROMPT_GAP_MS = 40 * 60_000L
+    /** Hard ceiling on prompts in one day. The day review is the only exception. */
+    private val PROMPT_DAILY_CAP = 5
+    /** A callback has to be properly late before we ask — not "due 3 minutes ago". */
+    private val CALLBACK_LATE_MS = 30 * 60_000L
+    /** …and not so old that the rep has obviously already decided to leave it. */
+    private val CALLBACK_STALE_MS = 2 * 24 * 3600_000L
+    /** A visit day has to be well past before "did they come?" is a fair question. */
+    private val VISIT_SETTLE_MS = 2 * 3600_000L
+    private val VISIT_STALE_MS = 30L * 24 * 3600_000L
+
+    /** When the app last came to the foreground — we stay quiet right after. */
+    @Volatile private var foregroundAt: Long = System.currentTimeMillis()
+
+    fun onForeground() {
+        foregroundAt = System.currentTimeMillis()
+        expirePendingUpdates()
+    }
+
+    fun setAssistantOn(value: Boolean) {
+        AppPrefs.setAssistantOn(getApplication(), value)
+        set { it.copy(assistantOn = value, assistantAsk = if (value) it.assistantAsk else null) }
+    }
+
+    fun setPostCallPopup(value: Boolean) {
+        AppPrefs.setPostCallPopup(getApplication(), value)
+        set { it.copy(postCallPopup = value) }
+    }
+
+    /** Stops the shake on one lead — its call has an outcome now. */
+    fun clearPendingUpdate(contactId: String) =
+        set { it.copy(pendingUpdates = it.pendingUpdates.filterNot { p -> p.contactId == contactId }) }
+
+    /** A call nobody answered for six hours isn't a fresh nudge any more. */
+    private fun expirePendingUpdates() {
+        val cutoff = System.currentTimeMillis() - 6 * 3600_000L
+        val kept = _state.value.pendingUpdates.filter { it.at >= cutoff }
+        if (kept.size != _state.value.pendingUpdates.size) set { it.copy(pendingUpdates = kept) }
+    }
+
+    /** Opens the standard Update sheet for the call the rep hasn't answered yet. */
+    fun openPendingUpdate(p: PendingUpdate) {
+        val fu = _state.value.followUpList.firstOrNull { it.contactId == p.contactId }
+        openFollowUpUpdate(p.contactId, p.phone, p.name, fu?.id)
+    }
+
+    /**
+     * Decide whether to ask something, and what. Called on a slow tick and on
+     * every foreground; returns without doing anything the overwhelming
+     * majority of the time, which is the point.
+     */
+    fun tickAssistant() {
+        val ctx = getApplication<Application>()
+        val s = _state.value
+        expirePendingUpdates()
+        if (!s.signedIn || !s.assistantOn || s.assistantAsk != null) return
+        // Never on top of something the rep is already doing.
+        if (s.postCallContactId != null || s.cloudCallNumber != null || s.update != null) return
+        if (s.leadDetailId != null || s.showAddLead || s.showSettings) return
+        if (DialerController.state.value.isRunning) return
+        if (com.salesautocall.app.dialer.SimCallMonitor.state.value != null) return
+        // An unanswered call outranks anything we might want to ask about.
+        if (s.pendingUpdates.isNotEmpty()) return
+
+        val now = System.currentTimeMillis()
+        if (now - foregroundAt < 90_000L) return
+        val zone = java.time.ZonedDateTime.now()
+        if (zone.hour < 9 || zone.hour >= 21) return
+        if (now - AppPrefs.getPromptLastAt(ctx) < PROMPT_GAP_MS) return
+
+        val today = java.time.LocalDate.now().toString()
+        val asked = AppPrefs.getAskedToday(ctx, today)
+        val overCap = AppPrefs.getPromptCount(ctx, today) >= PROMPT_DAILY_CAP
+
+        // After 7pm the calling day is effectively over, so the review comes
+        // first — a callback we ask about at 8pm is one the rep can't act on.
+        val ask = (if (zone.hour >= 19) dayReviewAsk(asked, now) else null)
+            ?: (if (overCap) null else visitCheckAsk(asked, now))
+            ?: (if (overCap) null else callbackCheckAsk(asked, now))
+        if (ask == null) return
+
+        AppPrefs.setPromptLastAt(ctx, now)
+        AppPrefs.bumpPromptCount(ctx, today)
+        AppPrefs.markAsked(ctx, today, ask.key)
+        set { it.copy(assistantAsk = ask.copy(shownAt = now)) }
+    }
+
+    /** The oldest site visit whose day has gone by with nothing to show for it. */
+    private fun visitCheckAsk(asked: Set<String>, now: Long): AssistantAsk? {
+        val dead = setOf("lost", "not_interested", "dnc", "booked")
+        val afterVisit = setOf("negotiation", "proposal", "token_paid")
+        val c = _state.value.leads
+            .asSequence()
+            .filter { it.id != null && "visit_check:${it.id}" !in asked }
+            .filter { it.status !in dead && it.status !in afterVisit && it.siteVisitArrivedAt == null }
+            .mapNotNull { lead -> parseInstantOrNull(lead.siteVisitAt)?.let { lead to it } }
+            .filter { (_, ms) -> ms < now - VISIT_SETTLE_MS && ms > now - VISIT_STALE_MS }
+            .minByOrNull { it.second } ?: return null
+        return AssistantAsk(
+            kind = "visit_check",
+            key = "visit_check:${c.first.id}",
+            contactId = c.first.id,
+            phone = c.first.phone,
+            name = c.first.name ?: c.first.phone,
+            project = c.first.siteVisitProject,
+            whenLabel = agoLabel(now - c.second),
+        )
+    }
+
+    /**
+     * The freshest missed callback, not the oldest.
+     *
+     * A callback three days red is one the rep has already seen and decided
+     * about; asking again teaches them we don't know what's going on. One that
+     * went red forty minutes ago is the one still worth saving today.
+     *
+     * "Did you call?" is only a fair question if we don't already know the
+     * answer — a lead dialled since the callback came due is skipped outright.
+     */
+    private fun callbackCheckAsk(asked: Set<String>, now: Long): AssistantAsk? {
+        val leadsById = _state.value.leads.associateBy { it.id }
+        val f = _state.value.followUpList
+            .asSequence()
+            .mapNotNull { fu -> parseInstantOrNull(fu.dueAt)?.let { fu to it } }
+            .filter { (fu, due) ->
+                due <= now - CALLBACK_LATE_MS && due > now - CALLBACK_STALE_MS &&
+                    "callback_check:${fu.contactId ?: fu.phone}" !in asked
+            }
+            .filterNot { (fu, due) ->
+                val called = parseInstantOrNull(leadsById[fu.contactId]?.lastContactedAt) ?: 0L
+                called >= due
+            }
+            .maxByOrNull { it.second } ?: return null
+        val note = f.first.note?.trim()?.takeIf { it.isNotEmpty() }
+        return AssistantAsk(
+            kind = "callback_check",
+            key = "callback_check:${f.first.contactId ?: f.first.phone}",
+            contactId = f.first.contactId,
+            phone = f.first.phone,
+            name = f.first.name ?: f.first.phone,
+            whenLabel = agoLabel(now - f.second),
+            why = when {
+                note == null -> null
+                note.startsWith("AI:", ignoreCase = true) -> note.removePrefix("AI:").removePrefix("ai:").trim()
+                else -> note
+            },
+            followUpId = f.first.id,
+        )
+    }
+
+    /** One honest look back at the day, once, after 7pm, if the rep worked. */
+    private fun dayReviewAsk(asked: Set<String>, now: Long): AssistantAsk? {
+        val today = java.time.LocalDate.now().toString()
+        if ("day_review:$today" in asked) return null
+        val s = _state.value
+        if (s.todayCalls < 1) return null
+        val startOfDay = java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toEpochMilli()
+        val notUpdated = s.leads.count { c ->
+            val called = parseInstantOrNull(c.lastContactedAt) ?: return@count false
+            called >= startOfDay && (parseInstantOrNull(c.handledAt) ?: 0L) < called
+        }
+        return AssistantAsk(
+            kind = "day_review",
+            key = "day_review:$today",
+            whenLabel = today,
+            calls = s.todayCalls,
+            connected = s.todayConnected,
+            interested = s.leads.count { it.status == "interested" },
+            visitsBooked = s.leads.count { c ->
+                (parseInstantOrNull(c.siteVisitAt) ?: 0L) >= now
+            },
+            notUpdated = notUpdated,
+        )
+    }
+
+    // ---------- answering the assistant ----------
+
+    /** Closes the prompt and records that it went unanswered. Never punished. */
+    fun assistantDismiss() {
+        val ask = _state.value.assistantAsk ?: return
+        set { it.copy(assistantAsk = null) }
+        logPrompt(ask, answer = null, dismissed = true)
+    }
+
+    /**
+     * "Yes, they came" — with the rep's own read on how close the deal is.
+     *
+     * All of it lands in one write: the visit is confirmed (so it stops being an
+     * unanswered question and stops inflating the ad report's qualified count),
+     * the forecast is stored against the lead, and the stage moves to whatever
+     * the rep picked. If that stage still needs a next touch and the lead has
+     * none, one is booked — this feature must not create leads with nowhere to go.
+     */
+    fun assistantVisitCame(percent: Int, nextStatus: String) {
+        val ask = _state.value.assistantAsk ?: return
+        val contactId = ask.contactId ?: return
+        set { it.copy(assistantAsk = null) }
+        viewModelScope.launch {
+            runCatching {
+                Repository.confirmSiteVisitHappened(contactId)
+                Repository.setCloseProbability(contactId, percent)
+                Repository.setDisposition(contactId, nextStatus, null)
+            }.onSuccess {
+                val nowIso = java.time.Instant.now().toString()
+                set { st ->
+                    st.copy(
+                        leads = st.leads.map { c ->
+                            if (c.id != contactId) c
+                            else c.copy(
+                                status = nextStatus, siteVisitArrivedAt = nowIso,
+                                siteVisitVerified = false, closeProbability = percent,
+                                closeProbabilityAt = nowIso, handledAt = nowIso,
+                            )
+                        },
+                        message = "✅ Visit confirmed · $percent% chance saved",
+                    )
+                }
+                launchActivityLog(contactId) {
+                    add("site_visit" to "Customer came to the site — rep's read: $percent% chance of closing")
+                }
+                // No lead without a next action: if this stage is still live and
+                // nothing is booked, put a call in the diary for tomorrow.
+                if (nextStatus in setOf("interested", "negotiation", "callback") &&
+                    _state.value.followUpList.none { it.contactId == contactId }
+                ) {
+                    val due = java.time.ZonedDateTime.now().plusDays(1)
+                        .withHour(11).withMinute(0).withSecond(0).toInstant().toEpochMilli()
+                    scheduleFollowUp(contactId, ask.phone ?: return@onSuccess, ask.name, due,
+                        "After the site visit — $percent% chance", mirrorStatus = false)
+                }
+                loadLeads(force = true)
+            }.onFailure { e -> set { it.copy(error = e.message) } }
+        }
+        logPrompt(ask, answer = "came", probability = percent, reason = nextStatus)
+    }
+
+    /**
+     * "No, they didn't come."
+     *
+     * The planned date is wiped either way — leaving it there is what makes the
+     * app keep insisting a visit is on the books when everyone involved knows it
+     * isn't. [reason] then decides where the lead goes: still alive and worth a
+     * call, or honestly dead.
+     */
+    fun assistantVisitNoShow(reason: String) {
+        val ask = _state.value.assistantAsk ?: return
+        val contactId = ask.contactId ?: return
+        set { it.copy(assistantAsk = null) }
+        val nextStatus = when (reason) {
+            "lost_interest" -> "not_interested"
+            "competitor" -> "lost"
+            else -> "callback"
+        }
+        viewModelScope.launch {
+            runCatching {
+                Repository.clearSiteVisit(contactId)
+                Repository.setDisposition(contactId, nextStatus, null)
+            }.onSuccess {
+                val nowIso = java.time.Instant.now().toString()
+                set { st ->
+                    st.copy(
+                        leads = st.leads.map { c ->
+                            if (c.id == contactId) c.copy(
+                                status = nextStatus, siteVisitAt = null,
+                                siteVisitProject = null, handledAt = nowIso,
+                            ) else c
+                        },
+                        message = "Visit didn't happen — lead updated",
+                    )
+                }
+                launchActivityLog(contactId) {
+                    add("site_visit" to "Customer did not come — ${reasonLabel(reason)}")
+                }
+                // Still alive → it gets a next call, not silence.
+                if (nextStatus == "callback" && _state.value.followUpList.none { it.contactId == contactId }) {
+                    val due = java.time.ZonedDateTime.now().plusDays(1)
+                        .withHour(11).withMinute(0).withSecond(0).toInstant().toEpochMilli()
+                    scheduleFollowUp(contactId, ask.phone ?: return@onSuccess, ask.name, due,
+                        "Visit missed — ${reasonLabel(reason)}", mirrorStatus = false)
+                }
+                loadLeads(force = true)
+            }.onFailure { e -> set { it.copy(error = e.message) } }
+        }
+        logPrompt(ask, answer = "no_show", reason = reason)
+    }
+
+    /**
+     * The visit moved to a new day — the one answer that is neither yes nor no.
+     *
+     * The lead stays exactly where it is in the funnel; only the date changes,
+     * and a reminder goes in for the morning of the new date so the rep is not
+     * relying on remembering it.
+     */
+    fun assistantVisitPostponed(newVisitMillis: Long) {
+        val ask = _state.value.assistantAsk ?: return
+        val contactId = ask.contactId ?: return
+        set { it.copy(assistantAsk = null) }
+        val iso = java.time.Instant.ofEpochMilli(newVisitMillis).toString()
+        viewModelScope.launch {
+            runCatching { Repository.updateContact(contactId, mapOf("site_visit_at" to iso)) }
+                .onSuccess {
+                    set { st ->
+                        st.copy(
+                            leads = st.leads.map { c -> if (c.id == contactId) c.copy(siteVisitAt = iso) else c },
+                            message = "📅 Visit moved to ${shortWhen(newVisitMillis)}",
+                        )
+                    }
+                    launchActivityLog(contactId) {
+                        add("site_visit" to "Visit rescheduled to ${shortWhen(newVisitMillis)}")
+                    }
+                    scheduleFollowUp(
+                        contactId, ask.phone ?: return@onSuccess, ask.name,
+                        // Ring the rep three hours before, not on the dot — a visit
+                        // needs confirming in the morning, not announcing as it starts.
+                        (newVisitMillis - 3 * 3600_000L).coerceAtLeast(System.currentTimeMillis() + 600_000L),
+                        "Confirm the site visit", mirrorStatus = false,
+                    )
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+        logPrompt(ask, answer = "postponed")
+    }
+
+    /** "Yes, I called" → straight into the one Update sheet the whole app uses. */
+    fun assistantCallbackCalled() {
+        val ask = _state.value.assistantAsk ?: return
+        set { it.copy(assistantAsk = null) }
+        logPrompt(ask, answer = "called")
+        openFollowUpUpdate(ask.contactId, ask.phone ?: return, ask.name, ask.followUpId)
+    }
+
+    /**
+     * "Not yet" — and the reason is the whole point of asking.
+     *
+     * Every answer books a real time, so the callback moves instead of just
+     * going redder. And the reason is kept: one rep saying "busy" on every
+     * single callback and another saying "not reachable" are two completely
+     * different coaching conversations, and neither is visible from a list of
+     * overdue rows.
+     */
+    fun assistantCallbackNotYet(reason: String) {
+        val ask = _state.value.assistantAsk ?: return
+        set { it.copy(assistantAsk = null) }
+        val phone = ask.phone ?: return
+        val now = java.time.ZonedDateTime.now()
+        val due = when (reason) {
+            "busy" -> now.plusMinutes(30)
+            "evening" -> if (now.hour < 18) now.withHour(18).withMinute(0) else now.plusDays(1).withHour(18).withMinute(0)
+            "not_reachable" -> now.plusHours(2)
+            else -> now.plusDays(1).withHour(11).withMinute(0)   // wrong_time
+        }.withSecond(0).withNano(0).toInstant().toEpochMilli()
+        ask.followUpId?.let { completeFollowUp(it) }
+        scheduleFollowUp(ask.contactId, phone, ask.name, due, reasonLabel(reason), mirrorStatus = false)
+        ask.contactId?.let { id ->
+            launchActivityLog(id) { add("follow_up" to "Callback pushed to ${shortWhen(due)} — ${reasonLabel(reason)}") }
+        }
+        logPrompt(ask, answer = "not_yet", reason = reason)
+    }
+
+    /** The day review's one question, and the tally that came with it. */
+    fun assistantDayReviewAnswer(reason: String) {
+        val ask = _state.value.assistantAsk ?: return
+        set { it.copy(assistantAsk = null, message = "Thanks — see you tomorrow 👋") }
+        logPrompt(ask, answer = "reviewed", reason = reason)
+    }
+
+    /** From the day review: open the first call of the day nobody wrote up. */
+    fun assistantFixFirstUnupdated() {
+        val ask = _state.value.assistantAsk
+        val startOfDay = java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toEpochMilli()
+        val lead = _state.value.leads.firstOrNull { c ->
+            val called = parseInstantOrNull(c.lastContactedAt) ?: return@firstOrNull false
+            c.id != null && called >= startOfDay && (parseInstantOrNull(c.handledAt) ?: 0L) < called
+        }
+        set { it.copy(assistantAsk = null) }
+        if (ask != null) logPrompt(ask, answer = "reviewed", reason = "fixing_updates")
+        if (lead?.id == null) {
+            set { it.copy(message = "Nothing left to update — well done 👏") }
+            return
+        }
+        val fu = _state.value.followUpList.firstOrNull { it.contactId == lead.id }
+        openFollowUpUpdate(lead.id, lead.phone, lead.name, fu?.id)
+    }
+
+    /** Best-effort record of the question and its answer. Never blocks the rep. */
+    private fun logPrompt(
+        ask: AssistantAsk,
+        answer: String?,
+        reason: String? = null,
+        probability: Int? = null,
+        dismissed: Boolean = false,
+    ) {
+        val seconds = ((System.currentTimeMillis() - ask.shownAt) / 1000L).toInt().coerceIn(0, 24 * 3600)
+        viewModelScope.launch {
+            runCatching {
+                Repository.logRepPrompt(
+                    contactId = ask.contactId, kind = ask.kind, answer = answer,
+                    reason = reason, probability = probability,
+                    secondsToAnswer = seconds, dismissed = dismissed,
+                )
+            }
+        }
+    }
+
+    /** Plain-English label for a reason chip, used in notes and the timeline. */
+    private fun reasonLabel(reason: String): String = when (reason) {
+        "busy" -> "Rep was busy"
+        "evening" -> "Will call in the evening"
+        "not_reachable" -> "Number not reachable"
+        "wrong_time" -> "Wrong time to call them"
+        "postponed" -> "Customer postponed the visit"
+        "lost_interest" -> "Customer lost interest"
+        "competitor" -> "Went with someone else"
+        else -> reason.replace('_', ' ')
+    }
+
+    /** "45 minutes ago", "3 hours ago", "2 days ago" — never a raw timestamp. */
+    private fun agoLabel(deltaMs: Long): String {
+        val mins = deltaMs / 60_000L
+        return when {
+            mins < 90 -> "$mins minutes ago"
+            mins < 48 * 60 -> "${mins / 60} hours ago"
+            else -> "${mins / (60 * 24)} days ago"
+        }
+    }
+
+    /** Millis from an ISO timestamp, tolerating both "Z" and "+00:00". */
+    private fun parseInstantOrNull(iso: String?): Long? {
+        if (iso.isNullOrBlank()) return null
+        return runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }
+            .recoverCatching { java.time.Instant.parse(iso).toEpochMilli() }
+            .getOrNull()
     }
 
     /** Count of follow-ups due now or overdue — the red badge on Home. */

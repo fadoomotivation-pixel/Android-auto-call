@@ -97,6 +97,59 @@ object AppPrefs {
     fun setReviewAfterCall(context: Context, value: Boolean) =
         prefs(context).edit().putBoolean(KEY_REVIEW, value).apply()
 
+    // ---------- after a SIM call: shake, don't block ----------
+    //
+    // The disposition sheet is thrown up the moment a call ends. On a cloud call
+    // that is instant, because the app is already in front. On a SIM call it is
+    // not: the phone's own in-call screen owns the foreground, our app is behind
+    // it, and the sheet only lands once Android has finished tearing that screen
+    // down and handing focus back. The rep sits looking at their home screen for
+    // a couple of seconds and then gets a full-screen modal thrown at them — it
+    // reads as the app being slow, and it interrupts whatever they moved on to.
+    //
+    // Off (the default) the same question is asked quietly instead: the lead's
+    // Update button shakes until it is answered. Nothing is lost — the lead
+    // still has no outcome and still shows as unanswered everywhere — it just
+    // waits for the rep rather than grabbing them.
+    fun getPostCallPopup(context: Context): Boolean = prefs(context).getBoolean("post_call_popup", false)
+    fun setPostCallPopup(context: Context, v: Boolean) = prefs(context).edit().putBoolean("post_call_popup", v).apply()
+
+    // ---------- the assistant's own questions ----------
+
+    /** Master switch for every assistant prompt (site visit / callback / day review). */
+    fun getAssistantOn(context: Context): Boolean = prefs(context).getBoolean("assistant_on", true)
+    fun setAssistantOn(context: Context, v: Boolean) = prefs(context).edit().putBoolean("assistant_on", v).apply()
+
+    /** Epoch millis of the last prompt shown — enforces the quiet gap between two. */
+    fun getPromptLastAt(context: Context): Long = prefs(context).getLong("prompt_last_at", 0L)
+    fun setPromptLastAt(context: Context, v: Long) = prefs(context).edit().putLong("prompt_last_at", v).apply()
+
+    /** How many prompts have been shown on [isoDate] — the daily cap. */
+    fun getPromptCount(context: Context, isoDate: String): Int =
+        if (prefs(context).getString("prompt_day", "") == isoDate) prefs(context).getInt("prompt_day_count", 0) else 0
+
+    fun bumpPromptCount(context: Context, isoDate: String) {
+        val next = getPromptCount(context, isoDate) + 1
+        prefs(context).edit().putString("prompt_day", isoDate).putInt("prompt_day_count", next).apply()
+    }
+
+    /**
+     * Targets already asked about — "<kind>:<id>" keys, cleared each new day.
+     *
+     * The anti-spam rule that matters most. Without it the same unanswered site
+     * visit is a fresh question every hour, which is exactly how a helpful app
+     * turns into one the rep swipes away on reflex.
+     */
+    fun getAskedToday(context: Context, isoDate: String): Set<String> =
+        if (prefs(context).getString("asked_day", "") == isoDate)
+            prefs(context).getStringSet("asked_keys", emptySet()) ?: emptySet()
+        else emptySet()
+
+    fun markAsked(context: Context, isoDate: String, key: String) {
+        val keys = getAskedToday(context, isoDate).toMutableSet().also { it.add(key) }
+        prefs(context).edit().putString("asked_day", isoDate).putStringSet("asked_keys", keys).apply()
+    }
+
     fun getLastEmail(context: Context): String =
         prefs(context).getString(KEY_EMAIL, "") ?: ""
 

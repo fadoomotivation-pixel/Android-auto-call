@@ -68,6 +68,20 @@ migrations in `supabase/migrations/`).
   `facebook-poll` PULLS leads via Graph API on a 10-min cron (migration 0090) —
   it imports ONLY mapped forms, deduped, recent-window only. There is also an
   **Ad Manager built inside the CRM** — don't duplicate it.
+- **The rep assistant** (`AssistantPrompts.kt` + `MainViewModel.tickAssistant`):
+  the app asks the rep three questions and nothing more — "did they come to the
+  site (and how close are they, 0-100)", "that callback is late, did you call
+  (and if not, why)", and one 7pm day review. Answers land in `rep_prompts` and
+  `contacts.close_probability` (migration 0127, view `v_rep_discipline`). ONE
+  prompt on screen ever, 40-min gap, 5/day cap, one question per lead per day
+  including dismissals, working hours only, never over a call/dialler/sheet. If
+  you add a prompt, add it to that engine — a second scheduler is how this turns
+  into spam and gets swiped away unread.
+- **After a SIM call the popup does NOT open** (`AppPrefs.getPostCallPopup`,
+  default off). It cannot open on time — the phone's in-call screen owns the
+  foreground — so the lead's Update button shakes (`Modifier.nudgeShake`) and a
+  bar sits above the bottom nav until the call has an outcome. Cloud calls keep
+  the instant sheet. Don't "fix" the shake by restoring the modal.
 - GitHub scheduled/dispatch workflows fire only from the repo's **default
   branch**, which is `claude/sales-app-auto-call-logging-Bb7e6` (NOT main).
   `amr-transcode.yml` must exist there; canonical copy lives on main.
