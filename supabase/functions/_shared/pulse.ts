@@ -70,6 +70,14 @@ export type RepPulse = {
   noConnect: string[];
   /** What is actually booked next, with the time. */
   nextSteps: NextStep[];
+  /** Leads whose site visit was BOOKED or moved today — the day's real wins. */
+  visitsFixed: number;
+  /** What the AI did on its own, aggregated. Never one line per lead. */
+  aiUpdates: string[];
+  /** The single best thing that happened today, in one sentence. */
+  win?: string;
+  /** The one thing that could go wrong if nobody acts. */
+  risk?: string;
   narrative?: string;
 };
 
@@ -97,6 +105,27 @@ export function realNotes(r: RepPulse) {
  */
 export function newsworthyMoves(r: RepPulse) {
   return r.moves.filter((m) => !/\(from voice note\)/i.test(m.detail));
+}
+
+/**
+ * What the AI did today, counted — never listed.
+ *
+ * The founder's report used to print one line per automatic action, so a rep
+ * with four unanswered calls produced four identical "Marked cold" lines and
+ * one lead that got two callbacks a minute apart produced two. That is a log,
+ * and a founder does not read logs. Counting DISTINCT LEADS turns the whole
+ * pile into the one sentence they actually wanted: "4 leads with no answer
+ * moved to Cold."
+ */
+export function aiUpdateLines(r: RepPulse): string[] {
+  const ai = r.moves.filter((m) => m.byAi);
+  const leadsWhere = (re: RegExp) => new Set(ai.filter((m) => re.test(m.detail)).map((m) => m.lead)).size;
+  const cold = leadsWhere(/\bcold\b/i);
+  const booked = leadsWhere(/(callback|follow[\s-]?up)/i);
+  const out: string[] = [];
+  if (cold) out.push(`${cold} lead${cold > 1 ? "s" : ""} with no answer moved to Cold.`);
+  if (booked) out.push(`${booked} callback${booked > 1 ? "s" : ""} booked automatically.`);
+  return out;
 }
 
 export async function buildCompany(
@@ -151,7 +180,7 @@ export async function buildCompany(
       map.set(id, {
         id, name: nameById.get(id)!, calls: 0, connected: 0, talkSeconds: 0,
         voiceNotes: [], moves: [], siteVisits: [], followUps: 0, hotLeads: 0,
-        topLeads: [], noConnect: [], nextSteps: [],
+        topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, aiUpdates: [],
       });
     }
     return map.get(id)!;
@@ -191,9 +220,21 @@ export async function buildCompany(
       disposition: n.suggested_disposition, audioPath: n.audio_path ?? null,
     });
   }
+  // Site visits BOOKED today, counted once per lead. `siteVisits` below is a
+  // different question — whose visit is happening today — and a founder asking
+  // "did we fix any visits?" is not asking that one. A lead whose visit gets
+  // moved twice in an afternoon is still one visit fixed.
+  const visitLeads = new Map<string, Set<string>>();
   for (const a of acts.data ?? []) {
     const r = rep(a.actor_id); if (!r) continue;
     r.moves.push({ detail: a.detail, lead: leadName.get(a.contact_id) ?? "lead", byAi: (a.actor_name ?? "").includes("AI") });
+    if (a.type === "site_visit" && a.contact_id) {
+      if (!visitLeads.has(r.id)) visitLeads.set(r.id, new Set());
+      visitLeads.get(r.id)!.add(a.contact_id);
+    }
+  }
+  for (const [repId, leads] of visitLeads) {
+    const r = map.get(repId); if (r) r.visitsFixed = leads.size;
   }
   for (const v of visits.data ?? []) {
     const r = rep(v.salesperson_id); if (!r) continue;
@@ -216,11 +257,22 @@ export async function buildCompany(
 
   const pulses = [...map.values()].sort((a, b) => (b.calls + b.voiceNotes.length) - (a.calls + a.voiceNotes.length));
 
-  // One narrative per rep. This goes through the shared provider chain rather
-  // than straight to Groq: this report now runs unattended every evening for
-  // every company, and Groq's free daily token budget is shared with sixteen
-  // other functions. A digest that silently stops arriving in week three is
-  // worse than one that was never promised.
+  // What the AI did runs on arithmetic, not on the model: a count of leads is
+  // something we KNOW, and a founder should never be told a number a language
+  // model estimated for them.
+  for (const p of pulses) p.aiUpdates = aiUpdateLines(p);
+
+  // The win and the risk, one sentence each. This goes through the shared
+  // provider chain rather than straight to Groq: this report now runs
+  // unattended every evening for every company, and Groq's free daily token
+  // budget is shared with sixteen other functions. A digest that silently
+  // stops arriving in week three is worse than one that was never promised.
+  //
+  // Two named fields, not a free paragraph. Asked for a "narrative" the model
+  // wrote a tidy essay that re-listed the leads and the numbers printed right
+  // above it — and a founder reading the same four names three times stops
+  // reading. A win and a risk are the two things they cannot get from the
+  // figures, and naming them is what stops the model padding.
   await Promise.all(pulses.map(async (p) => {
     const active = p.calls || p.voiceNotes.length || p.moves.length || p.siteVisits.length;
     if (!active) { p.narrative = "No activity today — check in with them."; return; }
@@ -237,20 +289,30 @@ export async function buildCompany(
       const { text } = await chatJson(
         "You brief a real-estate company FOUNDER on ONE telecaller's day. " +
           "This is forwarded as-is on WhatsApp, so every line has to earn its place.\n" +
-          "Reply as JSON: {\"narrative\": \"...\"} — 2-3 short sentences, nothing else.\n" +
-          "Simple English with the odd everyday Hindi word is fine; no formal Hindi, " +
-          "no markdown, no preamble, no sign-off.\n" +
-          "NEVER repeat the call/connected/talk-time numbers, and never re-list the " +
-          "next steps or lead names — all of that is already printed directly around " +
-          "your text, and repeating it is the first thing the owner deletes. Skip " +
-          "anything with no real content. Do not describe the same lead move twice.\n" +
-          "Spend the words on what a founder cannot see from the numbers: which deals " +
-          "actually moved and why, what is at risk, and the one thing that needs the " +
-          "founder's attention.",
+          "Reply as JSON: {\"win\": \"...\", \"risk\": \"...\"} and nothing else.\n" +
+          "win  = the single best thing that happened today, ONE sentence, naming the " +
+          "customer and what they committed to.\n" +
+          "risk = the one thing that goes wrong if nobody acts, ONE sentence. Use \"\" " +
+          "when there is genuinely nothing at risk — an invented risk gets the real " +
+          "ones ignored.\n" +
+          "Simple English. No markdown, no preamble, no sign-off, no formal Hindi.\n" +
+          "NEVER repeat the call/connected/talk-time numbers and never list the next " +
+          "steps — they are printed directly around your text and a founder reading " +
+          "the same thing twice stops reading.\n" +
+          "This is a founder, not a supervisor: no call logs. Never write \"call did " +
+          "not connect\", \"attempt 1\", \"marked cold\", \"stage changed\" or how many " +
+          "seconds a call lasted. Say what it MEANS for the deal.",
         JSON.stringify(facts),
         { temperature: 0.4 },
       );
-      const n = String(JSON.parse(text)?.narrative ?? "").trim();
+      const j = JSON.parse(text) ?? {};
+      const win = String(j.win ?? "").trim();
+      const risk = String(j.risk ?? "").trim();
+      if (win) p.win = win;
+      if (risk) p.risk = risk;
+      // The Pulse page has shown `narrative` since day one and is not part of
+      // this change, so it keeps getting one — built from the same two lines.
+      const n = [win, risk].filter(Boolean).join(" ");
       if (n) p.narrative = n;
     } catch (_) {
       // A missing narrative costs a nice-to-have line. Losing the whole report
@@ -268,7 +330,26 @@ export async function buildCompany(
   return { date, totals, reps: pulses };
 }
 
-/** ONE rep's day, as sent. */
+/** Connected out of dialled, as a founder would say it: "7 (88%)". */
+function connectedLine(calls: number, connected: number): string {
+  const pct = calls > 0 ? Math.round((connected / calls) * 100) : 0;
+  return `${connected}${calls > 0 ? ` (${pct}%)` : ""}`;
+}
+
+/**
+ * ONE rep's day, as the founder reads it.
+ *
+ * Wins → risks → priorities → metrics, and nothing else. What used to be here
+ * was the CRM's own diary written out longhand: every voice-note summary, every
+ * "Attempt 1 — didn't connect", every "Marked cold", the same lead's callback
+ * printed twice a minute apart, "a 42 second call is on the log". All of it
+ * true, none of it a decision — and the owner has to scroll past forty lines of
+ * it to find the one customer who agreed to visit the site.
+ *
+ * That detail is not deleted, it is just not HERE. It belongs on the Pulse page
+ * and in the rep's own screens, where someone is working the leads. A founder
+ * reads this on a phone between two other things.
+ */
 export function repText(r: RepPulse, date: string, companyName?: string | null): string {
   const L: string[] = [`📊 ${r.name} | Daily Pulse | ${prettyDate(date)}`];
   if (companyName) L.push(companyName);
@@ -280,32 +361,25 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
     return L.join("\n");
   }
 
-  L.push("", `Today: ${r.calls} calls | ${r.connected} connected | ${fmtDur(r.talkSeconds)} talk` +
-    (r.hotLeads ? ` | 🔥 ${r.hotLeads} hot` : ""));
+  L.push("", "🟢 Performance");
+  L.push(`• Calls: ${r.calls}`);
+  L.push(`• Connected: ${connectedLine(r.calls, r.connected)}`);
+  if (r.hotLeads) L.push(`• Hot leads: ${r.hotLeads}`);
+  if (r.visitsFixed) L.push(`• Site visits fixed: ${r.visitsFixed}`);
 
-  if (r.narrative) L.push("", r.narrative);
+  if (r.win) L.push("", "🎯 Biggest win", `✅ ${r.win}`);
+  if (r.risk) L.push("", "⚠️ Risk", `🔸 ${r.risk}`);
 
-  const bits: string[] = [];
-  if (r.topLeads.length) bits.push(`Top calls: ${r.topLeads.join(", ")}`);
-  if (r.siteVisits.length) bits.push(`📍 Site visit: ${r.siteVisits.join(", ")}`);
-  if (r.noConnect.length) bits.push(`No connect: ${r.noConnect.join(", ")}`);
-  if (bits.length) L.push("", ...bits);
-
-  const notes = realNotes(r);
-  if (notes.length) {
-    L.push("", "🎤 What they heard:");
-    notes.slice(0, 4).forEach((v) => L.push(`• ${v.lead}: ${v.summary}`));
-  }
-
-  const moves = newsworthyMoves(r);
-  if (moves.length) {
-    L.push("", "🔄 Lead moves:");
-    moves.slice(0, 5).forEach((m) => L.push(`• ${m.lead}: ${m.detail}${m.byAi ? " (AI)" : ""}`));
-  }
-
+  // Tomorrow morning's first calls, with the time — the half of the report a
+  // founder can still act on. The day's numbers are already history by 7pm.
   if (r.nextSteps.length) {
-    L.push("", "⏰ Next steps:");
-    r.nextSteps.forEach((s) => L.push(`• ${s.lead} — ${s.when}${s.note ? ` · ${s.note}` : ""}`));
+    L.push("", "🎯 Priority next");
+    r.nextSteps.slice(0, 4).forEach((s) => L.push(`• ${s.lead} — ${s.when}`));
+  }
+
+  if (r.aiUpdates.length) {
+    L.push("", "🤖 AI update");
+    r.aiUpdates.forEach((u) => L.push(`• ${u}`));
   }
 
   L.push("", "— via Call Pro AI");
@@ -323,23 +397,25 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
  */
 export function pulseText(p: CompanyPulse, companyName?: string | null): string {
   const L: string[] = [`📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse`, prettyDate(p.date)];
-  L.push("", `Team: ${p.totals.calls} calls | ${p.totals.connected} connected | ` +
-    `${fmtDur(p.totals.talkSeconds)} talk | ${p.totals.visits} site visits`);
+  L.push("", `Team: ${p.totals.calls} calls | ${connectedLine(p.totals.calls, p.totals.connected)} connected | ` +
+    `${p.totals.visits} site visit${p.totals.visits === 1 ? "" : "s"}`);
 
   const worked = p.reps.filter((r) => r.calls || r.voiceNotes.length || r.moves.length || r.siteVisits.length);
   const idle = p.reps.filter((r) => !worked.includes(r));
 
+  // The same shape as the single-rep message, tightened to four lines a rep.
+  // Five reps' worth of voice-note summaries, lead-move logs and no-connect
+  // lists was a message that had to be split across three WhatsApps before the
+  // founder had read a single decision.
   for (const r of worked) {
     L.push("", "━━━━━━━━━━━━━━━", `👤 ${r.name}`);
-    L.push(`${r.calls} calls | ${r.connected} connected | ${fmtDur(r.talkSeconds)} talk` +
-      (r.hotLeads ? ` | 🔥 ${r.hotLeads} hot` : ""));
-    if (r.narrative) L.push(r.narrative);
-    if (r.topLeads.length) L.push(`Top calls: ${r.topLeads.join(", ")}`);
-    realNotes(r).slice(0, 3).forEach((v) => L.push(`🎤 ${v.lead}: ${v.summary}`));
-    newsworthyMoves(r).slice(0, 4).forEach((m) => L.push(`🔄 ${m.lead}: ${m.detail}${m.byAi ? " (AI)" : ""}`));
-    if (r.siteVisits.length) L.push(`📍 Site visit: ${r.siteVisits.join(", ")}`);
-    if (r.noConnect.length) L.push(`No connect: ${r.noConnect.slice(0, 5).join(", ")}`);
-    r.nextSteps.slice(0, 3).forEach((s) => L.push(`⏰ ${s.lead} — ${s.when}${s.note ? ` · ${s.note}` : ""}`));
+    L.push(`${r.calls} calls | ${connectedLine(r.calls, r.connected)} connected` +
+      (r.hotLeads ? ` | 🔥 ${r.hotLeads} hot` : "") +
+      (r.visitsFixed ? ` | 📍 ${r.visitsFixed} visit${r.visitsFixed > 1 ? "s" : ""} fixed` : ""));
+    if (r.win) L.push(`✅ ${r.win}`);
+    if (r.risk) L.push(`🔸 ${r.risk}`);
+    r.nextSteps.slice(0, 2).forEach((s) => L.push(`🎯 Next: ${s.lead} — ${s.when}`));
+    r.aiUpdates.forEach((u) => L.push(`🤖 ${u}`));
   }
 
   if (idle.length) {
