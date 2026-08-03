@@ -13,6 +13,7 @@ import com.salesautocall.app.data.Company
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.ContactImport
 import com.salesautocall.app.data.ContentAsset
+import com.salesautocall.app.data.DayReview
 import com.salesautocall.app.data.FollowUp
 import com.salesautocall.app.data.LeadProjectInterest
 import com.salesautocall.app.data.LeaderboardRow
@@ -176,6 +177,10 @@ data class AppState(
     val assistantOn: Boolean = true,
     /** The one question the assistant is asking right now (null = silent). */
     val assistantAsk: AssistantAsk? = null,
+    /** The coached half of the 7pm card — score, wins, the habit to fix,
+     *  tomorrow's first calls. Null until it lands; the card works without it. */
+    val dayReview: DayReview? = null,
+    val dayReviewLoading: Boolean = false,
     // In-app update: set when a newer build is published; drives the update prompt.
     val update: AppUpdater.Release? = null,
     val checkingUpdate: Boolean = false,
@@ -2405,7 +2410,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         // After 7pm the calling day is effectively over, so the review comes
         // first — a callback we ask about at 8pm is one the rep can't act on.
-        val ask = (if (zone.hour >= 19) dayReviewAsk(asked, now) else null)
+        val ask = (if (zone.hour >= AppPrefs.getDayReviewHour(ctx)) dayReviewAsk(asked, now) else null)
             ?: (if (overCap) null else visitCheckAsk(asked, now))
             ?: (if (overCap) null else callbackCheckAsk(asked, now))
         if (ask == null) return
@@ -2414,6 +2419,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         AppPrefs.bumpPromptCount(ctx, today)
         AppPrefs.markAsked(ctx, today, ask.key)
         set { it.copy(assistantAsk = ask.copy(shownAt = now)) }
+
+        // The card opens on the counters the phone already has, and the coached
+        // half fills in behind it. Waiting on the network before showing
+        // anything would make the one prompt of the day feel broken on a bad
+        // connection — and if the fetch never lands, the card is still the day
+        // review it has always been.
+        if (ask.kind == "day_review") loadDayReview()
+    }
+
+    /** Fetch (or re-fetch) the coached half of the 7pm card. Cached server-side
+     *  per rep per date, so this is cheap on the second and third open. */
+    fun loadDayReview() {
+        if (_state.value.dayReviewLoading) return
+        set { it.copy(dayReviewLoading = true) }
+        viewModelScope.launch {
+            val r = runCatching { Repository.dayReview() }.getOrNull()
+            set { it.copy(dayReview = r ?: it.dayReview, dayReviewLoading = false) }
+        }
     }
 
     /** The oldest site visit whose day has gone by with nothing to show for it. */

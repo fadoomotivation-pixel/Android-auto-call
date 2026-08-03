@@ -165,6 +165,40 @@ data class CoachPanel(val coaching: CoachCallFeedback?, val brief: CoachBrief?, 
 /** One "Aaj ke 5" pick — the AI's next-best call with a ready-to-speak opener. */
 data class FocusPick(val contactId: String, val reason: String, val opener: String)
 
+/**
+ * The 7pm day review, built by rep-coach and cached there for the day.
+ *
+ * Every count is counted server-side, never estimated — a rep will argue with a
+ * score, and they have to be able to win that argument by pointing at their own
+ * call list. [wins] and [improve] are the only parts the model writes.
+ */
+data class DayReview(
+    /** 0-10, one decimal. Null when there were no calls to score. */
+    val score: Double?,
+    val calls: Int,
+    val connected: Int,
+    /** Calls long enough to have been a real conversation, not a brush-off. */
+    val conversations: Int,
+    val visitsFixed: Int,
+    val bookings: Int,
+    val wins: List<String>,
+    /** The habit that repeated today, and the exact words to use instead. Null
+     *  when the day showed no real repeated weakness — never invented. */
+    val improve: DayReviewImprove?,
+    /** Tomorrow's first calls, most urgent first. */
+    val priorities: List<DayReviewPriority>,
+    /** The day's highest- and lowest-rated call. Both null unless at least two
+     *  calls were rated and they actually differ — with one rated call, the
+     *  "worst call of the day" is also the best one. */
+    val bestCall: DayReviewCall? = null,
+    val worstCall: DayReviewCall? = null,
+)
+data class DayReviewImprove(val pattern: String, val say: String)
+data class DayReviewPriority(val lead: String, val why: String)
+/** One end of the day's call range: who it was with, its honest 1-5 rating, and
+ *  the line the coach already wrote about it. */
+data class DayReviewCall(val lead: String?, val rating: Int, val why: String?)
+
 /** A single rating row from coach_feedback — used to compute the Home calling score. */
 @Serializable
 data class RatingRow(val rating: Int? = null)

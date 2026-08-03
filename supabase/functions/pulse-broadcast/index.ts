@@ -16,7 +16,7 @@
 // not know, or need to know, which WhatsApp pipe carried it.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { buildCompany, istDate, istHour, pulseText } from "../_shared/pulse.ts";
+import { buildCompany, istDate, istHour, PULSE_FOOTER, pulseText, repText } from "../_shared/pulse.ts";
 import { notifyFounder } from "../_shared/notify.ts";
 
 const cors = {
@@ -35,6 +35,9 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 type Sub = {
   id: string; company_id: string; label: string; phone: string;
   send_hour_ist: number; template_name: string | null;
+  /** Null = the founder, who gets the whole team. Set = one telecaller, who
+   *  gets their own day and nobody else's numbers. */
+  salesperson_id: string | null;
 };
 
 async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
@@ -42,10 +45,28 @@ async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
   const companyName = company?.name ?? null;
 
   const pulse = await buildCompany(admin, sub.company_id, date);
+
+  // A telecaller recipient gets repText for their own row — the same wording
+  // the Pulse page's per-rep WhatsApp button sends, so a rep who has been
+  // forwarded their day by the manager and a rep who subscribed to it get the
+  // identical message. A rep whose row is missing (newly added, or not a
+  // salesperson) is not silently sent the whole team's numbers.
+  if (sub.salesperson_id) {
+    const mine = pulse.reps.find((r) => r.id === sub.salesperson_id);
+    if (!mine) return { ok: false, error: "No report for this telecaller today." };
+    return await notifyFounder(admin, {
+      companyId: sub.company_id,
+      to: sub.phone,
+      body: repText(mine, pulse.date, companyName),
+      kind: "pulse",
+      subscriberId: sub.id,
+    });
+  }
+
   // Nothing happened all day: say that in one line rather than sending an
   // elaborate report full of zeroes, which reads like the CRM is broken.
   const text = pulse.totals.calls === 0 && pulse.totals.notes === 0
-    ? `📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse\n${date}\n\nNo calls logged today.\n\n— via Call Pro AI`
+    ? `📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse\n${date}\n\nNo calls logged today.\n\n${PULSE_FOOTER}`
     : pulseText(pulse, companyName);
 
   return await notifyFounder(admin, {
@@ -103,7 +124,7 @@ Deno.serve(async (req) => {
     const hour = typeof body?.hour === "number" ? body.hour : istHour();
     const date = typeof body?.date === "string" ? body.date : istDate(0);
     const { data: subs } = await admin.from("pulse_subscribers")
-      .select("id, company_id, label, phone, send_hour_ist, template_name")
+      .select("id, company_id, label, phone, send_hour_ist, template_name, salesperson_id")
       .eq("active", true).eq("send_hour_ist", hour);
 
     let sent = 0, failed = 0, queued = 0;
@@ -139,7 +160,7 @@ Deno.serve(async (req) => {
   if (me?.role !== "admin" && !isSuper) return json({ ok: false, error: "Admins only" }, 403);
 
   const { data: sub } = await admin.from("pulse_subscribers")
-    .select("id, company_id, label, phone, send_hour_ist, template_name")
+    .select("id, company_id, label, phone, send_hour_ist, template_name, salesperson_id")
     .eq("id", body?.subscriber_id ?? "").maybeSingle();
   if (!sub) return json({ ok: false, error: "No such recipient." }, 404);
   // A company admin can only test their own company's recipient. Without this,

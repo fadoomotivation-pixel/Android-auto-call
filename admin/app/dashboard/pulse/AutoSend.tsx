@@ -23,6 +23,9 @@ type Sub = {
   label: string;
   phone: string;
   send_hour_ist: number;
+  /** Null = the founder, who gets the whole team's roll-up. Set = one
+   *  telecaller, who gets their own day and nobody else's numbers. */
+  salesperson_id: string | null;
   active: boolean;
   template_name: string | null;
   last_sent_at: string | null;
@@ -79,15 +82,22 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState("");
   const [label, setLabel] = useState("Founder");
+  // "" = the founder (whole team). Otherwise a telecaller's profile id.
+  const [who, setWho] = useState("");
+  const [reps, setReps] = useState<{ id: string; full_name: string | null }[]>([]);
   const [hour, setHour] = useState(19);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("pulse_subscribers")
-      .select("*").eq("company_id", companyId).order("created_at");
+    const [{ data }, { data: rs }] = await Promise.all([
+      supabase.from("pulse_subscribers").select("*").eq("company_id", companyId).order("created_at"),
+      supabase.from("profiles").select("id, full_name")
+        .eq("company_id", companyId).eq("role", "salesperson").order("full_name"),
+    ]);
     setSubs((data ?? []) as Sub[]);
+    setReps((rs ?? []) as { id: string; full_name: string | null }[]);
   }, [supabase, companyId]);
 
   useEffect(() => { void load(); }, [load]);
@@ -97,12 +107,19 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
     if (p.length < 11) { setMsg("Enter a WhatsApp number with country code — e.g. 919876543210."); return; }
     setBusy(true); setMsg(null);
     // Same number twice is an update, not a second daily message to one phone.
+    const repName = reps.find((r) => r.id === who)?.full_name ?? "Telecaller";
     const { error } = await supabase.from("pulse_subscribers")
-      .upsert({ company_id: companyId, phone: p, label: label.trim() || "Founder", send_hour_ist: hour, active: true },
-        { onConflict: "company_id,phone" });
+      .upsert({
+        company_id: companyId, phone: p,
+        // A rep row labels itself, because "Founder" sitting next to a
+        // telecaller's number is how the wrong person gets the team's figures.
+        label: who ? repName : (label.trim() || "Founder"),
+        salesperson_id: who || null,
+        send_hour_ist: hour, active: true,
+      }, { onConflict: "company_id,phone,salesperson_id" });
     setBusy(false);
     if (error) { setMsg(error.message); return; }
-    setPhone(""); setOpen(false);
+    setPhone(""); setWho(""); setOpen(false);
     void load();
   }
 
@@ -143,7 +160,7 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
         <strong style={{ color: "#fff", fontSize: 14 }}>💬 Send this to WhatsApp automatically</strong>
         <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
           {subs.length === 0
-            ? `Add the founder's number — this report goes out on its own, every evening.`
+            ? `Add a number — the founder gets the whole team, a telecaller gets only their own day. Goes out on its own, every evening.`
             : `${subs.filter((s) => s.active).length} number${subs.filter((s) => s.active).length === 1 ? "" : "s"} getting ${companyName ? `${companyName}'s` : "this"} report daily.`}
         </span>
         <button onClick={() => setOpen((o) => !o)}
@@ -154,7 +171,20 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
 
       {open && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
-          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Founder" style={{ ...box, width: 110 }} />
+          {/* WHO first, because it changes what the report is. Founder = the
+              whole team's roll-up; a telecaller = that one person's own day and
+              nobody else's numbers. Without this there was literally nowhere to
+              type a rep's number, so the only way a rep saw their own report
+              was a manager forwarding it by hand. */}
+          <select value={who} onChange={(e) => setWho(e.target.value)} style={{ ...box, width: 190 }}>
+            <option value="">👑 Founder — whole team</option>
+            {reps.map((r) => (
+              <option key={r.id} value={r.id}>👤 {r.full_name || "Telecaller"} — own report</option>
+            ))}
+          </select>
+          {!who && (
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Founder" style={{ ...box, width: 110 }} />
+          )}
           <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="9876543210" inputMode="tel" style={{ ...box, width: 170 }} />
           <select value={hour} onChange={(e) => setHour(Number(e.target.value))} style={box}>
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
@@ -169,7 +199,10 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
       {subs.map((s) => (
         <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
           <span style={{ fontSize: 13, color: "var(--text)" }}>
-            <strong>{s.label}</strong> · {s.phone}
+            <strong>{s.salesperson_id ? "👤" : "👑"} {s.label}</strong> · {s.phone}
+            <span style={{ color: "var(--muted)", fontSize: 12 }}>
+              {" "}· {s.salesperson_id ? "own report" : "whole team"}
+            </span>
           </span>
           <select value={s.send_hour_ist} onChange={(e) => patch(s.id, { send_hour_ist: Number(e.target.value) })} style={box}>
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
