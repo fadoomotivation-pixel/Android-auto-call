@@ -974,6 +974,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 postCallName = postName,
                 postCallCampaignId = postCampaignId,
                 postCallConnected = wasConnected,
+                // An incoming call can land while the assistant has a question
+                // open — the rep answers the phone, and the disposition sheet
+                // then stacks on a prompt they never saw the end of. A real call
+                // wins; the question comes back tomorrow.
+                assistantAsk = null,
             )
         }
         // Refresh the Calls list so the just-finished call shows up. The recording
