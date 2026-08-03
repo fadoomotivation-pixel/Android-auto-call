@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
@@ -1177,6 +1179,99 @@ private fun DeckStat(emoji: String, value: Int, label: String, highlight: Boolea
     }
 }
 
+/**
+ * A heading inside the Follow-up tab, carrying its own count and its own
+ * one-line explanation of what is in it.
+ *
+ * The explanation is not decoration. Reps said the buckets "sometimes don't
+ * make sense", and the answer to that is never a cleverer label — it is the
+ * rule, written down, next to the thing it governs.
+ *
+ * Pass [onToggle] and the section becomes a shut drawer with a count on it:
+ * still countable, still checkable, out of the way of the calls that are due.
+ */
+@Composable
+private fun FollowUpSection(
+    title: String,
+    count: Int,
+    color: Color,
+    explain: String,
+    open: Boolean = true,
+    onToggle: (() -> Unit)? = null,
+) {
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (onToggle != null) Modifier.background(color.copy(alpha = 0.07f)).clickable { onToggle() } else Modifier)
+            .padding(horizontal = if (onToggle != null) 12.dp else 0.dp, vertical = if (onToggle != null) 10.dp else 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "$title ($count)",
+                style = MaterialTheme.typography.titleSmall,
+                color = color, fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            if (onToggle != null) {
+                Icon(
+                    if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (open) "Hide" else "Show",
+                    tint = color, modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            explain,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** The older promised / didn't-pick-up split, now one level down inside
+ *  "Call now" — quieter than the section heading above it. */
+@Composable
+private fun FollowUpSubHead(text: String, color: Color) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = color, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
+/**
+ * Nothing is due. Said plainly, because a rep who has just worked through her
+ * whole list deserves to be told she has — and because the old tab looked
+ * exactly the same finished as unfinished, which is how "maine sab kar liye"
+ * and "107" ended up on the same screen.
+ */
+@Composable
+private fun FollowUpAllClear(laterCount: Int) {
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Green.copy(alpha = 0.10f))
+            .padding(horizontal = 16.dp, vertical = 18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("🎉", fontSize = 26.sp)
+        Spacer(Modifier.height(6.dp))
+        Text("All follow-ups done", style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold, color = Green)
+        Spacer(Modifier.height(3.dp))
+        Text(
+            if (laterCount > 0)
+                "No call is due right now. $laterCount are booked for later — they show up here on their own, at their time."
+            else "No call is due right now. Nothing is booked for later either.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
@@ -1202,6 +1297,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var reviveOpen by remember { mutableStateOf(false) } // RAG v13 — Second Chance sheet
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
+    // Follow-up's two "nothing to do" sections start shut, so the tab opens on
+    // the calls that are actually due and nothing else. Shut is the useful
+    // state; they are there to be checked, not scrolled past.
+    var fuDoneOpen by remember { mutableStateOf(false) }
+    var fuLaterOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(app.requestedContactId, app.leads) {
         val reqId = app.requestedContactId
@@ -1308,6 +1408,31 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // count simply did not add up against the others.
     fun needsAnotherCall(c: Contact): Boolean =
         (hasFollowUp(c) || c.status in retrySet) && c.status !in closedSet && c.status != "booked"
+
+    // ── Follow-up holds three different jobs under one name ──
+    //
+    // A rep told us she had finished every follow-up and the tab still said
+    // 107. She was right and so was the tab: finishing a callback books the
+    // NEXT one, so the lead is instantly back in this list with a new time on
+    // it, looking exactly like a callback she has never touched. Add the ones
+    // booked for next week and the number stops meaning anything — it never
+    // goes down no matter how much work she does, and she cannot tell a call
+    // she owes right now from one she already made.
+    //
+    // So the tab is cut the way the day actually works, using the ONE clock
+    // read the dedicated Follow Ups screen already uses (due_at against now):
+    //
+    //   Call now      — its time has come. This is the work.
+    //   Done today    — she wrote down what happened today; next call is later.
+    //   Booked later  — a plan, not a backlog. Arrives on its own, on the day.
+    //
+    // Due ALWAYS wins over done: a lead she handled at 10am with a callback at
+    // 4pm is done until 4pm and then it is work again. Missing a due time
+    // means "no time was ever booked" (a plain no-answer) — that is call-now,
+    // never later. The three are mutually exclusive and add up to the tab.
+    fun isDueNow(c: Contact): Boolean = (fuOf(c)?.let { instantMillis(it.dueAt) } ?: 0L) <= nowMs
+    fun doneToday(c: Contact): Boolean = !isDueNow(c) && isToday(c.handledAt)
+
     val base = when {
         stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
@@ -1352,6 +1477,18 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val filteredIds = filtered.mapNotNull { it.id }.toSet()
     val allSelected = filteredIds.isNotEmpty() && selectedIds.containsAll(filteredIds)
 
+    // The split only applies to the plain Follow-up tab. A rep who has reached
+    // for a stage, a temperature, a search or a sort is hunting for a specific
+    // lead, and sections would hide it behind a shut header.
+    val plainFollowUp = bucket == "followup" && stageFilter == null && quick == null &&
+        tempFilter == null && query.isBlank() && sortBy == "default"
+    val fuCallNow = if (plainFollowUp) filtered.filter { isDueNow(it) } else emptyList()
+    // Newest first: what she just finished sits at the top, which is where she
+    // looks to answer "did I already do this one?".
+    val fuDone = if (!plainFollowUp) emptyList()
+        else filtered.filter { doneToday(it) }.sortedByDescending { it.handledAt ?: "" }
+    val fuLater = if (plainFollowUp) filtered.filter { !isDueNow(it) && !doneToday(it) } else emptyList()
+
     fun exitSelect() { selectMode = false; selectedIds = emptySet() }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -1373,7 +1510,13 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // the search box or every tap of a filter chip — which is
                     // what it did, on the main thread, before this remember.
                     val deck = remember(app.leads, app.followUpList, nowMs / 60_000) {
-                        val dueNow = app.followUpList.count { (instantMillis(it.dueAt) ?: Long.MAX_VALUE) <= nowMs }
+                        // Exactly the Follow-up tab's "Call now" rule, because
+                        // that is where this counter now sends the rep. It used
+                        // to count rows in the follow_ups table instead, which
+                        // included callbacks on closed and booked leads — the
+                        // same "summary disagrees with the tab it links to"
+                        // problem the New count below already had to be fixed for.
+                        val dueNow = app.leads.count { needsAnotherCall(it) && isDueNow(it) }
                         val hotCount = app.leads.count { it.temperature == "hot" && it.status !in DEAD_OR_BOOKED }
                         val pipelineValue = app.leads
                             .filter { it.status !in DEAD_STATUSES }
@@ -1402,7 +1545,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
                         onScore = { vm.scoreLeads() },
                         onSelect = { selectMode = true },
-                        onDueNow = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },
+                        // "Due now" lands on Follow-up, which opens on Call now
+                        // — the list this number counts. It used to drop the rep
+                        // into New, where none of these leads live any more.
+                        onDueNow = { bucket = "followup"; stageFilter = null; quick = null; tempFilter = null },
                         onHot = { tempFilter = if (tempFilter == "hot") null else "hot" },
                         onNew = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },
                         onRevive = { reviveOpen = true; vm.loadSecondChance() },
@@ -1461,7 +1607,13 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         "all" to Triple("All", app.leads.size, MaterialTheme.colorScheme.primary),
                         "new" to Triple("New", app.leads.count { it.status in newSet && !hasFollowUp(it) && !inToday(it) }, MaterialTheme.colorScheme.primary),
                         "today" to Triple("Today", app.leads.count { inToday(it) }, Cyan),
-                        "followup" to Triple("Follow-up", app.leads.count { needsAnotherCall(it) }, Amber),
+                        // Calls that are DUE, not rows in the tab. A count that
+                        // includes next week's plan and this morning's finished
+                        // work cannot go down however hard a rep works, and a
+                        // number that never moves is a number nobody reads. The
+                        // other two groups are counted on their own headers
+                        // inside the tab, so the total is still in plain sight.
+                        "followup" to Triple("Follow-up", app.leads.count { needsAnotherCall(it) && isDueNow(it) }, Amber),
                         "working" to Triple("Working", app.leads.count { it.status in workingSet && !needsAnotherCall(it) }, Indigo),
                         "pipeline" to Triple("Pipeline", app.leads.count { it.status in pipelineSet }, Purple),
                         "booked" to Triple("Booked", app.leads.count { it.status == "booked" }, Green),
@@ -1486,7 +1638,22 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // count kept looking too big to a rep reading it as "fresh".
                     "new" -> "Never called. The moment you dial one, it moves to Follow-up."
                     "today" -> "Today's work: callbacks due today, site visits today, and leads you already handled today. These also stay in their own tab."
-                    "followup" -> "Everyone to call again — callbacks you promised, plus anyone who didn't pick up. Overdue at the top, then today, then later."
+                    // Says the split out loud, with the numbers. A rep who has
+                    // finished her calls must be able to read this one line and
+                    // see that she has finished them. When a filter or a search
+                    // is on the sections aren't drawn, so their counts would be
+                    // lying and the plain sentence is used instead.
+                    "followup" -> if (!plainFollowUp)
+                        "Everyone to call again — callbacks you promised, plus anyone who didn't pick up. Soonest first."
+                    else buildString {
+                        append(
+                            if (fuCallNow.isEmpty()) "No call is due right now."
+                            else "${fuCallNow.size} to call now — callbacks you promised, plus anyone who didn't pick up. Oldest first."
+                        )
+                        if (fuDone.isNotEmpty()) append(" ${fuDone.size} done today.")
+                        if (fuLater.isNotEmpty()) append(" ${fuLater.size} booked for later.")
+                        if (fuDone.isNotEmpty() || fuLater.isNotEmpty()) append(" Tap those below to see them.")
+                    }
                     "working" -> "You talked to them, deal is on, nothing booked to call back."
                     "pipeline" -> "Site visit, negotiating or token paid."
                     "booked" -> "Deal done."
@@ -1553,6 +1720,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             when {
                 app.leadsLoading && app.leads.isEmpty() ->
                     item { Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+                // An empty Follow-up tab is not "nothing matches your filter" —
+                // it is a rep who has no calls waiting, which is the best news
+                // the screen can give her. Say that instead of a shrug.
+                filtered.isEmpty() && plainFollowUp ->
+                    item(key = "fu_clear_all") { FollowUpAllClear(0) }
                 filtered.isEmpty() ->
                     item {
                         Column(
@@ -1616,36 +1788,58 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             onOpen = { c.id?.let { vm.openLeadDetail(it) } },
                         )
                     }
-                    // The two-section split moved from New to Follow-up, because
-                    // that is where the two kinds of work now live together. New
-                    // is one thing again (never called) and needs no headings;
-                    // Follow-up holds both a callback the rep PROMISED at a time
-                    // and a number that simply didn't pick up, and those are not
-                    // the same job. The promised ones go first — a person waiting
-                    // for a call at 4pm outranks a redial with no time on it.
-                    val plainFollowUp = bucket == "followup" && stageFilter == null && quick == null &&
-                        tempFilter == null && query.isBlank() && sortBy == "default"
-                    val promised = if (plainFollowUp) filtered.filter { hasFollowUp(it) } else emptyList()
-                    val redial = if (plainFollowUp) filtered.filterNot { hasFollowUp(it) } else emptyList()
-                    if (plainFollowUp && promised.isNotEmpty() && redial.isNotEmpty()) {
-                        item(key = "hdr_promised") {
-                            Text(
-                                "⏰ You promised to call back (${promised.size})",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Amber, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
+                    if (plainFollowUp) {
+                        // ── Call now ──
+                        if (fuCallNow.isEmpty()) {
+                            // She finished them. The screen has to SAY so —
+                            // that is the whole complaint. A tab that looks
+                            // identical whether you did the work or not is
+                            // what made a rep stop believing the number.
+                            item(key = "fu_clear") { FollowUpAllClear(fuLater.size) }
+                        } else {
+                            item(key = "hdr_callnow") {
+                                FollowUpSection(
+                                    "📞 Call now", fuCallNow.size, Red,
+                                    "Their time has come. Work top down — a lead leaves this list as soon as you write what happened.",
+                                )
+                            }
+                            // Inside the work, the older split still holds: a
+                            // person waiting for a call they were promised at
+                            // 4pm outranks a redial with no time on it. Only
+                            // worth saying when both kinds are actually here.
+                            val promised = fuCallNow.filter { hasFollowUp(it) }
+                            val redial = fuCallNow.filterNot { hasFollowUp(it) }
+                            if (promised.isNotEmpty() && redial.isNotEmpty()) {
+                                item(key = "hdr_promised") { FollowUpSubHead("⏰ You promised to call back (${promised.size})", Amber) }
+                                items(promised, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                                item(key = "hdr_redial") { FollowUpSubHead("🔁 Didn't pick up — try again (${redial.size})", MaterialTheme.colorScheme.primary) }
+                                items(redial, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                            } else {
+                                items(fuCallNow, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                            }
                         }
-                        items(promised, key = { it.id ?: it.phone }) { c -> leadCard(c) }
-                        item(key = "hdr_redial") {
-                            Text(
-                                "🔁 Didn't pick up — try again (${redial.size})",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 8.dp),
-                            )
+                        // ── Done today ──
+                        if (fuDone.isNotEmpty()) {
+                            item(key = "hdr_done") {
+                                FollowUpSection(
+                                    "✅ Done today", fuDone.size, Green,
+                                    "You called these today and wrote it down. Nothing to do — each one comes back on its own at its next time.",
+                                    open = fuDoneOpen, onToggle = { fuDoneOpen = !fuDoneOpen },
+                                )
+                            }
+                            if (fuDoneOpen) items(fuDone, key = { it.id ?: it.phone }) { c -> leadCard(c) }
                         }
-                        items(redial, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                        // ── Booked for later ──
+                        if (fuLater.isNotEmpty()) {
+                            item(key = "hdr_later") {
+                                FollowUpSection(
+                                    "📅 Booked for later", fuLater.size, MaterialTheme.colorScheme.primary,
+                                    "Nothing to do now. Each one moves up to Call now by itself, on its day and time.",
+                                    open = fuLaterOpen, onToggle = { fuLaterOpen = !fuLaterOpen },
+                                )
+                            }
+                            if (fuLaterOpen) items(fuLater, key = { it.id ?: it.phone }) { c -> leadCard(c) }
+                        }
                     } else {
                         items(filtered, key = { it.id ?: it.phone }) { c -> leadCard(c) }
                     }
@@ -1681,14 +1875,20 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     }
 
     // THE one action on this screen: power-dial whatever is in view.
-    if (!selectMode && filtered.isNotEmpty()) {
+    //
+    // On Follow-up that means the calls that are DUE — never the ones booked
+    // for next Tuesday or the ones already done today. "Call 107" on a tab
+    // where 24 are actually due would dial customers at the wrong time, and
+    // ring people the rep has already spoken to today.
+    val dialList = if (plainFollowUp) fuCallNow else filtered
+    if (!selectMode && dialList.isNotEmpty()) {
         androidx.compose.material3.ExtendedFloatingActionButton(
-            onClick = { vm.callList(filtered, "Leads") },
+            onClick = { vm.callList(dialList, "Leads") },
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
             icon = { Icon(Icons.Default.Call, contentDescription = null) },
-            text = { Text("Call ${filtered.size}", fontWeight = FontWeight.Bold) },
+            text = { Text("Call ${dialList.size}", fontWeight = FontWeight.Bold) },
         )
     }
     }
