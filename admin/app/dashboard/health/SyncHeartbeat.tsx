@@ -77,8 +77,9 @@ function ist(iso: string | null): string {
 export async function SyncHeartbeat() {
   const supabase = await createClient();
   const { data } = await supabase.from("v_device_sync_health")
-    .select("salesperson_id, full_name, company_name, last_run_at, last_ok_at, outcome, detail, " +
-            "native_seen, backfilled, app_version, device_model, state, trustworthy")
+    // Single literal — see the note in automations/page.tsx. A concatenated
+    // select silently loses its inferred row type.
+    .select("salesperson_id, full_name, company_name, last_run_at, last_ok_at, outcome, detail, native_seen, backfilled, app_version, device_model, state, trustworthy")
     .order("full_name");
   const rows = (data ?? []) as Row[];
   if (rows.length === 0) return null;

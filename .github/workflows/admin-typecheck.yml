@@ -1,0 +1,61 @@
+# Catch the admin build here, not on Vercel.
+#
+# Vercel was the only thing type-checking admin/, and it runs after merge — so
+# a type error reached main, the deploy went red, and the dashboard sat on the
+# previous build until somebody noticed. The error itself was a one-liner: a
+# `.select()` written as two concatenated strings, which silently defeats
+# supabase-js's type-level parse of the column list and degrades `data` to
+# GenericStringError[].
+#
+# `tsc --noEmit` against the project's OWN tsconfig is exactly the step
+# `next build` calls "Linting and checking validity of types". Running it on
+# the pull request means the same failure shows up before merge, in seconds,
+# instead of after.
+name: Admin typecheck
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths:
+      - "admin/**"
+      - ".github/workflows/admin-typecheck.yml"
+  pull_request:
+    paths:
+      - "admin/**"
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # No custom flags. The point is to run what the deploy runs — a check with
+      # its own settings can pass while the real build fails, which is how the
+      # duplicate-declaration outage got past me earlier today.
+      - name: tsc --noEmit
+        run: npx tsc --noEmit
+
+      # A concatenated select is legal TypeScript and usually still compiles;
+      # it only breaks when the result is cast to a row type. Catching the
+      # pattern itself is cheaper than catching its consequences.
+      - name: No concatenated .select() strings
+        run: |
+          hits=$(grep -rn 'select("[^"]*" *+' app lib --include=*.ts --include=*.tsx || true)
+          if [ -n "$hits" ]; then
+            echo "::error::A .select() built by string concatenation loses its inferred row type."
+            echo "$hits"
+            echo "::error::Write the column list as ONE string literal."
+            exit 1
+          fi

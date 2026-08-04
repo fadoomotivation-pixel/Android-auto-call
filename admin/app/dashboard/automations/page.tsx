@@ -106,8 +106,11 @@ export default async function AutomationsPage({
   // the reason, because "1 of 9 enrolled" is a fixable sentence and an empty
   // list is not.
   const repsQ = supabase.from("v_rep_review_recipients")
-    .select("salesperson_id, company_id, full_name, phone, company_name, has_phone, company_on, " +
-            "platform_on, enrolled, device_state, device_trustworthy")
+    // One string literal, never a concatenation: supabase-js infers the row
+    // type by parsing this select at the TYPE level, and a `+` defeats that
+    // parser silently — `data` degrades to GenericStringError[] and the cast
+    // below stops compiling. It cost a red Vercel build.
+    .select("salesperson_id, company_id, full_name, phone, company_name, has_phone, company_on, platform_on, enrolled, device_state, device_trustworthy")
     .order("full_name");
   if (scope) repsQ.eq("company_id", scope);
 
