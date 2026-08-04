@@ -533,7 +533,7 @@ export default function FacebookSetupPage() {
         <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 1: Setup Meta App</h3>
         <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>
           1. Go to developers.facebook.com and create an app (Type: Business).<br />
-          2. Add the "Webhooks" product and select "Page".<br />
+          2. Add the &ldquo;Webhooks&rdquo; product and select &ldquo;Page&rdquo;.<br />
           3. Subscribe to the <b style={{ color: "var(--text)" }}>leadgen</b> field.<br />
           4. Use the Webhook URL and Verify Token below.
         </p>
