@@ -1,16 +1,17 @@
-// The four things worth interrupting a founder for, and nothing else.
+// The three things worth interrupting a founder for, and nothing else.
 //
-// The Daily Pulse is a report. This is news: a booking at 3:40pm, or a customer
-// who walked the site this morning and still has not been rung back. Both are
-// worth less every hour they wait, and by 7pm they are one line among twenty.
+// The Daily Pulse is a report. This is news: a booking at 3:40pm, a token paid,
+// a visit put in the diary. All three are worth less every hour they wait, and
+// by 7pm they are one line among twenty.
 //
 // EVERYTHING about this function is built around not becoming spam, because
 // spam is the only way it can fail. A founder who gets pinged for every lead
 // movement mutes the number within a week — and then the one booking alert that
 // mattered arrives silently. So:
 //
-//   · Four kinds. Every "wouldn't it also be useful to know…" is a step towards
-//     the muted number, and the answer is the 7pm pulse, which already has it.
+//   · Three kinds — site visit fixed, booking, payment. Every "wouldn't it also
+//     be useful to know…" is a step towards the muted number, and the answer is
+//     the 7pm pulse, which already has it.
 //   · One alert per lead per kind, EVER, enforced by a unique index rather than
 //     by code that has to remember. The row is inserted before the send and the
 //     constraint decides: conflict means it already went, so nothing is sent. A
@@ -29,6 +30,7 @@ import { notifyFounder } from "../_shared/notify.ts";
 import { PULSE_FOOTER } from "../_shared/pulse.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
@@ -71,8 +73,8 @@ async function findAlerts(admin: SupabaseClient, companyId: string): Promise<Ale
   const [{ data: reps }, { data: rows }] = await Promise.all([
     admin.from("profiles").select("id, full_name").eq("company_id", companyId),
     admin.from("contacts")
-      .select("id, name, phone, status, token_amount, site_visit_at, site_visit_arrived_at, " +
-        "site_visit_verified, salesperson_id, updated_at, site_visit_project")
+      .select("id, name, phone, status, token_amount, site_visit_at, " +
+        "salesperson_id, updated_at, site_visit_project")
       .eq("company_id", companyId)
       .gte("updated_at", since)
       .limit(500),
@@ -102,16 +104,14 @@ async function findAlerts(admin: SupabaseClient, companyId: string): Promise<Ale
       });
       continue;
     }
-    // Came to the site, and nobody has confirmed what they thought. The single
-    // most expensive thing to leave sitting in a real-estate pipeline.
-    if (c.site_visit_arrived_at && c.site_visit_verified !== true) {
-      out.push({
-        kind: "site_visit_done", contactId: id,
-        text: `✅ SITE VISIT COMPLETED\n\n👤 Customer: ${lead}\n👩 Executive: ${who}${project}\n` +
-          `🎯 Feedback call within 24 hours — decision abhi pending hai.`,
-      });
-      continue;
-    }
+    // A customer who came to the site and has not been rung back used to alert
+    // here too. It was cut deliberately: the founder's list is Site Visit Fixed,
+    // Booking, Payment and the Daily Pulse, and nothing else. Missing feedback
+    // is a chase for whoever runs the floor, not news for the owner — it is on
+    // the Action Center as "Pending Site Visit Outcome", counted in the Pulse,
+    // and escalated to the rep by the assistant. Nothing was lost by removing
+    // the buzz; a fifth kind of alert is how the first four stop being read.
+
     // A visit on the books, in the future. Not "a visit exists" — a date that
     // has already gone by is not news, it is a chase.
     const visitAt = c.site_visit_at ? Date.parse(String(c.site_visit_at)) : NaN;
@@ -130,12 +130,70 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   const cronHeader = req.headers.get("x-cron-secret") ?? "";
-  const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-  if (!((CRON_SECRET && cronHeader === CRON_SECRET) || (!!bearer && bearer === SERVICE))) {
-    return json({ ok: false, error: "Unauthorized" }, 401);
-  }
+  const auth = req.headers.get("Authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "");
+  const isCron = (CRON_SECRET && cronHeader === CRON_SECRET) || (!!bearer && bearer === SERVICE);
 
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
+
+  // An admin pressing a button in the Automation Center is not the cron, and
+  // arrives with their own JWT. Both the preview and the "run it now" test need
+  // that to be a recognised caller — previously only the cron was, which made
+  // the test button in the UI a guaranteed 401.
+  const admin = createClient(SUPABASE_URL, SERVICE);
+  let isSuper = false;
+  let myCompany: string | null = null;
+  let isAdmin = false;
+  if (!isCron && bearer) {
+    const u = createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
+    const { data: ud } = await u.auth.getUser();
+    if (ud?.user) {
+      const [{ data: me }, { data: pa }] = await Promise.all([
+        admin.from("profiles").select("role, company_id").eq("id", ud.user.id).maybeSingle(),
+        admin.from("platform_admins").select("user_id").eq("user_id", ud.user.id).maybeSingle(),
+      ]);
+      isSuper = !!pa;
+      myCompany = (me?.company_id as string | null) ?? null;
+      isAdmin = me?.role === "admin" || isSuper;
+    }
+  }
+  if (!isCron && !isAdmin) return json({ ok: false, error: "Unauthorized" }, 401);
+
+  // ---- Preview: what WOULD be sent, from today's real leads ----
+  //
+  // Nothing is claimed and nothing is sent. That distinction is the whole
+  // reason this exists: the alert log is append-once by design, so the only way
+  // to see the text used to be to let it fire — which consumed the one alert
+  // that lead was ever going to get. Now the message can be read without
+  // spending it.
+  if (body.preview) {
+    const companyId = isSuper && typeof body.company_id === "string"
+      ? body.company_id
+      : String(myCompany ?? "");
+    if (!companyId) return json({ ok: false, error: "Pick a company first." }, 400);
+    if (!isSuper && companyId !== myCompany) return json({ ok: false, error: "Not your company." }, 403);
+
+    const found = await findAlerts(admin, companyId);
+    // Only the kind asked for, so the Site Visit row previews a site visit
+    // rather than whatever happened to move first today.
+    const want = typeof body.kind === "string" ? body.kind : null;
+    const mine = want ? found.filter((a) => a.kind === want) : found;
+    // Already-alerted leads are shown too — this is "what does this message
+    // look like", not "what is about to go out".
+    if (!mine.length) {
+      return json({
+        ok: true,
+        preview: null,
+        note: "No lead in the last 24 hours matches this alert, so there is nothing real to " +
+          "preview. The wording is above.",
+      });
+    }
+    const text = mine.length === 1
+      ? `${mine[0].text}\n\n${PULSE_FOOTER}`
+      : `🔔 ${mine.length} updates\n\n${mine.map((a) => a.text).join("\n\n━━━━━━━━\n\n")}\n\n${PULSE_FOOTER}`;
+    return json({ ok: true, preview: text, matched: mine.length });
+  }
+
   // Quiet hours are the default and the override is deliberate: "force" exists
   // so an admin can test this at 11pm without waiting until morning, which is
   // the same reason pulse-broadcast has a Send now.
@@ -144,9 +202,17 @@ Deno.serve(async (req) => {
     return json({ ok: true, skipped: "quiet hours", hour });
   }
 
-  const admin = createClient(SUPABASE_URL, SERVICE);
-  const { data: subs } = await admin.from("pulse_subscribers")
+  const subsQ = admin.from("pulse_subscribers")
     .select("id, company_id, phone").eq("active", true).eq("alerts_on", true);
+  // A human running the sweep runs it for one company. Only the cron sweeps the
+  // platform — otherwise one company's admin pressing a test button sends other
+  // tenants' bookings to other tenants' founders.
+  if (!isCron) {
+    const only = isSuper && typeof body.company_id === "string" ? body.company_id : myCompany;
+    if (!only) return json({ ok: false, error: "Pick a company first." }, 400);
+    subsQ.eq("company_id", only);
+  }
+  const { data: subs } = await subsQ;
 
   // Group recipients by company: the day's news is found ONCE per company, not
   // once per person on the list.

@@ -14,10 +14,11 @@
 //   status    — what the worker says about itself
 //   qr        — the current QR, while WhatsApp is offering one
 //   reconnect — force a fresh connection attempt
+//   route     — which pipe this company's notifications would leave by, probed
 //   drain     — cron only: retry everything the outbox is holding
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { BaileysProvider } from "../_shared/wa-provider.ts";
+import { BaileysProvider, resolveRoute } from "../_shared/wa-provider.ts";
 import { drainOutbox } from "../_shared/notify.ts";
 
 const cors = {
@@ -152,6 +153,61 @@ Deno.serve(async (req) => {
     }));
     await cacheStatus(admin, companyId, s);
     return json({ ok: true, ...s });
+  }
+
+  // ---- Which pipe would actually carry this company's notifications ----
+  //
+  // Answered by asking resolveRoute — the same ladder the sending code climbs —
+  // rather than by re-reading whatsapp_integrations here. A second copy of
+  // "own Baileys, then own Meta, then the platform's" is a copy that will
+  // disagree with the first one eventually, and the day it does, the Automation
+  // Center will confidently name the wrong number.
+  //
+  // Then it PROBES. Configured and connected are different states, and the
+  // difference is the single most common reason a founder's report does not
+  // arrive: the Baileys session is logged out and everything else looks fine.
+  if (action === "route") {
+    const r = await resolveRoute(admin, companyId);
+    if ("error" in r) return json({ ok: true, route: null, reason: r.error });
+
+    const p = r.provider;
+    let lenderName: string | null = null;
+    if (r.lenderCompanyId) {
+      const { data: c } = await admin.from("companies").select("name").eq("id", r.lenderCompanyId).maybeSingle();
+      lenderName = (c?.name as string | null) ?? null;
+    }
+
+    if (p.name === "baileys") {
+      const s = await (p as BaileysProvider).status().catch(() => ({
+        status: "disconnected", number: null, last_seen: null,
+        error: "Could not reach the worker. Check the URL and that the service is running.",
+      }));
+      if (r.lenderCompanyId) await cacheStatus(admin, r.lenderCompanyId, s);
+      else await cacheStatus(admin, companyId, s);
+      return json({
+        ok: true,
+        route: {
+          provider: "baileys", via: r.via, lender: lenderName,
+          connected: s.status === "connected",
+          number: s.number, last_seen: s.last_seen, error: s.error,
+        },
+      });
+    }
+
+    // Meta has no session to be up or down — having credentials is the only
+    // "connected" it has, and whether the token is still alive is discovered
+    // one message at a time. Saying so beats a green light that means nothing.
+    const ok = await p.isConnected();
+    return json({
+      ok: true,
+      route: {
+        provider: "meta", via: r.via, lender: lenderName,
+        connected: ok, number: null, last_seen: null,
+        error: ok ? null : "Credentials are missing or incomplete.",
+        note: "Meta is stateless: credentials exist, but whether the token is still valid is only " +
+          "known when a message is sent.",
+      },
+    });
   }
 
   return json({ ok: false, error: `Unknown action: ${action}` }, 400);

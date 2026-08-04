@@ -40,7 +40,17 @@ type Sub = {
   salesperson_id: string | null;
 };
 
-async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
+/**
+ * The exact words this recipient would receive, built from today's real data.
+ *
+ * Split out from the sending so that "show me the message" and "send the
+ * message" cannot drift apart. A preview assembled by a second code path is a
+ * preview of nothing — the moment the two disagree, the one people trust is
+ * the one that is wrong.
+ */
+async function buildText(
+  admin: SupabaseClient, sub: Sub, date: string,
+): Promise<{ text: string } | { error: string }> {
   const { data: company } = await admin.from("companies").select("name").eq("id", sub.company_id).maybeSingle();
   const companyName = company?.name ?? null;
 
@@ -53,26 +63,26 @@ async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
   // salesperson) is not silently sent the whole team's numbers.
   if (sub.salesperson_id) {
     const mine = pulse.reps.find((r) => r.id === sub.salesperson_id);
-    if (!mine) return { ok: false, error: "No report for this telecaller today." };
-    return await notifyFounder(admin, {
-      companyId: sub.company_id,
-      to: sub.phone,
-      body: repText(mine, pulse.date, companyName),
-      kind: "pulse",
-      subscriberId: sub.id,
-    });
+    if (!mine) return { error: "No report for this telecaller today." };
+    return { text: repText(mine, pulse.date, companyName) };
   }
 
   // Nothing happened all day: say that in one line rather than sending an
   // elaborate report full of zeroes, which reads like the CRM is broken.
-  const text = pulse.totals.calls === 0 && pulse.totals.notes === 0
-    ? `📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse\n${date}\n\nNo calls logged today.\n\n${PULSE_FOOTER}`
-    : pulseText(pulse, companyName);
+  return {
+    text: pulse.totals.calls === 0 && pulse.totals.notes === 0
+      ? `📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse\n${date}\n\nNo calls logged today.\n\n${PULSE_FOOTER}`
+      : pulseText(pulse, companyName),
+  };
+}
 
+async function deliver(admin: SupabaseClient, sub: Sub, date: string) {
+  const built = await buildText(admin, sub, date);
+  if ("error" in built) return { ok: false as const, error: built.error };
   return await notifyFounder(admin, {
     companyId: sub.company_id,
     to: sub.phone,
-    body: text,
+    body: built.text,
     kind: "pulse",
     subscriberId: sub.id,
   });
@@ -168,6 +178,20 @@ Deno.serve(async (req) => {
   if (!isSuper && sub.company_id !== me?.company_id) return json({ ok: false, error: "Not your company." }, 403);
 
   const date = typeof body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : istDate(0);
+
+  // ---- Preview: today's real report, delivered nowhere ----
+  //
+  // The difference between this and Send now is the whole point. Sending to
+  // check the wording means the founder's phone buzzes every time somebody
+  // adjusts a line, and the recipient's last_sent_at stops meaning "the report
+  // went out today". Preview touches neither.
+  if (body?.preview) {
+    const built = await buildText(admin, sub as Sub, date);
+    return "error" in built
+      ? json({ ok: false, error: built.error })
+      : json({ ok: true, preview: built.text, to: sub.phone, label: sub.label });
+  }
+
   try {
     const r = await deliver(admin, sub as Sub, date);
     const v = verdictOf(r);

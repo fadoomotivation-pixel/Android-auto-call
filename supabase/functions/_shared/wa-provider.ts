@@ -192,6 +192,22 @@ export class BaileysProvider implements WhatsAppProvider {
 }
 
 /**
+ * How the pipe was chosen, not just which pipe it is.
+ *
+ * The Automation Center has to be able to say "this company's alerts leave on
+ * the platform's Baileys number, lent by Manas property" — and the only place
+ * that is knowable is here. Returning it lets the page show the real route
+ * instead of a second copy of this ladder that drifts the first time the order
+ * changes.
+ */
+export type ProviderRoute = {
+  provider: WhatsAppProvider;
+  via: "own-baileys" | "own-meta" | "platform-baileys" | "platform-meta";
+  /** Set when the number belongs to a different company than the report. */
+  lenderCompanyId: string | null;
+};
+
+/**
  * Which pipe carries this company's founder notifications.
  *
  * Meta stays the fallback in every direction: a company that picked Baileys but
@@ -202,6 +218,15 @@ export async function resolveProvider(
   admin: SupabaseClient,
   companyId: string,
 ): Promise<WhatsAppProvider | { error: string }> {
+  const r = await resolveRoute(admin, companyId);
+  return "error" in r ? r : r.provider;
+}
+
+/** The same decision, with the reasoning kept. */
+export async function resolveRoute(
+  admin: SupabaseClient,
+  companyId: string,
+): Promise<ProviderRoute | { error: string }> {
   const baileys = async (cid: string) => {
     const { data: i } = await admin.from("whatsapp_integrations")
       .select("provider").eq("company_id", cid).maybeSingle();
@@ -223,9 +248,9 @@ export async function resolveProvider(
   // Own Baileys, then own Meta. A half-configured Baileys degrades to Meta
   // rather than going silent.
   const ownBaileys = await baileys(companyId);
-  if (ownBaileys) return ownBaileys;
+  if (ownBaileys) return { provider: ownBaileys, via: "own-baileys", lenderCompanyId: null };
   const own = await meta(companyId, false);
-  if (own) return own;
+  if (own) return { provider: own, via: "own-meta", lenderCompanyId: null };
 
   // The platform's shared number, the same way one central Facebook ad account
   // already runs ads for every company. Sharing the pipe is not sharing the
@@ -246,9 +271,9 @@ export async function resolveProvider(
   if (pw?.company_id) {
     const lender = String(pw.company_id);
     const sharedBaileys = await baileys(lender);
-    if (sharedBaileys) return sharedBaileys;
+    if (sharedBaileys) return { provider: sharedBaileys, via: "platform-baileys", lenderCompanyId: lender };
     const shared = await meta(lender, true);
-    if (shared) return shared;
+    if (shared) return { provider: shared, via: "platform-meta", lenderCompanyId: lender };
   }
 
   return {
