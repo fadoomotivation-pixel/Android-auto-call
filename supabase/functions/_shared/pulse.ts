@@ -404,13 +404,21 @@ function rupees(n: number): string {
  */
 function kpiBlock(k: {
   bookings: number; revenue: number; visitsFixed: number; hotLeads: number;
-  calls: number; connected: number;
+  calls: number; connected: number; talkSeconds: number;
 }): string[] {
   const L = [`• Bookings: ${k.bookings}`];
   if (k.revenue > 0) L.push(`• Token collected: ${rupees(k.revenue)}`);
   L.push(`• Site visits fixed: ${k.visitsFixed}`);
   if (k.hotLeads) L.push(`• Hot leads: ${k.hotLeads}`);
-  L.push(`• Calls: ${k.calls} · connected ${connectedLine(k.calls, k.connected)}`);
+  // Talk time back on the line, at the founder's request. It reads as one
+  // sentence — "22 calls, 15 connected, 18m talk" — and it is the one thing
+  // here that separates a rep who dialled all day from a rep who had
+  // conversations. Dropping it when this block was rewritten lost the only
+  // measure of whether the connects were worth anything.
+  L.push(
+    `• Calls: ${k.calls} · connected ${connectedLine(k.calls, k.connected)}` +
+      (k.talkSeconds > 0 ? ` · ${fmtDur(k.talkSeconds)} talk` : ""),
+  );
   if (k.connected > 0) {
     L.push(`• Visit rate: ${Math.round((k.visitsFixed / k.connected) * 100)}% of everyone talked to`);
   }
