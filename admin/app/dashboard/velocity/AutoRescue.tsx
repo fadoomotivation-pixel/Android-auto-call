@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { ist } from "@/lib/dashboard/format";
 
 interface Policy { company_id: string; enabled: boolean; reassign_after_min: number; notify_admin: boolean }
 interface Company { id: string; name: string | null }
@@ -128,7 +129,7 @@ export function AutoRescue() {
                 </span>
                 <span style={{ color: "var(--text)" }}>{e.detail}</span>
                 <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 12, whiteSpace: "nowrap" }}>
-                  {new Date(e.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+                  {ist(e.created_at)}
                 </span>
               </div>
             ))}

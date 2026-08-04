@@ -2,6 +2,7 @@ import { resolveScope } from "@/lib/dashboard/scope";
 import { duration as fmtDuration, compactNum as fmtNum, minutes as fmtMinutes }
   from "@/lib/dashboard/format";
 import { ModuleLinks } from "./ModuleLinks";
+import { connectRate } from "@/lib/dashboard/metrics";
 import { LiveFeed } from "./LiveFeed";
 import { ExportCalls } from "./ExportCalls";
 
@@ -178,7 +179,7 @@ export default async function OverviewPage({
                   <td style={{ color: "#fff", fontWeight: 500 }}>{l.name}</td>
                   <td>{l.calls}</td>
                   <td style={{ color: "var(--good)" }}>{l.connected}</td>
-                  <td style={{ color: "var(--accent)" }}>{l.calls ? Math.round((l.connected / l.calls) * 100) : 0}%</td>
+                  <td style={{ color: "var(--accent)" }}>{connectRate(l.connected, l.calls)}%</td>
                 </tr>
               ))}
             </tbody>

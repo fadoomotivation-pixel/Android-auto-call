@@ -27,6 +27,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { ist, istClock, istDate } from "@/lib/dashboard/format";
 
 /** "2 min ago" · "10:42 AM" · "3 Aug". What a manager needs to decide whether
  *  poking again is reasonable — not a precise timestamp. */
@@ -34,16 +35,8 @@ function agoLabel(iso: string): string {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins} min ago`;
-  const sameDay = new Date(iso).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) ===
-    new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
-  if (sameDay) {
-    return new Date(iso).toLocaleTimeString("en-IN", {
-      timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", hour12: true,
-    });
-  }
-  return new Date(iso).toLocaleDateString("en-IN", {
-    timeZone: "Asia/Kolkata", day: "numeric", month: "short",
-  });
+  const sameDay = istDate(iso) === istDate(new Date().toISOString());
+  return sameDay ? istClock(iso) : istDate(iso);
 }
 
 export type ReminderKind = "escalation" | "site_visit" | "follow_up";

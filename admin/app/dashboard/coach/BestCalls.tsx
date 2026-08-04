@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { ist, istDate } from "@/lib/dashboard/format";
 
 interface Row {
   company_id: string;
@@ -21,9 +22,6 @@ interface Row {
   improve: string | null;
   has_recording: boolean;
 }
-
-const ist = (iso: string) =>
-  new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
 const mmss = (s: number | null) => {
   if (!s) return "—";
@@ -140,7 +138,7 @@ export function BestCalls({ isSuper }: { isSuper: boolean }) {
             {isSuper && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>· {r.company_name ?? "—"}</span>}
             <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
               · {period === "day" ? "on" : "week of"}{" "}
-              {new Date(r.period_start).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" })}
+              {istDate(r.period_start)}
             </span>
             <span style={{ marginLeft: "auto", fontSize: 12.5, color: "var(--muted)" }}>
               {mmss(r.duration_seconds)} · {ist(r.started_at)}

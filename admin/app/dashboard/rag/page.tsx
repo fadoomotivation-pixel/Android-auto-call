@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { resolveScope } from "@/lib/dashboard/scope";
 import { ModuleLinks } from "../ModuleLinks";
 import { istDate } from "@/lib/dashboard/format";
+import { colorOf } from "@/lib/dashboard/health";
 import { AskConsole } from "./AskConsole";
 import { KnowledgeTrainer } from "./KnowledgeTrainer";
 import { KnowledgeManager } from "./KnowledgeManager";
@@ -19,11 +20,18 @@ type Stat = {
   last_learned: string | null;
 };
 
+/**
+ * A knowledge base's health, on the shared scale.
+ *
+ * The thresholds stay local — "fewer than eight chunks" is a RAG question and
+ * means nothing to the Action Center — but the colours no longer do, so amber
+ * here is the same amber as amber everywhere else.
+ */
 function health(s: Stat): { label: string; color: string } {
-  if (s.chunks === 0) return { label: "Empty", color: "#ef4444" };
-  if (s.chunks < 8) return { label: "Getting started", color: "#f59e0b" };
-  if (s.open_gaps > 5) return { label: "Needs answers", color: "#f59e0b" };
-  return { label: "Healthy", color: "#10b981" };
+  if (s.chunks === 0) return { label: "Empty", color: colorOf("bad") };
+  if (s.chunks < 8) return { label: "Getting started", color: colorOf("watch") };
+  if (s.open_gaps > 5) return { label: "Needs answers", color: colorOf("warn") };
+  return { label: "Healthy", color: colorOf("ok") };
 }
 
 /**

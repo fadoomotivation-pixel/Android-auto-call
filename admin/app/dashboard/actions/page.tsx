@@ -36,6 +36,7 @@ import Link from "next/link";
 import { resolveScope } from "@/lib/dashboard/scope";
 import { ModuleLinks } from "../ModuleLinks";
 import { ist, daysAgo } from "@/lib/dashboard/format";
+import { agedLevel, dotOf, colorOf } from "@/lib/dashboard/health";
 import { KpiChip } from "./KpiChip";
 import { RemindRep, type ReminderKind } from "./RemindRep";
 
@@ -53,11 +54,8 @@ type Search = { company?: string };
  * number.
  */
 function severity(days: number): { dot: string; color: string } {
-  if (days >= 21) return { dot: "🔴", color: "#f87171" };
-  if (days >= 14) return { dot: "🟠", color: "#fb923c" };
-  if (days >= 7) return { dot: "🟡", color: "#facc15" };
-  if (days >= 1) return { dot: "🔵", color: "#60a5fa" };
-  return { dot: "🟢", color: "#4ade80" };
+  const level = agedLevel(days);
+  return { dot: dotOf(level), color: colorOf(level) };
 }
 
 function Block({
