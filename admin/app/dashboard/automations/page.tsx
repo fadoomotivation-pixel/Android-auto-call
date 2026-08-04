@@ -102,14 +102,22 @@ export default async function AutomationsPage({
     .order("label");
   if (scope) subsQ.eq("company_id", scope);
 
+  // Every telecaller and whether the review reaches them. Shown as a count with
+  // the reason, because "1 of 9 enrolled" is a fixable sentence and an empty
+  // list is not.
+  const repsQ = supabase.from("v_rep_review_recipients")
+    .select("salesperson_id, company_id, full_name, phone, company_name, has_phone, company_on, platform_on, enrolled")
+    .order("full_name");
+  if (scope) repsQ.eq("company_id", scope);
+
   const sinceQ = supabase.from("whatsapp_messages")
     .select("created_at").not("kind", "is", null)
     .order("created_at", { ascending: true }).limit(1);
 
-  const [companyRows, wa, rem, outbox, subs, since] = await Promise.all([
+  const [companyRows, wa, rem, outbox, subs, since, repRows] = await Promise.all([
     isSuper ? supabase.from("companies").select("id, name").order("name")
             : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
-    waQ, remQ, outboxQ, subsQ, sinceQ,
+    waQ, remQ, outboxQ, subsQ, sinceQ, repsQ,
   ]);
 
   const companyList = (companyRows.data ?? []) as Array<{ id: string; name: string }>;
@@ -122,6 +130,16 @@ export default async function AutomationsPage({
   }>;
   const remRows = (rem.data ?? []) as Array<{ created_at: string }>;
   const trackingSince = (since.data?.[0] as { created_at?: string } | undefined)?.created_at ?? null;
+  const reps = (repRows.data ?? []) as Array<{
+    salesperson_id: string; company_id: string; full_name: string | null; phone: string | null;
+    company_name: string | null; has_phone: boolean; company_on: boolean;
+    platform_on: boolean; enrolled: boolean;
+  }>;
+  const enrolledReps = reps.filter((r) => r.enrolled);
+  const noPhone = reps.filter((r) => !r.has_phone);
+  // Who a rep-review test is built for: someone actually reachable if possible,
+  // otherwise anybody, so the PREVIEW still works before phone numbers exist.
+  const testRep = enrolledReps[0] ?? reps[0] ?? null;
   const queued = outRows.filter((r) => r.status === "queued");
 
   const companyName = scope
@@ -423,6 +441,7 @@ export default async function AutomationsPage({
                     ? <TestSend
                         preview={a.test.preview} send={a.test.send} note={a.test.note}
                         subscriberId={sub?.id ?? null} companyId={scope}
+                        salespersonId={testRep?.salesperson_id ?? null}
                         alertKind={a.id === "alert-site-visit-fixed" ? "site_visit_fixed" : undefined}
                       />
                     : (
@@ -438,6 +457,46 @@ export default async function AutomationsPage({
           </section>
         );
       })}
+
+      {/* The derived list, and the reason anybody is missing from it. The
+          review reaches telecallers automatically — which makes "why did this
+          rep get nothing" the only question worth answering here. */}
+      <section style={{ marginTop: 28 }}>
+        <h3 style={{ fontSize: 17 }}>🎧 Telecallers reached by the daily review</h3>
+        <p className="subtitle" style={{ margin: "0 0 10px", fontSize: 12.5, maxWidth: "72ch" }}>
+          No subscriber list — every active telecaller with a phone number is enrolled
+          automatically, in every company, the day they are created.
+          {" "}<strong>{enrolledReps.length} of {reps.length}</strong> are reachable right now.
+          {noPhone.length > 0 && (
+            <> {noPhone.length} {noPhone.length === 1 ? "has" : "have"} no phone number on their
+            profile, so there is nowhere to send it —{" "}
+            <Link href="/dashboard/salespeople">add it on Salespeople</Link>.</>
+          )}
+          {reps.length > 0 && !reps[0].platform_on && (
+            <> The platform switch is <strong>off</strong>, so nothing is being sent yet.</>
+          )}
+        </p>
+        {reps.length === 0
+          ? <div className="empty">No active telecallers in this company.</div>
+          : reps.map((r) => (
+            <div key={r.salesperson_id} style={{ display: "flex", gap: 12, flexWrap: "wrap",
+              alignItems: "center", padding: "8px 0", fontSize: 13.5,
+              borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <strong>{r.enrolled ? "✅" : "⚠️"} {r.full_name ?? "Unnamed"}</strong>
+              {!scope && <span style={{ fontSize: 12, color: "var(--muted)" }}>{r.company_name}</span>}
+              <span style={{ color: "var(--muted)", fontSize: 12.5 }}>
+                {r.has_phone ? r.phone : "no phone number"}
+              </span>
+              <span style={{ fontSize: 12, marginLeft: "auto",
+                color: r.enrolled ? "#86efac" : "#fbbf24" }}>
+                {r.enrolled ? "enrolled"
+                  : !r.has_phone ? "needs a phone number"
+                  : !r.company_on ? "this company has switched it off"
+                  : "platform switch is off"}
+              </span>
+            </div>
+          ))}
+      </section>
 
       {/* Recipients live on Daily Pulse; repeating the editor here would be a
           second place to change a phone number. This is the read-only truth of
