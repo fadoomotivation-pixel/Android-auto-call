@@ -6,7 +6,10 @@
 *.local
 
 # ---- Node / Next.js (admin) ----
-node_modules/
+# Bare name, not node_modules/ — the trailing slash matches a DIRECTORY only,
+# so a SYMLINK named node_modules slips straight past it. One did: a link into
+# a scratchpad was committed, and Vercel's npm had to remove it mid-install.
+node_modules
 .next/
 out/
 dist/
