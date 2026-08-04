@@ -73,8 +73,8 @@ function Block({
   );
 }
 
-function Row({ left, right, href, action }: {
-  left: ReactNode; right: ReactNode; href: string; action?: ReactNode;
+function Row({ left, why, right, href, action }: {
+  left: ReactNode; why: string; right: ReactNode; href: string; action?: ReactNode;
 }) {
   return (
     <div style={{
@@ -86,6 +86,12 @@ function Row({ left, right, href, action }: {
       <Link href={href} style={{ textDecoration: "none", color: "inherit", flex: 1, minWidth: 0 }}>
         <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {left}
+        </span>
+        {/* Why this row is in the queue at all. Without it the manager has to
+            open the lead just to find out what the app is worried about, which
+            is the navigation this page exists to remove. */}
+        <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", marginTop: 1 }}>
+          {why}
         </span>
       </Link>
       <span style={{ color: "var(--muted)", fontSize: 12.5, whiteSpace: "nowrap" }}>{right}</span>
@@ -152,16 +158,23 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
     .order("sent_at", { ascending: false }).limit(15);
   if (scope) alertQ.eq("company_id", scope);
 
+  // Who has already been poked. Read once for the whole page rather than per
+  // row, so twenty rows cost one query.
+  const remQ = supabase.from("rep_reminders")
+    .select("contact_id, kind, sent_at")
+    .order("sent_at", { ascending: false }).limit(300);
+  if (scope) remQ.eq("company_id", scope);
+
   const qualityQ = supabase.from("v_crm_data_quality")
     .select("salesperson_id, full_name, no_next_step, calls_no_outcome_7d, bookings_without_amount")
     .order("no_next_step", { ascending: false }).limit(20);
   if (scope) qualityQ.eq("company_id", scope);
 
-  const [companyRows, pending, fups, alerts, quality] = await Promise.all([
+  const [companyRows, pending, fups, alerts, quality, reminders] = await Promise.all([
     isSuper
       ? supabase.from("companies").select("id, name").order("name")
       : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
-    visitQ, fupQ, alertQ, qualityQ,
+    visitQ, fupQ, alertQ, qualityQ, remQ,
   ]);
   const companyList = (companyRows.data ?? []) as Array<{ id: string; name: string }>;
 
@@ -187,6 +200,16 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
     salesperson_id: string; full_name: string | null;
     no_next_step: number; calls_no_outcome_7d: number; bookings_without_amount: number;
   }>).filter((g) => g.no_next_step + g.calls_no_outcome_7d + g.bookings_without_amount > 0);
+
+  // contact + kind → when it was last chased. The query is already newest
+  // first, so the first row seen for a key is the one to keep.
+  const lastReminded = new Map<string, string>();
+  for (const r of (reminders.data ?? []) as Array<{ contact_id: string | null; kind: string; sent_at: string }>) {
+    const key = `${r.contact_id}:${r.kind}`;
+    if (r.contact_id && !lastReminded.has(key)) lastReminded.set(key, r.sent_at);
+  }
+  const remindedAt = (contactId: string | null, kind: string) =>
+    (contactId ? lastReminded.get(`${contactId}:${kind}`) ?? null : null);
 
   const alertLabel: Record<string, string> = {
     booking_confirmed: "🎉 Booking confirmed",
@@ -239,8 +262,10 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         {escalations.map((v) => (
           <Row key={v.contact_id} href={`/dashboard/leads?q=${encodeURIComponent(v.phone ?? "")}`}
             left={<><strong>{v.name || v.phone}</strong>{v.telecaller ? ` · ${v.telecaller}` : " · unassigned"}</>}
-            right={`${v.days_waiting ?? daysAgo(v.visit_at)}d · asked ${v.times_asked}×`}
+            why={`Asked ${v.times_asked}× and still no answer · ${v.days_waiting ?? 0} days since the visit`}
+            right={`${v.days_waiting ?? daysAgo(v.visit_at)}d`}
             action={<RemindRep userId={v.salesperson_id} contactId={v.contact_id}
+              companyId={scope} kind="escalation" lastRemindedAt={remindedAt(v.contact_id, "escalation")}
               title="Site visit — still waiting on you"
               message={`${v.name || v.phone}: what happened at the visit? It has been ${v.days_waiting ?? 0} days.`} />} />
         ))}
@@ -254,8 +279,10 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         {awaiting.map((v) => (
           <Row key={v.contact_id} href={`/dashboard/leads?q=${encodeURIComponent(v.phone ?? "")}`}
             left={<><strong>{v.name || v.phone}</strong>{v.telecaller ? ` · ${v.telecaller}` : " · unassigned"}</>}
-            right={`visit ${ist(v.visit_at)} · ${v.days_waiting ?? 0}d ago`}
+            why={`${v.days_waiting ?? 0} days since the site visit, outcome still not recorded`}
+            right={ist(v.visit_at)}
             action={<RemindRep userId={v.salesperson_id} contactId={v.contact_id}
+              companyId={scope} kind="site_visit" lastRemindedAt={remindedAt(v.contact_id, "site_visit")}
               title="Did they come to the site?"
               message={`${v.name || v.phone} — please record what happened at the visit.`} />} />
         ))}
@@ -269,8 +296,12 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
           return (
             <Row key={f.id} href={`/dashboard/leads?q=${encodeURIComponent(f.phone ?? "")}`}
               left={<><strong>{f.name || f.phone}</strong>{f.note ? ` · ${f.note}` : ""}</>}
-              right={<span style={{ color: late ? "#f87171" : undefined }}>{ist(f.due_at)}</span>}
+              why={late
+                ? `Callback was promised for ${ist(f.due_at)} and has not been made`
+                : `Callback promised for ${ist(f.due_at)} today`}
+              right={<span style={{ color: late ? "#f87171" : undefined }}>{late ? "overdue" : "today"}</span>}
               action={late ? <RemindRep userId={f.salesperson_id} contactId={f.contact_id}
+                companyId={scope} kind="follow_up" lastRemindedAt={remindedAt(f.contact_id, "follow_up")}
                 title="Callback is overdue"
                 message={`${f.name || f.phone} was due ${ist(f.due_at)}. Call them or book a new time.`} /> : undefined} />
           );
@@ -284,6 +315,8 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         {fired.map((a) => (
           <Row key={a.id} href={`/dashboard/leads?id=${a.contact_id}`}
             left={<strong>{alertLabel[a.kind] ?? a.kind}</strong>}
+            why={(a.detail ?? "").split("\n").find((l) => l.includes("Customer:"))?.trim()
+              ?? "Pushed to the founder's WhatsApp"}
             right={ist(a.sent_at)} />
         ))}
       </Block>
@@ -295,6 +328,11 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         {gaps.map((g) => (
           <Row key={g.salesperson_id} href={`/dashboard/integrity${q}`}
             left={<strong>{g.full_name || "Telecaller"}</strong>}
+            why={[
+              g.no_next_step ? "leads with no next call booked" : null,
+              g.calls_no_outcome_7d ? "calls with nothing written down" : null,
+              g.bookings_without_amount ? "bookings with no amount" : null,
+            ].filter(Boolean).join(", ")}
             right={[
               g.no_next_step ? `${g.no_next_step} no next call` : null,
               g.calls_no_outcome_7d ? `${g.calls_no_outcome_7d} no outcome` : null,
