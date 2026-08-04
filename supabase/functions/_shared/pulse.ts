@@ -343,13 +343,29 @@ export async function buildCompany(
           "the same thing twice stops reading.\n" +
           "This is a founder, not a supervisor: no call logs. Never write \"call did " +
           "not connect\", \"attempt 1\", \"marked cold\", \"stage changed\" or how many " +
-          "seconds a call lasted. Say what it MEANS for the deal.",
+          "seconds a call lasted. Say what it MEANS for the deal.\n" +
+          "MONEY IS NOT YOURS TO CLAIM. Never say a customer paid, booked, gave a " +
+          "token, blocked or held a unit, or signed anything, unless the facts you " +
+          "were given say so in as many words. A site visit is a site visit. " +
+          "Inventing a payment is the single worst thing you can do here — the " +
+          "founder acts on it.",
         JSON.stringify(facts),
         { temperature: 0.4 },
       );
       const j = JSON.parse(text) ?? {};
-      const win = String(j.win ?? "").trim();
-      const risk = String(j.risk ?? "").trim();
+      // The prompt asks the model not to invent money. This CHECKS.
+      //
+      // It went wrong exactly once and that was enough: a lead whose real state
+      // was site_visit, with token_amount null, was reported to the founder as
+      // "Yogesh Rajput booked a site visit for UP-16 and paid the token amount
+      // to hold the unit" — in a message whose own KPI block, three lines
+      // above, said "Bookings: 0". The founder went looking for money that did
+      // not exist.
+      //
+      // A prompt is a request. Where the database already knows the answer, the
+      // model does not get a vote.
+      const win = moneySafe(String(j.win ?? "").trim(), p);
+      const risk = moneySafe(String(j.risk ?? "").trim(), p);
       if (win) p.win = win;
       if (risk) p.risk = risk;
       // The Pulse page has shown `narrative` since day one and is not part of
@@ -423,6 +439,27 @@ function kpiBlock(k: {
     L.push(`• Visit rate: ${Math.round((k.visitsFixed / k.connected) * 100)}% of everyone talked to`);
   }
   return L;
+}
+
+/**
+ * Drop any AI line that claims money the CRM has no record of.
+ *
+ * Deliberately blunt: the line is dropped whole rather than edited down. A
+ * half-corrected sentence still reads as a claim, and there is no safe way to
+ * rewrite "paid the token amount to hold the unit" into something true without
+ * knowing what actually happened. Losing one narrative line costs a nice
+ * sentence; leaving it in costs the founder's trust in every number above it.
+ *
+ * Only fires when the structured facts DISAGREE. A rep who really did book a
+ * deal today keeps their sentence, money and all.
+ */
+const MONEY_CLAIM =
+  /\b(paid|payment|token|booked the|booking amount|advance|cheque|deposit|blocked the unit|held the unit|hold the unit|signed|registration|down ?payment)\b/i;
+
+function moneySafe(line: string, r: { bookings: number; revenue: number }): string {
+  if (!line) return line;
+  if (r.bookings > 0 || r.revenue > 0) return line;
+  return MONEY_CLAIM.test(line) ? "" : line;
 }
 
 /**
