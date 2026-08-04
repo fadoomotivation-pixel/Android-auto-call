@@ -19,9 +19,8 @@
  * outright — an automation with no record is more dangerous than one that has
  * failed, because failure at least leaves a mark.
  */
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { resolveScope } from "@/lib/dashboard/scope";
 import {
   AUDIENCE_LABEL, AUDIENCE_NOTE, AUTOMATIONS, ROUTING, TRANSPORT, type Audience,
 } from "./registry";
@@ -65,18 +64,9 @@ export default async function AutomationsPage({
   searchParams,
 }: { searchParams: Promise<{ company?: string }> }) {
   const sp = await searchParams;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const [{ data: me }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("role, company_id").eq("id", user!.id)
-      .maybeSingle<{ role: string; company_id: string | null }>(),
-    supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
-  ]);
-  const isSuper = !!pa;
-  if (me?.role !== "admin" && !isSuper) redirect("/dashboard");
-
-  const scope = isSuper ? (sp.company ?? null) : (me?.company_id ?? null);
+  // See lib/dashboard/scope.ts — one definition of who is asking and which
+  // company they are looking at.
+  const { supabase, isSuper, companyId: scope } = await resolveScope(sp);
 
   const waQ = supabase.from("whatsapp_messages")
     .select("id, kind, status, error, created_at, counterparty")
