@@ -24,8 +24,41 @@
  * function returned the wrong id. This is about the DEFAULT VIEW being honest,
  * and about not writing the ternary a thirty-first time.
  */
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+
+/**
+ * The identity round trip, deduplicated per request.
+ *
+ * The layout renders the sidebar (which needs to know if you are a super admin)
+ * and the page renders its content (which needs the same three facts). Without
+ * this, every page load asked Supabase who you are TWICE — once for the chrome
+ * and once for the body.
+ *
+ * React's cache() memoises for the lifetime of a single server render, so the
+ * second caller gets the first caller's result. Not a cross-request cache:
+ * nothing about one user's identity ever survives into another's request, which
+ * is the only property that matters here.
+ */
+const loadIdentity = cache(async () => {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { supabase, user: null, role: null, homeCompanyId: null, isSuper: false };
+
+  const [{ data: me }, { data: pa }] = await Promise.all([
+    supabase.from("profiles").select("role, company_id").eq("id", user.id)
+      .maybeSingle<{ role: string; company_id: string | null }>(),
+    supabase.from("platform_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
+  ]);
+  return {
+    supabase,
+    user,
+    role: me?.role ?? null,
+    homeCompanyId: me?.company_id ?? null,
+    isSuper: !!pa,
+  };
+});
 
 export type Scope = {
   /**
@@ -50,6 +83,14 @@ export type Scope = {
   companyId: string | null;
   /** `?company=<id>` to carry the current scope onto a link. "" when unscoped. */
   query: string;
+  /**
+   * Every company, for the picker. Populated only when asked for — most pages
+   * do not render a picker and should not pay for the query.
+   *
+   * Always empty for a company admin: they have exactly one company and a
+   * picker with one entry is a control that does nothing.
+   */
+  companies: Array<{ id: string; name: string | null }>;
 };
 
 /**
@@ -61,32 +102,49 @@ export type Scope = {
  *                      onward rather than shown a locked door.
  *                      'any' returns the scope without redirecting, for pages
  *                      that render something useful for a rep too.
+ *
+ * @param opts.fallback What an unscoped SUPER ADMIN means.
+ *                      'all' (default) — null, i.e. every company. Right for
+ *                      anything that aggregates: a platform owner should see
+ *                      the whole business unless they narrow it.
+ *                      'first' — the first company by name. Right for pages
+ *                      that EDIT one company's settings, where "all companies"
+ *                      is not a thing you can edit and null would render an
+ *                      editor bound to nothing. Implies withCompanies.
+ *
+ * @param opts.withCompanies  Load the company list for a picker. Costs one
+ *                      query, so it is opt-in.
  */
 export async function resolveScope(
   search?: { company?: string },
-  opts: { require?: "admin" | "any" } = {},
+  opts: {
+    require?: "admin" | "any";
+    fallback?: "all" | "first";
+    withCompanies?: boolean;
+  } = {},
 ): Promise<Scope> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user, role, homeCompanyId, isSuper } = await loadIdentity();
   if (!user) redirect("/login");
-
-  const [{ data: me }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("role, company_id").eq("id", user.id)
-      .maybeSingle<{ role: string; company_id: string | null }>(),
-    supabase.from("platform_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
-  ]);
-
-  const isSuper = !!pa;
-  const role = me?.role ?? null;
-  const homeCompanyId = me?.company_id ?? null;
 
   if ((opts.require ?? "admin") === "admin" && role !== "admin" && !isSuper) {
     redirect("/dashboard");
   }
 
+  // The company list is only fetched when a picker needs it, or when the
+  // 'first' fallback cannot resolve without it.
+  const wantCompanies = isSuper && (opts.withCompanies === true || opts.fallback === "first");
+  const companies = wantCompanies
+    ? (await supabase.from("companies").select("id, name").order("name")
+        .returns<Array<{ id: string; name: string | null }>>()).data ?? []
+    : [];
+
   // THE LINE. A super admin defaults to every company and narrows only when
-  // asked; anyone else is their own company and nothing else.
-  const companyId = isSuper ? (search?.company ?? null) : homeCompanyId;
+  // asked; anyone else is their own company and nothing else. The only variation
+  // is what "every company" collapses to on a page that edits one — see
+  // opts.fallback.
+  const companyId = isSuper
+    ? (search?.company ?? (opts.fallback === "first" ? companies[0]?.id ?? null : null))
+    : homeCompanyId;
 
   return {
     supabase,
@@ -96,6 +154,7 @@ export async function resolveScope(
     homeCompanyId,
     companyId,
     query: companyId ? `?company=${companyId}` : "",
+    companies,
   };
 }
 

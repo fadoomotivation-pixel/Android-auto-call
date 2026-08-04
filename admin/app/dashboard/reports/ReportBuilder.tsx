@@ -15,7 +15,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
   async function generateReport() {
     setLoading(true);
     setErrorMsg(null);
-    let startDate = new Date();
+    const startDate = new Date();
     let endDate = new Date();
     
     if (dateRange === "this_week") {

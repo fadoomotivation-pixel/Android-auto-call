@@ -27,7 +27,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ist, istClock, istDate } from "@/lib/dashboard/format";
+import { istClock, istDate } from "@/lib/dashboard/format";
 
 /** "2 min ago" · "10:42 AM" · "3 Aug". What a manager needs to decide whether
  *  poking again is reasonable — not a precise timestamp. */

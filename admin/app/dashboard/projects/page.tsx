@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { resolveScope } from "@/lib/dashboard/scope";
 import { CompanyPicker } from "../whatsapp/CompanyPicker";
 
 type Interest = {
@@ -23,23 +23,16 @@ function fmtDate(ts: string | null): string {
 }
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ company?: string }> }) {
-  const sp = await searchParams;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const [{ data: prof }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("role, company_id").eq("id", user!.id).maybeSingle<{ role: string; company_id: string | null }>(),
-    supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
-  ]);
-  const isSuper = !!pa;
-  if (prof?.role !== "admin" && !isSuper) {
+  // fallback:"first" — this page EDITS one company's settings, so an unscoped
+  // super admin lands on the first company rather than on nothing. That is the
+  // one way these pages differ from the aggregating ones, and it now lives in
+  // resolveScope instead of being re-derived here.
+  const ctx = await resolveScope(await searchParams, { require: "any", fallback: "first" });
+  const { supabase, isSuper, companies, companyId } = ctx;
+  if (ctx.role !== "admin" && !isSuper) {
     return <><h2>Buyer Projects</h2><div className="empty">Managers only.</div></>;
   }
 
-  const { data: companies } = isSuper
-    ? await supabase.from("companies").select("id, name").order("name").returns<{ id: string; name: string | null }[]>()
-    : { data: null };
-  const companyId = isSuper ? (sp.company ?? companies?.[0]?.id ?? null) : (prof?.company_id ?? null);
 
   const { data: interests } = companyId
     ? await supabase.from("lead_project_interests")
@@ -58,7 +51,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       <p style={{ color: "var(--muted)", marginTop: -6 }}>
         Which projects each buyer is considering — one lead can be at different stages across several projects.
       </p>
-      {isSuper && <CompanyPicker companies={companies ?? []} selected={companyId} />}
+      {isSuper && <CompanyPicker companies={companies} selected={companyId} />}
       <div className="card">
         {rows.length === 0
           ? <div className="empty">No project interests yet. Reps add them from a lead in the app.</div>
