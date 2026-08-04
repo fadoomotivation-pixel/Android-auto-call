@@ -29,7 +29,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { RemindRep } from "./RemindRep";
+import { KIND_PHRASE, RemindRep } from "./RemindRep";
 
 export const dynamic = "force-dynamic";
 
@@ -158,11 +158,13 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
     .order("sent_at", { ascending: false }).limit(15);
   if (scope) alertQ.eq("company_id", scope);
 
-  // Who has already been poked. Read once for the whole page rather than per
-  // row, so twenty rows cost one query.
-  const remQ = supabase.from("rep_reminders")
-    .select("contact_id, kind, sent_at")
-    .order("sent_at", { ascending: false }).limit(300);
+  // Who has already been poked — read from the lead's own timeline, the same
+  // log that carries its calls, notes and status changes. Once for the whole
+  // page rather than per row, so twenty rows cost one query.
+  const remQ = supabase.from("lead_activities")
+    .select("contact_id, detail, created_at")
+    .eq("type", "reminder")
+    .order("created_at", { ascending: false }).limit(300);
   if (scope) remQ.eq("company_id", scope);
 
   const qualityQ = supabase.from("v_crm_data_quality")
@@ -201,12 +203,18 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
     no_next_step: number; calls_no_outcome_7d: number; bookings_without_amount: number;
   }>).filter((g) => g.no_next_step + g.calls_no_outcome_7d + g.bookings_without_amount > 0);
 
-  // contact + kind → when it was last chased. The query is already newest
-  // first, so the first row seen for a key is the one to keep.
+  // contact + kind → when it was last chased. lead_activities has no typed
+  // `kind`, so the queue is recovered from the phrase RemindRep wrote —
+  // KIND_PHRASE is the single place that mapping lives, shared by both sides.
+  // The query is already newest first, so the first row seen for a key wins.
   const lastReminded = new Map<string, string>();
-  for (const r of (reminders.data ?? []) as Array<{ contact_id: string | null; kind: string; sent_at: string }>) {
-    const key = `${r.contact_id}:${r.kind}`;
-    if (r.contact_id && !lastReminded.has(key)) lastReminded.set(key, r.sent_at);
+  for (const r of (reminders.data ?? []) as Array<{ contact_id: string | null; detail: string | null; created_at: string }>) {
+    if (!r.contact_id) continue;
+    const kind = (Object.keys(KIND_PHRASE) as Array<keyof typeof KIND_PHRASE>)
+      .find((k) => (r.detail ?? "").includes(KIND_PHRASE[k]));
+    if (!kind) continue;
+    const key = `${r.contact_id}:${kind}`;
+    if (!lastReminded.has(key)) lastReminded.set(key, r.created_at);
   }
   const remindedAt = (contactId: string | null, kind: string) =>
     (contactId ? lastReminded.get(`${contactId}:${kind}`) ?? null : null);

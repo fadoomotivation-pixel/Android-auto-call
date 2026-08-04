@@ -9,7 +9,11 @@
  * quiet-hours rules, a second thing to mute, and a second place to look when a
  * rep says they never got told.
  *
- * The state is written to rep_reminders rather than held in the component,
+ * The state is written to lead_activities — the CRM's existing timeline —
+ * rather than to a table of its own. A reminder is an event in a lead's
+ * history exactly like a call or a status change, and a private table would
+ * mean the lead's story is told in two places. It is also written rather than
+ * held in the component,
  * because page-local memory is the version of this feature that causes the
  * problem it exists to prevent: refresh the dashboard, or open it on a phone
  * instead of the laptop, and every row looks untouched — so the natural move
@@ -41,6 +45,14 @@ function agoLabel(iso: string): string {
     timeZone: "Asia/Kolkata", day: "numeric", month: "short",
   });
 }
+
+/** The phrase written into the activity detail, and matched when reading it
+ *  back. Kept beside the reader in page.tsx — change one, change both. */
+export const KIND_PHRASE: Record<"escalation" | "site_visit" | "follow_up", string> = {
+  escalation: "no answer after two asks",
+  site_visit: "site visit outcome",
+  follow_up: "overdue callback",
+};
 
 export function RemindRep({
   userId, contactId, companyId, kind, title, message, lastRemindedAt,
@@ -78,10 +90,15 @@ export function RemindRep({
       setState("idle");
       // Best effort. The rep has the push either way; failing to log it must
       // not make the UI claim the reminder never happened.
-      if (companyId) {
-        await supabase.from("rep_reminders").insert({
-          company_id: companyId, contact_id: contactId,
-          salesperson_id: userId, kind,
+      if (companyId && contactId) {
+        await supabase.from("lead_activities").insert({
+          company_id: companyId,
+          contact_id: contactId,
+          type: "reminder",
+          // The queue it came from lives in the sentence, because
+          // lead_activities has no typed `kind`. KIND_PHRASE is the one place
+          // that mapping exists, and the page reads it back with the same map.
+          detail: `Reminder sent — ${KIND_PHRASE[kind]}`,
         });
       }
     } catch (e) {
@@ -93,10 +110,18 @@ export function RemindRep({
   const label =
     state === "sending" ? "Sending…" :
     state === "error" ? "Retry" :
-    sentAt ? `Remind again` : "Remind";
+    sentAt ? "Remind again" : "Remind";
 
+  // Status on the left, action on the right. Merging them into one green
+  // button made the state read as a thing to press — easy to click by
+  // accident, and hard to scan twenty rows for who has already been chased.
   return (
-    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      {sentAt && (
+        <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>
+          🔔 Last reminded: {agoLabel(sentAt)}
+        </span>
+      )}
       <button
         onClick={send}
         disabled={state === "sending"}
@@ -104,18 +129,13 @@ export function RemindRep({
         style={{
           fontSize: 11.5, padding: "3px 10px", borderRadius: 7, cursor: "pointer",
           border: "1px solid rgba(255,255,255,0.14)",
-          background: sentAt ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.05)",
-          color: state === "error" ? "#fca5a5" : sentAt ? "#86efac" : "var(--text)",
+          background: "rgba(255,255,255,0.05)",
+          color: state === "error" ? "#fca5a5" : "var(--text)",
           whiteSpace: "nowrap",
         }}
       >
         {label}
       </button>
-      {sentAt && (
-        <span style={{ fontSize: 10.5, color: "var(--muted)", whiteSpace: "nowrap" }}>
-          reminded {agoLabel(sentAt)}
-        </span>
-      )}
     </span>
   );
 }
