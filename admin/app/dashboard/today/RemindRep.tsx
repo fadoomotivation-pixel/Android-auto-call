@@ -46,9 +46,17 @@ function agoLabel(iso: string): string {
   });
 }
 
-/** The phrase written into the activity detail, and matched when reading it
- *  back. Kept beside the reader in page.tsx — change one, change both. */
-export const KIND_PHRASE: Record<"escalation" | "site_visit" | "follow_up", string> = {
+export type ReminderKind = "escalation" | "site_visit" | "follow_up";
+
+/**
+ * The sentence a person reads in the lead's timeline. DISPLAY ONLY.
+ *
+ * Nothing reads this back. The kind travels in `meta.kind`, so this wording can
+ * be rewritten, shortened or translated into Hindi tomorrow without any code
+ * noticing — which is exactly what would have broken if the reader were still
+ * matching on the phrase.
+ */
+const KIND_PHRASE: Record<ReminderKind, string> = {
   escalation: "no answer after two asks",
   site_visit: "site visit outcome",
   follow_up: "overdue callback",
@@ -60,7 +68,7 @@ export function RemindRep({
   userId: string | null;
   contactId: string | null;
   companyId: string | null;
-  kind: "escalation" | "site_visit" | "follow_up";
+  kind: ReminderKind;
   title: string;
   message: string;
   /** The most recent reminder for this lead, from the database. Survives a
@@ -95,10 +103,11 @@ export function RemindRep({
           company_id: companyId,
           contact_id: contactId,
           type: "reminder",
-          // The queue it came from lives in the sentence, because
-          // lead_activities has no typed `kind`. KIND_PHRASE is the one place
-          // that mapping exists, and the page reads it back with the same map.
+          // detail is for people; meta is for code. The reader keys off
+          // meta.kind and never looks at the sentence, so the wording is free
+          // to change without breaking anything.
           detail: `Reminder sent — ${KIND_PHRASE[kind]}`,
+          meta: { kind },
         });
       }
     } catch (e) {
