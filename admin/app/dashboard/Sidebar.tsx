@@ -27,6 +27,7 @@ export function Sidebar({
       </div>
       <aside className={`sidebar ${isOpen ? "mobile-open" : ""}`} onClick={() => setIsOpen(false)}>
         <h1 className="no-print" style={{ display: "none" }}>SalesAutoCall</h1>
+        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/today" label="☀️ Today" />}
         <NavLink href="/dashboard" label="✨ Overview" />
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/velocity" label="⚡ Sales Velocity" />}
         {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/routing" label="🎯 Lead Routing" />}
