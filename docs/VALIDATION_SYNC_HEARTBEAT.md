@@ -88,14 +88,43 @@ The worker runs every 15 minutes, and immediately after any call ends. To force
 it without waiting, end a call — that is the real trigger and a better test than
 anything artificial.
 
-### 2.1 It compiles and the APK installs — **BLOCKING**
+### 2.1 It compiles — **PASS**
 
-Nothing below can be attempted until the build is green. If
-`reportSyncHealth()` fails to compile, the whole heartbeat is absent and the
-`never_reported` state will look correct while meaning nothing.
+This was the blocking item, and it is cleared. The `Build Android APK` workflow
+runs on `claude/**` branches, so pushing the heartbeat built it:
 
-- [ ] `./gradlew assembleRelease` succeeds
+- **Run #460**, `head_sha 74cbc72` — the commit that adds `reportSyncHealth()`
+  — **success**, all three brand flavours assembled.
+- Artifact `brand-apks` (all flavours), **expires 24h after the run** — rebuild
+  by pushing any change under `android/` if it lapses.
+
+Version name is derived from the run number, so this build reports
+**`app_version = 1.0.460`**. That is the cheapest possible proof that a phone
+is running the heartbeat build and not an older one:
+
+```sql
+select full_name, app_version, state from v_device_sync_health
+where app_version is not null;
+```
+
+If `app_version` is missing or older than `1.0.460`, the rep is on a build
+without the heartbeat and every check below is meaningless.
+
+**Which flavour for whom** — all share an `applicationId`, so each installs
+over its own line:
+
+| Rep | Company | APK |
+|---|---|---|
+| Shweta | Manas property | `app-manasproperty-debug.apk` |
+| pooja, Pallavi | sn developers | `app-sndeveloper-debug.apk` |
+| everyone else | Fanbe, ankit, mayur dholera, capital brix | `app-standard-debug.apk` |
+
 - [ ] APK installs over the existing build without a data wipe
+- [ ] `app_version` reads `1.0.460` (or later) in `v_device_sync_health`
+
+Note this is a **branch build**: it does not publish to Releases and the in-app
+updater will not offer it. Reps install it once, by hand. Auto-update resumes
+for everyone when this merges to `main`.
 
 ### 2.2 Healthy phone
 
