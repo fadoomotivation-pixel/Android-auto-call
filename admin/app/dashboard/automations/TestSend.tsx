@@ -17,11 +17,11 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type Kind = "pulse" | "alert";
+type Kind = "pulse" | "alert" | "rep" | "rep-weekly";
 type Out = { ok: boolean; text: string; preview?: string | null };
 
 export function TestSend({
-  preview, send, note, subscriberId, companyId, alertKind,
+  preview, send, note, subscriberId, companyId, alertKind, salespersonId,
 }: {
   preview: Kind | null;
   send: Kind | null;
@@ -32,6 +32,8 @@ export function TestSend({
   companyId?: string | null;
   /** Restrict an alert preview to one milestone. */
   alertKind?: string;
+  /** Which telecaller a rep review is built for. */
+  salespersonId?: string | null;
 }) {
   const [busy, setBusy] = useState<"" | "preview" | "send">("");
   const [out, setOut] = useState<Out | null>(null);
@@ -39,6 +41,7 @@ export function TestSend({
 
   const needsSub = (k: Kind | null) => k === "pulse" && !subscriberId;
   const needsCompany = (k: Kind | null) => k === "alert" && !companyId;
+  const needsRep = (k: Kind | null) => (k === "rep" || k === "rep-weekly") && !salespersonId;
 
   async function run(mode: "preview" | "send") {
     const kind = mode === "preview" ? preview : send;
@@ -59,6 +62,31 @@ export function TestSend({
         if (!d?.ok) { setOut({ ok: false, text: d?.error ?? "Failed" }); return; }
         setOut(mode === "preview"
           ? { ok: true, text: "Built from today's real numbers. Nothing was sent.", preview: d.preview ?? null }
+          : {
+              ok: true,
+              text: d.queued
+                ? "Held — WhatsApp was down. The drain cron will retry within five minutes."
+                : `Sent via ${d.via ?? "WhatsApp"}. Check the phone.`,
+            });
+      } else if (kind === "rep" || kind === "rep-weekly") {
+        const { data, error } = await supabase.functions.invoke("pulse-broadcast", {
+          body: {
+            rep_review: {
+              salesperson_id: salespersonId,
+              weekly: kind === "rep-weekly",
+              preview: mode === "preview",
+            },
+          },
+        });
+        if (error) throw error;
+        const d = data as { ok?: boolean; error?: string; preview?: string | null; note?: string; via?: string; queued?: boolean };
+        if (!d?.ok) { setOut({ ok: false, text: d?.error ?? "Failed" }); return; }
+        setOut(mode === "preview"
+          ? {
+              ok: true,
+              text: d.preview ? "Built from this rep's real numbers. Nothing was sent." : (d.note ?? "Nothing to review."),
+              preview: d.preview ?? null,
+            }
           : {
               ok: true,
               text: d.queued
@@ -98,13 +126,15 @@ export function TestSend({
     }
   }
 
-  const blockedPreview = !preview || needsSub(preview) || needsCompany(preview);
-  const blockedSend = !send || needsSub(send) || needsCompany(send);
+  const blockedPreview = !preview || needsSub(preview) || needsCompany(preview) || needsRep(preview);
+  const blockedSend = !send || needsSub(send) || needsCompany(send) || needsRep(send);
   const blockReason = needsSub(preview ?? send)
     ? "Add a recipient on Daily Pulse first — there is nobody to build this for."
     : needsCompany(preview ?? send)
       ? "Pick one company above. The sweep runs per company, never across all of them at once."
-      : null;
+      : needsRep(preview ?? send)
+        ? "No active telecaller in this company to build a review for."
+        : null;
 
   return (
     <div style={{ marginTop: 13, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>

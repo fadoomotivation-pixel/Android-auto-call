@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
 import { PhoneHealth } from "./PhoneHealth";
+import { SyncHeartbeat } from "./SyncHeartbeat";
 
 /**
  * Phone Health — why a telecaller's calls are (or aren't) reaching the CRM.
@@ -39,6 +40,7 @@ export default async function HealthPage() {
         For what a rep actually did today see <a href="/dashboard/pulse" style={{ color: "var(--accent)" }}>Daily Pulse</a>.
       </p>
       <PhoneHealth isSuper={isSuper} />
+      <SyncHeartbeat />
     </>
   );
 }
