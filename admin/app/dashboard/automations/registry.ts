@@ -13,13 +13,33 @@
  * confidently wrong. A stale entry here is visible and fixable — a missing one
  * is a message nobody is watching, so ADD TO THIS LIST when you add a message.
  *
+ * ELEVEN entries, and eleven is the point. The founder's four are four because
+ * a fifth is what gets the number muted; the telecaller's five stay split
+ * across WhatsApp, push and in-app on purpose. Anyone adding a twelfth has to
+ * add it here, in front of the list it is joining, which is the cheapest review
+ * this codebase has.
+ *
  * `statusKind` is how a row finds its own history:
  *   wa:<kind>   → whatsapp_messages.kind, stamped by _shared/notify.ts
  *   activity    → lead_activities, for reminders
- *   none        → nothing is recorded anywhere (see `blind`)
+ *   null        → nothing is recorded anywhere (see `blind`)
  */
 
 export type Audience = "founder" | "telecaller" | "customer";
+
+/** The four pipes, named once. Nothing else in the UI may invent a fifth. */
+export type Transport = "baileys" | "meta" | "fcm" | "in-app" | "device";
+
+export const TRANSPORT: Record<Transport, { label: string; short: string; colour: string }> = {
+  baileys: { label: "Baileys — the platform's own WhatsApp account", short: "Baileys", colour: "#25D366" },
+  meta: { label: "Meta Cloud API — the official business number", short: "Meta Cloud API", colour: "#0866FF" },
+  fcm: { label: "Firebase push to the rep's phone", short: "FCM push", colour: "#f59e0b" },
+  "in-app": { label: "Shown inside the Android app", short: "In-app", colour: "#a78bfa" },
+  device: { label: "The rep's own WhatsApp, on their own phone", short: "Device WhatsApp", colour: "#94a3b8" },
+};
+
+/** One hop in the journey from "something happened" to "it arrived". */
+export type Step = string;
 
 export type Automation = {
   id: string;
@@ -27,22 +47,27 @@ export type Automation = {
   name: string;
   /** What makes it fire, in words a person can check. */
   trigger: string;
-  /** The pipe it actually leaves by. */
-  channel: "WhatsApp" | "FCM push" | "In-app" | "Device WhatsApp";
-  /** Which WhatsApp account carries it, when it is WhatsApp. */
-  sender?: string;
+  /** Who it lands on. Counted live where the count is knowable. */
+  recipient: string;
+  transport: Transport;
   /** The function or file that sends it. */
   sentBy: string;
   /** Where the words live. */
   template: string;
+  /**
+   * Every hop, in order, ending at the transport. Rendered as the path the
+   * user asked for: Lead → founder-alerts → notify.ts → Baileys → Delivered.
+   * The final "Delivered" or "FAILED" is added from live data, not from here.
+   */
+  path: Step[];
   /** How this row finds its last send. */
   statusKind: string | null;
   /** Set when nothing at all is logged — stated rather than hidden. */
   blind?: string;
   /** A truth about the status line that would otherwise mislead. */
   caveat?: string;
-  /** A safe way to fire one now, if there is one. */
-  test?: { kind: "pulse" | "alert"; label: string; note: string };
+  /** Safe ways to fire one now. Preview never sends; send really sends. */
+  test?: { preview: "pulse" | "alert" | null; send: "pulse" | "alert" | null; note: string };
   /** The message as it actually reads. Kept beside the template path so the
    *  two are corrected together. */
   preview: string;
@@ -52,20 +77,25 @@ export type Automation = {
 
 export const AUTOMATIONS: Automation[] = [
   // ─────────────────────────── FOUNDER ───────────────────────────
+  // Four. Site visit fixed, booking, payment, and the daily report. A customer
+  // who visited and has not been rung back used to be a fifth — it was cut, and
+  // now lives on the Action Center where the person who chases it can see it.
   {
     id: "alert-site-visit-fixed",
     audience: "founder",
-    name: "Site visit fixed",
-    trigger: "A lead gets a site_visit_at in the future · checked every 15 min",
-    channel: "WhatsApp",
-    sender: "Baileys (platform number), falls back to Meta",
+    name: "Site Visit Fixed",
+    trigger: "A lead gets a site_visit_at in the future · swept every 15 min",
+    recipient: "Every alerts-on recipient on Daily Pulse",
+    transport: "baileys",
     sentBy: "founder-alerts",
-    template: "supabase/functions/founder-alerts/index.ts",
+    template: "supabase/functions/founder-alerts/index.ts · findAlerts()",
+    path: ["Lead gets a visit date", "founder-alerts", "founder_alerts claim", "notify.ts", "WhatsApp"],
     statusKind: "wa:alert",
     test: {
-      kind: "alert",
-      label: "Run the alert sweep now",
-      note: "Ignores quiet hours. Only sends milestones not already logged — it cannot re-send one.",
+      preview: "alert",
+      send: "alert",
+      note: "Preview reads today's real leads and sends nothing. Send runs the sweep for real — it " +
+        "ignores quiet hours but can never re-send a milestone that already went.",
     },
     preview: `📍 SITE VISIT FIXED
 
@@ -79,13 +109,18 @@ Auto Generated by Call Pro AI • Executive Intelligence`,
   {
     id: "alert-booking",
     audience: "founder",
-    name: "Booking confirmed",
-    trigger: "Lead status becomes booked · checked every 15 min",
-    channel: "WhatsApp",
-    sender: "Baileys (platform number), falls back to Meta",
+    name: "Booking",
+    trigger: "Lead status becomes booked · swept every 15 min",
+    recipient: "Every alerts-on recipient on Daily Pulse",
+    transport: "baileys",
     sentBy: "founder-alerts",
-    template: "supabase/functions/founder-alerts/index.ts",
+    template: "supabase/functions/founder-alerts/index.ts · findAlerts()",
+    path: ["Lead marked booked", "founder-alerts", "founder_alerts claim", "notify.ts", "WhatsApp"],
     statusKind: "wa:alert",
+    caveat:
+      "Shares the wa:alert history with the other two alerts, because all three leave in one " +
+      "message when they happen in the same fifteen minutes. Three bookings in a good hour is " +
+      "still exactly one buzz.",
     preview: `🎉 BOOKING CONFIRMED
 
 👤 Customer: Krishanpal Singh
@@ -98,12 +133,13 @@ Auto Generated by Call Pro AI • Executive Intelligence`,
   {
     id: "alert-payment",
     audience: "founder",
-    name: "Payment received",
-    trigger: "Status token_paid with an amount · checked every 15 min",
-    channel: "WhatsApp",
-    sender: "Baileys (platform number), falls back to Meta",
+    name: "Payment",
+    trigger: "Status token_paid with an amount · swept every 15 min",
+    recipient: "Every alerts-on recipient on Daily Pulse",
+    transport: "baileys",
     sentBy: "founder-alerts",
-    template: "supabase/functions/founder-alerts/index.ts",
+    template: "supabase/functions/founder-alerts/index.ts · findAlerts()",
+    path: ["Token recorded", "founder-alerts", "founder_alerts claim", "notify.ts", "WhatsApp"],
     statusKind: "wa:alert",
     preview: `🏆 PAYMENT RECEIVED
 
@@ -115,37 +151,20 @@ Auto Generated by Call Pro AI • Executive Intelligence`,
 Auto Generated by Call Pro AI • Executive Intelligence`,
   },
   {
-    id: "alert-visit-done",
-    audience: "founder",
-    name: "Site visit completed",
-    trigger: "Customer arrived and no outcome recorded · every 15 min",
-    channel: "WhatsApp",
-    sender: "Baileys (platform number), falls back to Meta",
-    sentBy: "founder-alerts",
-    template: "supabase/functions/founder-alerts/index.ts",
-    statusKind: "wa:alert",
-    preview: `✅ SITE VISIT COMPLETED
-
-👤 Customer: Krishanpal Singh
-👩 Executive: Shweta
-🎯 Feedback call within 24 hours — decision abhi pending hai.
-
-Auto Generated by Call Pro AI • Executive Intelligence`,
-  },
-  {
     id: "pulse-team",
     audience: "founder",
-    name: "Daily Pulse — whole team",
-    trigger: "Hourly cron; sends to recipients whose chosen hour is now (IST)",
-    channel: "WhatsApp",
-    sender: "Baileys (platform number), falls back to Meta",
+    name: "Daily Pulse",
+    trigger: "Hourly cron; goes to recipients whose chosen hour is now (IST)",
+    recipient: "Recipients on Daily Pulse with no telecaller set",
+    transport: "baileys",
     sentBy: "pulse-broadcast",
     template: "pulseText() · supabase/functions/_shared/pulse.ts",
+    path: ["Cron, on the hour", "pulse-broadcast", "buildCompany()", "notify.ts", "WhatsApp"],
     statusKind: "wa:pulse",
     test: {
-      kind: "pulse",
-      label: "Send now",
-      note: "Sends tonight's real report immediately to that one recipient.",
+      preview: "pulse",
+      send: "pulse",
+      note: "Preview builds tonight's real report and delivers it nowhere. Send puts it on the phone.",
     },
     livePreview: { href: "/dashboard/pulse", label: "See today's real text on Daily Pulse" },
     preview: `📊 Manas property · Daily Pulse
@@ -174,15 +193,16 @@ Auto Generated by Call Pro AI • Executive Intelligence`,
     id: "pulse-own",
     audience: "telecaller",
     name: "Own Daily Pulse",
-    trigger: "Same hourly cron, for recipients with a salesperson_id",
-    channel: "WhatsApp",
-    sender: "Baileys (platform number)",
+    trigger: "Same hourly cron, for recipients with a telecaller set",
+    recipient: "That one telecaller, their own numbers only",
+    transport: "baileys",
     sentBy: "pulse-broadcast",
     template: "repText() · supabase/functions/_shared/pulse.ts",
+    path: ["Cron, on the hour", "pulse-broadcast", "repText()", "notify.ts", "WhatsApp"],
     statusKind: "wa:pulse",
     test: {
-      kind: "pulse",
-      label: "Send now",
+      preview: "pulse",
+      send: "pulse",
       note: "Their own day only — never the team roll-up.",
     },
     livePreview: { href: "/dashboard/pulse", label: "Per-rep card on Daily Pulse" },
@@ -204,18 +224,72 @@ Manas property
 Auto Generated by Call Pro AI • Executive Intelligence`,
   },
   {
+    id: "push-hot-lead",
+    audience: "telecaller",
+    name: "Hot Lead Push",
+    trigger: "DB trigger trg_notify_hot_lead, the moment a lead turns hot",
+    recipient: "The rep the lead is assigned to",
+    transport: "fcm",
+    sentBy: "notify-rep",
+    template: "supabase/functions/notify-rep/index.ts",
+    path: ["Lead turns hot", "trg_notify_hot_lead", "notify-rep", "Firebase", "Rep's phone"],
+    statusKind: null,
+    blind:
+      "Nothing is logged. notify-rep is fire-and-forget to Firebase and writes no row, so there " +
+      "is no way to prove a rep was told — the phone either buzzed or it did not, and the CRM " +
+      "cannot say which. This is the biggest remaining hole in the Automation Center and the top " +
+      "recommendation in the architecture review.",
+    preview: `🔥 Hot lead — call now
+Sonu Aazmi · Manas Property`,
+  },
+  {
+    id: "push-assignment",
+    audience: "telecaller",
+    name: "Assignment Push",
+    trigger: "Triggers trg_notify_bulk_assign_ins / _upd, on assignment",
+    recipient: "The rep receiving the leads",
+    transport: "fcm",
+    sentBy: "notify-rep",
+    template: "supabase/functions/notify-rep/index.ts",
+    path: ["Leads assigned", "trg_notify_bulk_assign", "notify-rep", "Firebase", "Rep's phone"],
+    statusKind: null,
+    blind: "Not logged — same fire-and-forget path as the hot-lead push.",
+    preview: `📇 12 new leads assigned to you
+Open Call Pro AI to start calling.`,
+  },
+  {
+    id: "push-reminder",
+    audience: "telecaller",
+    name: "Reminder Push",
+    trigger: "A human presses Remind Rep in the Action Center",
+    recipient: "The rep who owns that lead",
+    transport: "fcm",
+    sentBy: "RemindRep.tsx → notify-rep",
+    template: "app/dashboard/actions/RemindRep.tsx",
+    path: ["Someone presses Remind Rep", "notify-rep", "Firebase", "Rep's phone", "lead_activities"],
+    statusKind: "activity",
+    caveat:
+      "The only telecaller push with a record, and the record is the lead_activities row written " +
+      "alongside it — not proof the phone buzzed. It says a human asked, not that the rep saw it.",
+    preview: `Did they come to the site?
+Sonu Aazmi — please record what happened at the visit.`,
+  },
+  {
     id: "rep-coach",
     audience: "telecaller",
     name: "Rep Coach — 7pm review",
     trigger: "Assistant tick after the review hour, once a day",
-    channel: "In-app",
+    recipient: "The rep, on their own screen",
+    transport: "in-app",
     sentBy: "rep-coach → AssistantPrompts.kt",
     template: "AssistantPrompts.kt · DayReviewPrompt",
+    path: ["7pm, rep has the app open", "rep-coach", "AssistantPrompts.kt", "Card in the app"],
     statusKind: null,
     blind:
-      "In-app by design. Deliberately NOT WhatsApp — a rep already gets pushes, calls, " +
-      "CRM reminders, customer chats and founder requests. Coaching on top of that is noise. " +
-      "Answers land in rep_prompts; the card itself is not a delivery event.",
+      "In-app by design, and it stays that way. A rep already gets pushes, calls, CRM reminders, " +
+      "customer chats and founder requests; coaching delivered on top of that is not help, it is " +
+      "one more thing to swipe away. Answers land in rep_prompts — but the card being shown is " +
+      "not a delivery event, so there is no send to report here.",
     preview: `★★★★☆  8.5/10
 48 calls · 37 connected · 2 visits fixed
 
@@ -227,86 +301,48 @@ Good rapport — 2 site visits fixed today.
 Say instead: "Sir kis din call karun? Main wahi time note kar leta hoon."
 
 🎧 Best call · Sonu Aazmi · ★★★★★
-📉 Sabse kamzor · Naseer Mohd · ★★
+📉 Weakest call · Naseer Mohd · ★★
 
-🎯 Kal sabse pehle
-• Krishanpal Singh — feedback lena hai`,
-  },
-  {
-    id: "push-hot-lead",
-    audience: "telecaller",
-    name: "Hot lead push",
-    trigger: "DB trigger trg_notify_hot_lead when a lead turns hot",
-    channel: "FCM push",
-    sentBy: "notify-rep",
-    template: "supabase/functions/notify-rep/index.ts",
-    statusKind: null,
-    blind:
-      "Nothing is logged. notify-rep is fire-and-forget to FCM and writes no row, so there " +
-      "is no way to prove a rep was told. Fixing this is the top recommendation in the " +
-      "architecture review.",
-    preview: `🔥 Hot lead — call now
-Sonu Aazmi · Manas Property`,
-  },
-  {
-    id: "push-assignment",
-    audience: "telecaller",
-    name: "Assignment push",
-    trigger: "Triggers trg_notify_bulk_assign_ins / _upd",
-    channel: "FCM push",
-    sentBy: "notify-rep",
-    template: "supabase/functions/notify-rep/index.ts",
-    statusKind: null,
-    blind: "Not logged — same fire-and-forget path as the hot-lead push.",
-    preview: `📇 12 new leads assigned to you
-Open Call Pro AI to start calling.`,
-  },
-  {
-    id: "push-reminder",
-    audience: "telecaller",
-    name: "Reminder push",
-    trigger: "Super admin presses Remind Rep in the Action Center",
-    channel: "FCM push",
-    sentBy: "RemindRep.tsx → notify-rep",
-    template: "app/dashboard/actions/RemindRep.tsx",
-    statusKind: "activity",
-    preview: `Did they come to the site?
-Sonu Aazmi — please record what happened at the visit.`,
+🎯 First thing tomorrow
+• Krishanpal Singh — get the feedback`,
   },
 
   // ─────────────────────────── CUSTOMER ───────────────────────────
   {
-    id: "customer-manual",
-    audience: "customer",
-    name: "Rep's own WhatsApp",
-    trigger: "Rep taps WhatsApp on a lead",
-    channel: "Device WhatsApp",
-    sentBy: "waTemplate() · opens the rep's own WhatsApp",
-    template: "TelecallerScreens.kt · waTemplate()",
-    statusKind: null,
-    blind:
-      "Sent from the rep's personal WhatsApp, so the CRM never sees it. Not a gap that can " +
-      "be closed without routing customer messages through the platform.",
-    preview: `Namaste Sonu ji, main Shweta bol rahi hoon Manas Property se.
-Aapne humari property ke baare mein enquiry ki thi.`,
-  },
-  {
     id: "customer-inbox",
     audience: "customer",
     name: "Team Inbox reply",
-    trigger: "Admin types a reply on the WhatsApp page",
-    channel: "WhatsApp",
-    sender: "Meta Cloud API only — never Baileys",
+    trigger: "An admin types a reply on the WhatsApp page",
+    recipient: "The customer",
+    transport: "meta",
     sentBy: "whatsapp-send",
     template: "typed by hand, or an approved Meta template",
+    path: ["Admin types a reply", "whatsapp-send", "Meta Cloud API", "Customer's WhatsApp"],
     statusKind: "wa:inbox",
     caveat:
-      "The only entry here sent by a person rather than a schedule. Replies sent before the " +
-      "Automation Center existed were not tagged, so \"never sent\" here means nobody has " +
-      "replied since — not that the inbox has never been used. See the full thread history in " +
-      "the Team Inbox.",
+      "Sent by a person, not a schedule — it is here because it is the one automated-looking path " +
+      "that touches a customer, and the transport must stay visible. Replies sent before the " +
+      "Automation Center existed were not tagged, so \"never sent\" means nobody has replied " +
+      "since, not that the inbox has never been used.",
     livePreview: { href: "/dashboard/whatsapp", label: "Open Team Inbox" },
     preview: `(free text, or an approved template when outside the 24-hour window)`,
+  },
+  {
+    id: "customer-manual",
+    audience: "customer",
+    name: "Rep's personal WhatsApp",
+    trigger: "Rep taps WhatsApp on a lead in the Android app",
+    recipient: "The customer",
+    transport: "device",
+    sentBy: "waTemplate() · opens the rep's own WhatsApp",
+    template: "TelecallerScreens.kt · waTemplate()",
+    path: ["Rep taps WhatsApp", "waTemplate()", "Rep's own phone", "Customer's WhatsApp"],
+    statusKind: null,
+    blind:
+      "Leaves from the rep's personal WhatsApp, so the CRM never sees it and cannot. Not a gap " +
+      "that can be closed without routing customer conversations through the platform.",
+    preview: `Namaste Sonu ji, main Shweta bol rahi hoon Manas Property se.
+Aapne humari property ke baare mein enquiry ki thi.`,
   },
 ];
 
@@ -318,13 +354,40 @@ export const AUDIENCE_LABEL: Record<Audience, string> = {
 
 export const AUDIENCE_NOTE: Record<Audience, string> = {
   founder:
-    "Business-critical only. The founder should not have to open the CRM — and should not be " +
-    "messaged about anything that is not money or a customer standing on the site.",
+    "Four messages, and four is a decision. Site visit fixed, booking, payment, and the daily " +
+    "report — everything else is in the Pulse or on the Action Center. A founder who gets pinged " +
+    "for every lead movement mutes the number within a week, and then the one booking alert that " +
+    "mattered arrives silently.",
   telecaller:
     "The rep's day already contains pushes, calls, reminders, customer chats and founder " +
-    "requests. Coaching stays inside the app so it does not compete with all of that.",
+    "requests. Coaching stays inside the app so it does not compete with all of that, and only " +
+    "the two Pulse-style messages ever reach WhatsApp.",
   customer:
-    "Never sent over Baileys. Customers are only ever messaged on the official Cloud API or " +
-    "from the rep's own phone — an unofficial account carrying customer traffic risks the " +
-    "number leads reply to.",
+    "Never Baileys. Customers are only ever messaged on the official Cloud API or from the rep's " +
+    "own phone — an unofficial account carrying customer traffic risks a ban on the number leads " +
+    "reply to, and losing that costs the business rather than an evening.",
 };
+
+/** The transport map, stated once so there is no ambiguity anywhere. */
+export const ROUTING: Array<{ what: string; transport: Transport; why: string }> = [
+  {
+    what: "Founder alerts + Daily Pulse",
+    transport: "baileys",
+    why: "Internal reporting to a number we control. No 24-hour window, no templates, no token to expire.",
+  },
+  {
+    what: "Telecaller's own Pulse",
+    transport: "baileys",
+    why: "Same pipe, same reason — a rep is internal, not a customer.",
+  },
+  {
+    what: "Team Inbox → customer",
+    transport: "meta",
+    why: "The only account with a business agreement behind it. Customer traffic on Baileys risks the ban.",
+  },
+  {
+    what: "Rep's chat with a lead",
+    transport: "device",
+    why: "Opens the rep's own WhatsApp. Never touches a platform number at all.",
+  },
+];
