@@ -49,7 +49,10 @@ export default function LoginPage() {
         });
         if (signErr) throw signErr;
       }
-      router.push("/dashboard");
+      // Managers land on the action queue, not analytics. Operations should
+      // open with "what needs me today"; the twenty-three reporting pages are
+      // all still one click away in the sidebar.
+      router.push("/dashboard/today");
       router.refresh();
     } catch (err: any) {
       setError(err?.message ?? "Something went wrong");
