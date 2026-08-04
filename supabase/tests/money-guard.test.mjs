@@ -1,19 +1,24 @@
 /**
  * The money guard, tested against the source that actually ships.
  *
- * It extracts MONEY_CLAIM and moneySafe() out of ../pulse.ts at runtime rather
+ * It extracts MONEY_CLAIM and moneySafe() out of pulse.ts at runtime rather
  * than keeping a copy here. A test with its own copy of the logic passes
  * forever while the real thing rots — and the whole reason this guard exists is
  * that a second, unchecked source of truth told the founder a customer had paid
  * when nobody had.
  *
- *   node supabase/functions/_shared/__tests__/money-guard.test.mjs
+ * It lives OUTSIDE supabase/functions/ on purpose. It sat in
+ * functions/_shared/__tests__/ for about twenty minutes and took the Daily
+ * Pulse down with it — see the commit message. Nothing that is not an edge
+ * function may live under that directory.
+ *
+ *   node supabase/tests/money-guard.test.mjs
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../pulse.ts"), "utf8");
+const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../functions/_shared/pulse.ts"), "utf8");
 const m = src.match(
   /const MONEY_CLAIM =\n([\s\S]*?);\n\nfunction moneySafe\(line: string, r: \{ bookings: number; revenue: number \}\): string \{\n([\s\S]*?)\n\}\n/,
 );
