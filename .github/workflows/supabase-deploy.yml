@@ -60,6 +60,15 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase functions deploy --project-ref rqgkzamuohdvttnkluzn
 
+      # Only on success. The first run of this workflow failed on the missing
+      # token and then printed "Deployed every function…" underneath the error,
+      # because this step was `if: always()`. A deploy log that claims success
+      # after a failure is worse than no log at all — it is exactly how someone
+      # concludes the functions are live when they are not.
       - name: What went out
-        if: always()
+        if: success()
         run: echo "Deployed every function in supabase/functions to rqgkzamuohdvttnkluzn."
+
+      - name: What did not go out
+        if: failure()
+        run: echo "::warning::Deploy failed — the functions on Supabase are UNCHANGED, still running the previous version."
