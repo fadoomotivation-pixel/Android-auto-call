@@ -1,4 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
+import { resolveScope } from "@/lib/dashboard/scope";
+import { duration as fmtDuration, compactNum as fmtNum, minutes as fmtMinutes }
+  from "@/lib/dashboard/format";
+import { ModuleLinks } from "./ModuleLinks";
 import { LiveFeed } from "./LiveFeed";
 import { ExportCalls } from "./ExportCalls";
 
@@ -20,30 +23,14 @@ type SpeedRep = {
 };
 type Speed = { reps: SpeedRep[]; total_breaching: number };
 
-function fmtDuration(seconds: number) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-function fmtNum(n: number) {
-  return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`;
-}
-/** Minutes → a human "4m" / "2h 57m" / "1d 3h". */
-function fmtMinutes(min: number) {
-  if (!min || min <= 0) return "—";
-  if (min < 60) return `${Math.round(min)}m`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h ${Math.round(min % 60)}m`;
-  return `${Math.floor(h / 24)}d ${h % 24}h`;
-}
 
-export default async function OverviewPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+export default async function OverviewPage({
+  searchParams,
+}: { searchParams: Promise<{ company?: string }> }) {
+  // Everyone lands here after login, reps included — so this is the one module
+  // that must never redirect on role.
+  const ctx = await resolveScope(await searchParams, { require: "any" });
+  const { supabase } = ctx;
 
   // One aggregated round trip (was: pulling up to 5000 call rows per load).
   // The RPC returns a single jsonb object; supabase-js types rpc as an array,
@@ -198,6 +185,7 @@ export default async function OverviewPage() {
           </table>
         </div>
       )}
+      <ModuleLinks current="overview" scope={ctx} />
     </>
   );
 }

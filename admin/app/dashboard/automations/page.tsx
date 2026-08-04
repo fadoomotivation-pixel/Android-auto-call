@@ -21,6 +21,8 @@
  */
 import Link from "next/link";
 import { resolveScope } from "@/lib/dashboard/scope";
+import { ModuleLinks } from "../ModuleLinks";
+import { ist, istClock as clock } from "@/lib/dashboard/format";
 import {
   AUDIENCE_LABEL, AUDIENCE_NOTE, AUTOMATIONS, ROUTING, TRANSPORT, type Audience,
 } from "./registry";
@@ -29,19 +31,6 @@ import { Health } from "./Health";
 
 export const dynamic = "force-dynamic";
 
-function ist(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata", day: "numeric", month: "short",
-    hour: "numeric", minute: "2-digit", hour12: true,
-  });
-}
-function clock(iso: string | null | undefined): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", hour12: true,
-  });
-}
 
 const AUDIENCE_EMOJI: Record<Audience, string> = {
   founder: "👑", telecaller: "👤", customer: "🧑‍💼",
@@ -66,7 +55,9 @@ export default async function AutomationsPage({
   const sp = await searchParams;
   // See lib/dashboard/scope.ts — one definition of who is asking and which
   // company they are looking at.
-  const { supabase, isSuper, companyId: scope } = await resolveScope(sp);
+  const ctx = await resolveScope(sp);
+  const { supabase, isSuper } = ctx;
+  const scope = ctx.companyId;
 
   const waQ = supabase.from("whatsapp_messages")
     .select("id, kind, status, error, created_at, counterparty")
@@ -532,6 +523,8 @@ export default async function AutomationsPage({
             </div>
           ))}
       </section>
+
+      <ModuleLinks current="automations" scope={ctx} />
     </>
   );
 }

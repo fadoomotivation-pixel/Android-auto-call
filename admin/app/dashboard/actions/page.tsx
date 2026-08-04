@@ -34,6 +34,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { resolveScope } from "@/lib/dashboard/scope";
+import { ModuleLinks } from "../ModuleLinks";
+import { ist, daysAgo } from "@/lib/dashboard/format";
 import { KpiChip } from "./KpiChip";
 import { RemindRep, type ReminderKind } from "./RemindRep";
 
@@ -41,19 +43,6 @@ export const dynamic = "force-dynamic";
 
 type Search = { company?: string };
 
-function daysAgo(iso: string | null): number | null {
-  if (!iso) return null;
-  return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-}
-
-/** IST, always. A manager in Noida reading a UTC due-time will chase the wrong hour. */
-function ist(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata", day: "numeric", month: "short",
-    hour: "numeric", minute: "2-digit", hour12: true,
-  });
-}
 
 /**
  * How old is too old, as a colour.
@@ -151,7 +140,9 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   // Identity, admin gate and company scope in one call. The rule that a super
   // admin defaults to ALL companies and is never pinned to their own lives in
   // lib/dashboard/scope.ts, once, instead of being retyped on every page.
-  const { supabase, isSuper, companyId: scope } = await resolveScope(sp);
+  const ctx = await resolveScope(sp);
+  const { supabase, isSuper } = ctx;
+  const scope = ctx.companyId;
   const todayEndIst = `${new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)}T23:59:59+05:30`;
 
   // Built one at a time rather than through a generic helper: PostgREST
@@ -432,6 +423,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
             right="" />
         ))}
       </Block>
+      <ModuleLinks current="actions" scope={ctx} />
     </>
   );
 }
