@@ -106,7 +106,8 @@ export default async function AutomationsPage({
   // the reason, because "1 of 9 enrolled" is a fixable sentence and an empty
   // list is not.
   const repsQ = supabase.from("v_rep_review_recipients")
-    .select("salesperson_id, company_id, full_name, phone, company_name, has_phone, company_on, platform_on, enrolled")
+    .select("salesperson_id, company_id, full_name, phone, company_name, has_phone, company_on, " +
+            "platform_on, enrolled, device_state, device_trustworthy")
     .order("full_name");
   if (scope) repsQ.eq("company_id", scope);
 
@@ -134,12 +135,14 @@ export default async function AutomationsPage({
     salesperson_id: string; company_id: string; full_name: string | null; phone: string | null;
     company_name: string | null; has_phone: boolean; company_on: boolean;
     platform_on: boolean; enrolled: boolean;
+    device_state: string; device_trustworthy: boolean;
   }>;
   const enrolledReps = reps.filter((r) => r.enrolled);
   const noPhone = reps.filter((r) => !r.has_phone);
   // Who a rep-review test is built for: someone actually reachable if possible,
   // otherwise anybody, so the PREVIEW still works before phone numbers exist.
   const testRep = enrolledReps[0] ?? reps[0] ?? null;
+  const untrusted = enrolledReps.filter((r) => !r.device_trustworthy);
   const queued = outRows.filter((r) => r.status === "queued");
 
   const companyName = scope
@@ -475,6 +478,11 @@ export default async function AutomationsPage({
           {reps.length > 0 && !reps[0].platform_on && (
             <> The platform switch is <strong>off</strong>, so nothing is being sent yet.</>
           )}
+          {untrusted.length > 0 && (
+            <> {untrusted.length} enrolled {untrusted.length === 1 ? "phone is" : "phones are"} not
+            feeding the CRM, so their day cannot be scored honestly and they will be skipped —{" "}
+            <Link href="/dashboard/health">see Phone Health</Link>.</>
+          )}
         </p>
         {reps.length === 0
           ? <div className="empty">No active telecallers in this company.</div>
@@ -482,17 +490,19 @@ export default async function AutomationsPage({
             <div key={r.salesperson_id} style={{ display: "flex", gap: 12, flexWrap: "wrap",
               alignItems: "center", padding: "8px 0", fontSize: 13.5,
               borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-              <strong>{r.enrolled ? "✅" : "⚠️"} {r.full_name ?? "Unnamed"}</strong>
+              <strong>{r.enrolled && r.device_trustworthy ? "✅" : "⚠️"} {r.full_name ?? "Unnamed"}</strong>
               {!scope && <span style={{ fontSize: 12, color: "var(--muted)" }}>{r.company_name}</span>}
               <span style={{ color: "var(--muted)", fontSize: 12.5 }}>
                 {r.has_phone ? r.phone : "no phone number"}
               </span>
               <span style={{ fontSize: 12, marginLeft: "auto",
-                color: r.enrolled ? "#86efac" : "#fbbf24" }}>
-                {r.enrolled ? "enrolled"
-                  : !r.has_phone ? "needs a phone number"
-                  : !r.company_on ? "this company has switched it off"
-                  : "platform switch is off"}
+                color: r.enrolled && r.device_trustworthy ? "#86efac" : "#fbbf24" }}>
+                {!r.enrolled
+                  ? (!r.has_phone ? "needs a phone number"
+                    : !r.company_on ? "this company has switched it off"
+                    : "platform switch is off")
+                  : r.device_trustworthy ? "enrolled"
+                  : `phone not reporting (${r.device_state.replace(/_/g, " ")}) — will be skipped`}
               </span>
             </div>
           ))}

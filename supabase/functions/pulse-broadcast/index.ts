@@ -145,16 +145,28 @@ async function sendRepReviews(admin: SupabaseClient, hour: number, date: string)
   if (!gate?.rep_review_on && !weekly) return { skipped: "switched off" };
 
   const { data: recips } = await admin.from("v_rep_review_recipients")
-    .select("salesperson_id, company_id, full_name, phone, company_name, rep_review_hour_ist, enrolled")
+    .select("salesperson_id, company_id, full_name, phone, company_name, rep_review_hour_ist, " +
+            "enrolled, device_state, device_trustworthy")
     .eq("enrolled", true);
 
-  let sent = 0, failed = 0, quiet = 0;
+  let sent = 0, failed = 0, quiet = 0, untrusted = 0;
   for (const r of (recips ?? []) as Array<{
     salesperson_id: string; company_id: string; full_name: string | null;
     phone: string; company_name: string | null; rep_review_hour_ist: number;
+    device_state: string; device_trustworthy: boolean;
   }>) {
     const daily = gate?.rep_review_on === true && hour === r.rep_review_hour_ist;
     if (!daily && !weekly) continue;
+
+    // The phone has to be feeding the CRM before we grade the person.
+    //
+    // A rep whose device stopped reporting has a day the CRM never saw, and
+    // scoring that day produces the most damaging message this product can
+    // send: a low mark, in writing, for work that was actually done. It nearly
+    // happened — fifteen calls made, one recorded, and an honest score of 1/100
+    // waiting to go out at 7pm. Silence is the right answer, and the gap is
+    // Phone Health's problem rather than the rep's.
+    if (!r.device_trustworthy) { untrusted++; continue; }
 
     try {
       const body = weekly
@@ -171,7 +183,7 @@ async function sendRepReviews(admin: SupabaseClient, hour: number, date: string)
       failed++;
     }
   }
-  return { sent, failed, quiet, mode: weekly ? "weekly" : "daily" };
+  return { sent, failed, quiet, untrusted, mode: weekly ? "weekly" : "daily" };
 }
 
 async function dailyBody(

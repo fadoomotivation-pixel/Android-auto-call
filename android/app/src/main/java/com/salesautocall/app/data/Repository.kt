@@ -130,9 +130,59 @@ object Repository {
         )
     }
 
+
+    /**
+     * Tell the server what this phone's call-log sync just did — including the
+     * runs where it did nothing, and why.
+     *
+     * This exists because syncCallLogs() used to have three silent exits. A rep
+     * whose READ_CALL_LOG permission had been revoked looked exactly like a rep
+     * who made no calls: no rows, no error, no signal of any kind. One of them
+     * worked a full day of fifteen calls and the CRM recorded one, and nobody
+     * found out until the founder picked up her phone and compared it to the
+     * dashboard.
+     *
+     * Best-effort on purpose. Reporting the heartbeat must never be able to
+     * break the sync it is reporting on — if this throws, the calls still go up.
+     */
+    private suspend fun reportSyncHealth(
+        companyId: String,
+        salesId: String,
+        outcome: String,
+        detail: String? = null,
+        nativeSeen: Int = 0,
+        backfilled: Int = 0,
+        contactsLoaded: Int = 0,
+    ) {
+        runCatching {
+            val now = java.time.Instant.now().toString()
+            client.from("device_sync_health").upsert(buildJsonObject {
+                put("salesperson_id", salesId)
+                put("company_id", companyId)
+                put("last_run_at", now)
+                // Only a completed scan sets last_ok_at. The gap between the two
+                // timestamps is the entire diagnosis on the admin side.
+                if (outcome == "ok") put("last_ok_at", now)
+                put("outcome", outcome)
+                put("detail", detail?.take(300))
+                put("native_seen", nativeSeen)
+                put("backfilled", backfilled)
+                put("contacts_loaded", contactsLoaded)
+                put("app_version", com.salesautocall.app.BuildConfig.VERSION_NAME)
+                put("device_model", "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+                put("android_sdk", android.os.Build.VERSION.SDK_INT)
+                put("updated_at", now)
+            }) { onConflict = "salesperson_id" }
+        }
+    }
+
     /**
      * Safety net: Reads the native Android CallLog, compares with Supabase,
      * and backfills any missing calls made to our CRM contacts.
+     *
+     * Every exit reports itself — see reportSyncHealth. A return that records
+     * nothing is indistinguishable from a quiet day, and that ambiguity cost a
+     * telecaller a day's credit and the founder their trust in the dashboard.
      */
     suspend fun syncCallLogs(context: Context) {
         val companyId = myProfile()?.companyId ?: return
@@ -140,6 +190,11 @@ object Repository {
 
         // 1. Check permission
         if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            // The single most common way this phone goes blind, and until now
+            // the most silent. Say it out loud so Phone Health can name the
+            // rep, the handset and the setting to change.
+            reportSyncHealth(companyId, salesId, "no_permission",
+                "READ_CALL_LOG is not granted, so the app cannot see this phone's calls.")
             return
         }
 
@@ -160,7 +215,11 @@ object Repository {
         }.toMap()
 
         // With monitoring off and no CRM contacts, there's nothing to match against.
-        if (contactMap.isEmpty() && !recordAll) return
+        if (contactMap.isEmpty() && !recordAll) {
+            reportSyncHealth(companyId, salesId, "no_contacts",
+                "No CRM leads to match this phone's calls against.", contactsLoaded = 0)
+            return
+        }
 
         // 3. Fetch recent Supabase call logs to deduplicate
         // Limit to 500 to avoid large memory footprint, enough to catch missing ones.
@@ -184,7 +243,13 @@ object Repository {
             "${AndroidCallLog.Calls.DATE} > ?",
             arrayOf(timeLimitMillis.toString()),
             "${AndroidCallLog.Calls.DATE} ASC" // Ascending to process oldest first
-        ) ?: return
+        ) ?: run {
+            // The OS refused the query even though the permission looked
+            // granted — happens on some OEM builds after a restore.
+            reportSyncHealth(companyId, salesId, "no_cursor",
+                "Android returned no call-log cursor.", contactsLoaded = contactMap.size)
+            return
+        }
 
         data class NativeCall(val num: String, val cleanNum: String, val contactId: String?, val startedAt: Instant, val durationSec: Int, val type: Int)
         val nativeCalls = mutableListOf<NativeCall>()
@@ -226,6 +291,7 @@ object Repository {
 
         // 5. Greedy bipartite matching
         val matchedSupabaseIds = mutableSetOf<String>()
+        var backfilled = 0
 
         for (nativeCall in nativeCalls) {
             // Find closest unmatched Supabase log within 120 seconds
@@ -278,9 +344,20 @@ object Repository {
                     // Off-CRM = captured under record-all-calls, number isn't a lead.
                     offCrm = nativeCall.contactId == null,
                 )
-                runCatching { logCall(newLog) }
+                if (runCatching { logCall(newLog) }.isSuccess) backfilled++
             }
         }
+
+        // A completed scan. native_seen is what the PHONE believes happened;
+        // backfilled is how much of it the CRM had missed. A phone reporting
+        // fifteen seen and fourteen backfilled every run is a phone whose live
+        // capture is dead and whose safety net is quietly carrying the day.
+        reportSyncHealth(
+            companyId, salesId, "ok",
+            nativeSeen = nativeCalls.size,
+            backfilled = backfilled,
+            contactsLoaded = contactMap.size,
+        )
     }
 
     /** Uploads a recording file to the recording-upload edge function, which streams
