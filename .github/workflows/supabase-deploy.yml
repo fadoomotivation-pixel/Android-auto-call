@@ -51,6 +51,21 @@ jobs:
             exit 1
           fi
 
+      # supabase/functions is a deploy root, not a source folder. Every file
+      # under it is a candidate for the bundle, and one stray test file took
+      # the Daily Pulse, the founder alerts and team-pulse down for an hour —
+      # BOOT_ERROR on all three, with source code that was provably correct.
+      # Tests live in supabase/tests/.
+      - name: Nothing but functions under supabase/functions
+        run: |
+          stray=$(find supabase/functions \( -name '*.test.*' -o -name '__tests__' -o -name '*.mjs' \) -print)
+          if [ -n "$stray" ]; then
+            echo "::error::Not an edge function, but sitting in the deploy root:"
+            echo "$stray"
+            echo "::error::Move it to supabase/tests/. Files here are bundled into every function that shares the folder."
+            exit 1
+          fi
+
       - uses: supabase/setup-cli@v1
         with:
           version: latest
@@ -59,6 +74,27 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase functions deploy --project-ref rqgkzamuohdvttnkluzn
+
+      # A green deploy is not a working deploy. These three all deployed
+      # "successfully" while failing to boot, and nothing noticed until a
+      # founder reported the Pulse was down an hour later. OPTIONS is the
+      # cheapest possible liveness probe: it returns before any auth or body
+      # handling, so a non-2xx here means the module did not load at all.
+      - name: Smoke-test the functions that carry a message
+        if: success()
+        run: |
+          fail=0
+          for fn in pulse-broadcast founder-alerts team-pulse notify-provider notify-rep whatsapp-send; do
+            code=$(curl -s -o /tmp/out -w '%{http_code}' -X OPTIONS \
+              "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/$fn" --max-time 30 || echo 000)
+            if [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; then
+              echo "  ok   $fn ($code)"
+            else
+              echo "::error::$fn did not boot — OPTIONS returned $code: $(head -c 200 /tmp/out)"
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] || { echo "::error::Deploy completed but at least one function cannot start."; exit 1; }
 
       # Only on success. The first run of this workflow failed on the missing
       # token and then printed "Deployed every function…" underneath the error,
