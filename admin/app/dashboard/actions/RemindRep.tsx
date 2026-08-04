@@ -119,7 +119,9 @@ export function RemindRep({
   const label =
     state === "sending" ? "Sending…" :
     state === "error" ? "Retry" :
-    sentAt ? "Remind again" : "Remind";
+    // "Remind Rep", not "Remind". Scanning a column of buttons, the bare verb
+    // does not say who is on the other end of it.
+    sentAt ? "🔔 Remind again" : "🔔 Remind Rep";
 
   // Status on the left, action on the right. Merging them into one green
   // button made the state read as a thing to press — easy to click by
