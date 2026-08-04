@@ -25,9 +25,11 @@
  * without ever pinning them to their own, which is the rule that keeps the
  * "ankit" company from quietly becoming the whole platform.
  */
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { RemindRep } from "./RemindRep";
 
 export const dynamic = "force-dynamic";
 
@@ -48,13 +50,13 @@ function ist(iso: string | null): string {
 }
 
 function Block({
-  emoji, title, count, blurb, children, tone = "var(--accent)",
+  emoji, title, count, blurb, children, tone = "var(--accent)", id,
 }: {
   emoji: string; title: string; count: number; blurb: string;
-  children: React.ReactNode; tone?: string;
+  children: ReactNode; tone?: string; id?: string;
 }) {
   return (
-    <section className="card" style={{ padding: 16, marginBottom: 16 }}>
+    <section id={id} className="card" style={{ padding: 16, marginBottom: 16, scrollMarginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <h3 style={{ margin: 0, fontSize: 16 }}>{emoji} {title}</h3>
         <span style={{
@@ -71,17 +73,40 @@ function Block({
   );
 }
 
-function Row({ left, right, href }: { left: React.ReactNode; right: React.ReactNode; href: string }) {
+function Row({ left, right, href, action }: {
+  left: ReactNode; right: ReactNode; href: string; action?: ReactNode;
+}) {
   return (
-    <Link href={href} style={{ textDecoration: "none", color: "inherit" }}>
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
-        padding: "9px 0", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 13.5,
-      }}>
-        <span>{left}</span>
-        <span style={{ color: "var(--muted)", fontSize: 12.5, whiteSpace: "nowrap" }}>{right} →</span>
-      </div>
-    </Link>
+    <div style={{
+      display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+      padding: "9px 0", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 13.5,
+    }}>
+      {/* The action sits OUTSIDE the link. A button inside an anchor is a row
+          you cannot press without also navigating away from it. */}
+      <Link href={href} style={{ textDecoration: "none", color: "inherit", flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {left}
+        </span>
+      </Link>
+      <span style={{ color: "var(--muted)", fontSize: 12.5, whiteSpace: "nowrap" }}>{right}</span>
+      {action}
+      <Link href={href} style={{ textDecoration: "none", color: "var(--muted)", fontSize: 12.5 }}>→</Link>
+    </div>
+  );
+}
+
+/** The workload in four numbers, before a single row is read. */
+function Kpi({ n, label, href, tone }: { n: number; label: string; href: string; tone: string }) {
+  return (
+    <a href={href} style={{
+      textDecoration: "none", flex: "1 1 130px", minWidth: 120,
+      background: n > 0 ? `color-mix(in srgb, ${tone} 12%, transparent)` : "rgba(255,255,255,0.04)",
+      border: `1px solid ${n > 0 ? `color-mix(in srgb, ${tone} 35%, transparent)` : "rgba(255,255,255,0.08)"}`,
+      borderRadius: 12, padding: "10px 14px", display: "block",
+    }}>
+      <div style={{ fontSize: 24, fontWeight: 800, color: n > 0 ? tone : "var(--muted)", lineHeight: 1.1 }}>{n}</div>
+      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{label}</div>
+    </a>
   );
 }
 
@@ -111,12 +136,12 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   // builders are mutable, so an `if` reads plainly and does not need a cast
   // that the Vercel build would have to be talked out of.
   const visitQ = supabase.from("v_pending_site_visit_outcomes")
-    .select("contact_id, name, phone, telecaller, visit_at, days_waiting, times_asked, needs_manager")
+    .select("contact_id, salesperson_id, name, phone, telecaller, visit_at, days_waiting, times_asked, needs_manager")
     .order("days_waiting", { ascending: false }).limit(40);
   if (scope) visitQ.eq("company_id", scope);
 
   const fupQ = supabase.from("follow_ups")
-    .select("id, contact_id, name, phone, due_at, note")
+    .select("id, contact_id, name, phone, due_at, note, salesperson_id")
     .eq("status", "pending").lte("due_at", todayEndIst)
     .order("due_at", { ascending: true }).limit(40);
   if (scope) fupQ.eq("company_id", scope);
@@ -141,7 +166,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const companyList = (companyRows.data ?? []) as Array<{ id: string; name: string }>;
 
   const visits = (pending.data ?? []) as Array<{
-    contact_id: string; name: string | null; phone: string | null; telecaller: string | null;
+    contact_id: string; salesperson_id: string | null; name: string | null; phone: string | null; telecaller: string | null;
     visit_at: string | null; days_waiting: number | null; times_asked: number; needs_manager: boolean;
   }>;
   const escalations = visits.filter((v) => v.needs_manager);
@@ -149,7 +174,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
 
   const followUps = (fups.data ?? []) as Array<{
     id: string; contact_id: string | null; name: string | null; phone: string | null;
-    due_at: string; note: string | null;
+    due_at: string; note: string | null; salesperson_id: string | null;
   }>;
   const nowMs = Date.now();
   const overdue = followUps.filter((f) => new Date(f.due_at).getTime() < nowMs);
@@ -195,46 +220,66 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
+      {/* The workload in four numbers. A super admin opening this at 9am should
+          know the size of the day before reading a single row; each chip jumps
+          to the section it counts. */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "0 0 20px" }}>
+        <Kpi n={awaiting.length} label="Awaiting site visits" href="#visits" tone="#f59e0b" />
+        <Kpi n={overdue.length} label="Overdue follow-ups" href="#followups" tone="#60a5fa" />
+        <Kpi n={gaps.reduce((t, g) => t + g.no_next_step + g.calls_no_outcome_7d + g.bookings_without_amount, 0)}
+             label="CRM issues" href="#crm" tone="#c084fc" />
+        <Kpi n={escalations.length} label="Critical escalations" href="#escalations" tone="#f87171" />
+      </div>
+
       {/* 1 — the only block that is about a PERSON not answering, rather than a
           lead going stale. Two asks and still nothing means the prompt engine
           has done all it can and a human has to step in. */}
-      <Block emoji="🚨" title="Escalations" count={escalations.length} tone="#f87171"
+      <Block id="escalations" emoji="🚨" title="Escalations" count={escalations.length} tone="#f87171"
         blurb="Asked twice and still no answer. The app has stopped chasing these — they need you.">
         {escalations.map((v) => (
           <Row key={v.contact_id} href={`/dashboard/leads?q=${encodeURIComponent(v.phone ?? "")}`}
             left={<><strong>{v.name || v.phone}</strong>{v.telecaller ? ` · ${v.telecaller}` : " · unassigned"}</>}
-            right={`${v.days_waiting ?? daysAgo(v.visit_at)}d · asked ${v.times_asked}×`} />
+            right={`${v.days_waiting ?? daysAgo(v.visit_at)}d · asked ${v.times_asked}×`}
+            action={<RemindRep userId={v.salesperson_id} contactId={v.contact_id}
+              title="Site visit — still waiting on you"
+              message={`${v.name || v.phone}: what happened at the visit? It has been ${v.days_waiting ?? 0} days.`} />} />
         ))}
       </Block>
 
       {/* 2 — the most expensive blank in the database: a visit that happened and
           nobody said what came of it keeps counting as a qualified lead in every
           report and in the ad autopsy, forever. */}
-      <Block emoji="📍" title="Site visits awaiting outcome" count={awaiting.length} tone="#f59e0b"
+      <Block id="visits" emoji="📍" title="Site visits awaiting outcome" count={awaiting.length} tone="#f59e0b"
         blurb="The customer came (or didn't) and nobody has recorded what happened. Until they do, these still count as qualified everywhere.">
         {awaiting.map((v) => (
           <Row key={v.contact_id} href={`/dashboard/leads?q=${encodeURIComponent(v.phone ?? "")}`}
             left={<><strong>{v.name || v.phone}</strong>{v.telecaller ? ` · ${v.telecaller}` : " · unassigned"}</>}
-            right={`visit ${ist(v.visit_at)} · ${v.days_waiting ?? 0}d ago`} />
+            right={`visit ${ist(v.visit_at)} · ${v.days_waiting ?? 0}d ago`}
+            action={<RemindRep userId={v.salesperson_id} contactId={v.contact_id}
+              title="Did they come to the site?"
+              message={`${v.name || v.phone} — please record what happened at the visit.`} />} />
         ))}
       </Block>
 
       {/* 3 — invisible on the web until now: no page in this app read follow_ups. */}
-      <Block emoji="📋" title="Follow-ups due" count={followUps.length} tone="#60a5fa"
+      <Block id="followups" emoji="📋" title="Follow-ups due" count={followUps.length} tone="#60a5fa"
         blurb={`${overdue.length} overdue, ${dueToday.length} still to come today. Overdue first — the customer who has waited longest is the one to ring.`}>
         {[...overdue, ...dueToday].slice(0, 20).map((f) => {
           const late = new Date(f.due_at).getTime() < nowMs;
           return (
             <Row key={f.id} href={`/dashboard/leads?q=${encodeURIComponent(f.phone ?? "")}`}
               left={<><strong>{f.name || f.phone}</strong>{f.note ? ` · ${f.note}` : ""}</>}
-              right={<span style={{ color: late ? "#f87171" : undefined }}>{ist(f.due_at)}</span>} />
+              right={<span style={{ color: late ? "#f87171" : undefined }}>{ist(f.due_at)}</span>}
+              action={late ? <RemindRep userId={f.salesperson_id} contactId={f.contact_id}
+                title="Callback is overdue"
+                message={`${f.name || f.phone} was due ${ist(f.due_at)}. Call them or book a new time.`} /> : undefined} />
           );
         })}
       </Block>
 
       {/* 4 — what actually went out to a founder's phone. The engine sends one
           message per lead per kind, ever; this is the record of it. */}
-      <Block emoji="🔔" title="Alerts sent" count={fired.length} tone="#22c55e"
+      <Block id="alerts" emoji="🔔" title="Alerts sent" count={fired.length} tone="#22c55e"
         blurb="Bookings, payments and site visits that were pushed to WhatsApp. Baseline rows from first setup are not shown.">
         {fired.map((a) => (
           <Row key={a.id} href={`/dashboard/leads?id=${a.contact_id}`}
@@ -245,8 +290,8 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
 
       {/* 5 — a COUNT and a link, never the analysis. Integrity owns that, and
           two pages disagreeing about a rep's numbers is worse than one page. */}
-      <Block emoji="⚠️" title="CRM exceptions" count={gaps.length} tone="#c084fc"
-        blurb="Facts the CRM is missing, per telecaller. The analysis lives on Integrity — this is only the nudge to go and look.">
+      <Block id="crm" emoji="⚠️" title="CRM issues" count={gaps.length} tone="#c084fc"
+        blurb="Information missing from the CRM, per telecaller. The analysis lives on Integrity — this is only the nudge to go and look.">
         {gaps.map((g) => (
           <Row key={g.salesperson_id} href={`/dashboard/integrity${q}`}
             left={<strong>{g.full_name || "Telecaller"}</strong>}
