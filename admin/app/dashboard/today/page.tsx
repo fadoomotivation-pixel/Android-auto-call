@@ -29,6 +29,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { KpiChip } from "./KpiChip";
 import { RemindRep, type ReminderKind } from "./RemindRep";
 
 export const dynamic = "force-dynamic";
@@ -49,27 +50,66 @@ function ist(iso: string | null): string {
   });
 }
 
+/**
+ * How old is too old, as a colour.
+ *
+ * Thirteen rows all rendered in the same grey read as one undifferentiated
+ * pile, and the twenty-nine-day-old visit looked exactly like this morning's.
+ * The eye should land on the worst thing on the page without reading a single
+ * number.
+ */
+function severity(days: number): { dot: string; color: string } {
+  if (days >= 21) return { dot: "🔴", color: "#f87171" };
+  if (days >= 14) return { dot: "🟠", color: "#fb923c" };
+  if (days >= 7) return { dot: "🟡", color: "#facc15" };
+  if (days >= 1) return { dot: "🔵", color: "#60a5fa" };
+  return { dot: "🟢", color: "#4ade80" };
+}
+
 function Block({
-  emoji, title, count, blurb, children, tone = "var(--accent)", id,
+  emoji, title, count, blurb, children, tone = "var(--accent)", id, clear,
 }: {
   emoji: string; title: string; count: number; blurb: string;
-  children: ReactNode; tone?: string; id?: string;
+  children: ReactNode; tone?: string; id?: string; clear?: string;
 }) {
+  // An empty queue is good news and should read like it — one confident line,
+  // not a full-height card of grey space implying something is missing. Five
+  // sections at full height with nothing in them is a page that looks broken.
+  if (count === 0) {
+    return (
+      <section id={id} className="card"
+        style={{ padding: "11px 16px", marginBottom: 10, scrollMarginTop: 16, opacity: 0.72 }}>
+        <span style={{ fontSize: 13.5 }}>
+          ✅ {clear ?? `No ${title.toLowerCase()} today`}
+        </span>
+      </section>
+    );
+  }
   return (
     <section id={id} className="card" style={{ padding: 16, marginBottom: 16, scrollMarginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
         <h3 style={{ margin: 0, fontSize: 16 }}>{emoji} {title}</h3>
         <span style={{
-          fontSize: 13, fontWeight: 700, color: count > 0 ? tone : "var(--muted)",
-          background: count > 0 ? `color-mix(in srgb, ${tone} 15%, transparent)` : "transparent",
-          borderRadius: 999, padding: count > 0 ? "1px 9px" : 0,
+          fontSize: 13, fontWeight: 700, color: tone,
+          background: `color-mix(in srgb, ${tone} 15%, transparent)`,
+          borderRadius: 999, padding: "1px 9px",
         }}>{count}</span>
       </div>
       <p className="subtitle" style={{ margin: "4px 0 12px", fontSize: 12.5 }}>{blurb}</p>
-      {count === 0
-        ? <div style={{ fontSize: 13, color: "var(--muted)" }}>Nothing waiting. ✅</div>
-        : children}
+      {children}
     </section>
+  );
+}
+
+/** A heading inside a block — used to group overdue follow-ups by how late. */
+function GroupHead({ label, n, color }: { label: string; n: number; color: string }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 7, marginTop: 12, marginBottom: 2,
+      fontSize: 12, fontWeight: 700, color,
+    }}>
+      {label} <span style={{ opacity: 0.7, fontWeight: 600 }}>({n})</span>
+    </div>
   );
 }
 
@@ -98,21 +138,6 @@ function Row({ left, why, right, href, action }: {
       {action}
       <Link href={href} style={{ textDecoration: "none", color: "var(--muted)", fontSize: 12.5 }}>→</Link>
     </div>
-  );
-}
-
-/** The workload in four numbers, before a single row is read. */
-function Kpi({ n, label, href, tone }: { n: number; label: string; href: string; tone: string }) {
-  return (
-    <a href={href} style={{
-      textDecoration: "none", flex: "1 1 130px", minWidth: 120,
-      background: n > 0 ? `color-mix(in srgb, ${tone} 12%, transparent)` : "rgba(255,255,255,0.04)",
-      border: `1px solid ${n > 0 ? `color-mix(in srgb, ${tone} 35%, transparent)` : "rgba(255,255,255,0.08)"}`,
-      borderRadius: 12, padding: "10px 14px", display: "block",
-    }}>
-      <div style={{ fontSize: 24, fontWeight: 800, color: n > 0 ? tone : "var(--muted)", lineHeight: 1.1 }}>{n}</div>
-      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{label}</div>
-    </a>
   );
 }
 
@@ -219,6 +244,27 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const remindedAt = (contactId: string | null, kind: ReminderKind) =>
     (contactId ? lastReminded.get(`${contactId}:${kind}`) ?? null : null);
 
+  const oldestVisit = awaiting.reduce((m, v) => Math.max(m, v.days_waiting ?? 0), 0);
+  const crmTotal = gaps.reduce((t, g) =>
+    t + g.no_next_step + g.calls_no_outcome_7d + g.bookings_without_amount, 0);
+
+  // Overdue, grouped by how late. Twenty-five identical rows is a list; four
+  // buckets is a decision about where to start.
+  const bucketOf = (f: { due_at: string }) => {
+    const d = Math.floor((nowMs - new Date(f.due_at).getTime()) / 86_400_000);
+    if (d >= 30) return 0;
+    if (d >= 14) return 1;
+    if (d >= 7) return 2;
+    return 3;
+  };
+  const BUCKETS = [
+    { label: "🔴 Over 30 days", color: "#f87171" },
+    { label: "🟠 Over 14 days", color: "#fb923c" },
+    { label: "🟡 Over 7 days", color: "#facc15" },
+    { label: "🔵 This week", color: "#60a5fa" },
+  ];
+  const grouped = BUCKETS.map((b, i) => ({ ...b, rows: overdue.filter((f) => bucketOf(f) === i) }));
+
   const alertLabel: Record<string, string> = {
     booking_confirmed: "🎉 Booking confirmed",
     sale_closed: "🏆 Payment received",
@@ -255,23 +301,28 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
           know the size of the day before reading a single row; each chip jumps
           to the section it counts. */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "0 0 20px" }}>
-        <Kpi n={awaiting.length} label="Awaiting site visits" href="#visits" tone="#f59e0b" />
-        <Kpi n={overdue.length} label="Overdue follow-ups" href="#followups" tone="#60a5fa" />
-        <Kpi n={gaps.reduce((t, g) => t + g.no_next_step + g.calls_no_outcome_7d + g.bookings_without_amount, 0)}
-             label="CRM issues" href="#crm" tone="#c084fc" />
-        <Kpi n={escalations.length} label="Critical escalations" href="#escalations" tone="#f87171" />
+        <KpiChip n={awaiting.length} label="Awaiting site visits" target="visits" tone="#f59e0b"
+          hint={oldestVisit > 0 ? `oldest ${oldestVisit} days` : undefined} />
+        <KpiChip n={overdue.length} label="Overdue follow-ups" target="followups" tone="#60a5fa"
+          hint={dueToday.length > 0 ? `+${dueToday.length} due later today` : undefined} />
+        <KpiChip n={crmTotal} label="CRM issues" target="crm" tone="#c084fc"
+          hint={gaps.length > 0 ? `across ${gaps.length} telecaller${gaps.length > 1 ? "s" : ""}` : undefined} />
+        <KpiChip n={escalations.length} label="Critical escalations" target="escalations" tone="#f87171" />
       </div>
 
       {/* 1 — the only block that is about a PERSON not answering, rather than a
           lead going stale. Two asks and still nothing means the prompt engine
           has done all it can and a human has to step in. */}
       <Block id="escalations" emoji="🚨" title="Escalations" count={escalations.length} tone="#f87171"
+        clear="No escalations today — nobody has ignored the app twice"
         blurb="Asked twice and still no answer. The app has stopped chasing these — they need you.">
         {escalations.map((v) => (
           <Row key={v.contact_id} href={`/dashboard/leads?q=${encodeURIComponent(v.phone ?? "")}`}
             left={<><strong>{v.name || v.phone}</strong>{v.telecaller ? ` · ${v.telecaller}` : " · unassigned"}</>}
             why={`Asked ${v.times_asked}× and still no answer · ${v.days_waiting ?? 0} days since the visit`}
-            right={`${v.days_waiting ?? daysAgo(v.visit_at)}d`}
+            right={<span style={{ color: severity(v.days_waiting ?? 0).color, fontWeight: 700 }}>
+              {severity(v.days_waiting ?? 0).dot} {v.days_waiting ?? daysAgo(v.visit_at)}d
+            </span>}
             action={<RemindRep userId={v.salesperson_id} contactId={v.contact_id}
               companyId={scope} kind="escalation" lastRemindedAt={remindedAt(v.contact_id, "escalation")}
               title="Site visit — still waiting on you"
@@ -283,12 +334,15 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
           nobody said what came of it keeps counting as a qualified lead in every
           report and in the ad autopsy, forever. */}
       <Block id="visits" emoji="📍" title="Site visits awaiting outcome" count={awaiting.length} tone="#f59e0b"
+        clear="Every site visit has an outcome recorded"
         blurb="The customer came (or didn't) and nobody has recorded what happened. Until they do, these still count as qualified everywhere.">
         {awaiting.map((v) => (
           <Row key={v.contact_id} href={`/dashboard/leads?q=${encodeURIComponent(v.phone ?? "")}`}
             left={<><strong>{v.name || v.phone}</strong>{v.telecaller ? ` · ${v.telecaller}` : " · unassigned"}</>}
             why={`${v.days_waiting ?? 0} days since the site visit, outcome still not recorded`}
-            right={ist(v.visit_at)}
+            right={<span style={{ color: severity(v.days_waiting ?? 0).color, fontWeight: 700 }}>
+              {severity(v.days_waiting ?? 0).dot} {v.days_waiting ?? 0}d
+            </span>}
             action={<RemindRep userId={v.salesperson_id} contactId={v.contact_id}
               companyId={scope} kind="site_visit" lastRemindedAt={remindedAt(v.contact_id, "site_visit")}
               title="Did they come to the site?"
@@ -298,27 +352,45 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
 
       {/* 3 — invisible on the web until now: no page in this app read follow_ups. */}
       <Block id="followups" emoji="📋" title="Follow-ups due" count={followUps.length} tone="#60a5fa"
+        clear="No callbacks due today"
         blurb={`${overdue.length} overdue, ${dueToday.length} still to come today. Overdue first — the customer who has waited longest is the one to ring.`}>
-        {[...overdue, ...dueToday].slice(0, 20).map((f) => {
-          const late = new Date(f.due_at).getTime() < nowMs;
-          return (
-            <Row key={f.id} href={`/dashboard/leads?q=${encodeURIComponent(f.phone ?? "")}`}
-              left={<><strong>{f.name || f.phone}</strong>{f.note ? ` · ${f.note}` : ""}</>}
-              why={late
-                ? `Callback was promised for ${ist(f.due_at)} and has not been made`
-                : `Callback promised for ${ist(f.due_at)} today`}
-              right={<span style={{ color: late ? "#f87171" : undefined }}>{late ? "overdue" : "today"}</span>}
-              action={late ? <RemindRep userId={f.salesperson_id} contactId={f.contact_id}
-                companyId={scope} kind="follow_up" lastRemindedAt={remindedAt(f.contact_id, "follow_up")}
-                title="Callback is overdue"
-                message={`${f.name || f.phone} was due ${ist(f.due_at)}. Call them or book a new time.`} /> : undefined} />
-          );
-        })}
+        {grouped.filter((g) => g.rows.length > 0).map((g) => (
+          <div key={g.label}>
+            <GroupHead label={g.label} n={g.rows.length} color={g.color} />
+            {g.rows.slice(0, 10).map((f) => (
+              <Row key={f.id} href={`/dashboard/leads?q=${encodeURIComponent(f.phone ?? "")}`}
+                left={<><strong>{f.name || f.phone}</strong>{f.note ? ` · ${f.note}` : ""}</>}
+                why={`Callback was promised for ${ist(f.due_at)} and has not been made`}
+                right={<span style={{ color: g.color, fontWeight: 700 }}>overdue</span>}
+                action={<RemindRep userId={f.salesperson_id} contactId={f.contact_id}
+                  companyId={scope} kind="follow_up" lastRemindedAt={remindedAt(f.contact_id, "follow_up")}
+                  title="Callback is overdue"
+                  message={`${f.name || f.phone} was due ${ist(f.due_at)}. Call them or book a new time.`} />} />
+            ))}
+            {g.rows.length > 10 && (
+              <div style={{ fontSize: 12, color: "var(--muted)", padding: "7px 0 0" }}>
+                +{g.rows.length - 10} more in this group
+              </div>
+            )}
+          </div>
+        ))}
+        {dueToday.length > 0 && (
+          <div>
+            <GroupHead label="🟢 Still to come today" n={dueToday.length} color="#4ade80" />
+            {dueToday.slice(0, 8).map((f) => (
+              <Row key={f.id} href={`/dashboard/leads?q=${encodeURIComponent(f.phone ?? "")}`}
+                left={<><strong>{f.name || f.phone}</strong>{f.note ? ` · ${f.note}` : ""}</>}
+                why={`Callback promised for ${ist(f.due_at)} today`}
+                right={<span style={{ color: "#4ade80" }}>today</span>} />
+            ))}
+          </div>
+        )}
       </Block>
 
       {/* 4 — what actually went out to a founder's phone. The engine sends one
           message per lead per kind, ever; this is the record of it. */}
       <Block id="alerts" emoji="🔔" title="Alerts sent" count={fired.length} tone="#22c55e"
+        clear="No alerts today — nothing has booked or been visited yet"
         blurb="Bookings, payments and site visits that were pushed to WhatsApp. Baseline rows from first setup are not shown.">
         {fired.map((a) => (
           <Row key={a.id} href={`/dashboard/leads?id=${a.contact_id}`}
@@ -332,20 +404,26 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
       {/* 5 — a COUNT and a link, never the analysis. Integrity owns that, and
           two pages disagreeing about a rep's numbers is worse than one page. */}
       <Block id="crm" emoji="⚠️" title="CRM issues" count={gaps.length} tone="#c084fc"
+        clear="Nothing missing from the CRM"
         blurb="Information missing from the CRM, per telecaller. The analysis lives on Integrity — this is only the nudge to go and look.">
         {gaps.map((g) => (
           <Row key={g.salesperson_id} href={`/dashboard/integrity${q}`}
-            left={<strong>{g.full_name || "Telecaller"}</strong>}
-            why={[
-              g.no_next_step ? "leads with no next call booked" : null,
-              g.calls_no_outcome_7d ? "calls with nothing written down" : null,
-              g.bookings_without_amount ? "bookings with no amount" : null,
-            ].filter(Boolean).join(", ")}
-            right={[
-              g.no_next_step ? `${g.no_next_step} no next call` : null,
-              g.calls_no_outcome_7d ? `${g.calls_no_outcome_7d} no outcome` : null,
-              g.bookings_without_amount ? `${g.bookings_without_amount} no amount` : null,
-            ].filter(Boolean).join(" · ")} />
+            left={<>
+              <strong>{g.full_name || "Telecaller"}</strong>
+              <span style={{ display: "block", marginTop: 3, fontSize: 12, lineHeight: 1.7 }}>
+                {g.no_next_step > 0 && (
+                  <span style={{ color: "#f87171", marginRight: 12 }}>🔴 {g.no_next_step} missing next call</span>
+                )}
+                {g.calls_no_outcome_7d > 0 && (
+                  <span style={{ color: "#fb923c", marginRight: 12 }}>🟠 {g.calls_no_outcome_7d} missing outcome</span>
+                )}
+                {g.bookings_without_amount > 0 && (
+                  <span style={{ color: "#facc15" }}>🟡 {g.bookings_without_amount} missing amount</span>
+                )}
+              </span>
+            </>}
+            why=""
+            right="" />
         ))}
       </Block>
     </>
