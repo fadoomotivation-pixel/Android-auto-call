@@ -33,8 +33,7 @@
  */
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { resolveScope } from "@/lib/dashboard/scope";
 import { KpiChip } from "./KpiChip";
 import { RemindRep, type ReminderKind } from "./RemindRep";
 
@@ -149,24 +148,10 @@ function Row({ left, why, right, href, action }: {
 
 export default async function TodayPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const [{ data: me }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("role, company_id").eq("id", user!.id)
-      .maybeSingle<{ role: string; company_id: string | null }>(),
-    supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
-  ]);
-  const isSuper = !!pa;
-  // Everyone lands here after login, so a telecaller has to be sent onward
-  // rather than shown a locked door. This is an action queue for whoever runs
-  // the team; a rep's own work is in the app, not here.
-  if (me?.role !== "admin" && !isSuper) redirect("/dashboard");
-
-  // The super admin may narrow to one tenant, and defaults to ALL of them.
-  // Never their own company_id — that is how a platform owner ends up looking
-  // at one customer and believing it is the business.
-  const scope = isSuper ? (sp.company ?? null) : (me?.company_id ?? null);
+  // Identity, admin gate and company scope in one call. The rule that a super
+  // admin defaults to ALL companies and is never pinned to their own lives in
+  // lib/dashboard/scope.ts, once, instead of being retyped on every page.
+  const { supabase, isSuper, companyId: scope } = await resolveScope(sp);
   const todayEndIst = `${new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)}T23:59:59+05:30`;
 
   // Built one at a time rather than through a generic helper: PostgREST
