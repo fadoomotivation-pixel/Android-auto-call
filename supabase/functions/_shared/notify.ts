@@ -70,6 +70,10 @@ async function logMessage(
   await admin.from("whatsapp_messages").insert({
     company_id: req.companyId,
     direction: "out",
+    // Which automation produced this. Without it whatsapp_messages can say
+    // what went to a number but not whether the booking alert ever fired, and
+    // "why didn't the founder get it?" ends in reading function source.
+    kind: req.kind ?? null,
     wa_message_id: waId,
     counterparty: req.to,
     body,
@@ -182,7 +186,15 @@ export async function drainOutbox(admin: SupabaseClient, limit = 25): Promise<{ 
       .eq("id", row.id as string);
     await logMessage(
       admin,
-      { companyId: row.company_id as string, to: row.to_phone as string, body: String(row.body) },
+      // Carry the kind across the queue. A message that had to be retried is
+      // still the booking alert; dropping the kind here would make a delayed
+      // send look like an automation that never fired.
+      {
+        companyId: row.company_id as string,
+        to: row.to_phone as string,
+        body: String(row.body),
+        kind: (row.kind as string | null) ?? null,
+      },
       res.id, String(row.body), provider.name,
     );
     if (row.subscriber_id) {
