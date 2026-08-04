@@ -1,5 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
-import type { Profile } from "@/lib/types";
+import { resolveScope } from "@/lib/dashboard/scope";
+import { ModuleLinks } from "../ModuleLinks";
 import { VelocityBoard } from "./VelocityBoard";
 import { AutoRescue } from "./AutoRescue";
 
@@ -14,16 +14,14 @@ import { AutoRescue } from "./AutoRescue";
  * Super admin sees every company (and a per-company table); a company admin sees
  * only their own team — enforced inside the lead_velocity SQL function.
  */
-export default async function VelocityPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const [{ data: me }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", user!.id).maybeSingle<Pick<Profile, "role">>(),
-    supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
-  ]);
-  const isSuper = !!pa;
-  if (me?.role !== "admin" && !isSuper) {
+export default async function VelocityPage({
+  searchParams,
+}: { searchParams: Promise<{ company?: string }> }) {
+  // require:"any" — this page answers a rep with a sentence rather than a
+  // redirect, which was its behaviour before and is the friendlier one.
+  const scope = await resolveScope(await searchParams, { require: "any" });
+  const { isSuper } = scope;
+  if (scope.role !== "admin" && !isSuper) {
     return <><h2>⚡ Sales Velocity</h2><div className="empty">Managers only.</div></>;
   }
 
@@ -42,6 +40,7 @@ export default async function VelocityPage() {
       <div style={{ marginTop: 18 }}>
         <AutoRescue />
       </div>
+      <ModuleLinks current="velocity" scope={scope} />
     </>
   );
 }

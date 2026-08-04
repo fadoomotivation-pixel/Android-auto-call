@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { ist, istDate } from "@/lib/dashboard/format";
 
 type Objection = { label: string; count: number; quote: string; fix: string };
 type Demand = { what: string; count: number };
@@ -126,7 +127,7 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
         )}
         {generatedAt && (
           <span className="subtitle" style={{ margin: 0 }}>
-            Last scan: {new Date(generatedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+            Last scan: {ist(generatedAt)}
             {report?.stats && <> · {report.stats.conversations} conversations · {report.stats.leads} leads · {report.stats.days}d</>}
           </span>
         )}
@@ -164,7 +165,7 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
                     </div>
                   )}
                   <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10 }}>
-                    Scanned {new Date(a.at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}
+                    Scanned {istDate(a.at)}
                   </div>
                 </div>
               );

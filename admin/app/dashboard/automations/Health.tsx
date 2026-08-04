@@ -18,6 +18,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { dotOf } from "@/lib/dashboard/health";
+import { ist as istFmt } from "@/lib/dashboard/format";
 
 type Cron = {
   job: string; schedule: string; active: boolean;
@@ -43,14 +45,12 @@ type Route = {
 
 export type Verdict = { level: "ok" | "warn" | "bad" | "unknown"; label: string; reason: string; fix?: { href: string; label: string } };
 
-const DOT = { ok: "🟢", warn: "🟡", bad: "🔴", unknown: "⚪" } as const;
-
-function ist(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true,
-  });
-}
+// The dots come from the shared scale, so an amber here is the same amber the
+// Action Center and Phone Health use. Only four of the six levels are reachable
+// from these checks, which is why this is a narrowing rather than a new map.
+const DOT: Record<Verdict["level"], string> = {
+  ok: dotOf("ok"), warn: dotOf("warn"), bad: dotOf("bad"), unknown: dotOf("unknown"),
+};
 
 function cronOf(db: Db | null, name: string): Cron | null {
   return db?.crons?.find((c) => c.job === name) ?? null;
@@ -68,7 +68,7 @@ function cronVerdict(c: Cron | null, human: string): Verdict | null {
     return { level: "warn", label: human, reason: `Scheduled (${c.schedule}) but has never run yet.` };
   }
   if (c.last_status !== "succeeded") {
-    return { level: "bad", label: human, reason: `Last run ${ist(c.last_run)} ended "${c.last_status}". ${c.last_message ?? ""}`.trim() };
+    return { level: "bad", label: human, reason: `Last run ${istFmt(c.last_run)} ended "${c.last_status}". ${c.last_message ?? ""}`.trim() };
   }
   if ((c.minutes_since ?? 0) > c.stale_after_minutes) {
     return {
@@ -187,7 +187,7 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
       ? {
           level: "ok", label: "Baileys Connected",
           reason: `${route.number ?? "connected"}${route.lender ? ` · lent by ${route.lender}` : ""}` +
-            `${route.last_seen ? ` · seen ${ist(route.last_seen)}` : ""}`,
+            `${route.last_seen ? ` · seen ${istFmt(route.last_seen)}` : ""}`,
         }
       : {
           level: "bad", label: "Baileys Connected",
@@ -260,7 +260,7 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
       checks.push({
         level: "bad", label: "Edge Functions",
         reason: `${errors} of ${calls} scheduled calls were refused in the last ${window_hours} hours. ` +
-          `Last was ${last_error_code ?? "?"} at ${ist(last_error_at)}: ${last_error_body ?? "no body"}. ` +
+          `Last was ${last_error_code ?? "?"} at ${istFmt(last_error_at)}: ${last_error_body ?? "no body"}. ` +
           (last_error_code === 401
             ? "A 401 means a deploy switched verify_jwt back on — the cron's key is now being rejected."
             : ""),
@@ -347,7 +347,7 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
 
       {db && (
         <div style={{ marginTop: 11, fontSize: 11.5, color: "var(--muted)" }}>
-          Checked {ist(db.checked_at)}. Crons, queue depth and response codes come from the database;
+          Checked {istFmt(db.checked_at)}. Crons, queue depth and response codes come from the database;
           the WhatsApp line is a live question put to the worker just now.
         </div>
       )}

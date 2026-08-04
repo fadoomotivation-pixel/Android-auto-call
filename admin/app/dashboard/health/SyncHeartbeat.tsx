@@ -17,6 +17,8 @@
  * runs where it did nothing and why.
  */
 import { createClient } from "@/lib/supabase/server";
+import { ist } from "@/lib/dashboard/format";
+import { dotOf } from "@/lib/dashboard/health";
 
 type Row = {
   salesperson_id: string;
@@ -37,42 +39,34 @@ type Row = {
 /** What the state means, and what to actually do about it. */
 const STATE: Record<string, { dot: string; label: string; fix: string }> = {
   ok: {
-    dot: "🟢", label: "Feeding the CRM",
+    dot: dotOf("ok"), label: "Feeding the CRM",
     fix: "",
   },
   never_reported: {
-    dot: "⚪", label: "Never reported",
+    dot: dotOf("unknown"), label: "Never reported",
     fix: "This phone is on a build older than the heartbeat, or the app has not run since it " +
       "was installed. Ask the rep to open Call Pro AI once and check for an update.",
   },
   no_permission: {
-    dot: "🔴", label: "Cannot see the phone's calls",
+    dot: dotOf("bad"), label: "Cannot see the phone's calls",
     fix: "Call log permission is switched off, so calls made from the phone's own dialler never " +
       "reach the CRM. Settings → Apps → Call Pro AI → Permissions → Call logs → Allow.",
   },
   stale: {
-    dot: "🟠", label: "Stopped reporting",
+    dot: dotOf("warn"), label: "Stopped reporting",
     fix: "The background sync has not completed for over three hours. Usually the phone's " +
       "battery manager killing it: Settings → Battery → Call Pro AI → Unrestricted.",
   },
   broken: {
-    dot: "🔴", label: "The sync is erroring",
+    dot: dotOf("bad"), label: "The sync is erroring",
     fix: "The app could not read the call log even though permission looks granted. Reinstalling " +
       "usually clears it.",
   },
   no_leads: {
-    dot: "⚪", label: "No leads assigned",
+    dot: dotOf("unknown"), label: "No leads assigned",
     fix: "Nothing to match calls against. Assign this rep some leads.",
   },
 };
-
-function ist(iso: string | null): string {
-  if (!iso) return "never";
-  return new Date(iso).toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata", day: "numeric", month: "short",
-    hour: "numeric", minute: "2-digit", hour12: true,
-  });
-}
 
 export async function SyncHeartbeat() {
   const supabase = await createClient();
@@ -111,7 +105,7 @@ export async function SyncHeartbeat() {
                 {s.label}
               </span>
               <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: "auto" }}>
-                last full scan {ist(r.last_ok_at)}
+                last full scan {ist(r.last_ok_at, "never")}
               </span>
             </div>
 
@@ -123,7 +117,7 @@ export async function SyncHeartbeat() {
                 <> · saw {r.native_seen ?? 0} calls on the phone, backfilled {r.backfilled ?? 0}</>
               )}
               {r.last_run_at && r.last_run_at !== r.last_ok_at && (
-                <> · last tried {ist(r.last_run_at)}</>
+                <> · last tried {ist(r.last_run_at, "never")}</>
               )}
             </div>
 

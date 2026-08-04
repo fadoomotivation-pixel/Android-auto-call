@@ -1,18 +1,13 @@
-import { createClient } from "@/lib/supabase/server";
+import { resolveScope } from "@/lib/dashboard/scope";
+import { ModuleLinks } from "../ModuleLinks";
 import { PulseClient } from "./PulseClient";
 
-export default async function PulsePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const [{ data: me }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", user!.id).maybeSingle<{ role: string }>(),
-    supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
-  ]);
-  const isSuper = !!pa;
-  const isAdmin = me?.role === "admin" || isSuper;
+export default async function PulsePage({
+  searchParams,
+}: { searchParams: Promise<{ company?: string }> }) {
+  const scope = await resolveScope(await searchParams, { require: "any" });
+  const isSuper = scope.isSuper;
+  const isAdmin = scope.role === "admin" || isSuper;
 
   if (!isAdmin) {
     return (
@@ -36,6 +31,7 @@ export default async function PulsePage() {
         whether their phone is even reporting.
       </p>
       <PulseClient isSuper={isSuper} />
+      <ModuleLinks current="pulse" scope={scope} />
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { ist } from "@/lib/dashboard/format";
 
 /**
  * "Put the founder's number in and the report goes out at 7 every evening."
@@ -224,7 +225,7 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
             return (
               <span style={{ fontSize: 12, color: v.color }} title={v.hint}>
                 {v.label}{" "}
-                {new Date(s.last_sent_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+                {ist(s.last_sent_at)}
               </span>
             );
           })()}

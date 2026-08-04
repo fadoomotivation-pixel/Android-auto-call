@@ -1,4 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
+import { resolveScope } from "@/lib/dashboard/scope";
+import { ModuleLinks } from "../ModuleLinks";
+import { istDayYear } from "@/lib/dashboard/format";
 import { CoachPanel } from "./CoachPanel";
 import { KnowledgeBase } from "./KnowledgeBase";
 import { BestCalls } from "./BestCalls";
@@ -11,18 +13,12 @@ type Digest = {
   stats: Record<string, number> | null;
 };
 
-export default async function CoachPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const [{ data: me }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("role, company_id").eq("id", user!.id).maybeSingle<{ role: string; company_id: string | null }>(),
-    supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
-  ]);
-  const isSuper = !!pa;
-  const isAdmin = me?.role === "admin" || isSuper;
+export default async function CoachPage({
+  searchParams,
+}: { searchParams: Promise<{ company?: string }> }) {
+  const scope = await resolveScope(await searchParams, { require: "any" });
+  const { supabase, isSuper } = scope;
+  const isAdmin = scope.role === "admin" || isSuper;
 
   if (!isAdmin) {
     return (
@@ -71,7 +67,7 @@ export default async function CoachPage() {
             <div key={d.id} className="card hover-scale" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", borderRadius: 16, padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
                 <strong style={{ fontSize: 16, color: "#fff", letterSpacing: "0.2px" }}>
-                  {new Date(d.digest_date).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                  {istDayYear(d.digest_date)}
                   {isSuper && <span style={{ color: "var(--muted)", fontWeight: 400 }}> · {nameById.get(d.company_id) ?? "—"}</span>}
                 </strong>
                 {d.stats && <DigestStats stats={d.stats} />}
@@ -81,6 +77,7 @@ export default async function CoachPage() {
           ))}
         </div>
       )}
+      <ModuleLinks current="coach" scope={scope} />
     </>
   );
 }
