@@ -72,6 +72,10 @@ Deno.serve(async (req) => {
       contact_id: resolvedContactId,
       salesperson_id: ud.user.id,
       direction: "out",
+      // Typed by a human in the Team Inbox — not an automation. Stamped anyway
+      // so the Automation Center can tell "nobody has replied to a customer
+      // today" apart from "this row has no history because nothing records it".
+      kind: "inbox",
       wa_message_id: waId,
       counterparty: dest,
       body: String(text),
