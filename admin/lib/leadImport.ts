@@ -112,7 +112,7 @@ export function parseRows(rows: string[][]): ParseResult {
           continue;
         }
         
-        let extractedPhone = cleanPhone(phoneMatch[0]);
+        const extractedPhone = cleanPhone(phoneMatch[0]);
         if (digitsLen(extractedPhone) < 7 || seen.has(extractedPhone)) {
           skipped++;
           continue;
