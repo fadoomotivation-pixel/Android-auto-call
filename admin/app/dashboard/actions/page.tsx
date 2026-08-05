@@ -38,7 +38,7 @@ import { ModuleLinks } from "../ModuleLinks";
 import { ist, daysAgo } from "@/lib/dashboard/format";
 import { agedLevel, dotOf, colorOf } from "@/lib/dashboard/health";
 import { KpiChip } from "./KpiChip";
-import { RemindRep, type ReminderKind } from "./RemindRep";
+import { RepAction, type ReminderKind } from "./RepAction";
 
 export const dynamic = "force-dynamic";
 
@@ -177,13 +177,34 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
     .order("no_next_step", { ascending: false }).limit(20);
   if (scope) qualityQ.eq("company_id", scope);
 
-  const [companyRows, pending, fups, alerts, quality, reminders] = await Promise.all([
+  // Every telecaller's number and company, in ONE query rather than one per
+  // row. The action menu needs both to prefill a WhatsApp message, and a row
+  // that fetched its own would be twenty-five round trips on a busy morning.
+  const repQ = supabase.from("profiles")
+    .select("id, full_name, phone, company_id").eq("role", "salesperson");
+  if (scope) repQ.eq("company_id", scope);
+
+  const [companyRows, pending, fups, alerts, quality, reminders, repRows] = await Promise.all([
     isSuper
       ? supabase.from("companies").select("id, name").order("name")
       : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
-    visitQ, fupQ, alertQ, qualityQ, remQ,
+    visitQ, fupQ, alertQ, qualityQ, remQ, repQ,
   ]);
   const companyList = (companyRows.data ?? []) as Array<{ id: string; name: string }>;
+
+  const repById = new Map(
+    ((repRows.data ?? []) as Array<{
+      id: string; full_name: string | null; phone: string | null; company_id: string | null;
+    }>).map((r) => [r.id, r]),
+  );
+  const companyNameById = new Map(companyList.map((c) => [c.id, c.name]));
+  /** The rep's WhatsApp number, or null when their profile still has none. */
+  const repPhone = (id: string | null) => (id ? repById.get(id)?.phone ?? null : null);
+  /** Which company this lead's rep belongs to — the super admin sees several. */
+  const companyNameOf = (id: string | null) => {
+    const cid = id ? repById.get(id)?.company_id ?? null : null;
+    return cid ? companyNameById.get(cid) ?? null : null;
+  };
 
   const visits = (pending.data ?? []) as Array<{
     contact_id: string; salesperson_id: string | null; name: string | null; phone: string | null; telecaller: string | null;
@@ -318,10 +339,13 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
             right={<span style={{ color: severity(v.days_waiting ?? 0).color, fontWeight: 700 }}>
               {severity(v.days_waiting ?? 0).dot} {v.days_waiting ?? daysAgo(v.visit_at)}d
             </span>}
-            action={<RemindRep userId={v.salesperson_id} contactId={v.contact_id}
+            action={<RepAction userId={v.salesperson_id} contactId={v.contact_id}
               companyId={scope} kind="escalation" lastRemindedAt={remindedAt(v.contact_id, "escalation")}
               title="Site visit — still waiting on you"
-              message={`${v.name || v.phone}: what happened at the visit? It has been ${v.days_waiting ?? 0} days.`} />} />
+              message={`${v.name || v.phone}: what happened at the visit? It has been ${v.days_waiting ?? 0} days.`}
+              leadName={v.name || v.phone || "this lead"} leadPhone={v.phone}
+              repName={v.telecaller} repPhone={repPhone(v.salesperson_id)}
+              companyName={companyNameOf(v.salesperson_id)} delayDays={v.days_waiting ?? 0} />} />
         ))}
       </Block>
 
@@ -338,10 +362,13 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
             right={<span style={{ color: severity(v.days_waiting ?? 0).color, fontWeight: 700 }}>
               {severity(v.days_waiting ?? 0).dot} {v.days_waiting ?? 0}d
             </span>}
-            action={<RemindRep userId={v.salesperson_id} contactId={v.contact_id}
+            action={<RepAction userId={v.salesperson_id} contactId={v.contact_id}
               companyId={scope} kind="site_visit" lastRemindedAt={remindedAt(v.contact_id, "site_visit")}
               title="Did they come to the site?"
-              message={`${v.name || v.phone} — please record what happened at the visit.`} />} />
+              message={`${v.name || v.phone} — please record what happened at the visit.`}
+              leadName={v.name || v.phone || "this lead"} leadPhone={v.phone}
+              repName={v.telecaller} repPhone={repPhone(v.salesperson_id)}
+              companyName={companyNameOf(v.salesperson_id)} delayDays={v.days_waiting ?? 0} />} />
         ))}
       </Block>
 
@@ -357,10 +384,13 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
                 left={<><strong>{f.name || f.phone}</strong>{f.note ? ` · ${f.note}` : ""}</>}
                 why={`Callback was promised for ${ist(f.due_at)} and has not been made`}
                 right={<span style={{ color: g.color, fontWeight: 700 }}>overdue</span>}
-                action={<RemindRep userId={f.salesperson_id} contactId={f.contact_id}
+                action={<RepAction userId={f.salesperson_id} contactId={f.contact_id}
                   companyId={scope} kind="follow_up" lastRemindedAt={remindedAt(f.contact_id, "follow_up")}
                   title="Callback is overdue"
-                  message={`${f.name || f.phone} was due ${ist(f.due_at)}. Call them or book a new time.`} />} />
+                  message={`${f.name || f.phone} was due ${ist(f.due_at)}. Call them or book a new time.`}
+                  leadName={f.name || f.phone || "this lead"} leadPhone={f.phone}
+                  repName={null} repPhone={repPhone(f.salesperson_id)}
+                  companyName={companyNameOf(f.salesperson_id)} delayDays={daysAgo(f.due_at)} />} />
             ))}
             {g.rows.length > 10 && (
               <div style={{ fontSize: 12, color: "var(--muted)", padding: "7px 0 0" }}>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { BandDrill, type BandKey } from "./BandDrill";
 
 interface Summary {
   days: number; total_leads: number;
@@ -23,6 +24,22 @@ interface Payload {
 
 const DAYS = [7, 30, 90];
 
+/**
+ * The chart's band labels, mapped to the keys BandDrill filters by.
+ *
+ * Deliberately keyed on the label the edge function sends rather than on
+ * position: if a band is renamed and this map is not updated, the lookup
+ * returns undefined and that row simply stays un-clickable — which is visible.
+ * Position-based mapping would silently open the WRONG list of leads.
+ */
+const BAND_BY_LABEL: Record<string, BandKey | undefined> = {
+  "0-5 min": "b5",
+  "5-30 min": "b30",
+  "30 min - 2 hrs": "b120",
+  "2 - 24 hrs": "b1440",
+  "24 hrs+": "bmore",
+};
+
 /** Minutes → "4 min" / "2h 10m" / "3d". */
 function dur(mins: number | null): string {
   if (mins == null) return "—";
@@ -38,6 +55,9 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Which band the manager opened, if any. One at a time: two open tables is a
+  // page you scroll rather than a question you answered.
+  const [band, setBand] = useState<BandKey | null>(null);
 
   const load = useCallback(async (d: number, costPerLead: number) => {
     setLoading(true); setErr(null);
@@ -127,7 +147,9 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
             <Tile label="Median 1st call" value={dur(s.median_minutes)} tone={s.median_minutes != null && s.median_minutes <= 30 ? "#22c55e" : "#f59e0b"}
               sub={`${s.answered_in_30m_pct}% answered in 30 min`} />
             <Tile label="Never called" value={`${s.never_called}`} tone={s.never_called_pct >= 25 ? "#ef4444" : "#f59e0b"}
-              sub={`${s.never_called_pct}% of ${s.total_leads} leads`} />
+              sub={`${s.never_called_pct}% of ${s.total_leads} leads`}
+              onClick={() => setBand((b) => (b === "never" ? null : "never"))}
+              active={band === "never"} />
             <Tile label="Speed advantage" value={s.speed_multiple ? `${s.speed_multiple}×` : "—"} tone="#0A84FF"
               sub={`${s.fast_advance_pct}% vs ${s.slow_advance_pct}% advance`} />
             <Tile label="Deals left on table" value={`~${s.missed_deals}`} tone="#a855f7"
@@ -146,8 +168,26 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
               Interested, Site&nbsp;Visit or Booking.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {(data.buckets ?? []).map((b) => (
-                <div key={b.label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {(data.buckets ?? []).map((b) => {
+                const key = BAND_BY_LABEL[b.label];
+                const isOpen = key != null && band === key;
+                return (
+                <div key={b.label}
+                  role={key ? "button" : undefined}
+                  tabIndex={key ? 0 : undefined}
+                  onClick={key ? () => setBand((cur) => (cur === key ? null : key)) : undefined}
+                  onKeyDown={key ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setBand((cur) => (cur === key ? null : key));
+                    }
+                  } : undefined}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    cursor: key ? "pointer" : "default",
+                    background: isOpen ? "rgba(255,255,255,0.05)" : "transparent",
+                    borderRadius: 8, padding: "2px 6px", margin: "0 -6px",
+                  }}>
                   <div style={{ width: 110, fontSize: 13, color: "var(--text)" }}>{b.label}</div>
                   <div style={{ flex: 1, height: 22, background: "rgba(255,255,255,0.05)", borderRadius: 999, overflow: "hidden" }}>
                     <div style={{ width: `${Math.max(2, (b.advance_pct / maxAdv) * 100)}%`, height: "100%", borderRadius: 999,
@@ -156,8 +196,12 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
                   <div style={{ width: 62, textAlign: "right", fontSize: 13, fontWeight: 700, color: "#fff" }}>{b.advance_pct}%</div>
                   <div style={{ width: 74, textAlign: "right", fontSize: 12, color: "var(--muted)" }}>{b.leads} leads</div>
                 </div>
-              ))}
+              );})}
             </div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10 }}>
+              Click any band to see the leads in it.
+            </div>
+            {band && <BandDrill band={band} days={days} onClose={() => setBand(null)} />}
           </div>
 
           {/* AI verdict */}
@@ -223,9 +267,24 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
   );
 }
 
-function Tile({ label, value, tone, sub }: { label: string; value: string; tone: string; sub?: string }) {
+function Tile({ label, value, tone, sub, onClick, active }: {
+  label: string; value: string; tone: string; sub?: string;
+  onClick?: () => void; active?: boolean;
+}) {
   return (
-    <div style={{ background: `${tone}0d`, border: `1px solid ${tone}22`, borderRadius: 14, padding: "16px 18px" }}>
+    <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
+      } : undefined}
+      style={{
+        background: `${tone}0d`,
+        border: `1px solid ${active ? tone : `${tone}22`}`,
+        borderRadius: 14, padding: "16px 18px",
+        cursor: onClick ? "pointer" : "default",
+      }}>
       <div style={{ color: tone, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
       <div style={{ color: tone, fontSize: 26, fontWeight: 800, marginTop: 6 }}>{value}</div>
       {sub && <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>{sub}</div>}
