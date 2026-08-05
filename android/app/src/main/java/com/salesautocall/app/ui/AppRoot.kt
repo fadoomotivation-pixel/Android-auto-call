@@ -785,12 +785,13 @@ private fun MainShell(vm: MainViewModel) {
                     AppPrefs.clearCoachMini(ctx)
                     coachMini = false
                 },
-                // Moved off the top-right, where it landed on top of the
-                // pipeline card's refresh and menu buttons and made a clean card
-                // look crowded. Bottom-LEFT keeps it clear of the "Call N"
-                // action button on the right, and puts it under the thumb of
-                // someone holding the phone all day.
-                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 22.dp),
+                // Third position, and this one is checked against a screenshot.
+                // Top-right sat on the pipeline card's buttons; bottom-LEFT then
+                // landed squarely on the lead cards' avatar circles, which is
+                // worse — it covered a rep's data instead of a pair of icons.
+                // Bottom-right, lifted clear of the "Call N" button beneath it,
+                // is the only corner with nothing in it.
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 96.dp),
             )
             if (state.coachOpen) {
                 CoachSheet(
