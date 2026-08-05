@@ -6,6 +6,7 @@
 // Auth: the signed-in rep. Body: {} — everything is derived from their leads.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { loadStages, terminalFilter } from "../_shared/stage.ts";
 
 declare const Supabase: { ai: { Session: new (m: string) => { run(input: string, opts: { mean_pool: boolean; normalize: boolean }): Promise<number[]> } } };
 
@@ -21,7 +22,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
 const GROQ = Deno.env.get("GROQ_API_KEY") ?? "";
 
-const CLOSED = ["booked", "lost", "dnc", "not_interested"];
+// CLOSED used to be a hand-written status list here. Whether a lead is
+// finished is now answered once, by lead_stages.is_terminal.
 const MAX_LEADS = 60;
 
 const SYSTEM_PROMPT =
@@ -58,7 +60,7 @@ Deno.serve(async (req) => {
   const { data: leads } = await u.from("contacts")
     .select("id, name, status, budget, notes, temperature, ai_next_action, site_visit_at, created_at")
     .eq("salesperson_id", ud.user.id)
-    .not("status", "in", `(${CLOSED.join(",")})`)
+    .not("stage", "in", terminalFilter(await loadStages(u)))
     .order("created_at", { ascending: false })
     .limit(MAX_LEADS);
   if (!leads || leads.length === 0) return json({ ok: true, picks: [] });

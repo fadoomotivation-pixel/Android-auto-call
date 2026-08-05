@@ -14,6 +14,7 @@
 // Auth: company admin (own company) or platform super-admin (all) — enforced in SQL.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { loadStages, isAdvanced } from "../_shared/stage.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -37,7 +38,8 @@ interface Lead {
 
 // A lead that reached any of these actually moved forward — that's the outcome
 // speed is measured against (same stage list the funnel uses elsewhere).
-const ADVANCED = new Set(["interested", "site_visit", "negotiation", "proposal", "token_paid", "booked"]);
+// ADVANCED used to be a hand-written Set. "Reached Interested or beyond and
+// not lost" is now one answer, from lead_stages.is_advanced.
 const DEAD = new Set(["not_interested", "lost", "dnc", "invalid"]);
 
 const BUCKETS: { key: string; label: string; max: number }[] = [
@@ -73,13 +75,16 @@ Deno.serve(async (req) => {
   const leads = (data ?? []) as Lead[];
   if (leads.length === 0) return json({ ok: true, empty: true, days });
 
+  // One read of the canonical stage table; every classification below uses it.
+  const stages = await loadStages(u);
+
   // ---- Buckets + the proof: advance rate by response speed ----
   const buckets = BUCKETS.map((b) => ({ ...b, leads: 0, advanced: 0 }));
   let neverCalled = 0, neverCalledAdvanced = 0;
   const responded: number[] = [];
 
   for (const l of leads) {
-    const adv = ADVANCED.has(l.status);
+    const adv = isAdvanced(stages, l.status);
     if (l.minutes_to_first_call == null) {
       neverCalled++;
       if (adv) neverCalledAdvanced++;
@@ -134,7 +139,7 @@ Deno.serve(async (req) => {
       g.leads++;
       if (l.minutes_to_first_call == null) g.never++;
       else g.mins.push(Math.max(0, l.minutes_to_first_call));
-      if (ADVANCED.has(l.status)) g.advanced++;
+      if (isAdvanced(stages, l.status)) g.advanced++;
       m.set(k, g);
     }
     return [...m.entries()]

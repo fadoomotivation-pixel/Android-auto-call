@@ -4,6 +4,18 @@ import { useState } from "react";
 import { NavLink } from "./NavLink";
 import type { Company, Profile } from "@/lib/types";
 
+/** A section heading in the sidebar. */
+function Section({ label }: { label: string }) {
+  return (
+    <div style={{
+      margin: "14px 6px 4px", fontSize: 11, letterSpacing: "0.08em",
+      color: "var(--muted)", textTransform: "uppercase",
+    }}>
+      {label}
+    </div>
+  );
+}
+
 export function Sidebar({
   profile,
   company,
@@ -16,6 +28,8 @@ export function Sidebar({
   isSuper: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  // Every link repeated this test; it reads better named once.
+  const admin = profile?.role === "admin" || isSuper;
 
   return (
     <>
@@ -27,48 +41,46 @@ export function Sidebar({
       </div>
       <aside className={`sidebar ${isOpen ? "mobile-open" : ""}`} onClick={() => setIsOpen(false)}>
         <h1 className="no-print" style={{ display: "none" }}>SalesAutoCall</h1>
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/actions" label="🗂 Action Center" />}
-        <NavLink href="/dashboard" label="✨ Overview" />
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/velocity" label="⚡ Sales Velocity" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/routing" label="🎯 Lead Routing" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/health" label="📶 Phone Health" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/pulse" label="🔔 Daily Pulse" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/automations" label="⚙️ Automation Center" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/xray" label="🩻 Sales X-Ray" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/integrity" label="🛡 Integrity check" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/rag" label="🧠 RAG" />}
-        <NavLink href="/dashboard/salespeople" label="Salespeople" />
-        {profile?.role === "admin" && <NavLink href="/dashboard/attendance" label="📅 Attendance" />}
-        {profile?.role === "admin" && !isSuper && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/whatsapp" label="💬 WhatsApp" />}
-        {profile?.role === "admin" && <NavLink href="/dashboard/facebook" label="📱 Facebook Leads" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/capture" label="🪝 Lead Capture" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/content" label="📚 Content Library" />}
-        {(profile?.role === "admin" || isSuper) && <NavLink href="/dashboard/projects" label="🏢 Buyer Projects" />}
+        {/* Twenty-eight flat links was the navigation problem — not the number
+            of pages, the absence of any grouping. Five sections, ordered by how
+            often a working day touches them: act, understand, configure, run
+            the platform, diagnose. */}
+        <Section label="Operational" />
+        {admin && <NavLink href="/dashboard/actions" label="🗂 Action Center" />}
+        {admin && <NavLink href="/dashboard/leads" label="🎯 Lead Management" />}
         {/* Admins manage contacts in Lead Management — the read-only Contacts
             list was a duplicate for them; it stays for non-admin viewers. */}
         {profile?.role !== "admin" && <NavLink href="/dashboard/contacts" label="Contacts" />}
         <NavLink href="/dashboard/calls" label="Call logs" />
         <NavLink href="/dashboard/recordings" label="Recordings" />
-        <NavLink href="/dashboard/apps" label="📲 App downloads" />
+
+        <Section label="Analytics" />
+        <NavLink href="/dashboard" label="✨ Overview" />
+        {admin && <NavLink href="/dashboard/velocity" label="⚡ Sales Velocity" />}
+        {admin && <NavLink href="/dashboard/xray" label="🩻 Sales X-Ray" />}
         {profile?.role === "admin" && <NavLink href="/dashboard/reports" label="📊 Reports" />}
-        
-        {isSuper && (
-          <>
-            <div style={{ margin: "14px 6px 4px", fontSize: 11, letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" }}>
-              Super admin
-            </div>
-            <NavLink href="/dashboard/platform/hq" label="🛰 Platform HQ" />
-            <NavLink href="/dashboard/ads" label="📈 Ads Manager" />
-            <NavLink href="/dashboard/leads" label="🎯 Lead Management" />
-            <NavLink href="/dashboard/platform" label="🏢 Companies" />
-            <NavLink href="/dashboard/platform/telecallers" label="🎧 Telecallers" />
-            <NavLink href="/dashboard/platform/contacts" label="📇 Contacts" />
-            <NavLink href="/dashboard/platform/storage" label="💾 Recording storage" />
-          </>
-        )}
-        
+
+        <Section label="Configuration" />
+        {admin && <NavLink href="/dashboard/automations" label="⚙️ Automation Center" />}
+        {admin && <NavLink href="/dashboard/pulse" label="🔔 Daily Pulse" />}
+        {admin && <NavLink href="/dashboard/routing" label="🎯 Lead Routing" />}
+        {admin && <NavLink href="/dashboard/whatsapp" label="💬 WhatsApp" />}
+        {profile?.role === "admin" && <NavLink href="/dashboard/facebook" label="📱 Facebook Leads" />}
+        {admin && <NavLink href="/dashboard/capture" label="🪝 Lead Capture" />}
+        {admin && <NavLink href="/dashboard/content" label="📚 Content Library" />}
+        {admin && <NavLink href="/dashboard/projects" label="🏢 Buyer Projects" />}
+        {admin && <NavLink href="/dashboard/rag" label="🧠 RAG" />}
+
+        <Section label="Team" />
+        <NavLink href="/dashboard/salespeople" label="Salespeople" />
+        {profile?.role === "admin" && <NavLink href="/dashboard/attendance" label="📅 Attendance" />}
+        {admin && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}
+        <NavLink href="/dashboard/apps" label="📲 App downloads" />
+
+        <Section label="Diagnostics" />
+        {admin && <NavLink href="/dashboard/health" label="📶 Phone Health" />}
+        {admin && <NavLink href="/dashboard/integrity" label="🛡 Integrity check" />}
+
         <div className="spacer" />
         
         <div style={{ 

@@ -18,6 +18,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { chatJson } from "../_shared/chat.ts";
+import { loadStages, stageOf, isPipeline, countsAsSale, DISPOSITIONS, type StageRow } from "../_shared/stage.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -35,10 +36,8 @@ const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // been the bottleneck. The summarising step uses the full chain via chat.ts.
 const GROQ = (Deno.env.get("GROQ_API_KEY") ?? "").split(/[,\s]+/).filter(Boolean)[0] ?? "";
 
-const DISPOSITIONS = [
-  "interested", "site_visit", "negotiation", "token_paid", "booked",
-  "callback", "not_interested", "lost", "dnc",
-];
+// DISPOSITIONS now comes from _shared/stage.ts — see the note there on why
+// three copies of this list had drifted apart.
 
 // India timezone helpers (the telecaller market runs on IST).
 const IST_OFFSET_MS = 5.5 * 3600 * 1000;
@@ -164,13 +163,33 @@ function stageLabel(s: string): string {
   return m[s] ?? s;
 }
 
-/** Fallback temperature inferred from the funnel stage when the model omits it. */
-function tempFromDisposition(d: string | null): string | null {
+/**
+ * Fallback temperature inferred from the funnel stage when the model omits it.
+ *
+ * Reads lead_stages instead of repeating the funnel: hot = a deal in motion or
+ * money down, warm = qualified, cold = lost. A call OUTCOME (callback,
+ * no_answer) says nothing about how warm the customer is and leaves temperature
+ * alone — the stage/action split applied to this heuristic too.
+ */
+function tempFromDisposition(stages: Map<string, StageRow>, d: string | null): string | null {
   if (!d) return null;
-  if (["site_visit", "negotiation", "token_paid", "booked"].includes(d)) return "hot";
-  if (d === "interested") return "warm";
-  if (["not_interested", "lost", "dnc"].includes(d)) return "cold";
-  return null; // callback / unknown → leave as-is
+  const row = stages.get(stageOf(d));
+  if (!row) return null;
+  if (isPipeline(stages, d) || countsAsSale(stages, d)) return "hot";
+  if (row.code === "interested") return "warm";
+  if (row.outcome === "lost") return "cold";
+  return null;
+}
+
+/**
+ * A lead the automation must not overwrite: money has moved, or the customer
+ * has already asked not to be called. Replaces two hand-written lists that
+ * disagreed with each other about which stages were protected.
+ */
+function autoWriteBlocked(stages: Map<string, StageRow>, stage: string | null | undefined): boolean {
+  const row = stage ? stages.get(stage) : undefined;
+  if (!row) return false;
+  return row.counts_as_sale || row.code === "dnc";
 }
 
 Deno.serve(async (req) => {
@@ -311,14 +330,18 @@ Deno.serve(async (req) => {
     // invalid flag — it's a retry, not a Do-Not-Call.
     if (phoneInvalid && notConnected) phoneInvalid = false;
 
+    // The canonical stage table, read once. Every lifecycle judgement below
+    // comes from it; nothing here decides for itself what a stage means.
+    const stages = await loadStages(admin);
+
     // If the model didn't hand back a temperature, derive one from the stage so
     // the lead's hot/warm/cold badge is always kept accurate from the note.
-    if (!temp) temp = tempFromDisposition(disposition);
+    if (!temp) temp = tempFromDisposition(stages, disposition);
 
     // ---------- AUTO-ACTIONS ----------
     const actions: string[] = [];
     const { data: contact } = await admin.from("contacts")
-      .select("id, name, phone, alt_phone, company_name, salesperson_id, company_id, status, budget, temperature, extra, notes, site_visit_at, token_amount, attempts")
+      .select("id, name, phone, alt_phone, company_name, salesperson_id, company_id, status, stage, budget, temperature, extra, notes, site_visit_at, token_amount, attempts")
       .eq("id", note.contact_id).maybeSingle();
     const rep: string | null = contact?.salesperson_id ?? note.actor_id ?? null;
     const who = contact?.name ?? contact?.phone ?? "lead";
@@ -345,7 +368,7 @@ Deno.serve(async (req) => {
     // it's terminal on the lead page, an exit chip, out of every pipeline bucket,
     // and protected from the "reassign makes it New again" trigger. A
     // wrong_number marker is kept in extra so it can be reported separately.
-    if (contact && phoneInvalid && !["dnc", "booked", "token_paid"].includes(contact.status)) {
+    if (contact && phoneInvalid && !autoWriteBlocked(stages, contact.stage)) {
       const prev = (contact.extra && typeof contact.extra === "object" ? contact.extra : {}) as Record<string, unknown>;
       await admin.from("contacts").update({ status: "dnc", extra: { ...prev, wrong_number: true } }).eq("id", contact.id);
       actions.push("Wrong number → Do Not Call");
@@ -437,18 +460,31 @@ Deno.serve(async (req) => {
       await logAct("token", `Token ₹${tokenAmount.toLocaleString("en-IN")} received (from voice note)`);
     }
 
-    // Move the sales funnel to match what was said — the "tap any stage" that
-    // the rep would otherwise do by hand. Skipped only when the visit/token
-    // blocks above ALREADY settled the stage (a past-dated visit mention must
-    // not swallow the stage change), on no signal, or when it would undo a win.
+    // Record what the call actually produced.
+    //
+    // This used to guard against "undoing a win" by refusing to write, because
+    // status was carrying BOTH the disposition and the lifecycle position — so
+    // a callback recorded on a booked lead erased the booking. It no longer
+    // has to: status is the last disposition, contacts.stage is where the deal
+    // is, and the monotonic guard in contacts_stage_sync() (migration 0143)
+    // refuses to move a stage backwards. Writing "callback" on a won lead now
+    // records the callback and leaves the deal won, which is what happened.
+    //
+    // The lead_activities line is written from the STAGE the lead ends up in,
+    // not from the disposition, so the timeline never claims a demotion the
+    // database refused.
     if (contact && !phoneInvalid && disposition && !visitApplied && disposition !== contact.status) {
-      const locked = contact.status === "booked" || contact.status === "token_paid";
-      const wouldUndoWin = locked && !["booked", "token_paid"].includes(disposition);
-      if (!wouldUndoWin) {
-        await admin.from("contacts").update({ status: disposition }).eq("id", contact.id);
-        actions.push(`Stage → ${stageLabel(disposition)}`);
-        await logAct("status", `Stage → ${stageLabel(disposition)} (from voice note)`);
-      }
+      const { data: after } = await admin.from("contacts")
+        .update({ status: disposition }).eq("id", contact.id)
+        .select("stage").maybeSingle();
+      const landed = after?.stage ?? contact.stage;
+      const moved = landed !== contact.stage;
+      actions.push(moved
+        ? `Stage → ${stages.get(landed)?.label ?? landed}`
+        : `Call outcome: ${stageLabel(disposition)}`);
+      await logAct("status", moved
+        ? `Stage → ${stages.get(landed)?.label ?? landed} (from voice note)`
+        : `Call outcome recorded: ${stageLabel(disposition)} — stage stays ${stages.get(landed)?.label ?? landed} (from voice note)`);
     }
 
     // Call didn't connect → it counts as a NO-CONNECT ATTEMPT. Bump the attempts
@@ -456,8 +492,10 @@ Deno.serve(async (req) => {
     // already left New for 'no_answer', which puts it in Follow-up's "didn't
     // pick up — try again" section; this just says how many tries it has taken.
     // Capped so it can't run away, and only for a lead still in the calling pile.
+    // Only for a lead still in the calling pile: past qualification, or already
+    // finished, "attempt 4" is noise.
     if (contact && notConnected && !phoneInvalid &&
-        !["booked", "token_paid", "site_visit", "negotiation", "dnc"].includes(contact.status)) {
+        !isPipeline(stages, contact.status) && !autoWriteBlocked(stages, contact.stage)) {
       const nextAttempts = Math.min((contact.attempts ?? 0) + 1, 9);
       await admin.from("contacts").update({ attempts: nextAttempts }).eq("id", contact.id);
       actions.push(`Attempt ${nextAttempts} — didn't connect`);

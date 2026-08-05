@@ -1051,6 +1051,35 @@ object Repository {
             }.decodeSingleOrNull<UpdatePolicy>()
         }.getOrNull() ?: UpdatePolicy()
 
+    /**
+     * The canonical stage vocabulary. Ten rows, readable by every authenticated
+     * user, cached by the caller for the session — labels and colours come from
+     * here so the phone can never disagree with the dashboard about what a
+     * stage is called or what colour it is.
+     */
+    suspend fun fetchLeadStages(): List<LeadStage> =
+        runCatching {
+            client.from("lead_stages").select {
+                order("sort_order", Order.ASCENDING)
+            }.decodeList<LeadStage>()
+        }.getOrElse { emptyList() }
+
+    /**
+     * Every open lead's DERIVED action state for this rep.
+     *
+     * Deliberately fetched, not computed on the phone. Two client-side
+     * definitions of "due" are exactly how the Follow-up tab and the Follow Ups
+     * screen ended up disagreeing about the same clock.
+     */
+    suspend fun fetchWorkStates(salespersonId: String): List<LeadWork> =
+        runCatching {
+            client.from("v_lead_workstate").select(
+                columns = io.github.jan.supabase.postgrest.query.Columns.raw("contact_id, action_state, due_at")
+            ) {
+                filter { eq("salesperson_id", salespersonId) }
+            }.decodeList<LeadWork>()
+        }.getOrElse { emptyList() }
+
     suspend fun fetchCampaignContacts(campaignId: String): List<Contact> {
         return client.from("contacts").select {
             filter { eq("campaign_id", campaignId) }

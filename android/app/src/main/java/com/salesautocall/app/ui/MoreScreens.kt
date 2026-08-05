@@ -545,7 +545,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
     val now = System.currentTimeMillis()
     val firstName = app.profile?.fullName?.substringBefore(' ')?.takeIf { it.isNotBlank() } ?: "there"
 
-    val hotNew = app.leads.filter { it.temperature == "hot" && it.status in setOf("new", "queued") }
+    val hotNew = app.leads.filter { it.temperature == "hot" && it.stage == "new" }
     val overdueFu = app.followUpList.filter { (ms(it.dueAt) ?: Long.MAX_VALUE) < now }
     val interested = app.leads.filter { it.status == "interested" }
     val siteVisits = app.leads.filter { it.status == "site_visit" }

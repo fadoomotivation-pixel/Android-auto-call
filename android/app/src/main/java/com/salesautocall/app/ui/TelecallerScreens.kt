@@ -92,6 +92,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.FollowUp
+import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.data.LeaderboardRow
 import kotlin.math.abs
@@ -115,34 +116,67 @@ private val Slate = Color(0xFF5D6862)   // warm slate — neutral / cold
 private val Bronze = Color(0xFF8A6D3B)  // muted bronze — negotiation, value
 private val WaGreen = Color(0xFF25D366) // WhatsApp brand — kept recognisable
 
-private data class Stage(val key: String, val label: String, val statuses: Set<String>, val color: Color)
+/**
+ * A chip on the "What to do now" row.
+ *
+ * Mirrors v_lead_action_state one-for-one. The database decides which state a
+ * lead is in; this only decides how to say it and what colour to use. `none`
+ * (a finished lead) has no chip — there is nothing to do.
+ */
+private data class ActionChip(val code: String, val label: String, val color: Color, val hint: String)
+
+/**
+ * A lead's derived action state, or null if it has none yet.
+ *
+ * Contact.id is nullable (a row not yet round-tripped through the server), so
+ * this cannot be a bare map lookup.
+ */
+private fun AppState.actionOf(c: Contact): String? = c.id?.let { actionByLead[it] }
+
+private val ACTIONS = listOf(
+    ActionChip("overdue", "Overdue", Color(0xFFC0452C),
+        "You promised these earlier and the time has passed. Call these first."),
+    ActionChip("call_now", "Call now", Color(0xFFC98A3E),
+        "Due right now, brand new, or nobody picked up last time."),
+    ActionChip("due_today", "Due today", Color(0xFF3E7F8A),
+        "Booked for later today. They move into Call now on their own, at their time."),
+    ActionChip("scheduled", "Scheduled", Color(0xFF5A62C9),
+        "Booked for another day. Nothing to do yet — this is a plan, not a backlog."),
+    ActionChip("awaiting_visit", "Visit coming", Color(0xFF75629B),
+        "A site visit is booked. Waiting for them to come."),
+    ActionChip("no_next_step", "No next step", Color(0xFF8A6D3B),
+        "You talked to them and nothing is booked. These go cold if nobody acts."),
+)
+
+/**
+ * One plain line per stage. Only the sentences live here — the label, colour
+ * and order all come from lead_stages, so a stage added tomorrow still shows
+ * up, just without a bespoke sentence until someone writes one.
+ */
+private val STAGE_HINTS = mapOf(
+    "new" to "Never called. The moment you record an outcome, it moves on.",
+    "contacted" to "You have dialled them. What happens next depends on the call, not on this tab.",
+    "interested" to "They said yes to hearing more. Book the site visit.",
+    "site_visit" to "A visit is booked or done.",
+    "negotiation" to "Talking price.",
+    "token_paid" to "Token money received. Not finished — the booking still has to close.",
+    "won" to "Booked. Deal done.",
+    "lost" to "Not interested, or the deal died.",
+    "dnc" to "They asked us not to call. Do not call them.",
+)
+
+/** "#RRGGBB" from lead_stages -> Compose Color. The stage table owns the
+ *  palette so the phone and the dashboard cannot drift to different greens. */
+private fun parseHex(hex: String): Color =
+    runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { Color(0xFF6A7B85) }
+
 
 private val Teal = Color(0xFF5A62C9)    // jade-adjacent: token money
 
-/** Real-estate pipeline, in order. "Negotiation" folds in the older "proposal"
- *  status; "Token Paid" is the booking-token money milestone before a full booking. */
-private val STAGES = listOf(
-    // New means NEVER CALLED. No-answer and busy used to sit here on the grounds
-    // that nobody had spoken to those people yet — but the rep did dial them,
-    // and being shown their own finished work as "New" is the thing they have
-    // now reported twice. Tried-and-missed belongs with the rest of the
-    // call-again pile, not with leads nobody has touched.
-    Stage("new", "New", setOf("new", "queued"), Color(0xFF6A7B85)),
-    Stage("contacted", "Contacted", setOf("called", "callback", "follow_up", "no_answer", "busy", "wrong_person"), Cyan),
-    Stage("interested", "Interested", setOf("interested"), Amber),
-    Stage("site_visit", "Site Visit", setOf("site_visit"), Purple),
-    Stage("negotiation", "Negotiation", setOf("negotiation", "proposal"), Bronze),
-    Stage("token", "Token Paid", setOf("token_paid"), Teal),
-    Stage("closed", "Booked", setOf("booked"), Green),
-)
-
-private fun stageOf(status: String): Stage =
-    STAGES.firstOrNull { status in it.statuses }
-        ?: when (status) {
-            "not_interested", "lost" -> Stage("lost", "Lost", emptySet(), Red)
-            "dnc" -> Stage("dnc", "Do Not Call", emptySet(), Slate)
-            else -> STAGES[0]
-        }
+// The seven-stage STAGES list and stageOf() that used to live here are gone.
+// They were this file's private funnel, disagreeing with the eight tab buckets
+// forty lines down AND with the dashboard's nine chips. The vocabulary now
+// arrives from lead_stages (AppState.leadStages) and is only rendered here.
 
 /** Stages a rep can move a lead into, from the action sheet. */
 private val SETTABLE_STAGES = listOf(
@@ -170,7 +204,7 @@ private data class DeckStats(
 /** Everything Home counts off the lead list, computed once per load. */
 private data class HomeStats(
     val newLeads: Int,
-    val stageCounts: List<Pair<Stage, Int>>,
+    val stageCounts: List<Pair<LeadStage, Int>>,
     val pipelineValue: Double,
     val tokenCollected: Double,
     val hotUncontacted: Int,
@@ -186,11 +220,23 @@ private data class HomeStats(
 // kind of work that makes an older one feel like it is dragging. Hoisted here,
 // they are allocated once for the life of the process.
 private val DEAD_STATUSES = setOf("lost", "not_interested", "dnc")
-private val DEAD_OR_BOOKED = setOf("lost", "not_interested", "dnc", "booked")
+/**
+ * A lead nobody should be chasing: finished, either way.
+ *
+ * This was a status list and disagreed with the four other "closed" lists in
+ * the codebase — notably it excluded `invalid`, so a bad number kept showing up
+ * as live work. It is now the STAGE question `is_terminal`, asked of the same
+ * table the dashboard asks. Kept as a helper on the stage code rather than a
+ * set, so there is nothing to fall out of date.
+ */
+private fun isFinished(stages: List<LeadStage>, stage: String): Boolean =
+    stages.firstOrNull { it.code == stage }?.isTerminal ?: false
 private val SAID_NO = setOf("lost", "not_interested")
 private val BOOKED_OR_DNC = setOf("booked", "dnc")
 /** Never dialled — the same meaning as the New tab. */
-private val UNCALLED = setOf("new", "queued")
+// UNCALLED was setOf("new","queued") — the New stage, spelled out. It is now
+// just `stage == "new"`, which is the same question asked of the canonical
+// column instead of guessed from the disposition.
 private val NEEDS_REMINDER = setOf("interested", "callback")
 /** Stages a lead only reaches AFTER a site visit really happened. */
 private val AFTER_VISIT = setOf("negotiation", "proposal", "token_paid")
@@ -593,11 +639,15 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         val protectedIds = app.followUpList.mapNotNull { it.contactId }.toSet()
         val protectedPhones = app.followUpList.map { it.phone }.toSet()
         HomeStats(
-            newLeads = app.leads.count { it.status in UNCALLED },
-            stageCounts = STAGES.map { st -> st to app.leads.count { it.status in st.statuses } },
+            newLeads = app.leads.count { it.stage == "new" },
+            // Home used to count with STAGES while the Leads screen counted with
+            // its own tab buckets — two groupings of the same leads, one app.
+            // Both now count the stage column against the canonical rows.
+            stageCounts = app.leadStages.filter { it.repVisible }
+                .map { st -> st to app.leads.count { c -> c.stage == st.code } },
             pipelineValue = app.leads.filter { it.status !in DEAD_STATUSES }.sumOf { parseBudgetRupees(it.budget) },
             tokenCollected = app.leads.sumOf { it.tokenAmount ?: 0.0 },
-            hotUncontacted = app.leads.count { it.temperature == "hot" && it.status in UNCALLED },
+            hotUncontacted = app.leads.count { it.temperature == "hot" && it.stage == "new" },
             // Safety net: interested/callback leads with NO pending follow-up are
             // "unprotected" — one tap gives each a reminder so none can slip away.
             unprotected = app.leads.filter {
@@ -632,7 +682,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     // went past, and the app asks about it instead of asserting it.
     val pastVisits = app.leads
         .mapNotNull { c -> c.siteVisitAt?.let { instantMillis(it) }?.let { ms -> c to ms } }
-        .filter { it.second < nowMs && it.first.status !in DEAD_OR_BOOKED }
+        .filter { it.second < nowMs && !isFinished(app.leadStages, it.first.stage) }
         .sortedByDescending { it.second }
     val (visitsDone, visitsUnconfirmed) = pastVisits.partition {
         it.first.siteVisitArrivedAt != null || it.first.status in AFTER_VISIT
@@ -818,9 +868,10 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                     val maxCount = stageCounts.maxOf { it.second }.coerceAtLeast(1)
                     Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
                         stageCounts.forEach { (stage, n) ->
+                            val stageColor = parseHex(stage.color)
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(Modifier.size(8.dp).clip(CircleShape).background(stage.color))
+                                    Box(Modifier.size(8.dp).clip(CircleShape).background(stageColor))
                                     Spacer(Modifier.width(8.dp))
                                     Text(stage.label, style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
@@ -832,7 +883,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                     .background(MaterialTheme.colorScheme.surfaceVariant)) {
                                     if (n > 0) {
                                         Box(Modifier.fillMaxWidth(n / maxCount.toFloat()).fillMaxHeight()
-                                            .clip(RoundedCornerShape(50)).background(stage.color))
+                                            .clip(RoundedCornerShape(50)).background(stageColor))
                                     }
                                 }
                             }
@@ -1179,74 +1230,11 @@ private fun DeckStat(emoji: String, value: Int, label: String, highlight: Boolea
     }
 }
 
-/**
- * A heading inside the Follow-up tab, carrying its own count and its own
- * one-line explanation of what is in it.
- *
- * The explanation is not decoration. Reps said the buckets "sometimes don't
- * make sense", and the answer to that is never a cleverer label — it is the
- * rule, written down, next to the thing it governs.
- *
- * Pass [onToggle] and the section becomes a shut drawer with a count on it:
- * still countable, still checkable, out of the way of the calls that are due.
- */
-@Composable
-private fun FollowUpSection(
-    title: String,
-    count: Int,
-    color: Color,
-    explain: String,
-    open: Boolean = true,
-    onToggle: (() -> Unit)? = null,
-) {
-    Column(
-        Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .then(if (onToggle != null) Modifier.background(color.copy(alpha = 0.07f)).clickable { onToggle() } else Modifier)
-            .padding(horizontal = if (onToggle != null) 12.dp else 0.dp, vertical = if (onToggle != null) 10.dp else 4.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "$title ($count)",
-                style = MaterialTheme.typography.titleSmall,
-                color = color, fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
-            if (onToggle != null) {
-                Icon(
-                    if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (open) "Hide" else "Show",
-                    tint = color, modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(
-            explain,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
+// FollowUpSection and FollowUpSubHead are gone with the in-page Follow-up
+// split. The three groups they drew — Call now / Done today / Booked for later
+// — are first-class chips on the action row now, counted by the database
+// rather than by this screen.
 
-/** The older promised / didn't-pick-up split, now one level down inside
- *  "Call now" — quieter than the section heading above it. */
-@Composable
-private fun FollowUpSubHead(text: String, color: Color) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = color, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 4.dp),
-    )
-}
-
-/**
- * Nothing is due. Said plainly, because a rep who has just worked through her
- * whole list deserves to be told she has — and because the old tab looked
- * exactly the same finished as unfinished, which is how "maine sab kar liye"
- * and "107" ended up on the same screen.
- */
 @Composable
 private fun FollowUpAllClear(laterCount: Int) {
     Column(
@@ -1288,7 +1276,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var query by remember { mutableStateOf("") }
     // One simple question on screen: "which bucket?" — the fine-grained stage /
     // temperature / sort controls live in the Filters sheet, not the page.
-    var bucket by remember { mutableStateOf("new") }              // all | new | working | pipeline | booked — default to New
+    // TWO AXES, TWO ROWS. "act:<state>" is WHAT TO DO NOW (derived, from the
+    // database); "stage:<code>" is WHERE THE DEAL IS (canonical, from
+    // lead_stages). They are never mixed, which is what made the old tab row —
+    // New / Today / Follow-up / Working / Pipeline / Booked / Closed — look
+    // like the same lead was in several places at once. It usually was.
+    //
+    // Opens on the action queue, because a rep's first question is never "how
+    // many leads are at Negotiation", it is "who do I ring now".
+    var bucket by remember { mutableStateOf("act:call_now") }
     var stageFilter by remember { mutableStateOf<String?>(null) } // exact stage from the sheet
     var quick by remember { mutableStateOf<String?>(null) }       // "today" | "retry"
     var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
@@ -1300,8 +1296,6 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // Follow-up's two "nothing to do" sections start shut, so the tab opens on
     // the calls that are actually due and nothing else. Shut is the useful
     // state; they are there to be checked, not scrolled past.
-    var fuDoneOpen by remember { mutableStateOf(false) }
-    var fuLaterOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(app.requestedContactId, app.leads) {
         val reqId = app.requestedContactId
@@ -1326,137 +1320,37 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // Buckets a rep actually thinks in. Sheet filters (exact stage / quick views)
     // override the bucket when active.
     //
-    // NEW = never called. Nothing else.
+    // THE HARDCODED TAXONOMY THAT USED TO LIVE HERE IS GONE.
     //
-    // It used to also hold no-answer, busy, wrong-person and callback, on the
-    // reasoning that nobody had actually SPOKEN to those people so they still
-    // needed dialling. Reps read the tab's own label instead — "never called
-    // yet" — saw numbers they had personally rung sitting in it, and reported it
-    // twice: "jo number call kar liye the wo abhi bhi New me pade hain."
+    // newSet / retrySet / workingSet / pipelineSet / closedSet, plus inToday(),
+    // hasFollowUp(), needsAnotherCall() and doneToday(), were this screen's
+    // private opinion about what a lead's lifecycle position was — a third one,
+    // disagreeing with the STAGES list forty lines up and with the dashboard's
+    // nine chips. Six leads were in Pipeline and Follow-up at the same time
+    // because two of those sets overlapped and nobody could see it.
     //
-    // They are right. A rep who dialled a number and heard it ring has called
-    // it. The list they want it in is the one they already said out loud: they
-    // keep call-again data in Follow-up. So New is now only what its label
-    // promises, and everything tried lives in Follow-up next to the booked
-    // callbacks — one pile of "call these", instead of the work being split
-    // across the tab for untouched leads and the tab for booked ones.
-    val newSet = setOf("new", "queued")
-    // Dialled, nobody reached — or a callback the rep booked by hand. Same
-    // meaning to a rep ("ise dobara call karna hai"), so the same tab.
-    val retrySet = setOf("no_answer", "busy", "wrong_person", "callback")
-    val workingSet = setOf("called", "follow_up", "interested")
-    val pipelineSet = setOf("site_visit", "negotiation", "proposal", "token_paid")
-    // The graveyard is still data: reps need to SEE their lost/not-interested
-    // leads (to revive one, check history, or answer "kya bola tha?"), they just
-    // must never clutter the working lists.
-    // "invalid" belonged to no bucket at all, so a lead marked invalid vanished
-    // from every tab except All — it looked deleted. It is a dead lead; it lives
-    // with the other dead ones.
-    val closedSet = setOf("lost", "not_interested", "dnc", "invalid")
+    // Both questions are now answered once, by the database, and merely
+    // rendered here: `contact.stage` (a column, monotonic, joined to
+    // lead_stages) and `app.actionByLead` (v_lead_action_state). If a count on
+    // this screen ever disagrees with the dashboard again, one of them stopped
+    // reading these and started deciding for itself.
     val nowMs = System.currentTimeMillis()
     fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
-    // "Today" = the day's action list. A lead belongs here when the rep RECORDED
-    // an outcome for it today (drains it out of New so New stays purely fresh),
-    // OR its follow-up is due TODAY (earlier-today still counts — it's today's
-    // work), OR its site visit is today. Done leads (booked/closed) never appear.
-    // Leads here ALSO still show in their real bucket — Today is a one-day
-    // cross-cut.
-    //
-    // Deliberately handled_at, NOT last_contacted_at. A call on its own proves
-    // nothing: a mis-tap dials, hangs up and stamps last_contacted_at, and the
-    // lead used to vanish from New with nothing written down. A lead moves only
-    // once the rep has said what happened — a funnel status, a voice note, a
-    // typed note or a booked callback (see migration 0101).
-    //
-    // Previous days' OVERDUE callbacks do NOT belong in Today — they were piling
-    // up here (e.g. 15 stale callbacks turning a rep's Today into a 19-lead
-    // dumping ground) and drowning out "aaj ka kaam". An overdue callback is
-    // just someone to call NOW, so it falls back into New (the call pile) with
-    // its attempt tag, sorted to the top — never lost, just in the right list.
-    fun dueToday(c: Contact): Boolean {
-        val due = fuOf(c)?.let { instantMillis(it.dueAt) } ?: return false
-        val d = java.time.Instant.ofEpochMilli(due).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-        return d == java.time.LocalDate.now()
-    }
-    fun inToday(c: Contact): Boolean =
-        c.status !in closedSet && c.status != "booked" &&
-            (isToday(c.handledAt) || dueToday(c) || isToday(c.siteVisitAt))
-
-    // A lead with a callback booked on it. Reps kept finding these in New and
-    // said so: "follow up ki lead new me padi hai". They were right — an overdue
-    // callback used to fall back into the New pile and a future one hid inside
-    // Working, so the one thing a rep most needs to see as a group was scattered
-    // across two tabs that are about something else.
-    //
-    // It now has its own tab, and this single rule is what fills it. New and
-    // Working simply exclude it, so no lead is counted in two places and there
-    // is only ever one definition of "has a follow-up". Closed and booked leads
-    // are out because 0112 closes their callbacks anyway.
-    fun hasFollowUp(c: Contact): Boolean =
-        fuOf(c) != null && c.status !in closedSet && c.status != "booked"
-
-    // The Follow-up tab's one rule: a callback is booked on it, OR it was
-    // dialled and nobody was reached. Both mean "call this again", and a rep
-    // hunting for the second kind should never have to know which of the two
-    // the CRM happened to record.
-    //
-    // New and Working BOTH have to exclude it, and Working did not: a lead at
-    // 'called', 'follow_up' or 'interested' with a callback booked on it was
-    // being listed in Follow-up and in Working at the same time. Fifteen leads
-    // were double-counted, ten of them on one rep — which is the same "follow-up
-    // ki lead doosri jagah padi hai" confusion in a new place, and the Working
-    // count simply did not add up against the others.
-    fun needsAnotherCall(c: Contact): Boolean =
-        (hasFollowUp(c) || c.status in retrySet) && c.status !in closedSet && c.status != "booked"
-
-    // ── Follow-up holds three different jobs under one name ──
-    //
-    // A rep told us she had finished every follow-up and the tab still said
-    // 107. She was right and so was the tab: finishing a callback books the
-    // NEXT one, so the lead is instantly back in this list with a new time on
-    // it, looking exactly like a callback she has never touched. Add the ones
-    // booked for next week and the number stops meaning anything — it never
-    // goes down no matter how much work she does, and she cannot tell a call
-    // she owes right now from one she already made.
-    //
-    // So the tab is cut the way the day actually works, using the ONE clock
-    // read the dedicated Follow Ups screen already uses (due_at against now):
-    //
-    //   Call now      — its time has come. This is the work.
-    //   Done today    — she wrote down what happened today; next call is later.
-    //   Booked later  — a plan, not a backlog. Arrives on its own, on the day.
-    //
-    // Due ALWAYS wins over done: a lead she handled at 10am with a callback at
-    // 4pm is done until 4pm and then it is work again. Missing a due time
-    // means "no time was ever booked" (a plain no-answer) — that is call-now,
-    // never later. The three are mutually exclusive and add up to the tab.
-    fun isDueNow(c: Contact): Boolean = (fuOf(c)?.let { instantMillis(it.dueAt) } ?: 0L) <= nowMs
-    fun doneToday(c: Contact): Boolean = !isDueNow(c) && isToday(c.handledAt)
 
     val base = when {
-        stageFilter != null -> app.leads.filter { it.status in (STAGES.firstOrNull { s -> s.key == stageFilter }?.statuses ?: emptySet()) }
+        stageFilter != null -> app.leads.filter { it.stage == stageFilter }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
-        quick == "retry" -> app.leads.filter { it.status in retrySet || it.status == "follow_up" }
-        else -> when (bucket) {
-            // New = never called, no callback booked on it, and not already
-            // handled today.
-            "new" -> app.leads.filter { it.status in newSet && !hasFollowUp(it) && !inToday(it) }
-            "today" -> app.leads.filter { inToday(it) }
-            // Due first, oldest first — the same order the Follow Ups screen
-            // uses, so the two never disagree about what to call next. Leads
-            // with no booked time (a plain no-answer) sort after the ones that
-            // have one: a promised callback beats a retry whenever both are due.
-            "followup" -> app.leads.filter { needsAnotherCall(it) }
+        quick == "retry" -> app.leads.filter { app.actionOf(it) == "call_now" }
+        // Both axes read straight through. There is no client-side re-derivation
+        // of either one: the stage is a column, the action state is a view, and
+        // a second opinion computed here is exactly the drift being removed.
+        bucket.startsWith("act:") ->
+            app.leads.filter { app.actionOf(it) == bucket.removePrefix("act:") }
+                // Soonest first, so the longest wait is at the top of the queue.
                 .sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
-            // Working = deal in motion with nothing booked to call back. The
-            // moment a callback exists, Follow-up owns the lead — one lead, one
-            // tab, so the counts across the row always add up.
-            "working" -> app.leads.filter { it.status in workingSet && !needsAnotherCall(it) }
-            "pipeline" -> app.leads.filter { it.status in pipelineSet }
-            "booked" -> app.leads.filter { it.status == "booked" }
-            "closed" -> app.leads.filter { it.status in closedSet }
-            else -> app.leads
-        }
+        bucket.startsWith("stage:") ->
+            app.leads.filter { it.stage == bucket.removePrefix("stage:") }
+        else -> app.leads
     }
     val tempFiltered = if (tempFilter == null) base else base.filter { it.temperature == tempFilter }
     val searched = if (query.isBlank()) tempFiltered else tempFiltered.filter {
@@ -1467,27 +1361,19 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         "recent" -> searched.sortedByDescending { it.createdAt ?: "" }
         // Default order in New: woken-up retries/callbacks first (their time is
         // NOW), then everything else in its usual order.
-        else -> if (bucket == "new" && stageFilter == null && quick == null) {
-            searched.sortedByDescending { c ->
-                val due = fuOf(c)?.let { instantMillis(it.dueAt) }
-                if (due != null && due <= nowMs) 1 else 0
-            }
-        } else searched
+        // The action buckets already arrive in due order from the filter above;
+        // re-sorting them here would be a second opinion about the same clock.
+        else -> searched
     }
     val filteredIds = filtered.mapNotNull { it.id }.toSet()
     val allSelected = filteredIds.isNotEmpty() && selectedIds.containsAll(filteredIds)
 
-    // The split only applies to the plain Follow-up tab. A rep who has reached
-    // for a stage, a temperature, a search or a sort is hunting for a specific
-    // lead, and sections would hide it behind a shut header.
-    val plainFollowUp = bucket == "followup" && stageFilter == null && quick == null &&
-        tempFilter == null && query.isBlank() && sortBy == "default"
-    val fuCallNow = if (plainFollowUp) filtered.filter { isDueNow(it) } else emptyList()
-    // Newest first: what she just finished sits at the top, which is where she
-    // looks to answer "did I already do this one?".
-    val fuDone = if (!plainFollowUp) emptyList()
-        else filtered.filter { doneToday(it) }.sortedByDescending { it.handledAt ?: "" }
-    val fuLater = if (plainFollowUp) filtered.filter { !isDueNow(it) && !doneToday(it) } else emptyList()
+    // The action queue: the ONLY place a power-dial may run from. Dialling a
+    // stage tab would ring people whose time has not come — which is what
+    // "power-dial the Follow-up tab" used to do before the tab was three
+    // different jobs under one name.
+    val isActionQueue = bucket == "act:overdue" || bucket == "act:call_now"
+    val fuCallNow = if (isActionQueue) filtered else emptyList()
 
     fun exitSelect() { selectMode = false; selectedIds = emptySet() }
 
@@ -1516,8 +1402,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         // included callbacks on closed and booked leads — the
                         // same "summary disagrees with the tab it links to"
                         // problem the New count below already had to be fixed for.
-                        val dueNow = app.leads.count { needsAnotherCall(it) && isDueNow(it) }
-                        val hotCount = app.leads.count { it.temperature == "hot" && it.status !in DEAD_OR_BOOKED }
+                        // Work only — overdue plus due-now. Never the whole tab: a
+                        // count that includes next week's plan cannot go down however
+                        // hard a rep works, and a number that never moves is a number
+                        // nobody reads.
+                        val dueNow = app.leads.count {
+                            val a = app.actionOf(it); a == "overdue" || a == "call_now"
+                        }
+                        val hotCount = app.leads.count { it.temperature == "hot" && !isFinished(app.leadStages, it.stage) }
                         val pipelineValue = app.leads
                             .filter { it.status !in DEAD_STATUSES }
                             .sumOf { parseBudgetRupees(it.budget) }
@@ -1538,7 +1430,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         // Must stay character-for-character the same rule as the New
                         // tab below — a summary card that disagrees with the tab it
                         // links to has already caused one "12 vs 8" bug report.
-                        newCount = app.leads.count { it.status in newSet && !hasFollowUp(it) && !inToday(it) },
+                        newCount = app.leads.count { it.stage == "new" },
                         pipelineValue = deck.pipelineValue,
                         scoring = app.aiScoringLeads,
                         reviveCount = deck.reviveCount,
@@ -1598,74 +1490,74 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            // The buckets a rep thinks in — one calm row, no chip wall.
-            // Follow-up sits right after Today because that is the order the day
-            // runs in: what's fresh, what's due today, what I promised to call back.
+            // ── Row 1 · What to do now ──────────────────────────────────
+            // Derived from the clock, mutually exclusive, and the only row a
+            // power-dial may run from. "Today" is a state in here, not a tab of
+            // its own — a due date was never a place in the funnel.
+            item {
+                Text(
+                    "What to do now",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             item {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val segments = listOf(
-                        "all" to Triple("All", app.leads.size, MaterialTheme.colorScheme.primary),
-                        "new" to Triple("New", app.leads.count { it.status in newSet && !hasFollowUp(it) && !inToday(it) }, MaterialTheme.colorScheme.primary),
-                        "today" to Triple("Today", app.leads.count { inToday(it) }, Cyan),
-                        // Calls that are DUE, not rows in the tab. A count that
-                        // includes next week's plan and this morning's finished
-                        // work cannot go down however hard a rep works, and a
-                        // number that never moves is a number nobody reads. The
-                        // other two groups are counted on their own headers
-                        // inside the tab, so the total is still in plain sight.
-                        "followup" to Triple("Follow-up", app.leads.count { needsAnotherCall(it) && isDueNow(it) }, Amber),
-                        "working" to Triple("Working", app.leads.count { it.status in workingSet && !needsAnotherCall(it) }, Indigo),
-                        "pipeline" to Triple("Pipeline", app.leads.count { it.status in pipelineSet }, Purple),
-                        "booked" to Triple("Booked", app.leads.count { it.status == "booked" }, Green),
-                        "closed" to Triple("Closed", app.leads.count { it.status in closedSet }, Slate),
-                    )
-                    segments.forEach { (key, seg) ->
-                        val (label, n, color) = seg
-                        FilterTab(label, n, bucket == key && stageFilter == null && quick == null, color) {
+                    ACTIONS.forEach { a ->
+                        val n = app.leads.count { app.actionOf(it) == a.code }
+                        val key = "act:${a.code}"
+                        FilterTab(a.label, n, bucket == key && stageFilter == null && quick == null, a.color) {
                             bucket = key; stageFilter = null; quick = null
                         }
                     }
                 }
             }
-            // Reps kept asking what each tab actually holds, and "Today"
-            // deliberately repeats leads that also sit in another tab. None of
-            // that is guessable, so the list says it in one plain line instead
-            // of leaving people to work it out.
-            if (stageFilter == null && quick == null) {
-                val hint = when (bucket) {
-                    // Now literally true, so it can be said in four words. It
-                    // used to also hold no-answers, which is exactly why the
-                    // count kept looking too big to a rep reading it as "fresh".
-                    "new" -> "Never called. The moment you dial one, it moves to Follow-up."
-                    "today" -> "Today's work: callbacks due today, site visits today, and leads you already handled today. These also stay in their own tab."
-                    // Says the split out loud, with the numbers. A rep who has
-                    // finished her calls must be able to read this one line and
-                    // see that she has finished them. When a filter or a search
-                    // is on the sections aren't drawn, so their counts would be
-                    // lying and the plain sentence is used instead.
-                    "followup" -> if (!plainFollowUp)
-                        "Everyone to call again — callbacks you promised, plus anyone who didn't pick up. Soonest first."
-                    else buildString {
-                        append(
-                            if (fuCallNow.isEmpty()) "No call is due right now."
-                            else "${fuCallNow.size} to call now — callbacks you promised, plus anyone who didn't pick up. Oldest first."
-                        )
-                        if (fuDone.isNotEmpty()) append(" ${fuDone.size} done today.")
-                        if (fuLater.isNotEmpty()) append(" ${fuLater.size} booked for later.")
-                        if (fuDone.isNotEmpty() || fuLater.isNotEmpty()) append(" Tap those below to see them.")
+
+            // ── Row 2 · Where the deal is ───────────────────────────────
+            // The canonical stages, straight from lead_stages — same codes,
+            // same labels, same colours and same counts as the web dashboard,
+            // because both read the one table. Adding a stage needs no release.
+            item {
+                Text(
+                    "Where the deal is",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            item {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterTab("All", app.leads.size, bucket == "all" && stageFilter == null && quick == null,
+                        MaterialTheme.colorScheme.primary) { bucket = "all"; stageFilter = null; quick = null }
+                    app.leadStages.filter { it.repVisible }.forEach { st ->
+                        val n = app.leads.count { it.stage == st.code }
+                        val key = "stage:${st.code}"
+                        FilterTab(st.label, n, bucket == key && stageFilter == null && quick == null, parseHex(st.color)) {
+                            bucket = key; stageFilter = null; quick = null
+                        }
                     }
-                    "working" -> "You talked to them, deal is on, nothing booked to call back."
-                    "pipeline" -> "Site visit, negotiating or token paid."
-                    "booked" -> "Deal done."
-                    "closed" -> "Not interested, lost, or do not call."
-                    else -> "Every lead assigned to you."
                 }
-                item {
-                    Text(
-                        hint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            }
+            // One plain line under every tab, because a rep should never have to
+            // work out what a list holds. These sentences were the best thing in
+            // the old screen and they survive the rewrite.
+            if (stageFilter == null && quick == null) {
+                val hint = when {
+                    bucket.startsWith("act:") ->
+                        ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }?.hint ?: ""
+                    bucket.startsWith("stage:") -> {
+                        val code = bucket.removePrefix("stage:")
+                        STAGE_HINTS[code] ?: "Leads at ${app.leadStages.firstOrNull { it.code == code }?.label ?: code}."
+                    }
+                    else -> "Every lead assigned to you, whatever stage it is at."
+                }
+                if (hint.isNotBlank()) {
+                    item {
+                        Text(
+                            hint,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             // The line that taught the swipe gestures is gone with them. Call and
@@ -1675,7 +1567,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // Active sheet-filters show as dismissible chips — tap ✕ to clear.
             run {
                 val active = buildList {
-                    stageFilter?.let { sf -> add(Triple("stage", STAGES.firstOrNull { it.key == sf }?.label ?: sf) { stageFilter = null }) }
+                    stageFilter?.let { sf -> add(Triple("stage", app.leadStages.firstOrNull { it.code == sf }?.label ?: sf) { stageFilter = null }) }
                     quick?.let { q -> add(Triple("quick", if (q == "today") "Added today" else "Retry") { quick = null }) }
                     tempFilter?.let { t -> add(Triple("temp", when (t) { "hot" -> "🔥 Hot"; "warm" -> "🌤 Warm"; else -> "❄️ Cold" }) { tempFilter = null }) }
                     if (sortBy != "default") add(Triple("sort", if (sortBy == "score") "AI Score ↓" else "Newest first") { sortBy = "default" })
@@ -1723,7 +1615,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 // An empty Follow-up tab is not "nothing matches your filter" —
                 // it is a rep who has no calls waiting, which is the best news
                 // the screen can give her. Say that instead of a shrug.
-                filtered.isEmpty() && plainFollowUp ->
+                filtered.isEmpty() && isActionQueue ->
                     item(key = "fu_clear_all") { FollowUpAllClear(0) }
                 filtered.isEmpty() ->
                     item {
@@ -1748,6 +1640,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 else -> {
                     val leadCard: @Composable (Contact) -> Unit = { c ->
                         LeadCard(
+                            stages = app.leadStages,
                             c = c,
                             followUp = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone],
                             cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
@@ -1788,58 +1681,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             onOpen = { c.id?.let { vm.openLeadDetail(it) } },
                         )
                     }
-                    if (plainFollowUp) {
-                        // ── Call now ──
-                        if (fuCallNow.isEmpty()) {
-                            // She finished them. The screen has to SAY so —
-                            // that is the whole complaint. A tab that looks
-                            // identical whether you did the work or not is
-                            // what made a rep stop believing the number.
-                            item(key = "fu_clear") { FollowUpAllClear(fuLater.size) }
-                        } else {
-                            item(key = "hdr_callnow") {
-                                FollowUpSection(
-                                    "📞 Call now", fuCallNow.size, Red,
-                                    "Their time has come. Work top down — a lead leaves this list as soon as you write what happened.",
-                                )
-                            }
-                            // Inside the work, the older split still holds: a
-                            // person waiting for a call they were promised at
-                            // 4pm outranks a redial with no time on it. Only
-                            // worth saying when both kinds are actually here.
-                            val promised = fuCallNow.filter { hasFollowUp(it) }
-                            val redial = fuCallNow.filterNot { hasFollowUp(it) }
-                            if (promised.isNotEmpty() && redial.isNotEmpty()) {
-                                item(key = "hdr_promised") { FollowUpSubHead("⏰ You promised to call back (${promised.size})", Amber) }
-                                items(promised, key = { it.id ?: it.phone }) { c -> leadCard(c) }
-                                item(key = "hdr_redial") { FollowUpSubHead("🔁 Didn't pick up — try again (${redial.size})", MaterialTheme.colorScheme.primary) }
-                                items(redial, key = { it.id ?: it.phone }) { c -> leadCard(c) }
-                            } else {
-                                items(fuCallNow, key = { it.id ?: it.phone }) { c -> leadCard(c) }
-                            }
-                        }
-                        // ── Done today ──
-                        if (fuDone.isNotEmpty()) {
-                            item(key = "hdr_done") {
-                                FollowUpSection(
-                                    "✅ Done today", fuDone.size, Green,
-                                    "You called these today and wrote it down. Nothing to do — each one comes back on its own at its next time.",
-                                    open = fuDoneOpen, onToggle = { fuDoneOpen = !fuDoneOpen },
-                                )
-                            }
-                            if (fuDoneOpen) items(fuDone, key = { it.id ?: it.phone }) { c -> leadCard(c) }
-                        }
-                        // ── Booked for later ──
-                        if (fuLater.isNotEmpty()) {
-                            item(key = "hdr_later") {
-                                FollowUpSection(
-                                    "📅 Booked for later", fuLater.size, MaterialTheme.colorScheme.primary,
-                                    "Nothing to do now. Each one moves up to Call now by itself, on its day and time.",
-                                    open = fuLaterOpen, onToggle = { fuLaterOpen = !fuLaterOpen },
-                                )
-                            }
-                            if (fuLaterOpen) items(fuLater, key = { it.id ?: it.phone }) { c -> leadCard(c) }
-                        }
+                    // The Follow-up tab used to be cut into Call now / Done
+                    // today / Booked for later, in-page, because one tab was
+                    // doing three jobs and its count never went down however
+                    // much work a rep did. Those three are now first-class
+                    // chips on the action row — same three groups, same one
+                    // clock, except the clock is the database's and the counts
+                    // are the ones the dashboard shows.
+                    if (fuCallNow.isEmpty() && bucket == "act:call_now" && filtered.isEmpty()) {
+                        item(key = "fu_clear") { FollowUpAllClear(app.leads.count { app.actionOf(it) == "scheduled" }) }
                     } else {
                         items(filtered, key = { it.id ?: it.phone }) { c -> leadCard(c) }
                     }
@@ -1880,7 +1730,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // for next Tuesday or the ones already done today. "Call 107" on a tab
     // where 24 are actually due would dial customers at the wrong time, and
     // ring people the rep has already spoken to today.
-    val dialList = if (plainFollowUp) fuCallNow else filtered
+    // Never the whole list. A stage tab is a report, not a call queue.
+    val dialList = if (isActionQueue) filtered else emptyList()
     if (!selectMode && dialList.isNotEmpty()) {
         androidx.compose.material3.ExtendedFloatingActionButton(
             onClick = { vm.callList(dialList, "Leads") },
@@ -1903,10 +1754,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 }
                 Text("Stage", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    STAGES.forEach { st ->
-                        val n = app.leads.count { it.status in st.statuses }
-                        FilterTab(st.label, n, stageFilter == st.key, st.color) {
-                            stageFilter = if (stageFilter == st.key) null else st.key
+                    app.leadStages.filter { it.repVisible }.forEach { st ->
+                        val n = app.leads.count { it.stage == st.code }
+                        FilterTab(st.label, n, stageFilter == st.code, parseHex(st.color)) {
+                            stageFilter = if (stageFilter == st.code) null else st.code
                             quick = null
                         }
                     }
@@ -2054,6 +1905,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
 
     actionFor?.let { c ->
         LeadActionSheet(
+            stages = app.leadStages,
             c = c,
             onDismiss = { actionFor = null },
             onApply = { status, temp, budget, note, svProj, svAt, token ->
@@ -2198,6 +2050,9 @@ private fun LeadMiniChip(label: String, color: Color) {
 @Composable
 private fun LeadCard(
     c: Contact,
+    /** The canonical stage rows. The card renders a stage's label and colour;
+     *  it does not get to decide either. Empty only in previews. */
+    stages: List<LeadStage> = emptyList(),
     followUp: FollowUp? = null,
     cloudOn: Boolean,
     selectMode: Boolean = false,
@@ -2211,7 +2066,9 @@ private fun LeadCard(
     onUpdate: () -> Unit,
     onOpen: () -> Unit = {},
 ) {
-    val stage = stageOf(c.status)
+    val stage = stages.firstOrNull { it.code == c.stage }
+    val stageLabel = stage?.label ?: c.stage
+    val stageColor = stage?.let { parseHex(it.color) } ?: Color(0xFF6A7B85)
     val container = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
     val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2246,10 +2103,10 @@ private fun LeadCard(
         // happened was the date going by, and it is the one a rep reads on every
         // single row. Done needs the on-site check-in or a stage that only
         // follows a real visit; otherwise it asks.
-        visitMs != null && c.status !in DEAD_OR_BOOKED &&
+        visitMs != null && !isFinished(stages, c.stage) &&
             (c.siteVisitArrivedAt != null || c.status in AFTER_VISIT) ->
             "✅ Visit done — close them" to Teal
-        visitMs != null && c.status !in DEAD_OR_BOOKED ->
+        visitMs != null && !isFinished(stages, c.stage) ->
             "❓ Visit day gone (${dayLabel(c.siteVisitAt)}) — did they come?" to Amber
         !c.aiNextAction.isNullOrBlank() -> "✦ ${c.aiNextAction}" to Indigo
         !c.notes.isNullOrBlank() -> c.notes!! to muted
@@ -2311,8 +2168,8 @@ private fun LeadCard(
                 val age = ageLabel(c.createdAt ?: c.assignedAt)
                 // Hoisted set: this runs once per visible card, every frame
                 // a card is composed during a scroll.
-                val stale = age != null && c.status in UNCALLED && c.attempts == 0 && age != "Today"
-                Text("· ${stage.label}", style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
+                val stale = age != null && c.stage == "new" && c.attempts == 0 && age != "Today"
+                Text("· $stageLabel", style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
                 age?.let {
                     Text(" · $it", style = MaterialTheme.typography.labelSmall,
                         color = if (stale) Amber else muted,
@@ -2448,6 +2305,8 @@ private fun LeadCard(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LeadActionSheet(
+    /** The canonical stage rows — the sheet renders them, it does not define them. */
+    stages: List<LeadStage>,
     c: Contact,
     onDismiss: () -> Unit,
     onApply: (String?, String?, String?, String?, String?, String?, String?) -> Unit,
@@ -2557,7 +2416,11 @@ private fun LeadActionSheet(
                 // figure, and a form that refuses to save is a form that sends
                 // them back to writing it on paper. It says what the blank
                 // costs instead, which is the honest way round.
-                val bookingStage = (stage ?: c.status) in setOf("booked", "token_paid")
+                // "Money has moved" — lead_stages.counts_as_sale, the same flag the
+                // revenue reports use, instead of a fourth copy of this pair.
+                val bookingStage = stages.any {
+                    it.code == (stage ?: c.stage) && it.countsAsSale
+                }
                 if (bookingStage) {
                     OutlinedTextField(
                         token, { token = it.filter { ch -> ch.isDigit() } },

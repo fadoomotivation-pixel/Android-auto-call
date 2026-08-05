@@ -16,6 +16,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { encodeBase64, decodeBase64 } from "jsr:@std/encoding@1/base64";
+import { DISPOSITIONS } from "../_shared/stage.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -24,7 +25,6 @@ const GROQ = Deno.env.get("GROQ_API_KEY") ?? "";
 const G_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID") ?? "";
 const G_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "";
 
-const DISPOSITIONS = ["interested", "site_visit", "proposal", "booked", "callback", "not_interested", "dnc"];
 const SYS =
   "You are a sales manager's assistant analysing a real-estate telecaller's call. " +
   "The transcript may be in Hindi, English or Hinglish. Reply ONLY with a JSON object " +

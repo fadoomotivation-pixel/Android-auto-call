@@ -113,6 +113,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
+import com.salesautocall.app.data.LeadStage
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -609,7 +610,7 @@ private fun MainShell(vm: MainViewModel) {
                 currentRoute = currentRoute,
                 followUps = state.followUpList.size,
                 siteVisits = state.leads.count { it.status == "site_visit" },
-                pipelineValue = pipelineValue(state.leads),
+                pipelineValue = pipelineValue(state.leads, state.leadStages),
                 onNavigate = { route ->
                     vm.clearMessage()
                     scope.launch { drawerState.close() }
@@ -1325,8 +1326,10 @@ private val MenuAccent = Color(0xFF3B82F6)
 private val Gold = Color(0xFFF5B23E)
 
 /** Rough INR value of the open pipeline (excludes won/dead), for the menu card. */
-private fun pipelineValue(leads: List<Contact>): String {
-    val open = leads.filter { it.status !in setOf("booked", "lost", "not_interested", "dnc") }
+private fun pipelineValue(leads: List<Contact>, stages: List<LeadStage>): String {
+    // Open = not terminal, from lead_stages. The old list omitted `invalid`,
+    // so bad numbers counted as live leads in this total.
+    val open = leads.filter { c -> stages.firstOrNull { it.code == c.stage }?.isTerminal != true }
     val total = open.sumOf { menuBudgetRupees(it.budget) }
     return menuFormatRupees(total)
 }
