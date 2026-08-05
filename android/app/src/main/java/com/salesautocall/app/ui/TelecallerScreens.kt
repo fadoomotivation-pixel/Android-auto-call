@@ -160,61 +160,54 @@ private val ACTIONS = listOf(
 )
 
 /**
- * One filter row: a small heading, a single sideways-scrolling line of chips,
- * and a fade at the right edge so nobody has to guess that there is more.
+ * One filter row: a tiny inline label and a single scrolling line of chips.
  *
- * The heading is 11sp and the whole block is 8dp of padding, because two of
- * these sit above the list and every pixel they take is a lead the rep cannot
- * see. The selected chip's explanation appears under the row only when one is
- * selected — it is the one line worth the space.
+ * NO CARD. These were full-width tinted blocks with their own padding, corners
+ * and heading — two of them, stacked, costing about 190dp between them before a
+ * single lead appeared. A filter is a control, not a section, and on a 6-inch
+ * phone every pixel it takes is a lead the rep cannot see.
+ *
+ * The label now sits on the same line as the chips, greyed and small, so the
+ * row reads as "What to do now: [Call now 92] [Overdue 0] …" and costs ~40dp.
+ * The fade at the right edge still says there is more.
  */
 @Composable
 private fun CompactFilterRow(
     title: String,
-    tint: Color,
-    hint: String?,
     chips: @Composable () -> Unit,
 ) {
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-            .background(tint).padding(horizontal = 10.dp, vertical = 8.dp),
-    ) {
-        Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.4.sp)
-        Spacer(Modifier.height(6.dp))
-        Box {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            title, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 12.sp, maxLines = 2,
+            modifier = Modifier.width(56.dp).padding(end = 8.dp),
+        )
+        Box(Modifier.weight(1f)) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 chips()
-                // Room for the fade to sit over, so it never covers a chip's tail.
-                Spacer(Modifier.width(18.dp))
+                Spacer(Modifier.width(16.dp))
             }
-            // The swipe hint. A hard edge looks like the end of the list; a fade
-            // reads as "keep going" without costing a line of text.
+            // Swipe hint. Fades to the page, not to a block colour, because
+            // there is no block any more.
             Box(
-                Modifier.align(Alignment.CenterEnd).width(26.dp).height(34.dp)
-                    .background(Brush.horizontalGradient(listOf(Color.Transparent, tint))),
+                Modifier.align(Alignment.CenterEnd).width(22.dp).height(30.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color.Transparent, MaterialTheme.colorScheme.background),
+                        ),
+                    ),
             )
-        }
-        if (hint != null) {
-            Spacer(Modifier.height(6.dp))
-            Text(hint, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-/** Soft blue behind the action row — this is the work. */
-@Composable
-private fun ActionRowTint(): Color =
-    if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF16202E) else Color(0xFFEFF4FB)
-
-/** Quiet neutral behind the stage row — this is filing, not work. */
-@Composable
-private fun StageRowTint(): Color =
-    if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF181D1B) else Color(0xFFF3F5F3)
+// The two row tints are gone with the blocks they filled. The rows are told
+// apart by their labels and by their chips' own colours now, which is all the
+// distinction they ever needed and costs no height.
 
 /**
  * One plain line per stage. Only the sentences live here — the label, colour
@@ -1228,52 +1221,49 @@ private fun LeadsDeck(
     val brand = brandColorOf(app.company?.brandColor)
     val g0 = brand ?: Color(0xFF4353B8)
     val g1 = darken(g0, 0.72f)
+    // A SUMMARY STRIP, NOT A HERO.
+    //
+    // This was ~200dp: an eyebrow, a headline number, and four glass tiles in
+    // their own row. On a 6-inch phone that plus two filter blocks left barely
+    // one lead card on screen. It is now about 90dp — the same five facts, laid
+    // out in two tight lines. Nothing was dropped; it just stopped shouting.
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
             .background(Brush.linearGradient(listOf(g0, g1)))
-            .padding(18.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    // ONE thing on this card is loud, and it is the money. The
-                    // eyebrow and the caption are deliberately quiet: three
-                    // competing white texts is what made this card feel busy.
-                    Text("PIPELINE  ·  ${app.leads.size} LEADS", fontSize = 9.5.sp,
-                        color = Color.White.copy(alpha = 0.55f), fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
-                    Spacer(Modifier.height(3.dp))
-                    Row {
-                        if (pipelineValue > 0) {
-                            Text(formatRupees(pipelineValue), style = MaterialTheme.typography.headlineLarge,
-                                color = Color.White, fontWeight = FontWeight.ExtraBold, modifier = Modifier.alignByBaseline())
-                            Spacer(Modifier.width(7.dp))
-                            Text("on the table", fontSize = 11.sp,
-                                color = Color.White.copy(alpha = 0.55f), modifier = Modifier.alignByBaseline())
-                        } else {
-                            Text("${app.leads.size}", style = MaterialTheme.typography.headlineLarge,
-                                color = Color.White, fontWeight = FontWeight.ExtraBold, modifier = Modifier.alignByBaseline())
-                            Spacer(Modifier.width(7.dp))
-                            Text("leads with you", fontSize = 11.sp,
-                                color = Color.White.copy(alpha = 0.55f), modifier = Modifier.alignByBaseline())
-                        }
+                    Text("PIPELINE · ${app.leads.size} LEADS", fontSize = 9.sp,
+                        color = Color.White.copy(alpha = 0.55f), fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp, maxLines = 1)
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            if (pipelineValue > 0) formatRupees(pipelineValue) else "${app.leads.size}",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.White, fontWeight = FontWeight.ExtraBold, maxLines = 1,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (pipelineValue > 0) "on the table" else "leads with you",
+                            fontSize = 10.sp, color = Color.White.copy(alpha = 0.55f),
+                            maxLines = 1, modifier = Modifier.padding(bottom = 2.dp))
                     }
                 }
-                // Utilities, not features. Smaller and dimmer so they stop
-                // competing with the number they sit next to.
                 Box(
-                    Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
+                    Modifier.size(28.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
                         .clickable { onRefresh() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(15.dp)) }
+                ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(14.dp)) }
                 Spacer(Modifier.width(6.dp))
                 Box {
                     Box(
-                        Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
+                        Modifier.size(28.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
                             .clickable { menuOpen = true },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (scoring) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
-                        else Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(15.dp))
+                        if (scoring) CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 2.dp, color = Color.White)
+                        else Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(14.dp))
                     }
                     androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         androidx.compose.material3.DropdownMenuItem(
@@ -1289,15 +1279,14 @@ private fun LeadsDeck(
                     }
                 }
             }
-            Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DeckStat("⏰", dueNow, "Due now", highlight = dueNow > 0, modifier = Modifier.weight(1f), onClick = onDueNow)
-                DeckStat("🔥", hotCount, "Hot", highlight = false, modifier = Modifier.weight(1f), onClick = onHot)
-                DeckStat("✨", newCount, "New", highlight = false, modifier = Modifier.weight(1f), onClick = onNew)
-                // RAG v13 — the dead pile, mined by AI for revivable deals.
-                if (reviveCount > 0) {
-                    DeckStat("💎", reviveCount, "Revive", highlight = false, modifier = Modifier.weight(1f), onClick = onRevive)
-                }
+            Spacer(Modifier.height(7.dp))
+            // The four counters, still one tap each, now one line instead of a
+            // row of 60dp tiles.
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                DeckStat("⏰", dueNow, "Due", dueNow > 0, Modifier.weight(1f), onDueNow)
+                DeckStat("🔥", hotCount, "Hot", false, Modifier.weight(1f), onHot)
+                DeckStat("✨", newCount, "New", false, Modifier.weight(1f), onNew)
+                if (reviveCount > 0) DeckStat("💎", reviveCount, "Revive", false, Modifier.weight(1f), onRevive)
             }
         }
     }
@@ -1306,19 +1295,20 @@ private fun LeadsDeck(
 /** One glass counter on the deck — a number that is also a one-tap filter. */
 @Composable
 private fun DeckStat(emoji: String, value: Int, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(
-        modifier.clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = if (highlight) 0.24f else 0.13f))
+    // One line, 26dp. Two-line tiles cost 60dp each and said nothing extra.
+    Row(
+        modifier.height(26.dp).clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = if (highlight) 0.26f else 0.12f))
             .clickable { onClick() }
-            .padding(vertical = 9.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .padding(horizontal = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(emoji, fontSize = 12.sp)
-            Spacer(Modifier.width(5.dp))
-            Text("$value", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold)
-        }
-        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.85f))
+        Text(emoji, fontSize = 10.sp)
+        Spacer(Modifier.width(4.dp))
+        Text("$value", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+        Spacer(Modifier.width(4.dp))
+        Text(label, fontSize = 9.5.sp, color = Color.White.copy(alpha = 0.8f), maxLines = 1)
     }
 }
 
@@ -1480,8 +1470,12 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         Refreshable(onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) }, modifier = Modifier.weight(1f)) {
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            // Tighter side margins buy ~8dp of card width on a small phone, and
+            // the bottom is deeper because the card now ENDS in buttons: the
+            // last card's Call must never sit under the nav bar or the raised
+            // dial button in front of it.
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             item {
                 if (!selectMode) {
@@ -1607,12 +1601,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // when you said "either wrap, or one row with a clear swipe hint and
             // edge fade" — on a 5-inch screen only the second one survives.
             item {
-                CompactFilterRow(
-                    title = "What to do now",
-                    tint = ActionRowTint(),
-                    hint = ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }
-                        ?.takeIf { bucket.startsWith("act:") && stageFilter == null && quick == null }?.hint,
-                ) {
+                CompactFilterRow("What to do now") {
                     ACTIONS.forEach { a ->
                         val n = app.leads.count { app.actionOf(it) == a.code }
                         val key = "act:${a.code}"
@@ -1623,12 +1612,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 }
             }
             item {
-                CompactFilterRow(
-                    title = "Where the deal is",
-                    tint = StageRowTint(),
-                    hint = if (bucket.startsWith("stage:") && stageFilter == null && quick == null)
-                        STAGE_HINTS[bucket.removePrefix("stage:")] else null,
-                ) {
+                CompactFilterRow("Where the deal is") {
                     FilterTab("All", app.leads.size, bucket == "all" && stageFilter == null && quick == null,
                         MaterialTheme.colorScheme.primary) { bucket = "all"; stageFilter = null; quick = null }
                     app.leadStages.filter { it.repVisible }.forEach { st ->
@@ -1638,6 +1622,27 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             bucket == key && stageFilter == null && quick == null, parseHex(st.color)) {
                             bucket = key; stageFilter = null; quick = null
                         }
+                    }
+                }
+            }
+            // ONE line explaining whatever is selected.
+            //
+            // CLAUDE.md's rule for this app is that every bucket explains
+            // itself — reps said the lead tabs "sometimes don't make sense" and
+            // guessing is how a tab stops being trusted. When the two filter
+            // blocks went, their hints went with them; this puts the rule back
+            // for the cost of a single 16dp line instead of two padded cards.
+            if (stageFilter == null && quick == null) {
+                val hint = when {
+                    bucket.startsWith("act:") ->
+                        ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }?.hint
+                    bucket.startsWith("stage:") -> STAGE_HINTS[bucket.removePrefix("stage:")]
+                    else -> "Every lead assigned to you, whatever stage it is at."
+                }
+                if (!hint.isNullOrBlank()) {
+                    item {
+                        Text(hint, fontSize = 11.5.sp, lineHeight = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -2150,9 +2155,10 @@ private fun LeadCard(
     onUpdate: () -> Unit,
     onOpen: () -> Unit = {},
 ) {
-    val stage = stages.firstOrNull { it.code == c.stage }
-    val stageLabel = stage?.label ?: c.stage
-    val stageColor = stage?.let { parseHex(it.color) } ?: Color(0xFF6A7B85)
+    // The stage is deliberately NOT on the card any more. It said "Contacted"
+    // on 140 of a rep's leads — true, and no help in deciding whether to ring
+    // one. The action label in the note strip answers that, and the stage row
+    // above the list is where you go when you want to browse by stage.
     val container = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
     val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2218,209 +2224,172 @@ private fun LeadCard(
     // SwipeToDismissBox, which means an anchored-draggable state and a whole
     // background layer per lead, composed and measured whether or not anyone
     // ever swipes.
-    // A calm paper row — a stage dot, the name, the phone, one intent line, a
-    // jade call button. Dense: 5–6 leads to a screen, no boxed-in cards.
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(container)
+    // THE CARD, LAID OUT THE WAY A REP READS IT.
+    //
+    // Actions used to live in a right-hand column: temperature on top, then a
+    // WhatsApp circle, then Call. That column is what the floating AI bubble
+    // kept landing on — it sat directly over a card's Call button — and it also
+    // squeezed the text column so the note and the project name never had room.
+    //
+    // They move to a full-width row along the bottom instead. Nothing floats
+    // over them, the note gets the whole card width, and Call is a filled bar
+    // that cannot be mistaken for anything else.
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(container)
             .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
-            .padding(horizontal = 15.dp, vertical = 13.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = 13.dp, vertical = 11.dp),
     ) {
-        // Initials avatar — calm graphite by default (zero visual noise). The
-        // ONLY colour it can wear is a temperature ring for a hot/warm lead;
-        // otherwise the green Call button is the single accent on the row.
-        val ring = when (c.temperature) { "hot" -> Red; "warm" -> Amber; else -> null }
-        val discInk = MaterialTheme.colorScheme.onSurfaceVariant
-        Box(
-            Modifier.size(44.dp).clip(CircleShape)
-                .background(discInk.copy(alpha = 0.08f))
-                .then(ring?.let { Modifier.border(2.dp, it, CircleShape) } ?: Modifier),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(initialsOf(c.name), style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold, color = ring ?: discInk)
-        }
-        Spacer(Modifier.width(12.dp))
+        Row(verticalAlignment = Alignment.Top) {
+            // Initials avatar — calm graphite by default. The only colour it can
+            // wear is a temperature ring on a hot/warm lead.
+            val ring = when (c.temperature) { "hot" -> Red; "warm" -> Amber; else -> null }
+            val discInk = MaterialTheme.colorScheme.onSurfaceVariant
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
+                    .background(discInk.copy(alpha = 0.08f))
+                    .then(ring?.let { Modifier.border(2.dp, it, RoundedCornerShape(12.dp)) } ?: Modifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(initialsOf(c.name), style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold, color = ring ?: discInk)
+            }
+            Spacer(Modifier.width(11.dp))
 
-        Column(Modifier.weight(1f)) {
-            // THE NAME GETS THE WHOLE LINE.
-            //
-            // It shared a row with the stage and the age, all three with
-            // weight(1f, fill = false) and maxLines = 1, so the name was
-            // whatever width was left over — which on a real phone meant
-            // "Pooja" rendered as "Pooj" and one lead showed as a single
-            // letter, "N". A rep cannot recognise a customer from one letter.
-            // Stage and age move to their own line, where nothing competes.
-            Text(
-                c.name?.takeIf { it.isNotBlank() } ?: prettyPhone(c.phone),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Stage + lead age. A New lead sitting untouched past a day
-                // turns the age amber — the quiet speed-to-lead nudge.
-                val age = ageLabel(c.createdAt ?: c.assignedAt)
-                val stale = age != null && c.stage == "new" && c.attempts == 0 && age != "Today"
-                Text(stageLabel, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
-                age?.let {
-                    Text(" · $it", style = MaterialTheme.typography.labelSmall,
-                        color = if (stale) Amber else muted,
-                        fontWeight = if (stale) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
-                }
-            }
-            // THE NEXT ACTION, directly under the name.
-            //
-            // A rep scanning this list is answering one question — "do I ring
-            // this one now?" — and the card used to make them work it out from
-            // the stage, the attempt count and a due time three lines apart.
-            // The answer goes second, in the action's own colour, before any
-            // detail about the lead.
-            ACTIONS.firstOrNull { it.code == action }?.let { a ->
-                Spacer(Modifier.height(3.dp))
-                Text(a.label, style = MaterialTheme.typography.labelMedium,
-                    color = a.color, fontWeight = FontWeight.Bold, maxLines = 1)
-            }
-            Spacer(Modifier.height(2.dp))
-            // Phone and attempts. The budget used to ride here too, at the end
-            // of a four-item row, so a long number left it as "₹ 3 –" — a
-            // clipped price is worse than no price, because a rep reads it and
-            // believes it. Money now gets its own line below.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted,
-                    letterSpacing = 0.3.sp, maxLines = 1)
-                if (c.attempts > 0) {
-                    val due = followUp?.let { instantMillis(it.dueAt) }
-                    val dueNow = due != null && due <= now
-                    Text(
-                        "  ·  🔁 ${c.attempts + 1}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (dueNow) Red else Amber,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1,
-                    )
-                }
-            }
-            // Money, on its own line and never clipped. This is the number a
-            // rep sorts their own day by.
-            val money = budgetLabel(c.budget)
-            if (money != null || c.closeProbability != null) {
+            Column(Modifier.weight(1f)) {
+                // Name, temperature, age — one line, and the NAME gets the room.
+                // It used to compete with the stage and the age at maxLines = 1,
+                // which rendered "Pooja" as "Pooj" and one lead as the single
+                // letter "N".
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    money?.let {
-                        Text("₹ $it", style = MaterialTheme.typography.bodyMedium, color = jade,
-                            fontWeight = FontWeight.Bold, maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false))
+                    Text(
+                        c.name?.takeIf { it.isNotBlank() } ?: prettyPhone(c.phone),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (tempLabel.isNotEmpty()) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(tempLabel, fontSize = 10.sp, color = tempColor, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
-                    // The rep's own read on this lead, given after they met at
-                    // the site — two leads both "negotiating" are not the same
-                    // call, and this says which to ring first.
+                    ageLabel(c.createdAt ?: c.assignedAt)?.let {
+                        Spacer(Modifier.width(6.dp))
+                        Text(it, fontSize = 10.sp, color = muted, maxLines = 1)
+                    }
+                }
+                // Money, second and prominent — the number a rep sorts by.
+                budgetLabel(c.budget)?.let {
+                    Text("₹ $it", style = MaterialTheme.typography.bodyMedium, color = jade,
+                        fontWeight = FontWeight.Bold, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("📞 ${prettyPhone(c.phone)}", fontSize = 12.sp, color = muted,
+                        letterSpacing = 0.2.sp, maxLines = 1)
+                    if (c.attempts > 0) {
+                        val due = followUp?.let { instantMillis(it.dueAt) }
+                        Text("  🔁 ${c.attempts + 1}", fontSize = 12.sp,
+                            color = if (due != null && due <= now) Red else Amber,
+                            fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
                     c.closeProbability?.let { pct ->
-                        if (money != null) Spacer(Modifier.width(10.dp))
-                        Text("🎯 $pct%", style = MaterialTheme.typography.bodySmall,
+                        Text("  🎯 $pct%", fontSize = 12.sp,
                             color = if (pct >= 60) Teal else if (pct >= 40) Amber else Slate,
                             fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                 }
-            }
-            // Place and project used to ride on the phone line too. Five facts
-            // on one line is fine on a big screen and unreadable on a 4-inch
-            // one: the phone number, the budget, the day, the attempt count and
-            // the project all fought for the same row and everything ended up
-            // clipped mid-word — "Overdue 8h…", "Yesterda", "₹ 3 –".
-            //
-            // They get their own line, joined into ONE string so the ellipsis
-            // falls at the end of the sentence instead of chopping a field in
-            // half, and the line simply isn't there when there's nothing to say.
-            val extras = listOfNotNull(
-                c.territory?.takeIf { it.isNotBlank() }?.let { "📍 $it" },
-                c.companyName?.takeIf { it.isNotBlank() }?.let { "🏢 $it" },
-            )
-            if (extras.isNotEmpty()) {
-                // Two lines, not one. "🏢 Kunj Vihari, Bridge Vat…" is a project
-                // name cut mid-word, which tells a rep less than nothing — they
-                // cannot tell which of two similar sites this lead asked about.
-                // Real project names are long; give them the room to be read.
-                Text(
-                    extras.joinToString("  ·  "),
-                    style = MaterialTheme.typography.bodySmall, color = muted,
-                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                // Project and area. Two lines, because real project names are
+                // long and "Kunj Vihari, Bridge Vat…" tells a rep less than
+                // nothing — they cannot tell which of two sites this lead asked
+                // about.
+                val extras = listOfNotNull(
+                    c.companyName?.takeIf { it.isNotBlank() }?.let { "🏢 $it" },
+                    c.territory?.takeIf { it.isNotBlank() }?.let { "📍 $it" },
                 )
+                if (extras.isNotEmpty()) {
+                    Text(extras.joinToString("  ·  "), fontSize = 12.sp, color = muted,
+                        maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
             }
-            intent?.let { (label, color) ->
-                Spacer(Modifier.height(4.dp))
-                // Also two lines: this now carries the REASON a callback exists,
-                // and a reason clipped at "🎤 budget 85L, Friday vi…" is the same
-                // problem in a new place.
-                // Three lines, not two. "Auto: callback ka time set nahi tha —
-                // kal…" told a rep nothing they could act on; the sentence
-                // needs room to finish.
-                Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium,
-                    maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            }
-            // Update lives on the LEFT, under the lead's own details.
-            //
-            // Tucked into the right-hand action column it sat under two round
-            // buttons and read as a third, smaller sibling of Call — an
-            // afterthought squeezed against the edge. It belongs with the lead's
-            // information, where the eye already is, and the text column has the
-            // width to give it a proper target.
-            //
-            // And when this lead's call has just ended with nothing recorded,
-            // it shakes. That gentle wobble is the whole replacement for the
-            // post-call popup on SIM calls: the rep is pointed at the one button
-            // that finishes the job, without a modal landing on them two seconds
-            // after they've put the phone down and moved on.
-            Spacer(Modifier.height(7.dp))
-            val updateTint = if (needsUpdate) Amber else MaterialTheme.colorScheme.primary
-            Box(
-                Modifier.nudgeShake(needsUpdate)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(updateTint.copy(alpha = if (needsUpdate) 0.20f else 0.12f))
-                    .clickable { onUpdate() }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            ) {
-                Text(if (needsUpdate) "✎  Update this call" else "✎  Update",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = updateTint, fontWeight = FontWeight.Bold, maxLines = 1)
+
+            if (selectMode) {
+                Spacer(Modifier.width(8.dp))
+                val selRing = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                Box(
+                    Modifier.size(24.dp).clip(CircleShape)
+                        .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                        .border(2.dp, selRing, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isSelected) Icon(Icons.Default.Check, contentDescription = "Selected",
+                        tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(14.dp))
+                }
             }
         }
-        Spacer(Modifier.width(10.dp))
 
-        if (selectMode) {
-            val ring = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-            Box(
-                Modifier.size(26.dp).clip(CircleShape)
-                    .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
-                    .border(2.dp, ring, CircleShape),
-                contentAlignment = Alignment.Center,
+        // What to do, and why — the note, three lines, full card width. This is
+        // the line a rep reads to decide whether to ring, so it gets the space.
+        intent?.let { (label, color) ->
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .background(color.copy(alpha = 0.09f))
+                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.Top,
             ) {
-                if (isSelected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+                ACTIONS.firstOrNull { it.code == action }?.let { a ->
+                    Text(a.label, fontSize = 11.sp, color = a.color,
+                        fontWeight = FontWeight.Bold, maxLines = 1)
+                    Spacer(Modifier.width(7.dp))
+                }
+                Text(label, fontSize = 12.sp, color = color, fontWeight = FontWeight.Medium,
+                    lineHeight = 16.sp, maxLines = 3,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
-        } else {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (tempLabel.isNotEmpty())
-                    Text(tempLabel, style = MaterialTheme.typography.labelSmall, color = tempColor, fontWeight = FontWeight.SemiBold)
-                else c.createdAt?.let { Text(dayLabel(it), style = MaterialTheme.typography.labelSmall, color = muted) }
-                // Both actions, both visible. WhatsApp used to be the hidden
-                // swipe-left; a rep should not have to know a gesture exists
-                // to reach half the row's functions.
-                // Calling is the job. It was the same 38dp circle as WhatsApp,
-                // so the one button a rep presses two hundred times a day looked
-                // exactly as important as the one they press twice. Call is now
-                // bigger, solid and lifted; WhatsApp stays available and quiet.
-                Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(36.dp).clip(CircleShape).background(WaGreen.copy(alpha = 0.13f))
-                            .clickable { onWhatsApp() },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WaGreen, modifier = Modifier.size(16.dp)) }
-                    Box(
-                        Modifier.size(52.dp).shadow(4.dp, RoundedCornerShape(17.dp))
-                            .clip(RoundedCornerShape(17.dp)).background(jade)
-                            .clickable { if (cloudOn) onCloudCall() else onCall() },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(24.dp)) }
+        }
+
+        if (!selectMode) {
+            Spacer(Modifier.height(9.dp))
+            // ONE ACTION ROW, full width. Update shakes when this lead's call
+            // has just ended with nothing written down — that wobble is the
+            // whole replacement for the post-call popup on SIM calls.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val updateTint = if (needsUpdate) Amber else MaterialTheme.colorScheme.primary
+                Row(
+                    Modifier.nudgeShake(needsUpdate).weight(1f).height(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(updateTint.copy(alpha = if (needsUpdate) 0.20f else 0.10f))
+                        .clickable { onUpdate() },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text(if (needsUpdate) "✎ Update call" else "✎ Update", fontSize = 12.5.sp,
+                        color = updateTint, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+                Spacer(Modifier.width(7.dp))
+                Row(
+                    Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(10.dp))
+                        .background(WaGreen.copy(alpha = 0.12f))
+                        .clickable { onWhatsApp() },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(Icons.Default.Chat, contentDescription = null, tint = WaGreen, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("WhatsApp", fontSize = 12.5.sp, color = WaGreen, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+                Spacer(Modifier.width(7.dp))
+                // Calling is the job. Solid, widest, unmistakable.
+                Row(
+                    Modifier.weight(1.25f).height(38.dp).clip(RoundedCornerShape(10.dp))
+                        .background(jade)
+                        .clickable { if (cloudOn) onCloudCall() else onCall() },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Call", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         }

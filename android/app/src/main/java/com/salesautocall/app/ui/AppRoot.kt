@@ -648,6 +648,20 @@ private fun MainShell(vm: MainViewModel) {
                         }
                     },
                     actions = {
+                        // THE AI COACH LIVES IN THE HEADER NOW.
+                        //
+                        // As a floating bubble it collided with something in
+                        // every corner it was tried: top-right sat on the
+                        // pipeline card's buttons, bottom-left on the lead
+                        // cards' avatars, bottom-right squarely on a card's
+                        // Call button — the one control a rep must never miss.
+                        // A floating layer over a scrolling list will always
+                        // land on somebody's content eventually. In the bar it
+                        // cannot, and it is still one tap from every screen.
+                        IconButton(onClick = { vm.openCoach() }) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "AI Coach",
+                                tint = jadeAccent(isSystemInDarkTheme()))
+                        }
                         IconButton(onClick = { vm.openSettings() }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
@@ -687,12 +701,6 @@ private fun MainShell(vm: MainViewModel) {
                 }
             },
         ) { padding ->
-            // Floating AI Coach bubble — top-right, above every tab. It never
-            // disappears; "hide" just shrinks it to a mini dot for the rest of
-            // the day (still one tap away), returning to full size tomorrow.
-            val ctx = LocalContext.current
-            val today = remember { java.time.LocalDate.now().toString() }
-            var coachMini by remember { mutableStateOf(AppPrefs.getCoachMiniDate(ctx) == today) }
 
             Box(Modifier.padding(padding)) {
             Column {
@@ -778,28 +786,12 @@ private fun MainShell(vm: MainViewModel) {
                 }
             }
 
-            CoachBubble(
-                mini = coachMini,
-                onOpen = { vm.openCoach() },
-                onExpand = {
-                    AppPrefs.clearCoachMini(ctx)
-                    coachMini = false
-                },
-                // Third position, and this one is checked against a screenshot.
-                // Top-right sat on the pipeline card's buttons; bottom-LEFT then
-                // landed squarely on the lead cards' avatar circles, which is
-                // worse — it covered a rep's data instead of a pair of icons.
-                // Bottom-right, lifted clear of the "Call N" button beneath it,
-                // is the only corner with nothing in it.
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 96.dp),
-            )
             if (state.coachOpen) {
                 CoachSheet(
                     panel = state.coachPanel,
                     loading = state.coachLoading,
                     picks = state.coachPicks,
                     picksLoading = state.coachPicksLoading,
-                    mini = coachMini,
                     resolveLead = { id -> state.leads.firstOrNull { l -> l.id == id } },
                     objection = state.coachObjection,
                     onObjectionChange = { vm.setCoachObjection(it) },
@@ -818,16 +810,6 @@ private fun MainShell(vm: MainViewModel) {
                         vm.dialManual(phone)
                     },
                     onDismiss = { vm.closeCoach() },
-                    onToggleMini = {
-                        if (coachMini) {
-                            AppPrefs.clearCoachMini(ctx)
-                            coachMini = false
-                        } else {
-                            AppPrefs.setCoachMiniDate(ctx, today)
-                            coachMini = true
-                        }
-                        vm.closeCoach()
-                    },
                 )
             }
             }
@@ -838,53 +820,10 @@ private fun MainShell(vm: MainViewModel) {
 // ---- The app's one jade accent, theme-aware. ----
 internal fun jadeAccent(dark: Boolean) = if (dark) Color(0xFF8189E6) else Color(0xFF4353B8)
 
-/**
- * The floating AI Coach bubble — top-right, one tap to open. A soft jade→indigo
- * gradient disc with a subtle halo ring. When [mini] it shrinks to a small dot
- * (never vanishes) so a rep can tuck it away for the day; tapping the dot brings
- * it back to full size.
- */
-@Composable
-private fun CoachBubble(
-    mini: Boolean,
-    onOpen: () -> Unit,
-    onExpand: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val dark = isSystemInDarkTheme()
-    val gradient = Brush.linearGradient(
-        colors = if (dark) listOf(Color(0xFF8189E6), Color(0xFF5D63C4))
-                 else listOf(Color(0xFF5765D6), Color(0xFF3C46A8)),
-    )
-    val size = if (mini) 20.dp else 46.dp
-    Box(
-        modifier = modifier
-            .size(size)
-            .shadow(if (mini) 3.dp else 8.dp, CircleShape)
-            .clip(CircleShape)
-            .background(gradient)
-            .border(1.dp, Color.White.copy(alpha = if (dark) 0.14f else 0.28f), CircleShape)
-            .clickable { if (mini) onExpand() else onOpen() },
-        contentAlignment = Alignment.Center,
-    ) {
-        if (!mini) AiSpark(Modifier.size(24.dp))
-    }
-}
+// CoachBubble is deleted. A floating layer over a scrolling list lands on
+// somebody's content eventually — it hit the pipeline buttons, then the lead
+// avatars, then a card's Call button. The coach lives in the app bar.
 
-/**
- * The coach's mark: a four-point spark that breathes, and one small companion
- * that drifts around it.
- *
- * It was a 🎯 dartboard emoji. That reads as "target"/"goal", not as a thinking
- * assistant, and an emoji is whatever font the handset ships — a different
- * picture on every phone, at whatever weight the vendor drew it.
- *
- * Drawn rather than shipped as an SVG or PNG: it is four lines of geometry, so
- * it stays sharp at any density, needs no asset per bucket, adds nothing to the
- * APK, and recolours itself for dark mode for free. The animation is one
- * infinite transition driving a scale and a rotation — it says "this is alive
- * and listening" without spinning like a loader, which would say "wait".
- */
 @Composable
 private fun AiSpark(modifier: Modifier = Modifier) {
     val t = rememberInfiniteTransition(label = "ai")
@@ -934,7 +873,7 @@ private fun AiSpark(modifier: Modifier = Modifier) {
 /**
  * The coach sheet: last-call feedback (kya acha tha / kya better ho sakta hai —
  * one point each, never a lecture) + the 10 AM "kal ka din" / 6 PM "aaj ka din"
- * brief. "Aaj ke liye chota karo" shrinks the bubble to a mini dot until tomorrow.
+ * brief. Opened from the AI Coach button in the app bar.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -943,7 +882,6 @@ private fun CoachSheet(
     loading: Boolean,
     picks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
     picksLoading: Boolean = false,
-    mini: Boolean = false,
     resolveLead: (String) -> com.salesautocall.app.data.Contact? = { null },
     objection: String = "",
     onObjectionChange: (String) -> Unit = {},
@@ -959,7 +897,6 @@ private fun CoachSheet(
     onClearAnswer: () -> Unit = {},
     onCall: (String) -> Unit = {},
     onDismiss: () -> Unit,
-    onToggleMini: () -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -972,10 +909,10 @@ private fun CoachSheet(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("🎯 AI Coach", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onToggleMini) {
-                    Text(if (mini) "Bada karo" else "Hide")
-                }
-            }
+// The "Hide / Bada karo" button is gone with the floating bubble it
+                // shrank. With the coach in the app bar there is nothing to
+                // minimise, and a button that does nothing is worse than no
+                // button — a rep taps it once and stops trusting the screen.
             Spacer(Modifier.height(8.dp))
 
             when {
