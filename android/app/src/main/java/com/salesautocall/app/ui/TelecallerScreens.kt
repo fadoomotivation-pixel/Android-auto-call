@@ -159,6 +159,53 @@ private val ACTIONS = listOf(
         "You talked to them but nothing is booked. These go cold if you leave them."),
 )
 
+/**
+ * One filter row: a small heading, a single sideways-scrolling line of chips,
+ * and a fade at the right edge so nobody has to guess that there is more.
+ *
+ * The heading is 11sp and the whole block is 8dp of padding, because two of
+ * these sit above the list and every pixel they take is a lead the rep cannot
+ * see. The selected chip's explanation appears under the row only when one is
+ * selected — it is the one line worth the space.
+ */
+@Composable
+private fun CompactFilterRow(
+    title: String,
+    tint: Color,
+    hint: String?,
+    chips: @Composable () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(tint).padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Text(title, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 0.4.sp)
+        Spacer(Modifier.height(6.dp))
+        Box {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                chips()
+                // Room for the fade to sit over, so it never covers a chip's tail.
+                Spacer(Modifier.width(18.dp))
+            }
+            // The swipe hint. A hard edge looks like the end of the list; a fade
+            // reads as "keep going" without costing a line of text.
+            Box(
+                Modifier.align(Alignment.CenterEnd).width(26.dp).height(34.dp)
+                    .background(Brush.horizontalGradient(listOf(Color.Transparent, tint))),
+            )
+        }
+        if (hint != null) {
+            Spacer(Modifier.height(6.dp))
+            Text(hint, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
 /** Soft blue behind the action row — this is the work. */
 @Composable
 private fun ActionRowTint(): Color =
@@ -1329,7 +1376,13 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     //
     // Opens on the action queue, because a rep's first question is never "how
     // many leads are at Negotiation", it is "who do I ring now".
-    var bucket by remember { mutableStateOf("act:call_now") }
+    // Opens on NEW.
+    //
+    // This was "act:call_now" an hour ago, on the reasoning that a rep's first
+    // question is who to ring. Changed on instruction: the day starts with the
+    // leads nobody has touched, and a rep who wants the due pile is one tap
+    // away on the row above.
+    var bucket by remember { mutableStateOf("stage:new") }
     var stageFilter by remember { mutableStateOf<String?>(null) } // exact stage from the sheet
     var quick by remember { mutableStateOf<String?>(null) }       // "today" | "retry"
     var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
@@ -1541,75 +1594,49 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            // ── The two rows, told apart on sight ───────────────────────
+            // ── The two rows, compact ───────────────────────────────────
             //
-            // A rep should never have to read a heading to know which row is
-            // work and which is filing. So the action row sits on a soft blue
-            // tint and the stage row on a neutral one, and both WRAP: a chip cut
-            // in half at the screen edge is how someone learns there are options
-            // they cannot see, and no amount of swipe-hinting fixes that.
+            // These WRAPPED, and on a real phone the two blocks ate roughly a
+            // thousand pixels — about forty percent of the screen — leaving one
+            // lead card half-visible at the bottom. Nothing was cut off and
+            // nothing could be read either, which is the worse trade: a rep
+            // opens this screen to see LEADS.
+            //
+            // So: one line each, scrolled sideways, with a fade at the right
+            // edge that says there is more. That is the alternative you offered
+            // when you said "either wrap, or one row with a clear swipe hint and
+            // edge fade" — on a 5-inch screen only the second one survives.
             item {
-                Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                        .background(ActionRowTint()).padding(horizontal = 12.dp, vertical = 11.dp),
+                CompactFilterRow(
+                    title = "What to do now",
+                    tint = ActionRowTint(),
+                    hint = ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }
+                        ?.takeIf { bucket.startsWith("act:") && stageFilter == null && quick == null }?.hint,
                 ) {
-                    Text("What to do now", style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Spacer(Modifier.height(9.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        ACTIONS.forEach { a ->
-                            val n = app.leads.count { app.actionOf(it) == a.code }
-                            val key = "act:${a.code}"
-                            FilterTab(a.label, n, bucket == key && stageFilter == null && quick == null, a.color) {
-                                bucket = key; stageFilter = null; quick = null
-                            }
+                    ACTIONS.forEach { a ->
+                        val n = app.leads.count { app.actionOf(it) == a.code }
+                        val key = "act:${a.code}"
+                        FilterTab(a.label, n, bucket == key && stageFilter == null && quick == null, a.color) {
+                            bucket = key; stageFilter = null; quick = null
                         }
-                    }
-                    // One plain line, under the row it explains.
-                    val actHint = ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }?.hint
-                    if (bucket.startsWith("act:") && stageFilter == null && quick == null && actHint != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(actHint, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
-
             item {
-                Column(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                        .background(StageRowTint()).padding(horizontal = 12.dp, vertical = 11.dp),
+                CompactFilterRow(
+                    title = "Where the deal is",
+                    tint = StageRowTint(),
+                    hint = if (bucket.startsWith("stage:") && stageFilter == null && quick == null)
+                        STAGE_HINTS[bucket.removePrefix("stage:")] else null,
                 ) {
-                    Text("Where the deal is", style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Spacer(Modifier.height(9.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        FilterTab("All", app.leads.size, bucket == "all" && stageFilter == null && quick == null,
-                            MaterialTheme.colorScheme.primary) { bucket = "all"; stageFilter = null; quick = null }
-                        // Labels, colours and order all come from lead_stages —
-                        // including the short name, so the app is not inventing
-                        // its own abbreviation for "Do not call".
-                        app.leadStages.filter { it.repVisible }.forEach { st ->
-                            val n = app.leads.count { it.stage == st.code }
-                            val key = "stage:${st.code}"
-                            FilterTab(st.shortLabel.ifBlank { st.label }, n, bucket == key && stageFilter == null && quick == null, parseHex(st.color)) {
-                                bucket = key; stageFilter = null; quick = null
-                            }
-                        }
-                    }
-                    if (bucket.startsWith("stage:") && stageFilter == null && quick == null) {
-                        val code = bucket.removePrefix("stage:")
-                        val h = STAGE_HINTS[code]
-                        if (h != null) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(h, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FilterTab("All", app.leads.size, bucket == "all" && stageFilter == null && quick == null,
+                        MaterialTheme.colorScheme.primary) { bucket = "all"; stageFilter = null; quick = null }
+                    app.leadStages.filter { it.repVisible }.forEach { st ->
+                        val n = app.leads.count { it.stage == st.code }
+                        val key = "stage:${st.code}"
+                        FilterTab(st.shortLabel.ifBlank { st.label }, n,
+                            bucket == key && stageFilter == null && quick == null, parseHex(st.color)) {
+                            bucket = key; stageFilter = null; quick = null
                         }
                     }
                 }
@@ -1963,8 +1990,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             stages = app.leadStages,
             c = c,
             onDismiss = { actionFor = null },
-            onApply = { status, temp, budget, note, svProj, svAt, token ->
-                c.id?.let { vm.applyLead(it, status, temp, budget, note, svProj, svAt, token) }
+            onApply = { status, temp, budget, note, svProj, svAt, token, name ->
+                c.id?.let { vm.applyLead(it, status, temp, budget, note, svProj, svAt, token, name) }
                 actionFor = null
             },
             onShareContent = { actionFor = null; contentFor = c },
@@ -2216,17 +2243,27 @@ private fun LeadCard(
         Spacer(Modifier.width(12.dp))
 
         Column(Modifier.weight(1f)) {
+            // THE NAME GETS THE WHOLE LINE.
+            //
+            // It shared a row with the stage and the age, all three with
+            // weight(1f, fill = false) and maxLines = 1, so the name was
+            // whatever width was left over — which on a real phone meant
+            // "Pooja" rendered as "Pooj" and one lead showed as a single
+            // letter, "N". A rep cannot recognise a customer from one letter.
+            // Stage and age move to their own line, where nothing competes.
+            Text(
+                c.name?.takeIf { it.isNotBlank() } ?: prettyPhone(c.phone),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(c.name ?: prettyPhone(c.phone), style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-                Spacer(Modifier.width(7.dp))
                 // Stage + lead age. A New lead sitting untouched past a day
                 // turns the age amber — the quiet speed-to-lead nudge.
                 val age = ageLabel(c.createdAt ?: c.assignedAt)
-                // Hoisted set: this runs once per visible card, every frame
-                // a card is composed during a scroll.
                 val stale = age != null && c.stage == "new" && c.attempts == 0 && age != "Today"
-                Text("· $stageLabel", style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
+                Text(stageLabel, style = MaterialTheme.typography.labelSmall, color = muted, maxLines = 1)
                 age?.let {
                     Text(" · $it", style = MaterialTheme.typography.labelSmall,
                         color = if (stale) Amber else muted,
@@ -2246,25 +2283,14 @@ private fun LeadCard(
                     color = a.color, fontWeight = FontWeight.Bold, maxLines = 1)
             }
             Spacer(Modifier.height(2.dp))
-            // Phone + budget always; they are what a rep reads before dialling.
+            // Phone and attempts. The budget used to ride here too, at the end
+            // of a four-item row, so a long number left it as "₹ 3 –" — a
+            // clipped price is worse than no price, because a rep reads it and
+            // believes it. Money now gets its own line below.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(prettyPhone(c.phone), style = MaterialTheme.typography.bodySmall, color = muted,
                     letterSpacing = 0.3.sp, maxLines = 1)
-                budgetLabel(c.budget)?.let {
-                    Text("  ·  ₹ $it", style = MaterialTheme.typography.bodySmall, color = jade,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1)
-                }
-                // The rep's own read on this lead, given after they met at the
-                // site. It earns a place on the line a rep reads before dialling
-                // because it answers "who do I call first" better than the stage
-                // does — two leads both "negotiating" are not the same call.
-                c.closeProbability?.let { pct ->
-                    Text("  ·  🎯 $pct%", style = MaterialTheme.typography.bodySmall,
-                        color = if (pct >= 60) Teal else if (pct >= 40) Amber else Slate,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1)
-                }
                 if (c.attempts > 0) {
-                    // "Attempt 2/3" — which try comes NEXT, loud when its time is due.
                     val due = followUp?.let { instantMillis(it.dueAt) }
                     val dueNow = due != null && due <= now
                     Text(
@@ -2273,6 +2299,28 @@ private fun LeadCard(
                         color = if (dueNow) Red else Amber,
                         fontWeight = FontWeight.SemiBold, maxLines = 1,
                     )
+                }
+            }
+            // Money, on its own line and never clipped. This is the number a
+            // rep sorts their own day by.
+            val money = budgetLabel(c.budget)
+            if (money != null || c.closeProbability != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    money?.let {
+                        Text("₹ $it", style = MaterialTheme.typography.bodyMedium, color = jade,
+                            fontWeight = FontWeight.Bold, maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false))
+                    }
+                    // The rep's own read on this lead, given after they met at
+                    // the site — two leads both "negotiating" are not the same
+                    // call, and this says which to ring first.
+                    c.closeProbability?.let { pct ->
+                        if (money != null) Spacer(Modifier.width(10.dp))
+                        Text("🎯 $pct%", style = MaterialTheme.typography.bodySmall,
+                            color = if (pct >= 60) Teal else if (pct >= 40) Amber else Slate,
+                            fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    }
                 }
             }
             // Place and project used to ride on the phone line too. Five facts
@@ -2304,8 +2352,11 @@ private fun LeadCard(
                 // Also two lines: this now carries the REASON a callback exists,
                 // and a reason clipped at "🎤 budget 85L, Friday vi…" is the same
                 // problem in a new place.
+                // Three lines, not two. "Auto: callback ka time set nahi tha —
+                // kal…" told a rep nothing they could act on; the sentence
+                // needs room to finish.
                 Text(label, style = MaterialTheme.typography.bodySmall, color = color, fontWeight = FontWeight.Medium,
-                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             // Update lives on the LEFT, under the lead's own details.
             //
@@ -2383,11 +2434,17 @@ private fun LeadActionSheet(
     stages: List<LeadStage>,
     c: Contact,
     onDismiss: () -> Unit,
-    onApply: (String?, String?, String?, String?, String?, String?, String?) -> Unit,
+    /** stage, temperature, budget, note, siteVisitProject, siteVisitAt, token, name */
+    onApply: (String?, String?, String?, String?, String?, String?, String?, String?) -> Unit,
     onShareContent: () -> Unit = {},
     onProjects: () -> Unit = {},
     onArrived: () -> Unit = {},
 ) {
+    // The rep can fix the name here. Imports arrive with blanks, initials and
+    // "Unknown", and until now the only person who could correct that was an
+    // admin on the web — so a lead the rep speaks to every week stayed nameless
+    // on the one screen they actually use.
+    var leadName by remember(c.id) { mutableStateOf(c.name ?: "") }
     var stage by remember(c.id) { mutableStateOf<String?>(null) }
     var temp by remember(c.id) { mutableStateOf<String?>(null) }
     var budget by remember(c.id) { mutableStateOf(c.budget ?: "") }
@@ -2402,6 +2459,13 @@ private fun LeadActionSheet(
         title = { Text(c.name ?: c.phone) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    leadName, { leadName = it },
+                    label = { Text("Customer name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
                 Text("Stage", style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(6.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2536,6 +2600,7 @@ private fun LeadActionSheet(
                     svProject.trim().ifBlank { null }.takeIf { it != c.siteVisitProject },
                     svAt.trim().ifBlank { null }.takeIf { it != c.siteVisitAt },
                     token.trim().ifBlank { null },
+                    leadName.trim().ifBlank { null }.takeIf { it != c.name },
                 )
             }) { Text("Save") }
         },
