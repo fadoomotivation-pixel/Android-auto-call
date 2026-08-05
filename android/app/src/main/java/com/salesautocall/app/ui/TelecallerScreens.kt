@@ -16,11 +16,13 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -133,20 +135,39 @@ private data class ActionChip(val code: String, val label: String, val color: Co
  */
 private fun AppState.actionOf(c: Contact): String? = c.id?.let { actionByLead[it] }
 
+/**
+ * Call now sits FIRST and is what the screen opens on. A telecaller's job is
+ * calling; the row they land in should already be the one they work from.
+ * Overdue follows it in red — late work still shouts, it just does not have to
+ * be first to do that.
+ *
+ * Labels are short on purpose. "Visit coming" and "No next step" were the two
+ * that pushed the row off the edge of a phone.
+ */
 private val ACTIONS = listOf(
-    ActionChip("overdue", "Overdue", Color(0xFFC0452C),
-        "You promised these earlier and the time has passed. Call these first."),
     ActionChip("call_now", "Call now", Color(0xFFC98A3E),
-        "Due right now, brand new, or nobody picked up last time."),
+        "Ring these now. Due today, brand new, or nobody picked up last time."),
+    ActionChip("overdue", "Overdue", Color(0xFFC0452C),
+        "You said you would call earlier and the time has gone. Do these first."),
     ActionChip("due_today", "Due today", Color(0xFF3E7F8A),
-        "Booked for later today. They move into Call now on their own, at their time."),
-    ActionChip("scheduled", "Scheduled", Color(0xFF5A62C9),
-        "Booked for another day. Nothing to do yet — this is a plan, not a backlog."),
-    ActionChip("awaiting_visit", "Visit coming", Color(0xFF75629B),
-        "A site visit is booked. Waiting for them to come."),
-    ActionChip("no_next_step", "No next step", Color(0xFF8A6D3B),
-        "You talked to them and nothing is booked. These go cold if nobody acts."),
+        "Booked for later today. They come to Call now on their own, at their time."),
+    ActionChip("scheduled", "Later", Color(0xFF5A62C9),
+        "Booked for another day. Nothing to do now."),
+    ActionChip("awaiting_visit", "Visit", Color(0xFF75629B),
+        "Site visit is booked. Waiting for them to come."),
+    ActionChip("no_next_step", "No step", Color(0xFF8A6D3B),
+        "You talked to them but nothing is booked. These go cold if you leave them."),
 )
+
+/** Soft blue behind the action row — this is the work. */
+@Composable
+private fun ActionRowTint(): Color =
+    if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF16202E) else Color(0xFFEFF4FB)
+
+/** Quiet neutral behind the stage row — this is filing, not work. */
+@Composable
+private fun StageRowTint(): Color =
+    if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF181D1B) else Color(0xFFF3F5F3)
 
 /**
  * One plain line per stage. Only the sentences live here — the label, colour
@@ -154,15 +175,15 @@ private val ACTIONS = listOf(
  * up, just without a bespoke sentence until someone writes one.
  */
 private val STAGE_HINTS = mapOf(
-    "new" to "Never called. The moment you record an outcome, it moves on.",
-    "contacted" to "You have dialled them. What happens next depends on the call, not on this tab.",
-    "interested" to "They said yes to hearing more. Book the site visit.",
-    "site_visit" to "A visit is booked or done.",
-    "negotiation" to "Talking price.",
-    "token_paid" to "Token money received. Not finished — the booking still has to close.",
-    "won" to "Booked. Deal done.",
-    "lost" to "Not interested, or the deal died.",
-    "dnc" to "They asked us not to call. Do not call them.",
+    "new" to "Nobody has called them yet.",
+    "contacted" to "You have called them. Nothing decided yet.",
+    "interested" to "They want to know more. Next step is a site visit.",
+    "site_visit" to "Site visit booked or done.",
+    "negotiation" to "Talking about price.",
+    "token_paid" to "Token money taken. Booking is still not done.",
+    "won" to "Booking done.",
+    "lost" to "They said no, or the deal is dead.",
+    "dnc" to "They asked us not to call. Do not call.",
 )
 
 /** "#RRGGBB" from lead_stages -> Compose Color. The stage table owns the
@@ -412,26 +433,47 @@ private fun Pill(text: String, fg: Color, bg: Color) {
 
 @Composable
 private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Color, onClick: () -> Unit) {
-    // Selected = filled with the bucket's own accent; unselected = quiet neutral.
-    // The count rides in a tiny counter chip so it reads as a badge, not text.
-    val bg = if (selected) accent else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    val fg = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    // EVERY chip is the same height and carries its count in the same place, at
+    // the same size. Chips that grew and shrank with their label — and lost the
+    // badge entirely at zero — made a tidy row look ragged, which is most of
+    // why this screen read as unfinished.
+    //
+    // An empty chip is shown but not offered: faded, grey badge, no ripple, not
+    // clickable. Hiding it would make the row jump around as counts change
+    // during the day; leaving it live invites a tap that does nothing.
+    val empty = count == 0 && !selected
+    val bg = when {
+        selected -> accent
+        empty -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
+    val fg = when {
+        selected -> Color.White
+        empty -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Row(
-        Modifier.clip(RoundedCornerShape(50)).background(bg).clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+        Modifier.height(34.dp).clip(RoundedCornerShape(50)).background(bg)
+            .then(if (empty) Modifier else Modifier.clickable { onClick() })
+            .padding(horizontal = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = fg, style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
-        if (count > 0) {
-            Spacer(Modifier.width(6.dp))
-            Box(
-                Modifier.clip(RoundedCornerShape(50))
-                    .background(if (selected) Color(0x33FFFFFF) else MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 7.dp, vertical = 1.dp),
-            ) {
-                Text("$count", color = fg, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-            }
+        Text(label, color = fg, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
+        Spacer(Modifier.width(7.dp))
+        Box(
+            Modifier.defaultMinSize(minWidth = 22.dp).clip(RoundedCornerShape(50))
+                .background(
+                    when {
+                        selected -> Color(0x3DFFFFFF)
+                        empty -> Color.Transparent
+                        else -> MaterialTheme.colorScheme.surface
+                    },
+                )
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("$count", color = fg, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -1147,41 +1189,44 @@ private fun LeadsDeck(
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("PIPELINE  ·  ${app.leads.size} LEADS", style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.75f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-                    Spacer(Modifier.height(2.dp))
-                    // The hero number: money on the table. If budgets aren't
-                    // captured yet, the lead count carries the line instead.
+                    // ONE thing on this card is loud, and it is the money. The
+                    // eyebrow and the caption are deliberately quiet: three
+                    // competing white texts is what made this card feel busy.
+                    Text("PIPELINE  ·  ${app.leads.size} LEADS", fontSize = 9.5.sp,
+                        color = Color.White.copy(alpha = 0.55f), fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+                    Spacer(Modifier.height(3.dp))
                     Row {
                         if (pipelineValue > 0) {
-                            Text(formatRupees(pipelineValue), style = MaterialTheme.typography.headlineMedium,
-                                color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
-                            Spacer(Modifier.width(8.dp))
-                            Text("on the table", style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.8f), modifier = Modifier.alignByBaseline())
+                            Text(formatRupees(pipelineValue), style = MaterialTheme.typography.headlineLarge,
+                                color = Color.White, fontWeight = FontWeight.ExtraBold, modifier = Modifier.alignByBaseline())
+                            Spacer(Modifier.width(7.dp))
+                            Text("on the table", fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.55f), modifier = Modifier.alignByBaseline())
                         } else {
-                            Text("${app.leads.size}", style = MaterialTheme.typography.headlineMedium,
-                                color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.alignByBaseline())
-                            Spacer(Modifier.width(8.dp))
-                            Text("leads with you", style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.8f), modifier = Modifier.alignByBaseline())
+                            Text("${app.leads.size}", style = MaterialTheme.typography.headlineLarge,
+                                color = Color.White, fontWeight = FontWeight.ExtraBold, modifier = Modifier.alignByBaseline())
+                            Spacer(Modifier.width(7.dp))
+                            Text("leads with you", fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.55f), modifier = Modifier.alignByBaseline())
                         }
                     }
                 }
+                // Utilities, not features. Smaller and dimmer so they stop
+                // competing with the number they sit next to.
                 Box(
-                    Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.16f))
+                    Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
                         .clickable { onRefresh() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White, modifier = Modifier.size(19.dp)) }
-                Spacer(Modifier.width(8.dp))
+                ) { Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(15.dp)) }
+                Spacer(Modifier.width(6.dp))
                 Box {
                     Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.16f))
+                        Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.10f))
                             .clickable { menuOpen = true },
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (scoring) CircularProgressIndicator(Modifier.size(17.dp), strokeWidth = 2.dp, color = Color.White)
-                        else Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White, modifier = Modifier.size(19.dp))
+                        if (scoring) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
+                        else Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(15.dp))
                     }
                     androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         androidx.compose.material3.DropdownMenuItem(
@@ -1459,104 +1504,113 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // Search + Filters: one slim row. Everything fine-grained hides in the sheet.
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // A soft borderless pill, not a boxed form field — search
-                    // should feel like part of the paper, not a fence on it.
+                    // Search is the fastest way to a specific lead, so it has to
+                    // look like something you can type in. The old borderless
+                    // pill read as decoration; this one has a real edge and a
+                    // little lift under it.
+                    val searchAccent = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
                     OutlinedTextField(
                         query, { query = it }, placeholder = { Text("Search name or phone") },
-                        singleLine = true, modifier = Modifier.weight(1f), shape = RoundedCornerShape(50),
+                        singleLine = true, shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.weight(1f).height(52.dp)
+                            .shadow(2.dp, RoundedCornerShape(14.dp), clip = false),
                         leadingIcon = {
                             Icon(Icons.Default.Search, contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                tint = searchAccent, modifier = Modifier.size(20.dp))
                         },
                         colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                             unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                             focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                            focusedBorderColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            focusedBorderColor = searchAccent,
                         ),
                     )
                     val filtersOn = stageFilter != null || tempFilter != null || quick != null || sortBy != "default"
-                    val jadeBtn = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
+                    // Same shape and height as the search field and the chips —
+                    // one visual language, not a stray circle.
                     Box(
-                        Modifier.size(48.dp).clip(CircleShape)
-                            .background(if (filtersOn) jadeBtn else MaterialTheme.colorScheme.surface)
-                            .border(1.dp, if (filtersOn) jadeBtn else MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                        Modifier.height(52.dp).width(52.dp).clip(RoundedCornerShape(14.dp))
+                            .background(if (filtersOn) searchAccent else MaterialTheme.colorScheme.surface)
+                            .border(1.dp, if (filtersOn) searchAccent else MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
                             .clickable { sheetOpen = true },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(Icons.Default.Sort, contentDescription = "Filters",
                             tint = if (filtersOn) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp))
+                            modifier = Modifier.size(21.dp))
                     }
                 }
             }
-            // ── Row 1 · What to do now ──────────────────────────────────
-            // Derived from the clock, mutually exclusive, and the only row a
-            // power-dial may run from. "Today" is a state in here, not a tab of
-            // its own — a due date was never a place in the funnel.
+            // ── The two rows, told apart on sight ───────────────────────
+            //
+            // A rep should never have to read a heading to know which row is
+            // work and which is filing. So the action row sits on a soft blue
+            // tint and the stage row on a neutral one, and both WRAP: a chip cut
+            // in half at the screen edge is how someone learns there are options
+            // they cannot see, and no amount of swipe-hinting fixes that.
             item {
-                Text(
-                    "What to do now",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            item {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ACTIONS.forEach { a ->
-                        val n = app.leads.count { app.actionOf(it) == a.code }
-                        val key = "act:${a.code}"
-                        FilterTab(a.label, n, bucket == key && stageFilter == null && quick == null, a.color) {
-                            bucket = key; stageFilter = null; quick = null
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                        .background(ActionRowTint()).padding(horizontal = 12.dp, vertical = 11.dp),
+                ) {
+                    Text("What to do now", style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(9.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        ACTIONS.forEach { a ->
+                            val n = app.leads.count { app.actionOf(it) == a.code }
+                            val key = "act:${a.code}"
+                            FilterTab(a.label, n, bucket == key && stageFilter == null && quick == null, a.color) {
+                                bucket = key; stageFilter = null; quick = null
+                            }
                         }
+                    }
+                    // One plain line, under the row it explains.
+                    val actHint = ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }?.hint
+                    if (bucket.startsWith("act:") && stageFilter == null && quick == null && actHint != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(actHint, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
 
-            // ── Row 2 · Where the deal is ───────────────────────────────
-            // The canonical stages, straight from lead_stages — same codes,
-            // same labels, same colours and same counts as the web dashboard,
-            // because both read the one table. Adding a stage needs no release.
             item {
-                Text(
-                    "Where the deal is",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            item {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterTab("All", app.leads.size, bucket == "all" && stageFilter == null && quick == null,
-                        MaterialTheme.colorScheme.primary) { bucket = "all"; stageFilter = null; quick = null }
-                    app.leadStages.filter { it.repVisible }.forEach { st ->
-                        val n = app.leads.count { it.stage == st.code }
-                        val key = "stage:${st.code}"
-                        FilterTab(st.label, n, bucket == key && stageFilter == null && quick == null, parseHex(st.color)) {
-                            bucket = key; stageFilter = null; quick = null
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                        .background(StageRowTint()).padding(horizontal = 12.dp, vertical = 11.dp),
+                ) {
+                    Text("Where the deal is", style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(9.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp),
+                    ) {
+                        FilterTab("All", app.leads.size, bucket == "all" && stageFilter == null && quick == null,
+                            MaterialTheme.colorScheme.primary) { bucket = "all"; stageFilter = null; quick = null }
+                        // Labels, colours and order all come from lead_stages —
+                        // including the short name, so the app is not inventing
+                        // its own abbreviation for "Do not call".
+                        app.leadStages.filter { it.repVisible }.forEach { st ->
+                            val n = app.leads.count { it.stage == st.code }
+                            val key = "stage:${st.code}"
+                            FilterTab(st.shortLabel.ifBlank { st.label }, n, bucket == key && stageFilter == null && quick == null, parseHex(st.color)) {
+                                bucket = key; stageFilter = null; quick = null
+                            }
                         }
                     }
-                }
-            }
-            // One plain line under every tab, because a rep should never have to
-            // work out what a list holds. These sentences were the best thing in
-            // the old screen and they survive the rewrite.
-            if (stageFilter == null && quick == null) {
-                val hint = when {
-                    bucket.startsWith("act:") ->
-                        ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }?.hint ?: ""
-                    bucket.startsWith("stage:") -> {
+                    if (bucket.startsWith("stage:") && stageFilter == null && quick == null) {
                         val code = bucket.removePrefix("stage:")
-                        STAGE_HINTS[code] ?: "Leads at ${app.leadStages.firstOrNull { it.code == code }?.label ?: code}."
-                    }
-                    else -> "Every lead assigned to you, whatever stage it is at."
-                }
-                if (hint.isNotBlank()) {
-                    item {
-                        Text(
-                            hint,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        val h = STAGE_HINTS[code]
+                        if (h != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(h, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
@@ -1641,6 +1695,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     val leadCard: @Composable (Contact) -> Unit = { c ->
                         LeadCard(
                             stages = app.leadStages,
+                            action = app.actionOf(c),
                             c = c,
                             followUp = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone],
                             cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
@@ -2053,6 +2108,8 @@ private fun LeadCard(
     /** The canonical stage rows. The card renders a stage's label and colour;
      *  it does not get to decide either. Empty only in previews. */
     stages: List<LeadStage> = emptyList(),
+    /** This lead's derived action state — what to do about it now. */
+    action: String? = null,
     followUp: FollowUp? = null,
     cloudOn: Boolean,
     selectMode: Boolean = false,
@@ -2176,6 +2233,18 @@ private fun LeadCard(
                         fontWeight = if (stale) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
                 }
             }
+            // THE NEXT ACTION, directly under the name.
+            //
+            // A rep scanning this list is answering one question — "do I ring
+            // this one now?" — and the card used to make them work it out from
+            // the stage, the attempt count and a due time three lines apart.
+            // The answer goes second, in the action's own colour, before any
+            // detail about the lead.
+            ACTIONS.firstOrNull { it.code == action }?.let { a ->
+                Spacer(Modifier.height(3.dp))
+                Text(a.label, style = MaterialTheme.typography.labelMedium,
+                    color = a.color, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
             Spacer(Modifier.height(2.dp))
             // Phone + budget always; they are what a rep reads before dialling.
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2285,17 +2354,22 @@ private fun LeadCard(
                 // Both actions, both visible. WhatsApp used to be the hidden
                 // swipe-left; a rep should not have to know a gesture exists
                 // to reach half the row's functions.
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Calling is the job. It was the same 38dp circle as WhatsApp,
+                // so the one button a rep presses two hundred times a day looked
+                // exactly as important as the one they press twice. Call is now
+                // bigger, solid and lifted; WhatsApp stays available and quiet.
+                Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        Modifier.size(38.dp).clip(CircleShape).background(WaGreen.copy(alpha = 0.14f))
+                        Modifier.size(36.dp).clip(CircleShape).background(WaGreen.copy(alpha = 0.13f))
                             .clickable { onWhatsApp() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WaGreen, modifier = Modifier.size(17.dp)) }
+                    ) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WaGreen, modifier = Modifier.size(16.dp)) }
                     Box(
-                        Modifier.size(38.dp).clip(CircleShape).background(jade)
+                        Modifier.size(52.dp).shadow(4.dp, RoundedCornerShape(17.dp))
+                            .clip(RoundedCornerShape(17.dp)).background(jade)
                             .clickable { if (cloudOn) onCloudCall() else onCall() },
                         contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(17.dp)) }
+                    ) { Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(24.dp)) }
                 }
             }
         }
