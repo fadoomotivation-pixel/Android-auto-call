@@ -1938,7 +1938,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null, tokenAmount: String? = null) {
+    fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null, tokenAmount: String? = null, name: String? = null) {
         viewModelScope.launch {
             // Persist a positive token amount whenever it's supplied. The sheet
             // asks for it on BOOKED as well as Token Paid, so paid-at has to be
@@ -1947,6 +1947,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             // this month" silently misses it.
             val token = tokenAmount?.toDoubleOrNull()?.takeIf { it > 0 }
             val patch = buildMap<String, String> {
+                if (name != null) put("name", name)
                 if (status != null) put("status", status)
                 if (temperature != null) put("temperature", temperature)
                 if (budget != null) put("budget", budget)
