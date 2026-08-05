@@ -906,13 +906,14 @@ private fun CoachSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
         ) {
+            // The "Hide / Bada karo" button that used to sit at the end of this
+            // row is gone with the floating bubble it shrank. With the coach in
+            // the app bar there is nothing to minimise, and a button that does
+            // nothing is worse than no button.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("🎯 AI Coach", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
-// The "Hide / Bada karo" button is gone with the floating bubble it
-                // shrank. With the coach in the app bar there is nothing to
-                // minimise, and a button that does nothing is worse than no
-                // button — a rep taps it once and stops trusting the screen.
+            }
             Spacer(Modifier.height(8.dp))
 
             when {
