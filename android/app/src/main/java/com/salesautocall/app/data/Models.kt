@@ -160,6 +160,9 @@ data class Contact(
 data class LeadStage(
     val code: String,
     val label: String,
+    /** The name a narrow surface uses (a phone filter chip). Canonical too —
+     *  see migration 0149; the app must not invent its own abbreviations. */
+    @SerialName("short_label") val shortLabel: String = "",
     val color: String,
     @SerialName("sort_order") val sortOrder: Int,
     @SerialName("is_terminal") val isTerminal: Boolean = false,
