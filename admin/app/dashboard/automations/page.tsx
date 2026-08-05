@@ -22,6 +22,7 @@
 import Link from "next/link";
 import { resolveScope } from "@/lib/dashboard/scope";
 import { ModuleLinks } from "../ModuleLinks";
+import { AddPhone } from "./AddPhone";
 import { ist, istClock as clock } from "@/lib/dashboard/format";
 import {
   AUDIENCE_LABEL, AUDIENCE_NOTE, AUTOMATIONS, ROUTING, TRANSPORT, type Audience,
@@ -456,8 +457,7 @@ export default async function AutomationsPage({
           {" "}<strong>{enrolledReps.length} of {reps.length}</strong> are reachable right now.
           {noPhone.length > 0 && (
             <> {noPhone.length} {noPhone.length === 1 ? "has" : "have"} no phone number on their
-            profile, so there is nowhere to send it —{" "}
-            <Link href="/dashboard/salespeople">add it on Salespeople</Link>.</>
+            profile, so there is nowhere to send it — add it below.</>
           )}
           {reps.length > 0 && !reps[0].platform_on && (
             <> The platform switch is <strong>off</strong>, so nothing is being sent yet.</>
@@ -468,6 +468,37 @@ export default async function AutomationsPage({
             <Link href="/dashboard/health">see Phone Health</Link>.</>
           )}
         </p>
+        {/* The ones that need a number come FIRST and carry the input. A list
+            sorted by name buries the eight people blocking the feature among
+            the one who is fine. */}
+        {noPhone.length > 0 && (
+          <div style={{
+            marginBottom: 12, padding: "11px 14px", borderRadius: 10,
+            border: "1px solid rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.07)",
+          }}>
+            <strong style={{ fontSize: 13.5 }}>
+              ➕ {noPhone.length} telecaller{noPhone.length === 1 ? "" : "s"} need a number
+            </strong>
+            <div style={{ fontSize: 12, color: "var(--muted)", margin: "3px 0 9px" }}>
+              Add it here — nothing else is required to enrol them.
+            </div>
+            {noPhone.map((r) => (
+              <div key={r.salesperson_id} style={{
+                display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
+                padding: "7px 0", fontSize: 13.5,
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+              }}>
+                <strong>{r.full_name ?? "Unnamed"}</strong>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>{r.company_name}</span>
+                <span style={{ marginLeft: "auto" }}>
+                  <AddPhone salespersonId={r.salesperson_id}
+                    name={r.full_name ?? "this telecaller"} current={null} />
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {reps.length === 0
           ? <div className="empty">No active telecallers in this company.</div>
           : reps.map((r) => (
@@ -479,6 +510,8 @@ export default async function AutomationsPage({
               <span style={{ color: "var(--muted)", fontSize: 12.5 }}>
                 {r.has_phone ? r.phone : "no phone number"}
               </span>
+              <AddPhone salespersonId={r.salesperson_id}
+                name={r.full_name ?? "this telecaller"} current={r.has_phone ? r.phone : null} />
               <span style={{ fontSize: 12, marginLeft: "auto",
                 color: r.enrolled && r.device_trustworthy ? "#86efac" : "#fbbf24" }}>
                 {!r.enrolled
