@@ -1,5 +1,6 @@
 // RAG ingest — turns material into retrievable knowledge.
 // Body: { title?, source_kind?, source_id?, text, scope?, company_id?, offset?, batch? }
+//   or:  { mode: 'edit', id, content, title? }  → correct ONE fact, re-embedded.
 //   scope 'global'  → shared brain for ALL companies (company_id = null).
 //                     Platform super-admin ONLY.
 //   scope 'company' → a single company's private brain (default).
@@ -61,6 +62,7 @@ Deno.serve(async (req) => {
   // ---- Authorize + resolve who may write where. ----
   let isSuper = false;
   let profCompany: string | null = null;
+  let actorId: string | null = null;
   if (isService) {
     isSuper = true; // admin tooling: may target global or any company
   } else {
@@ -73,6 +75,76 @@ Deno.serve(async (req) => {
     if (!isAdmin) return json({ ok: false, error: "Admins only." }, 403);
     isSuper = !!pa;
     profCompany = (prof?.company_id as string) ?? null;
+    actorId = ud.user.id;
+  }
+
+  // ---------- correcting one fact ----------
+  //
+  // A wrong price used to mean deleting the whole source and re-uploading it.
+  // This corrects a single chunk in place — and RE-EMBEDS it, which is the
+  // whole point. match_knowledge() searches the 384-dim vector, never the text.
+  // Saving new wording against the old vector would leave the coach quoting the
+  // price you just fixed while the screen shows the correction: both "working",
+  // no error anywhere. So the new text and its new vector are written in ONE
+  // statement, and if the model is unreachable we change nothing at all.
+  //
+  // (Migration 0142 adds a trigger that nulls the embedding on any UPDATE that
+  // changes content without supplying a vector — the backstop for a write path
+  // that isn't this one. Because this path always sends both, it never fires.)
+  if (bodyIn.mode === "edit") {
+    const id = String(bodyIn.id ?? "").trim();
+    const newContent = String(bodyIn.content ?? "").trim();
+    const newTitle = bodyIn.title === undefined
+      ? undefined
+      : (bodyIn.title === null ? null : String(bodyIn.title).slice(0, 200));
+
+    if (!id) return json({ ok: false, error: "No fact chosen." }, 400);
+    if (!newContent) return json({ ok: false, error: "A fact can't be empty. Delete it instead." }, 400);
+    // One chunk is ~700 chars by design; a much longer paste belongs in the
+    // uploader, which splits it so each piece stays retrievable on its own.
+    if (newContent.length > 3000) {
+      return json({ ok: false, error: "Too long for one fact. Re-upload it as a source so it gets split properly." }, 400);
+    }
+
+    // Named `db`, not `admin`: the ingest path below declares its own `admin` at
+    // function scope. Two same-named consts in nested scopes is legal and reads
+    // like a bug — and a genuine duplicate const is what took three functions
+    // down with a BOOT_ERROR once. Different name, no second guessing.
+    const db = createClient(SUPABASE_URL, SERVICE);
+    const { data: row, error: readErr } = await db
+      .from("knowledge_chunks").select("id, company_id").eq("id", id).maybeSingle();
+    if (readErr) return json({ ok: false, error: readErr.message }, 500);
+    if (!row) return json({ ok: false, error: "That fact no longer exists — refresh the list." }, 404);
+
+    // The service-role client below BYPASSES RLS, so permission is decided
+    // here, by the same rule as the knowledge_chunks_update policy: global
+    // knowledge is shared into every company's brain and belongs to the
+    // platform owner alone; a company admin may only correct their own.
+    const mayEdit = isSuper || (row.company_id !== null && row.company_id === profCompany);
+    if (!mayEdit) {
+      return json({ ok: false, error: row.company_id === null
+        ? "Global knowledge is edited by the platform admin."
+        : "That fact belongs to another company." }, 403);
+    }
+
+    let embedding: number[];
+    try {
+      const model = new Supabase.ai.Session("gte-small");
+      embedding = await model.run(newContent, { mean_pool: true, normalize: true });
+    } catch (_e) {
+      // Refusing outright beats saving text the AI would still find by its old
+      // wording. Nothing has been written at this point.
+      return json({ ok: false, error: "Could not re-teach that fact to the AI just now. Nothing was changed — try again." }, 502);
+    }
+
+    const patch: Record<string, unknown> = {
+      content: newContent, embedding, updated_at: new Date().toISOString(), updated_by: actorId,
+    };
+    if (newTitle !== undefined) patch.title = newTitle;
+
+    const { error: upErr } = await db.from("knowledge_chunks").update(patch).eq("id", id);
+    if (upErr) return json({ ok: false, error: upErr.message }, 500);
+    return json({ ok: true, mode: "edit", id, reembedded: true });
   }
 
   const text: string = String(bodyIn.text ?? "").trim();

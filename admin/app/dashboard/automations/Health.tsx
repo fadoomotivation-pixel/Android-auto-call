@@ -253,22 +253,42 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
     checks.push({ level: "ok", label: "Notification Queue", reason: "Empty. Nothing is waiting." });
   }
 
-  // 6 — Edge functions, judged by what the crons got back.
+  // 6 — Edge functions, judged by what came back over pg_net.
+  //
+  // TWO HONESTY FIXES LIVE HERE, both learned the hard way.
+  //
+  // These are "background calls", not "scheduled calls". pg_net carries
+  // anything the DATABASE sends — the crons, yes, but also a one-off
+  // net.http_post someone runs while debugging. This panel once reported a
+  // single hand-made test call as "1 of 208 scheduled calls were refused",
+  // which is a red light for an outage that did not exist.
+  //
+  // And it used to assert the CAUSE: "a 401 means a deploy switched verify_jwt
+  // back on". It cannot know that — pg_net does not keep the URL, so this
+  // check cannot even tell which function answered. Worse, the remedy that
+  // sentence implies is to turn verify_jwt OFF, which would make an
+  // admin-only endpoint public. A guess dressed as a diagnosis is more
+  // dangerous than no diagnosis, so now it lists what to check and says
+  // plainly that it does not know which function.
   if (db) {
     const { errors, timeouts, calls, window_hours, last_error_code, last_error_body, last_error_at } = db.http;
     if (errors > 0) {
       checks.push({
         level: "bad", label: "Edge Functions",
-        reason: `${errors} of ${calls} scheduled calls were refused in the last ${window_hours} hours. ` +
+        reason: `${errors} of ${calls} background calls were refused in the last ${window_hours} hours. ` +
           `Last was ${last_error_code ?? "?"} at ${istFmt(last_error_at)}: ${last_error_body ?? "no body"}. ` +
           (last_error_code === 401
-            ? "A 401 means a deploy switched verify_jwt back on — the cron's key is now being rejected."
-            : ""),
+            ? "A 401 is the function refusing the caller's key. Check, in this order: the " +
+              "service_role_key secret in Vault (a rotated or missing key makes every cron " +
+              "send an empty Bearer), then whether a one-off test call was made from the " +
+              "database by hand — those land here too. Do NOT turn verify_jwt off to clear " +
+              "this; that makes the function public to the internet."
+            : "This does not say which function — pg_net keeps the response but not the URL."),
       });
     } else {
       checks.push({
         level: "ok", label: "Edge Functions",
-        reason: `${calls - timeouts} of ${calls} scheduled calls answered cleanly in the last ${window_hours} hours` +
+        reason: `${calls - timeouts} of ${calls} background calls answered cleanly in the last ${window_hours} hours` +
           (timeouts > 0
             ? `. ${timeouts} timed out — pg_net stops listening after five seconds while the function carries on, so these are not failures.`
             : "."),
