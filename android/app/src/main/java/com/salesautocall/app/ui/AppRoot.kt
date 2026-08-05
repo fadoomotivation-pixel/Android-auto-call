@@ -785,7 +785,12 @@ private fun MainShell(vm: MainViewModel) {
                     AppPrefs.clearCoachMini(ctx)
                     coachMini = false
                 },
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 12.dp),
+                // Moved off the top-right, where it landed on top of the
+                // pipeline card's refresh and menu buttons and made a clean card
+                // look crowded. Bottom-LEFT keeps it clear of the "Call N"
+                // action button on the right, and puts it under the thumb of
+                // someone holding the phone all day.
+                modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 22.dp),
             )
             if (state.coachOpen) {
                 CoachSheet(
@@ -1263,7 +1268,9 @@ internal fun FloatingCallBar(
     val jade = jadeAccent(dark)
     val pill = if (dark) Color(0xFF16181C) else Color.White
     val hair = if (dark) Color(0xFF24272C) else Color(0xFFE7E9E4)
-    val unsel = if (dark) Color(0xFF8A9099) else Color(0xFF6C737C)
+    // Darkened from #6C737C: the inactive labels were washing out in sunlight,
+    // which is where a telecaller actually uses this.
+    val unsel = if (dark) Color(0xFF9AA1AA) else Color(0xFF525A63)
     val ring = MaterialTheme.colorScheme.background
     Box(Modifier.fillMaxWidth().height(84.dp).padding(horizontal = 14.dp), contentAlignment = Alignment.BottomCenter) {
         Row(
@@ -1302,14 +1309,26 @@ internal fun FloatingCallBar(
 
 @Composable
 private fun NavSlot(label: String, icon: ImageVector, on: Boolean, jade: Color, unsel: Color, modifier: Modifier, onClick: () -> Unit) {
+    // The active tab used to differ only by tint, which on a bright phone in
+    // daylight is close to no difference at all. It now carries a tinted pill
+    // behind the icon as well — a shape change reads at arm's length where a
+    // colour change does not.
     Column(
-        modifier.clip(RoundedCornerShape(14.dp)).clickable { onClick() }.padding(vertical = 6.dp),
+        modifier.clip(RoundedCornerShape(14.dp)).clickable { onClick() }.padding(vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = label, tint = if (on) jade else unsel, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(3.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall,
-            color = if (on) jade else unsel, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
+        Box(
+            Modifier.clip(RoundedCornerShape(50))
+                .background(if (on) jade.copy(alpha = 0.15f) else Color.Transparent)
+                .padding(horizontal = 14.dp, vertical = 3.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = label, tint = if (on) jade else unsel,
+                modifier = Modifier.size(if (on) 23.dp else 21.dp))
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+            color = if (on) jade else unsel, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium)
     }
 }
 
