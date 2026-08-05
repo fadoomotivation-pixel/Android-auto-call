@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ImportLeads } from "./ImportLeads";
+import { loadStages, repStages, ACTION_STATES, type Stage } from "@/lib/dashboard/stage";
 import { LeadHistory } from "./LeadHistory";
 
 type Sp = { id: string; full_name: string | null; territory: string | null; company_id?: string | null; company_name?: string | null };
@@ -12,6 +13,7 @@ type Lead = {
   phone: string;
   company_name: string | null;
   status: string;
+  stage: string;
   salesperson_id: string | null;
   budget: string | null;
   territory: string | null;
@@ -21,18 +23,11 @@ type Lead = {
   last_contacted_at: string | null;
 };
 
-// Status chips shown on the admin board, in funnel order.
-const STATUS_FILTERS: { key: string; label: string }[] = [
-  { key: "new", label: "New" },
-  { key: "callback", label: "Callback" },
-  { key: "interested", label: "Interested" },
-  { key: "site_visit", label: "Site Visit" },
-  { key: "negotiation", label: "Negotiation" },
-  { key: "token_paid", label: "Token" },
-  { key: "booked", label: "Booked" },
-  { key: "not_interested", label: "Not int." },
-  { key: "lost", label: "Lost" },
-];
+// The chips used to be nine hand-written entries here. Four live statuses had
+// no chip at all — 91 leads, 11.6% of the book, unreachable by any filter —
+// while three chips matched zero rows. They now come from lead_stages, the same
+// rows the Android app and every report read, so the three can never disagree
+// again. See admin/lib/dashboard/stage.ts.
 const TEMP_META: Record<string, { label: string; color: string; bg: string }> = {
   hot: { label: "🔥 Hot", color: "#fca5a5", bg: "rgba(239,68,68,0.14)" },
   warm: { label: "🌤 Warm", color: "#fcd34d", bg: "rgba(245,158,11,0.14)" },
@@ -116,7 +111,13 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
   // so the super admin sees them flagged and can decide what to do.
   const [crossCoPhones, setCrossCoPhones] = useState<Set<string>>(new Set());
   // Status + temperature filters and their live counts (per current scope).
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  // Two axes, kept apart exactly as the database keeps them: stageFilter is
+  // WHERE THE DEAL IS, actionFilter is WHAT TO DO NOW. A lead always has both,
+  // which is why they are separate filters and not one row of mixed chips.
+  const [stageFilter, setStageFilter] = useState<string>("");
+  const [actionFilter, setActionFilter] = useState<string>("");
+  const [stages, setStages] = useState<Stage[]>([]);
+  const [actionIds, setActionIds] = useState<string[] | null>(null);
   const [tempFilter, setTempFilter] = useState<string>("");
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
 
@@ -140,7 +141,7 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     let q = scopeCompany(
       supabase
         .from("contacts")
-        .select("id, name, phone, company_name, status, salesperson_id, budget, territory, created_at, notes, temperature, last_contacted_at")
+        .select("id, name, phone, company_name, status, stage, salesperson_id, budget, territory, created_at, notes, temperature, last_contacted_at")
         .order("created_at", { ascending: false }),
     );
     if (tab === "unassigned") {
@@ -149,13 +150,16 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
       q = q.not("salesperson_id", "is", null);
       if (agentFilter) q = q.eq("salesperson_id", agentFilter);
     }
-    if (statusFilter) q = q.eq("status", statusFilter);
+    if (stageFilter) q = q.eq("stage", stageFilter);
+    // Action state is DERIVED (v_lead_action_state), so it cannot be a column
+    // filter on contacts. The ids are resolved separately below and joined here.
+    if (actionFilter && actionIds) q = q.in("id", actionIds.length ? actionIds : ["00000000-0000-0000-0000-000000000000"]);
     if (tempFilter) q = q.eq("temperature", tempFilter);
     const s = safe(search);
     if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
     return q;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, tab, agentFilter, search, companyId, isSuper, companyFilter, statusFilter, tempFilter]);
+  }, [supabase, tab, agentFilter, search, companyId, isSuper, companyFilter, stageFilter, tempFilter, actionFilter, actionIds]);
 
   const load = useCallback(
     async (reset: boolean) => {
@@ -197,12 +201,35 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, agentFilter, search, companyFilter, statusFilter, tempFilter]);
+  }, [tab, agentFilter, search, companyFilter, stageFilter, tempFilter, actionFilter, actionIds]);
 
   useEffect(() => {
     void refreshStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyFilter]);
+
+  // The stage vocabulary, straight from the table both clients read.
+  useEffect(() => {
+    let off = false;
+    void loadStages(supabase).then((rows) => { if (!off) setStages(rows); });
+    return () => { off = true; };
+  }, [supabase]);
+
+  // Action state lives in a view, so filtering by it means resolving ids first.
+  // Only the ids are fetched (one narrow column), and only while an action chip
+  // is actually selected — no cost on the default view.
+  useEffect(() => {
+    let off = false;
+    if (!actionFilter) { setActionIds(null); return; }
+    (async () => {
+      let q = supabase.from("v_lead_workstate").select("contact_id").eq("action_state", actionFilter);
+      if (!isSuper) q = q.eq("company_id", companyId);
+      else if (companyFilter) q = q.eq("company_id", companyFilter);
+      const { data } = await q.limit(5000).returns<{ contact_id: string }[]>();
+      if (!off) setActionIds((data ?? []).map((r) => r.contact_id));
+    })();
+    return () => { off = true; };
+  }, [supabase, actionFilter, companyId, isSuper, companyFilter]);
 
   // Live per-status counts for the filter chips, respecting the company scope.
   // Paged so it isn't capped at PostgREST's 1000-row limit.
@@ -212,12 +239,12 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
       const counts: Record<string, number> = {};
       const P = 1000;
       for (let from = 0; ; from += P) {
-        let q = supabase.from("contacts").select("status");
+        let q = supabase.from("contacts").select("stage");
         if (!isSuper) q = q.eq("company_id", companyId);
         else if (companyFilter) q = q.eq("company_id", companyFilter);
-        const { data, error } = await q.range(from, from + P - 1).returns<{ status: string }[]>();
+        const { data, error } = await q.range(from, from + P - 1).returns<{ stage: string }[]>();
         if (error) break;
-        for (const r of data ?? []) counts[r.status] = (counts[r.status] ?? 0) + 1;
+        for (const r of data ?? []) counts[r.stage] = (counts[r.stage] ?? 0) + 1;
         if (!data || data.length < P) break;
       }
       if (!cancelled) setStatusCounts(counts);
@@ -505,11 +532,50 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
         </div>
       )}
 
-      {/* Status filter chips — with live counts (whole scope, not just this tab). */}
+      {/* ── What to do now — the ACTION axis, derived from the clock ──
+          Kept visually and verbally separate from the stage row below, because
+          conflating the two is what made the same lead look like it belonged to
+          several tabs at once on the phone. "Today" is a filter here, never a
+          stage. */}
+      <div>
+        <div style={{ fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>
+          What to do now
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Chip active={actionFilter === ""} onClick={() => setActionFilter("")} label="Any" count={stats.total} />
+          {ACTION_STATES.map((a) => (
+            <button
+              key={a.code}
+              title={a.hint}
+              onClick={() => setActionFilter(actionFilter === a.code ? "" : a.code)}
+              style={{
+                fontSize: 12.5, padding: "5px 12px", borderRadius: 999, cursor: "pointer",
+                border: `1px solid ${actionFilter === a.code ? a.color : "var(--border)"}`,
+                background: actionFilter === a.code ? `${a.color}22` : "transparent",
+                color: actionFilter === a.code ? a.color : "var(--muted)",
+              }}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+        {actionFilter && (
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
+            {ACTION_STATES.find((a) => a.code === actionFilter)?.hint}
+          </div>
+        )}
+      </div>
+
+      {/* ── Where the deal is — the STAGE axis, from lead_stages ──
+          Mutually exclusive and generated from the table, so these chips, the
+          Android tabs and every report count the same leads. */}
+      <div style={{ fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)", marginTop: 4 }}>
+        Where the deal is
+      </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Chip active={statusFilter === ""} onClick={() => setStatusFilter("")} label="All statuses" count={stats.total} />
-        {STATUS_FILTERS.filter((s) => (statusCounts[s.key] ?? 0) > 0 || statusFilter === s.key).map((s) => (
-          <Chip key={s.key} active={statusFilter === s.key} onClick={() => setStatusFilter(statusFilter === s.key ? "" : s.key)} label={s.label} count={statusCounts[s.key] ?? 0} />
+        <Chip active={stageFilter === ""} onClick={() => setStageFilter("")} label="All stages" count={stats.total} />
+        {repStages(stages).filter((st) => (statusCounts[st.code] ?? 0) > 0 || stageFilter === st.code).map((st) => (
+          <Chip key={st.code} active={stageFilter === st.code} onClick={() => setStageFilter(stageFilter === st.code ? "" : st.code)} label={st.label} count={statusCounts[st.code] ?? 0} />
         ))}
       </div>
 

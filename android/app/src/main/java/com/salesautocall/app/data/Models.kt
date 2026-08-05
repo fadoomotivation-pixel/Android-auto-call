@@ -96,7 +96,22 @@ data class Contact(
     val email: String? = null,
     @SerialName("company_name") val companyName: String? = null,
     val notes: String? = null,
+    /**
+     * The LAST DISPOSITION — what happened on the most recent call.
+     *
+     * This used to carry the lifecycle position too, and the two fought: a
+     * no-answer on an interested lead overwrote the qualification and it was
+     * gone. It is now only ever "what happened last time"; where the deal is
+     * lives in [stage].
+     */
     val status: String = "new",
+    /**
+     * WHERE THE DEAL IS. Maintained by the database from [status] and never
+     * allowed to move backwards (migration 0143). Joins to `lead_stages`, which
+     * owns its label, colour and meaning — the app must not decide any of that
+     * for itself, or the phone and the dashboard drift apart again.
+     */
+    val stage: String = "new",
     /** Lead triage: "hot" | "warm" | "cold" (null = not scored yet). */
     val temperature: String? = null,
     /** Free-text budget the rep captured (e.g. "₹45L", "1.2 Cr"). */
@@ -131,6 +146,45 @@ data class Contact(
     /** When the rep actually RECORDED an outcome — a funnel status, a voice note,
      *  a typed note or a booked callback. This is what moves a lead out of New. */
     @SerialName("handled_at") val handledAt: String? = null,
+)
+
+/**
+ * One row of `lead_stages` — the canonical lifecycle vocabulary.
+ *
+ * The app used to declare its own seven-stage list AND a separate set of eight
+ * tab buckets, neither of which matched the web dashboard's nine chips. All
+ * three now read these rows, so a count on the phone and a count on the web are
+ * the same number by construction.
+ */
+@Serializable
+data class LeadStage(
+    val code: String,
+    val label: String,
+    val color: String,
+    @SerialName("sort_order") val sortOrder: Int,
+    @SerialName("is_terminal") val isTerminal: Boolean = false,
+    /** "open" | "won" | "lost" | "excluded" */
+    val outcome: String = "open",
+    /** Deal in motion: past qualification, before the close. "Pipeline". */
+    @SerialName("is_pipeline") val isPipeline: Boolean = false,
+    @SerialName("is_advanced") val isAdvanced: Boolean = false,
+    @SerialName("counts_as_sale") val countsAsSale: Boolean = false,
+    @SerialName("rep_visible") val repVisible: Boolean = true,
+)
+
+/**
+ * A lead's DERIVED action state, from `v_lead_action_state`.
+ *
+ * Fetched rather than computed. The app computing "is this due" itself is how
+ * the Follow-up tab and the Follow Ups screen came to disagree about the same
+ * clock; there is one definition and it lives in the database.
+ */
+@Serializable
+data class LeadWork(
+    @SerialName("contact_id") val contactId: String,
+    /** overdue | call_now | due_today | scheduled | awaiting_visit | no_next_step | none */
+    @SerialName("action_state") val actionState: String,
+    @SerialName("due_at") val dueAt: String? = null,
 )
 
 /** A company project's pinned location, used to geo-fence site-visit arrivals. */

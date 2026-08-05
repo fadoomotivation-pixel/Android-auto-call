@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.salesautocall.app.data.AppPrefs
 import com.salesautocall.app.data.Attendance
 import com.salesautocall.app.data.CallLog
+import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.ChatMsg
 import com.salesautocall.app.data.CampaignStat
 import com.salesautocall.app.data.Company
@@ -103,6 +104,11 @@ data class AppState(
     val inCallNote: String = "",
     // lead pipeline (all my contacts across campaigns)
     val leads: List<Contact> = emptyList(),
+    /** The canonical stage vocabulary (labels, colours, order, semantics). */
+    val leadStages: List<LeadStage> = emptyList(),
+    /** contact id -> derived action state, straight from v_lead_workstate.
+     *  Never computed on the phone: one clock, and it lives in the database. */
+    val actionByLead: Map<String, String> = emptyMap(),
     /** Company project pins, for geo-fencing site-visit arrivals. */
     val projectSites: List<ProjectSite> = emptyList(),
     val leadsLoading: Boolean = false,
@@ -303,12 +309,19 @@ data class AssistantAsk(
 
 enum class CallFilter(val label: String) { TODAY("Today"), WEEK("This week"), ALL("All time") }
 
-/** Lead-pipeline filters shown on the Leads tab. */
-enum class LeadFilter(val key: String, val label: String, val statuses: Set<String>) {
-    OPEN("open", "Open", setOf("new", "queued", "callback", "follow_up", "no_answer", "busy", "wrong_person")),
-    HOT("hot", "Hot", emptySet()),           // filtered by temperature, not status
+/**
+ * Lead-pipeline filters shown on the Leads tab.
+ *
+ * These were status sets — a fourth private taxonomy, disagreeing with the
+ * other three. They are STAGE codes now, matched against contacts.stage, so
+ * "Open" means whatever lead_stages currently says is not terminal rather than
+ * whatever this line happened to list.
+ */
+enum class LeadFilter(val key: String, val label: String, val stages: Set<String>) {
+    OPEN("open", "Open", setOf("new", "contacted")),
+    HOT("hot", "Hot", emptySet()),           // filtered by temperature, not stage
     INTERESTED("interested", "Interested", setOf("interested")),
-    BOOKED("booked", "Booked", setOf("booked")),
+    BOOKED("booked", "Won", setOf("won")),
     ALL("all", "All", emptySet()),
 }
 
@@ -1260,8 +1273,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Starts auto-dialing an existing campaign (e.g. a follow-up) from its loaded contacts. */
     fun startExistingCampaign(campaignId: String, campaignName: String, contacts: List<Contact>) {
+        // Callable = the action queue, same rule the Leads screen power-dials
+        // from. It used to be a status list that quietly excluded a lead whose
+        // callback was genuinely due just because its disposition was 'called'.
+        val work = _state.value.actionByLead
         val callable = contacts.filter {
-            it.status in setOf("new", "queued", "callback", "no_answer", "busy", "wrong_person")
+            val a = it.id?.let { id -> work[id] }
+            a == "overdue" || a == "call_now"
         }
         if (callable.isEmpty()) {
             set { it.copy(error = "No contacts left to call in this campaign.") }
@@ -1440,9 +1458,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!shouldLoad("leads", force)) return
         viewModelScope.launch {
             set { it.copy(leadsLoading = true) }
+            // Stages and action states load alongside the leads: a tab row that
+            // renders before its vocabulary arrives would flash the wrong labels.
+            val stages = Repository.fetchLeadStages()
+            val work = Repository.currentUserId()?.let { Repository.fetchWorkStates(it) } ?: emptyList()
             runCatching { Repository.fetchLeads() }
                 .onSuccess { list ->
-                    set { it.copy(leads = list, leadsLoading = false) }
+                    set {
+                        it.copy(
+                            leads = list, leadsLoading = false,
+                            leadStages = if (stages.isNotEmpty()) stages else it.leadStages,
+                            actionByLead = work.associate { w -> w.contactId to w.actionState },
+                        )
+                    }
                     // Keep the on-device phone → lead map fresh so Lead Ring can
                     // name an inbound caller instantly, even offline.
                     runCatching { com.salesautocall.app.notify.LeadRing.cache(getApplication(), list) }
@@ -2447,12 +2475,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** The oldest site visit whose day has gone by with nothing to show for it. */
     private fun visitCheckAsk(asked: Set<String>, now: Long): AssistantAsk? {
         val ctx = getApplication<Application>()
-        val dead = setOf("lost", "not_interested", "dnc", "booked")
-        val afterVisit = setOf("negotiation", "proposal", "token_paid")
+        // Finished, and "moved on past the visit", from the canonical rows.
+        val stages = _state.value.leadStages
+        fun terminal(code: String) = stages.firstOrNull { it.code == code }?.isTerminal ?: false
+        fun pastVisit(code: String) =
+            (stages.firstOrNull { it.code == code }?.sortOrder ?: 0) >
+            (stages.firstOrNull { it.code == "site_visit" }?.sortOrder ?: 40)
         val c = _state.value.leads
             .asSequence()
             .filter { it.id != null && "visit_check:${it.id}" !in asked }
-            .filter { it.status !in dead && it.status !in afterVisit && it.siteVisitArrivedAt == null }
+            .filter { !terminal(it.stage) && !pastVisit(it.stage) && it.siteVisitArrivedAt == null }
             // Asked twice already and still no answer. Stop. A third prompt
             // teaches the rep that these can be ignored, and after that they
             // ignore the useful ones too. It is the manager's problem now —

@@ -104,15 +104,25 @@ private val TEMPS = listOf("hot" to "🔥 Hot", "warm" to "🌤 Warm", "cold" to
 
 /** The real-estate journey, top to bottom. First two steps are milestones the
  *  system stamps itself; from "Interested" onward the rep moves the lead. */
-private data class FunnelStep(val key: String, val label: String, val statuses: Set<String>, val settable: Boolean)
+private data class FunnelStep(val key: String, val label: String, val settable: Boolean)
+
+/**
+ * The journey drawn on the lead page.
+ *
+ * `key` IS the canonical stage code, so a lead's position is `contact.stage`
+ * matched directly — no status sets. This list used to repeat the whole
+ * disposition-to-stage mapping, making it the fifth copy in the codebase and
+ * the one most likely to drift, because it also carried the drawing order.
+ * Labels shown to a rep still live here; membership does not.
+ */
 private val FUNNEL = listOf(
-    FunnelStep("new", "New enquiry", setOf("new", "queued"), false),
-    FunnelStep("contacted", "Contacted", setOf("called", "no_answer", "busy", "callback", "follow_up"), false),
-    FunnelStep("interested", "Interested", setOf("interested"), true),
-    FunnelStep("site_visit", "Site Visit", setOf("site_visit"), true),
-    FunnelStep("negotiation", "Negotiation", setOf("negotiation", "proposal"), true),
-    FunnelStep("token_paid", "Token Paid", setOf("token_paid"), true),
-    FunnelStep("booked", "Booked 🏆", setOf("booked"), true),
+    FunnelStep("new", "New enquiry", false),
+    FunnelStep("contacted", "Contacted", false),
+    FunnelStep("interested", "Interested", true),
+    FunnelStep("site_visit", "Site Visit", true),
+    FunnelStep("negotiation", "Negotiation", true),
+    FunnelStep("token_paid", "Token Paid", true),
+    FunnelStep("won", "Booked 🏆", true),
 )
 
 /** Ways a lead leaves the funnel (or loops back for another call). */
@@ -152,10 +162,11 @@ private fun fmtWhen(ms: Long): String {
     return "$day, $h12:${"%02d".format(d.minute)} ${if (d.hour < 12) "AM" else "PM"}"
 }
 
-private fun stageLabel(status: String): String =
-    FUNNEL.firstOrNull { status in it.statuses }?.label?.removeSuffix(" 🏆")
-        ?: SETTABLE.firstOrNull { it.first == status }?.second
-        ?: status.replaceFirstChar { it.uppercase() }
+/** Label for a canonical STAGE code (falls back to a disposition label). */
+private fun stageLabel(stage: String): String =
+    FUNNEL.firstOrNull { it.key == stage }?.label?.removeSuffix(" 🏆")
+        ?: SETTABLE.firstOrNull { it.first == stage }?.second
+        ?: stage.replaceFirstChar { it.uppercase() }
 
 /** Full-screen 360° view of one lead — the premium, card-based cockpit. */
 @Composable
@@ -342,7 +353,9 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     val visitMs = isoMs(contact.siteVisitAt)
                     val nowMs = System.currentTimeMillis()
                     val fuMs = followUp?.let { isoMs(it.dueAt) }
-                    val terminal = contact.status in setOf("booked", "lost", "not_interested", "dnc")
+                    // Terminal is a STAGE question, and it now includes `invalid` — a bad
+                    // number was previously treated as still-live work here.
+                    val terminal = app.leadStages.firstOrNull { it.code == contact.stage }?.isTerminal ?: false
                     when {
                         followUp != null -> NextStepBanner(
                             color = if (fuMs != null && fuMs <= nowMs) RedL else IndigoL,
@@ -414,7 +427,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             when (key) {
                                 "site_visit" -> visitOpen = true
                                 else -> {
-                                    val idx = FUNNEL.indexOfFirst { contact.status in it.statuses }
+                                    val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
                                     val tapped = FUNNEL.indexOfFirst { it.key == key }
                                     if (tapped in 0 until idx) confirmMoveKey = key
                                     else contact.id?.let {
@@ -833,7 +846,7 @@ private fun IdentityBlock(
         }
         Spacer(Modifier.height(14.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LeadChip(stageLabel(contact.status), tempRing(null))
+            LeadChip(stageLabel(contact.stage), tempRing(null))
             contact.temperature?.takeIf { it.isNotBlank() }?.let { t ->
                 val (label, col) = when (t) { "hot" -> "🔥 Hot" to RedL; "warm" -> "☀ Warm" to AmberL; else -> "❄ Cold" to ColdL }
                 LeadChip(label, col)
@@ -1296,7 +1309,7 @@ private fun WadaRow(emoji: String, label: String, value: String) {
 /** Horizontal 7-step funnel with a connecting rail — the compact overview. */
 @Composable
 private fun HorizontalFunnel(contact: Contact, onTap: (String) -> Unit) {
-    val idx = FUNNEL.indexOfFirst { contact.status in it.statuses }
+    val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
     Row(Modifier.fillMaxWidth()) {
         FUNNEL.forEachIndexed { i, step ->
             val done = i < idx
@@ -1481,7 +1494,7 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
  *  its own line, tap a done step to walk back, edit/cancel the site visit. */
 @Composable
 private fun FunnelStepper(contact: Contact, onSet: (String) -> Unit, onMoveBack: (String) -> Unit, onEditVisit: () -> Unit, onClearVisit: () -> Unit) {
-    val idx = FUNNEL.indexOfFirst { contact.status in it.statuses }
+    val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
     Column(Modifier.fillMaxWidth()) {
         FUNNEL.forEachIndexed { i, step ->
             val done = idx > i

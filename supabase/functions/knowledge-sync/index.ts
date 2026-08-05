@@ -8,6 +8,7 @@
 // Body: { }  (admin / super-admin only; company from the caller's profile)
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { loadStages } from "../_shared/stage.ts";
 
 declare const Supabase: { ai: { Session: new (m: string) => { run(input: string, opts: { mean_pool: boolean; normalize: boolean }): Promise<number[]> } } };
 
@@ -87,9 +88,16 @@ Deno.serve(async (req) => {
     if (n > 0) { sources++; stored += n; }
   }
 
-  // 2. Won-deal call transcripts — the words that ACTUALLY closed deals.
+  // 2. Call transcripts from deals where money actually moved.
+  //
+  // This used to hardcode ["booked","token_paid"] — the same idea as
+  // lead_stages.counts_as_sale, spelled out a fourth time. Note it is
+  // counts_as_sale and NOT outcome='won': a token payment is real money on a
+  // still-open deal, and the words that got it are worth learning from.
+  const saleStages = [...(await loadStages(admin)).values()]
+    .filter((s) => s.counts_as_sale).map((s) => s.code);
   const { data: wonContacts } = await admin.from("contacts")
-    .select("id, name").eq("company_id", companyId).in("status", ["booked", "token_paid"]).limit(300);
+    .select("id, name").eq("company_id", companyId).in("stage", saleStages).limit(300);
   const wonById = new Map((wonContacts ?? []).map((c: { id: string; name: string | null }) => [c.id, c.name]));
   if (wonById.size > 0) {
     const { data: calls } = await admin.from("call_logs")

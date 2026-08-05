@@ -3,15 +3,11 @@
 // and the call-summary function (on-demand from the admin web / the app).
 // Free tier: console.groq.com → GROQ_API_KEY secret.
 import { type SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { DISPOSITIONS } from "./stage.ts";
 
 const GROQ = Deno.env.get("GROQ_API_KEY") ?? "";
 export const hasGroq = () => !!GROQ;
 
-// Canonical lead stages the AI may suggest (mirror of the app's SETTABLE_STAGES).
-const DISPOSITIONS = [
-  "interested", "site_visit", "proposal", "booked",
-  "callback", "not_interested", "dnc",
-];
 
 const SYSTEM_PROMPT =
   "You are a sales manager's assistant analysing a real-estate telecaller's " +

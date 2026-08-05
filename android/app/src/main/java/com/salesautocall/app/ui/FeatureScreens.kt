@@ -1356,8 +1356,10 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
 
+        // The action queue, not a status list — see MainViewModel.LeadFilter.
         val callable = app.campaignContacts.count {
-            it.status in setOf("new", "queued", "callback", "no_answer", "busy")
+            val a = it.id?.let { id -> app.actionByLead[id] }
+            a == "overdue" || a == "call_now"
         }
         Button(
             onClick = {
