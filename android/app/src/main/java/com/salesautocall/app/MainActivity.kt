@@ -101,22 +101,39 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkBatteryOptimization() {
-        // Only ask to bypass Doze when the app genuinely needs to stay alive in the
-        // background — i.e. the in-app SIP inbound listener is on. CallerDesk users
-        // get inbound via the SIM + FCM (high-priority pushes wake the app even in
-        // Doze), so leaving Doze ON for them saves a lot of battery and avoids the
-        // repeated whitelist prompt.
-        val needsBackgroundLiveness = AppPrefs.getIncomingEnabled(this) &&
-            AppPrefs.getAgentId(this).isNotBlank() &&
-            AppPrefs.getSipPassword(this).isNotBlank()
-        if (!needsBackgroundLiveness) return
-
+        // THIS USED TO ASK ONLY SIP USERS, AND THAT WAS THE BUG.
+        //
+        // The old reasoning was that Doze exemption is only needed to keep the
+        // in-app SIP inbound listener alive, so plain SIM reps were skipped to
+        // save their battery. But CallLogSyncWorker and RecordingSyncWorker are
+        // how a SIM rep's work reaches the CRM at all, and Doze suspends
+        // WorkManager. So the reps who most needed the exemption were the only
+        // ones never asked — their calls arrived hours late or not at all,
+        // which is exactly the "Shweta's call log doesn't match the dashboard"
+        // report. I chased that as a capture bug and built a device heartbeat
+        // for it; the heartbeat was worth having, but this line was the cause.
+        //
+        // Everyone is asked now. The prompt is also a proper step in
+        // PermissionOnboarding with a reason attached — this remains only as a
+        // safety net for installs that predate it.
+        //
+        // ONCE, though. This runs on every onResume, so an unguarded ask is a
+        // Settings screen in the rep's face every time they switch back to the
+        // app — the fastest way to teach someone to dismiss our dialogs without
+        // reading them. If they decline, the onboarding row still carries the
+        // ask with its reason attached, and they can grant it whenever.
+        if (AppPrefs.getBatteryAsked(this)) return
+        // ...and never over the onboarding screen. onResume fires while that
+        // screen is up, so an ungated ask would fling Settings at the rep
+        // before they have read a single line of what the app wants or why.
+        // While essentials are missing, PermissionOnboarding owns the ask.
+        if (!essentialsGranted()) return
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         if (!pm.isIgnoringBatteryOptimizations(packageName)) {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                 data = Uri.parse("package:$packageName")
             }
-            runCatching { startActivity(intent) }
+            runCatching { startActivity(intent) }.onSuccess { AppPrefs.setBatteryAsked(this, true) }
         }
     }
 
