@@ -172,3 +172,25 @@ jobs:
       - name: What did not go out
         if: failure()
         run: echo "::warning::Deploy failed — the functions on Supabase are UNCHANGED, still running the previous version."
+
+      # WHEN THE JOB DIES BEFORE ANY STEP RUNS.
+      #
+      # 6 Aug 2026: this workflow failed on "Set up job" with "Failed to resolve
+      # action download info. Error: Service Unavailable" — GitHub's own action
+      # download service, retried twice by the runner and then given up on. Not
+      # one step of this file executed, so even the warning above never printed,
+      # and the merge that had just landed sat on main with the functions on
+      # Supabase still running yesterday's code.
+      #
+      # There is no fixing that from inside the job; it fails before the job
+      # exists. What matters is knowing the recovery, because it is not obvious:
+      #
+      #   * The re-run button needs write access this repo's automation does not
+      #     have, and `gh workflow run` needs workflow_dispatch — which GitHub
+      #     only offers from the DEFAULT branch, and the default branch here is
+      #     NOT main (see the trigger block at the top).
+      #   * So the recovery is another PUSH TO MAIN touching supabase/functions/**
+      #     or this file. That is the whole trick.
+      #
+      # If a merge to main is green everywhere but the app still behaves like the
+      # old build, check this workflow ran at all before debugging the code.
