@@ -61,7 +61,11 @@ export type RepPulse = {
   talkSeconds: number;
   voiceNotes: { summary: string | null; lead: string; disposition: string | null; audioPath: string | null }[];
   moves: { detail: string; lead: string; byAi: boolean }[];
+  /** Whose visit is DATED today. A date is a promise, not attendance. */
   siteVisits: string[];
+  /** Who actually turned up — site_visit_arrived_at stamped today. The only
+   *  evidence in this system that a customer was ever on site. */
+  visitsArrived: string[];
   followUps: number;
   hotLeads: number;
   /** Leads they got real talk time with today, longest first. */
@@ -167,7 +171,10 @@ export async function buildCompany(
     admin.from("lead_activities").select("actor_id, actor_name, contact_id, detail, type")
       .eq("company_id", companyId).gte("created_at", start).lte("created_at", end)
       .in("type", ["status", "site_visit", "follow_up", "budget", "temperature"]),
-    admin.from("contacts").select("salesperson_id, name, phone, site_visit_at")
+    // site_visit_arrived_at comes along because a DATE IS NOT AN ARRIVAL. The
+    // app already refuses to call a visit done without this stamp; the founder's
+    // report was the one place still treating the two as the same thing.
+    admin.from("contacts").select("salesperson_id, name, phone, site_visit_at, site_visit_arrived_at")
       .eq("company_id", companyId).gte("site_visit_at", start).lte("site_visit_at", end),
     admin.from("follow_ups").select("salesperson_id").eq("company_id", companyId)
       .gte("created_at", start).lte("created_at", end),
@@ -188,7 +195,7 @@ export async function buildCompany(
     if (!map.has(id)) {
       map.set(id, {
         id, name: nameById.get(id)!, calls: 0, connected: 0, talkSeconds: 0,
-        voiceNotes: [], moves: [], siteVisits: [], followUps: 0, hotLeads: 0,
+        voiceNotes: [], moves: [], siteVisits: [], visitsArrived: [], followUps: 0, hotLeads: 0,
         topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, bookings: 0,
         revenue: 0, aiUpdates: [],
       });
@@ -280,7 +287,9 @@ export async function buildCompany(
   }
   for (const v of visits.data ?? []) {
     const r = rep(v.salesperson_id); if (!r) continue;
-    r.siteVisits.push(v.name || v.phone || "lead");
+    const who = v.name || v.phone || "lead";
+    r.siteVisits.push(who);
+    if (v.site_visit_arrived_at) r.visitsArrived.push(who);
   }
   for (const f of fups.data ?? []) { const r = rep(f.salesperson_id); if (r) r.followUps++; }
   for (const h of hot.data ?? []) { const r = rep(h.salesperson_id); if (r) r.hotLeads++; }
@@ -318,9 +327,20 @@ export async function buildCompany(
   await Promise.all(pulses.map(async (p) => {
     const active = p.calls || p.voiceNotes.length || p.moves.length || p.siteVisits.length;
     if (!active) { p.narrative = "No activity today — check in with them."; return; }
+    // LABEL THE FACT, DON'T JUST HAND IT OVER.
+    //
+    // This used to pass `site_visits: ["Anuj"]` — a list of leads whose visit
+    // DATE is today — and the model, reasonably, wrote that Anuj visited. The
+    // two states now arrive under names that cannot be confused, and the
+    // scheduled ones carry the warning in the value itself, because a model
+    // skims keys and reads values.
     const facts = {
       rep: p.name, calls: p.calls, connected: p.connected, talk: fmtDur(p.talkSeconds),
-      site_visits: p.siteVisits, follow_ups: p.followUps, hot_leads: p.hotLeads,
+      visits_confirmed_on_site: p.visitsArrived,
+      visits_only_booked_for_today_NOT_confirmed: p.siteVisits
+        .filter((v) => !p.visitsArrived.includes(v))
+        .map((v) => `${v} — said they would come today; nobody has confirmed they arrived`),
+      follow_ups: p.followUps, hot_leads: p.hotLeads,
       next_steps: p.nextSteps.map((s) => `${s.lead} at ${s.when}${s.note ? ` — ${s.note}` : ""}`),
       pipeline_moves: p.moves.slice(0, 12).map((m) => `${m.lead}: ${m.detail}${m.byAi ? " [AI]" : ""}`),
       // Only notes that actually say something. Feeding "(processing)" or an
@@ -346,9 +366,17 @@ export async function buildCompany(
           "seconds a call lasted. Say what it MEANS for the deal.\n" +
           "MONEY IS NOT YOURS TO CLAIM. Never say a customer paid, booked, gave a " +
           "token, blocked or held a unit, or signed anything, unless the facts you " +
-          "were given say so in as many words. A site visit is a site visit. " +
-          "Inventing a payment is the single worst thing you can do here — the " +
-          "founder acts on it.",
+          "were given say so in as many words. " +
+          "A BOOKED VISIT IS NOT A VISIT. Only someone in " +
+          "visits_confirmed_on_site actually came. Anyone in " +
+          "visits_only_booked_for_today_NOT_confirmed said they would come and may " +
+          "well not have — write \"agreed to visit\" or \"was due at the site\", " +
+          "NEVER \"visited\", \"came\", \"turned up\" or \"toured\". " +
+          "INVENT NOTHING ABOUT THE PROPERTY. No unit type, no BHK, no floor, no " +
+          "tower, no view, no \"near the park\" unless those exact words are in the " +
+          "facts. If you do not know what they liked, do not say what they liked. " +
+          "A founder acts on this message and cannot check it — an invented " +
+          "payment or an invented visit is the single worst thing you can do here.",
         JSON.stringify(facts),
         { temperature: 0.4 },
       );
@@ -364,8 +392,11 @@ export async function buildCompany(
       //
       // A prompt is a request. Where the database already knows the answer, the
       // model does not get a vote.
-      const win = moneySafe(String(j.win ?? "").trim(), p);
-      const risk = moneySafe(String(j.risk ?? "").trim(), p);
+      // The prompt asks. This CHECKS — see grounded(). Where the database
+      // already knows the answer, the model does not get a vote.
+      const factsText = JSON.stringify(facts);
+      const win = grounded(String(j.win ?? "").trim(), p, factsText);
+      const risk = grounded(String(j.risk ?? "").trim(), p, factsText);
       if (win) p.win = win;
       if (risk) p.risk = risk;
       // The Pulse page has shown `narrative` since day one and is not part of
@@ -456,10 +487,76 @@ function kpiBlock(k: {
 const MONEY_CLAIM =
   /\b(paid|payment|token|booked the|booking amount|advance|cheque|deposit|blocked the unit|held the unit|hold the unit|signed|registration|down ?payment)\b/i;
 
-function moneySafe(line: string, r: { bookings: number; revenue: number }): string {
+/**
+ * A DATE IS NOT AN ARRIVAL.
+ *
+ * 6 Aug 2026, Ankita's Pulse: "✅ Anuj visited the site today and showed strong
+ * interest in a 2BHK unit near the park." Three inventions in one sentence.
+ * Anuj had a visit BOOKED for 4pm and never came (site_visit_arrived_at null),
+ * there were ZERO calls to him all day so nobody could have learned what he was
+ * interested in, and site_visit_project and notes are both null — there is no
+ * 2BHK and no park anywhere in this database.
+ *
+ * The model was not lying so much as answering the question it was asked. It
+ * was handed `site_visits: ["Anuj"]`, a list built from "site_visit_at falls
+ * today", under a name that says the visit HAPPENED. The app has known better
+ * for months — it refuses to show a visit as done without the on-site check-in
+ * — and the founder's report was the last place still treating a promise and an
+ * attendance as the same fact.
+ *
+ * Ankita spotted it in minutes because she was there. The founder would not
+ * have, and that is the whole danger: a report only gets read by someone who
+ * cannot check it.
+ */
+// PAST TENSE ONLY. The prompt asks the model to write "agreed to visit" or "was
+// due at the site" when nobody has confirmed an arrival, so those exact phrasings
+// have to survive the guard — a filter that eats the wording it just demanded
+// leaves the report with no win at all on a day that had a real one.
+const VISIT_CLAIM =
+  /\b(visited|came (?:to|in|down)\b|turned up|showed up|toured|walked through|attended|arrived|was on site|site visit (?:done|completed|happened|went))\b/i;
+
+/**
+ * Concrete product detail. Allowed ONLY when the word is somewhere in the facts
+ * the model was given — a unit type, a tower, a view is either something a rep
+ * recorded or something the model made up, and there is no third option.
+ */
+const CONCRETE_DETAIL =
+  /\b(\d\s*-?\s*bhk|villa|penthouse|duplex|bungalow|park|garden|corner plot|park[- ]facing|facing|floor|tower|balcony|terrace|clubhouse|swimming pool)\b/gi;
+
+/**
+ * Drop any AI line the CRM cannot back up.
+ *
+ * Deliberately blunt: the line is dropped whole rather than edited down. A
+ * half-corrected sentence still reads as a claim, and there is no safe way to
+ * rewrite "paid the token amount to hold the unit" into something true without
+ * knowing what actually happened. Losing one narrative line costs a nice
+ * sentence; leaving it in costs the founder's trust in every number above it.
+ *
+ * Only fires when the structured facts DISAGREE. A rep whose customer really
+ * did turn up, or really did pay, keeps their sentence in full.
+ */
+function grounded(
+  line: string,
+  r: { bookings: number; revenue: number; visitsArrived: string[] },
+  factsText: string,
+): string {
   if (!line) return line;
-  if (r.bookings > 0 || r.revenue > 0) return line;
-  return MONEY_CLAIM.test(line) ? "" : line;
+
+  // Money nobody recorded.
+  if (!(r.bookings > 0 || r.revenue > 0) && MONEY_CLAIM.test(line)) return "";
+
+  // A visit nobody checked in for.
+  if (r.visitsArrived.length === 0 && VISIT_CLAIM.test(line)) return "";
+
+  // A detail nobody wrote down. Evidence-gated rather than blacklisted, so a
+  // rep who genuinely noted "3 BHK, park facing" keeps every word of it.
+  const haystack = factsText.toLowerCase();
+  for (const m of line.match(CONCRETE_DETAIL) ?? []) {
+    const needle = m.toLowerCase().replace(/\s*-?\s*bhk$/, "bhk").replace(/\s+/g, "");
+    const flat = haystack.replace(/\s+/g, "");
+    if (!flat.includes(needle)) return "";
+  }
+  return line;
 }
 
 /**

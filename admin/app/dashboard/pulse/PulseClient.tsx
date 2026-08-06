@@ -12,7 +12,10 @@ type Rep = {
   talkSeconds: number;
   voiceNotes: { summary: string | null; lead: string; disposition: string | null; audioPath: string | null }[];
   moves: { detail: string; lead: string; byAi: boolean }[];
+  /** Visit DATED today. A date is a promise, not attendance. */
   siteVisits: string[];
+  /** Actually checked in on site today. The only evidence anyone came. */
+  visitsArrived?: string[];
   followUps: number;
   hotLeads: number;
   narrative?: string;
@@ -329,9 +332,21 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                       </div>
                     </details>
                   )}
-                  {r.siteVisits.length > 0 && (
+                  {/* "Visit today" meant a DATE, and read as an attendance.
+                      The two are split here for the same reason the WhatsApp
+                      report now splits them: on 6 Aug a lead with a 4pm slot he
+                      never showed up to was reported to the founder as having
+                      visited. Green is someone who came; amber is someone who
+                      said they would. */}
+                  {(r.visitsArrived ?? []).length > 0 && (
+                    <div style={{ fontSize: 12.5, color: "#16a34a", marginTop: 6 }}>
+                      ✅ Came to site: {(r.visitsArrived ?? []).join(", ")}
+                    </div>
+                  )}
+                  {r.siteVisits.filter((v) => !(r.visitsArrived ?? []).includes(v)).length > 0 && (
                     <div style={{ fontSize: 12.5, color: "#f59e0b", marginTop: 6 }}>
-                      📍 Visit today: {r.siteVisits.join(", ")}
+                      📍 Due at site today, arrival not confirmed:{" "}
+                      {r.siteVisits.filter((v) => !(r.visitsArrived ?? []).includes(v)).join(", ")}
                     </div>
                   )}
 
