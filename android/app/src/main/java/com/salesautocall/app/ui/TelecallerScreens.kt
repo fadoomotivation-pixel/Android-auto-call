@@ -31,7 +31,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Chat
@@ -47,7 +46,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.TrendingUp
@@ -285,6 +283,32 @@ private fun parseHex(hex: String): Color =
     runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { Color(0xFF6A7B85) }
 
 
+/**
+ * A clock the screen can trust.
+ *
+ * Every "is this callback due yet" test read System.currentTimeMillis() once,
+ * at composition, and Compose had no reason to run that code again. So a 3 PM
+ * callback stayed sitting in "Booked for later" while the rep watched the
+ * screen at 3:05 — it only moved when something else forced a recompose, or
+ * when the rep left the screen and came back. That is the "follow-up late
+ * process ho raha hai" report: the callback was on time, the clock on the
+ * screen was not.
+ *
+ * One tick a minute is enough — callbacks are booked to the minute, never to
+ * the second — and it costs one recomposition of the list.
+ */
+@Composable
+private fun rememberNowTick(periodMs: Long = 60_000L): Long {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(periodMs) {
+        while (true) {
+            kotlinx.coroutines.delay(periodMs)
+            now = System.currentTimeMillis()
+        }
+    }
+    return now
+}
+
 private val Teal = Color(0xFF5A62C9)    // jade-adjacent: token money
 
 // The seven-stage STAGES list and stageOf() that used to live here are gone.
@@ -445,16 +469,10 @@ private fun relativeDue(iso: String): String {
     return if (diff <= 0) (if (absMin < 1) "Due now" else "Overdue $txt") else "in $txt"
 }
 
-private fun initials(name: String): String =
-    name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("").ifBlank { "?" }
-
-// One saturation band, hues from the system — avatars vary without shouting.
-private val avatarColors = listOf(
-    Color(0xFF6A7B85), Color(0xFF75629B), Color(0xFF3E7F8A), Color(0xFF4353B8),
-    Color(0xFF8A6D3B), Color(0xFF96617A), Color(0xFF4E7A8C), Color(0xFF5A62C9),
-)
-
-private fun colorFor(seed: String): Color = avatarColors[abs(seed.hashCode()) % avatarColors.size]
+// The round, name-coloured Avatar and its hash palette are gone with the last
+// screen that used one. Every card now draws the same 40dp squared initials
+// block in one neutral ink — see initialsOf(). Two avatar styles across two
+// lists of the same leads was a difference that carried no information.
 
 private fun openWhatsApp(context: android.content.Context, phone: String, message: String? = null) {
     com.salesautocall.app.data.WhatsAppLauncher.open(context, phone, message)
@@ -472,19 +490,6 @@ private fun waTemplate(name: String?, project: String?, agent: String?, company:
         ?: " Aapki property enquiry ke regarding."
     return "$hi ${sv.iAm(speaksAs)} $who$co se baat ${sv.doing(speaksAs, "kar")}.$ref " +
         "Property ki details aur best offer share karna ${sv.want(speaksAs)} — kya abhi baat kar sakte hain?"
-}
-
-@Composable
-private fun Avatar(name: String, size: Int = 44, tint: Color? = null) {
-    // With a [tint] the avatar carries the lead's stage colour (colour =
-    // information); without one it falls back to the name-hash palette.
-    val c = tint ?: colorFor(name)
-    Box(
-        Modifier.size(size.dp).clip(CircleShape).background(c.copy(alpha = 0.15f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(initials(name), color = c, fontWeight = FontWeight.Bold, fontSize = (size / 2.6).sp)
-    }
 }
 
 @Composable
@@ -1461,7 +1466,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // lead_stages) and `app.workByLead` (v_lead_workstate). If a count on
     // this screen ever disagrees with the dashboard again, one of them stopped
     // reading these and started deciding for itself.
-    val nowMs = System.currentTimeMillis()
+    // Ticking, not frozen at composition — see rememberNowTick. Overdue badges
+    // on this list used to go stale the moment the screen stopped changing.
+    val nowMs = rememberNowTick()
+    // "Call now" is the SERVER's answer (v_lead_workstate compares due_at to
+    // now() in Postgres), so a local tick alone cannot move a lead into it. Each
+    // minute we re-ask — one small view, not the whole lead list. Skipping the
+    // first tick avoids repeating the fetch loadLeads has just done.
+    var settled by remember { mutableStateOf(false) }
+    LaunchedEffect(nowMs) { if (settled) vm.refreshWorkStates() else settled = true }
     fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
 
     val base = when {
@@ -3058,7 +3071,11 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     LaunchedEffect(Unit) { vm.loadFollowUps(); vm.loadLeads() }
 
     var rescheduleFor by remember { mutableStateOf<FollowUp?>(null) }
-    val now = System.currentTimeMillis()
+    // Ticks once a minute, so a callback whose time arrives while the rep is
+    // looking at this screen walks into Call now by itself. It used to need the
+    // rep to leave and come back — which is how a callback booked for 3 PM got
+    // rung at 3:40 and the screen took the blame for being "late".
+    val now = rememberNowTick()
     val all = app.followUpList
     fun at(f: FollowUp) = instantMillis(f.dueAt) ?: Long.MAX_VALUE
 
@@ -3117,40 +3134,35 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        // ONE header line. It used to be a headline, a subtitle that said
+        // nothing ("Never miss a follow-up"), and then a row of three stat
+        // tiles whose numbers were repeated verbatim by the chips directly
+        // underneath. Between them they ate the top third of a small phone,
+        // so a rep opening this screen saw two callbacks and a lot of decor.
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Follow Ups", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Never miss a follow-up", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Follow Ups", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(onClick = { vm.loadFollowUps(force = true) }, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(19.dp))
                 }
-                IconButton(onClick = { vm.loadFollowUps(force = true) }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                }
-                TextButton(onClick = onBack) { Text("Back") }
+                TextButton(
+                    onClick = onBack,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
+                ) { Text("Back", fontSize = 13.sp) }
             }
         }
-        // Priority stats
+        // The chips ARE the counts. Same row, same look, same behaviour as the
+        // Leads screen — one line of "Call now 24 · Later today 3 · Tomorrow 6"
+        // with the fade at the right edge showing there is more to scroll.
+        //
+        // Still no Morning/Afternoon/Overdue: those were slices of the same
+        // callbacks under different names, which is what made this screen hard
+        // to trust. Each chip here is a different WHEN, and the line underneath
+        // spells out whichever one is selected.
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile("📞", toCall.size.toString(), "Call now", Red, Modifier.weight(1f))
-                StatTile("🕒", laterToday.size.toString(), "Later today", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                StatTile("🔔", all.size.toString(), "Scheduled", Green, Modifier.weight(1f))
-            }
-        }
-        // filters
-        item {
-            // Tabs, not a dropdown.
-            //
-            // A dropdown would hide four counts behind a tap and put the rep in
-            // a mode they have to remember they are in. These read as one line
-            // — "24 to call, 3 later today, 6 tomorrow" — and switching costs
-            // one tap with the number already in front of you.
-            //
-            // Still no Morning/Afternoon/Overdue: those were slices of the same
-            // leads under different names, which is what made this screen hard
-            // to trust in the first place. Each tab here is a different WHEN.
             Column {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CompactFilterRow {
                     FilterTab("Call now", toCall.size, filter == "tocall", Red) { picked = "tocall" }
                     FilterTab("Later today", laterToday.size, filter == "later", MaterialTheme.colorScheme.primary) { picked = "later" }
                     FilterTab("Tomorrow", tomorrow.size, filter == "tomorrow", Amber) { picked = "tomorrow" }
@@ -3162,58 +3174,43 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        // Bulk reschedule: clear an overdue pile-up in one tap.
-        if (overdueStrict.isNotEmpty()) {
+        // The one button that does the day's work, and the one that admits
+        // defeat, in that order. "Auto queue mode" was a full card with an icon
+        // circle, a title and a subtitle wrapped around a button — three lines
+        // of explanation for a thing whose whole meaning fits on the button.
+        if (dueContacts.isNotEmpty() || overdueStrict.isNotEmpty()) {
             item {
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                        .background(Red.copy(alpha = 0.10f))
-                        .clickable {
-                            val tomorrow10 = java.time.ZonedDateTime.now().plusDays(1)
-                                .withHour(10).withMinute(0).withSecond(0).toInstant().toEpochMilli()
-                            vm.rescheduleFollowUps(overdueStrict, tomorrow10)
+                Column {
+                    if (dueContacts.isNotEmpty()) {
+                        Row(
+                            Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primary)
+                                .clickable { vm.callList(dueContacts, "Due follow-ups") },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null,
+                                tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(7.dp))
+                            Text("Call all ${dueContacts.size} due, one after another",
+                                color = Color.White, fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold, maxLines = 1)
                         }
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
-                ) {
-                    Text("⚠️ ${overdueStrict.size} overdue · tap to push all to tomorrow 10 AM",
-                        style = MaterialTheme.typography.labelLarge, color = Red, fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
-        // auto-queue
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Bolt, contentDescription = "Auto queue", tint = MaterialTheme.colorScheme.onPrimary)
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Auto queue mode", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("Call your due leads back to back", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    val next = toCall.firstOrNull() ?: all.firstOrNull()
-                    val canQueue = dueContacts.isNotEmpty()
-                    Box(
-                        Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
-                            .clickable(enabled = next != null) {
-                                // Power-dial all due follow-ups back-to-back when we can
-                                // map them to leads; otherwise just dial the next one.
-                                if (canQueue) vm.callList(dueContacts, "Due follow-ups")
-                                else next?.let { vm.dialManual(it.phone) }
-                            }
-                            .padding(horizontal = 14.dp, vertical = 9.dp),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = "Start", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(if (canQueue) "Call ${dueContacts.size} due" else "Call next", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
-                        }
+                    if (overdueStrict.isNotEmpty()) {
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            "${overdueStrict.size} left over from before today — tap to move them all to tomorrow 10 AM",
+                            fontSize = 11.5.sp, color = Red, fontWeight = FontWeight.Medium,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    val tomorrow10 = java.time.ZonedDateTime.now().plusDays(1)
+                                        .withHour(10).withMinute(0).withSecond(0).toInstant().toEpochMilli()
+                                    vm.rescheduleFollowUps(overdueStrict, tomorrow10)
+                                }
+                                .padding(vertical = 4.dp),
+                        )
                     }
                 }
             }
@@ -3238,6 +3235,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 val cid = f.contactId
                 FollowUpCard(
                     f = f,
+                    now = now,
                     onCall = { vm.dialManual(f.phone) },
                     onWhatsApp = { openWhatsApp(context, f.phone, waTemplate(f.name, null, app.profile?.fullName, app.company?.name, app.profile?.speaksAs)) },
                     onSnooze = { f.id?.let { vm.snoozeFollowUp(it, 1) } },
@@ -3264,26 +3262,27 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
 }
 
 /**
- * One plain line saying why this callback exists and what it is waiting on.
+ * One plain line saying why this callback exists.
  *
  * The note is written by whoever booked it — the rep, the voice-note AI, or the
  * attempt ladder — so it already says why. This just gives it a sentence around
  * it, and says something useful when there is no note at all instead of showing
  * nothing.
+ *
+ * It no longer repeats the due time. The card already prints that twice, in the
+ * pill and the day/time line right beside it, and a third copy at the end of
+ * this sentence was pushing the actual note onto a second line for no reason.
  */
-private fun whyThisCallback(f: FollowUp, overdue: Boolean): String {
+private fun whyThisCallback(f: FollowUp): String {
     val note = (f.note ?: "").trim()
-    val when_ = if (overdue) "was due ${relativeDue(f.dueAt)}" else "due ${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}"
     return when {
         // The AI's own wording; strip its prefix and let it speak for itself.
         note.startsWith("AI:", ignoreCase = true) ->
-            "🎤 From your voice note — ${note.removePrefix("AI:").removePrefix("ai:").trim()} · $when_"
+            "🎤 ${note.removePrefix("AI:").removePrefix("ai:").trim()}"
         // The no-answer ladder books these, and the note already counts the try.
-        note.contains("Attempt", ignoreCase = true) ->
-            "🔁 Nobody picked up — $note · $when_"
-        note.isNotEmpty() -> "📝 You said: $note · $when_"
-        overdue -> "↻ You booked a call back, and it $when_"
-        else -> "↻ You booked a call back · $when_"
+        note.contains("Attempt", ignoreCase = true) -> "🔁 Nobody picked up — $note"
+        note.isNotEmpty() -> "📝 You said: $note"
+        else -> "↻ You booked a call back"
     }
 }
 
@@ -3295,92 +3294,157 @@ private fun whyThisCallback(f: FollowUp, overdue: Boolean): String {
  * isn't there.
  */
 @Composable
-private fun FollowUpCard(f: FollowUp, onCall: () -> Unit, onWhatsApp: () -> Unit, onSnooze: () -> Unit, onReschedule: () -> Unit, onUpdate: (() -> Unit)?, onDone: () -> Unit, needsUpdate: Boolean = false) {
-    val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= System.currentTimeMillis()
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+private fun FollowUpCard(
+    f: FollowUp,
+    /** The screen's ticking clock, so a card turns overdue on its own. */
+    now: Long,
+    onCall: () -> Unit,
+    onWhatsApp: () -> Unit,
+    onSnooze: () -> Unit,
+    onReschedule: () -> Unit,
+    onUpdate: (() -> Unit)?,
+    onDone: () -> Unit,
+    needsUpdate: Boolean = false,
+) {
+    // FIVE BUTTONS WAS THE PROBLEM.
+    //
+    // Call, WhatsApp, Update, Snooze and Pick Time each got a full-width or
+    // half-width block of their own, stacked in three rows — about 230dp of
+    // card, so two callbacks filled a phone. A rep with twenty-four to get
+    // through was scrolling more than dialling, and every card asked them to
+    // choose between five things when the answer is nearly always "call them".
+    //
+    // Same three-button row as a lead card now — Update · WhatsApp · Call, with
+    // Call solid and widest — and the two time controls demoted to small text
+    // underneath, where they are still one tap away but no longer compete.
+    val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= now
+    val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val accent = if (overdue) Red else jade
+    val who = f.name?.takeIf { it.isNotBlank() } ?: prettyPhone(f.phone)
+
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(f.name ?: f.phone)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(f.name ?: f.phone, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                    Text(f.phone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Pill(relativeDue(f.dueAt), if (overdue) Red else MaterialTheme.colorScheme.primary,
-                        (if (overdue) Red else MaterialTheme.colorScheme.primary).copy(alpha = 0.12f))
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccessTime, contentDescription = "Due time", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(3.dp))
-                        Text("${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+        Row(verticalAlignment = Alignment.Top) {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
+                    .background(muted.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(initialsOf(f.name ?: f.phone), style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold, color = muted)
             }
-            // WHY this callback is sitting here, in one line, on every card.
-            //
-            // A rep opening Follow Ups saw a name, a phone and a time and had to
-            // remember what any of it was about — so the honest reaction was
-            // "this shouldn't be here". It is never a mystery to the app: either
-            // the rep booked it themselves, or the AI booked it from a voice
-            // note, or the attempt ladder booked it because nobody picked up.
-            // The note already carries that; it was just printed as a bare 📝
-            // line and only when a note existed at all.
-            Spacer(Modifier.height(8.dp))
-            Text(
-                whyThisCallback(f, overdue),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (overdue) Red else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = if (overdue) FontWeight.SemiBold else FontWeight.Normal,
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(Icons.Default.Call, "Call", Green, Modifier.weight(1f), onClick = onCall)
-                ActionButton(Icons.Default.Chat, "WhatsApp", Color(0xFF25D366), Modifier.weight(1f), onClick = onWhatsApp)
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text(who, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text("📞 ${prettyPhone(f.phone)}", fontSize = 12.sp, color = muted,
+                    letterSpacing = 0.2.sp, maxLines = 1)
             }
-            Spacer(Modifier.height(8.dp))
-            // Update REPLACES the old "Done".
-            //
-            // Done ticked the callback off and recorded nothing — which is
-            // exactly how a customer who said "interested, call Friday" ended up
-            // as a closed callback on a lead that never moved. Update asks the
-            // one question and then does all of it: the stage moves, the note and
-            // temperature save, the next callback books itself, and THIS callback
-            // closes. Two buttons that both looked like "finish" but meant
-            // different things is the confusion; now there is one.
+            Spacer(Modifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Pill(relativeDue(f.dueAt), accent, accent.copy(alpha = 0.12f))
+                Spacer(Modifier.height(3.dp))
+                Text("${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}", fontSize = 10.5.sp,
+                    color = muted, maxLines = 1)
+            }
+        }
+        // WHY this callback is sitting here, in one line, on every card.
+        //
+        // A rep opening Follow Ups saw a name, a phone and a time and had to
+        // remember what any of it was about — so the honest reaction was "this
+        // shouldn't be here". It is never a mystery to the app: either the rep
+        // booked it themselves, or the AI booked it from a voice note, or the
+        // attempt ladder booked it because nobody picked up.
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                .background(accent.copy(alpha = 0.09f))
+                .padding(horizontal = 9.dp, vertical = 7.dp),
+        ) {
+            Text(whyThisCallback(f), fontSize = 12.sp, color = accent,
+                fontWeight = FontWeight.Medium, lineHeight = 16.sp, maxLines = 3,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(9.dp))
+        // Update REPLACES the old "Done".
+        //
+        // Done ticked the callback off and recorded nothing — which is exactly
+        // how a customer who said "interested, call Friday" ended up as a closed
+        // callback on a lead that never moved. Update asks the one question and
+        // then does all of it: the stage moves, the note and temperature save,
+        // the next callback books itself, and THIS callback closes.
+        Row(verticalAlignment = Alignment.CenterVertically) {
             if (onUpdate != null) {
                 // A just-finished call turns it amber and sets it wobbling —
                 // the same reminder the Leads list gives, in the place a rep
                 // ringing their callbacks is actually looking.
-                Box(
-                    Modifier.fillMaxWidth().height(46.dp).nudgeShake(needsUpdate)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (needsUpdate) Amber else MaterialTheme.colorScheme.primary)
+                val updateTint = if (needsUpdate) Amber else MaterialTheme.colorScheme.primary
+                Row(
+                    Modifier.nudgeShake(needsUpdate).weight(1f).height(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(updateTint.copy(alpha = if (needsUpdate) 0.20f else 0.10f))
                         .clickable { onUpdate() },
-                    contentAlignment = Alignment.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val ink = if (needsUpdate) Color.White else MaterialTheme.colorScheme.onPrimary
-                        Icon(Icons.Default.CheckCircle, contentDescription = null,
-                            tint = ink, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (needsUpdate) "Update this call" else "Update", color = ink,
-                            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    }
+                    Text(if (needsUpdate) "✎ Update call" else "✎ Update", fontSize = 12.5.sp,
+                        color = updateTint, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             } else {
-                ActionButton(Icons.Default.CheckCircle, "Done", MaterialTheme.colorScheme.primary,
-                    Modifier.fillMaxWidth(), onClick = onDone)
+                // Not linked to a lead, so there is no funnel to move — ticking
+                // the callback off is genuinely all this can do.
+                Row(
+                    Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+                        .clickable { onDone() },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text("✓ Done", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold, maxLines = 1)
+                }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ActionButton(Icons.Default.Schedule, "Snooze", Amber, Modifier.weight(1f), onClick = onSnooze)
-                ActionButton(Icons.Default.CalendarMonth, "Pick Time", Slate, Modifier.weight(1f), onClick = onReschedule)
+            Spacer(Modifier.width(7.dp))
+            Row(
+                Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(10.dp))
+                    .background(WaGreen.copy(alpha = 0.12f))
+                    .clickable { onWhatsApp() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(Icons.Default.Chat, contentDescription = null, tint = WaGreen, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(5.dp))
+                Text("WhatsApp", fontSize = 12.5.sp, color = WaGreen, fontWeight = FontWeight.Bold, maxLines = 1)
             }
+            Spacer(Modifier.width(7.dp))
+            Row(
+                Modifier.weight(1.25f).height(38.dp).clip(RoundedCornerShape(10.dp))
+                    .background(jade)
+                    .clickable { onCall() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Call", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
+        }
+        // "Not now" lives here — small, plain and out of the way of the three
+        // buttons that move work forward.
+        Spacer(Modifier.height(7.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🕒 In 1 hour", fontSize = 11.5.sp, color = muted, fontWeight = FontWeight.Medium,
+                modifier = Modifier.clip(RoundedCornerShape(7.dp)).clickable { onSnooze() }
+                    .padding(horizontal = 6.dp, vertical = 3.dp))
+            Spacer(Modifier.width(10.dp))
+            Text("📅 Pick another time", fontSize = 11.5.sp, color = muted, fontWeight = FontWeight.Medium,
+                modifier = Modifier.clip(RoundedCornerShape(7.dp)).clickable { onReschedule() }
+                    .padding(horizontal = 6.dp, vertical = 3.dp))
         }
     }
 }

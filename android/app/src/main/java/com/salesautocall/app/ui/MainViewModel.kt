@@ -1486,6 +1486,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * Re-read ONLY what the clock changes: v_lead_workstate.
+     *
+     * "Call now" is a server-side answer — due_at compared against now() inside
+     * the view — and the app was asking for it once, when a screen opened, then
+     * holding that answer for as long as the rep stayed on the screen. So a
+     * callback booked for 3 PM was still filed under "booked for later" at 3:40
+     * for a rep who had not navigated away and back. That is Ankita's "follow-up
+     * late process ho raha hai": nothing was late except the app's copy of the
+     * time.
+     *
+     * Deliberately NOT loadLeads(). The leads themselves have not changed — only
+     * which side of now() their due time falls on — so this fetches one small
+     * view instead of leads + stages + project sites, and it leaves the list
+     * alone if the network is down rather than blanking it or raising an error
+     * banner over a background refresh nobody asked for.
+     */
+    fun refreshWorkStates() {
+        viewModelScope.launch {
+            val uid = Repository.currentUserId() ?: return@launch
+            val work = runCatching { Repository.fetchWorkStates(uid) }.getOrNull() ?: return@launch
+            if (work.isEmpty()) return@launch
+            set { it.copy(workByLead = work.associateBy { w -> w.contactId }) }
+        }
+    }
+
+    /**
      * App-open catch-up for lead assignments — the fail-safe for the push:
      * if a lead was assigned while the rep's device wasn't registered (fresh
      * install / token rotated), the FCM alert is lost. On every foreground we

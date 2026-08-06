@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.History
@@ -90,6 +91,39 @@ fun PermissionOnboarding(onDone: () -> Unit) {
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { refresh++ }
 
+    // BATTERY IS A STEP, NOT AN AFTERTHOUGHT.
+    //
+    // Doze exemption used to be requested only for reps using the in-app SIP
+    // listener (MainActivity.checkBatteryOptimization). Every plain SIM
+    // telecaller — which is most of them — was never asked, so Android
+    // suspended their background call-log sync and their calls arrived at the
+    // CRM hours late or not at all. That is the "Shweta's call log doesn't
+    // match the dashboard" report, and it was never a capture bug.
+    //
+    // It is not a runtime permission, so it cannot ride the permission
+    // launcher: it is a Settings intent, and the result comes back only when
+    // the user returns to the app. Hence the resume re-check below.
+    fun batteryOk(): Boolean = refresh.let {
+        val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+        pm.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    val batteryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { refresh++ }
+
+    // Android returns nothing useful from the battery dialog, and a rep may
+    // also grant a permission from Settings and come back. Re-check whenever
+    // this screen is resumed so the ticks are never stale.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) refresh++
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
     val essentialsLeft = rows.filter { it.essential && !granted(it) }
     val anyLeft = rows.filter { !granted(it) }
 
@@ -146,6 +180,59 @@ fun PermissionOnboarding(onDone: () -> Unit) {
             Spacer(Modifier.height(10.dp))
         }
 
+        // ── Keep working in the background ──
+        run {
+            val ok = batteryOk()
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surface).padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.BatteryFull, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.size(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Keep working in background", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Without this your phone stops the app and your calls reach the office late",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.size(10.dp))
+                if (ok) {
+                    Box(Modifier.size(32.dp).clip(CircleShape).background(Color16A34A.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Check, contentDescription = "Allowed", tint = Color16A34A, modifier = Modifier.size(20.dp))
+                    }
+                } else {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
+                            .clickable {
+                                runCatching {
+                                    batteryLauncher.launch(
+                                        android.content.Intent(
+                                            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                            android.net.Uri.parse("package:${context.packageName}"),
+                                        ),
+                                    )
+                                }.onSuccess {
+                                    // Asked here, with a reason attached — so
+                                    // MainActivity's safety net must not ask
+                                    // again the moment this screen closes.
+                                    com.salesautocall.app.data.AppPrefs.setBatteryAsked(context, true)
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        Text("Allow", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
         Spacer(Modifier.height(10.dp))
         if (anyLeft.isNotEmpty()) {
             Button(
@@ -155,6 +242,19 @@ fun PermissionOnboarding(onDone: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
                 Text(if (essentialsLeft.isEmpty()) "Continue" else "Skip for now")
+            }
+            // Skipping is allowed — a blocked rep is a rep who cannot work —
+            // but it must not be silent. Naming the consequence is the whole
+            // difference between a rep who denies by accident and one who
+            // chooses to.
+            if (essentialsLeft.isNotEmpty()) {
+                Text(
+                    "Without ${essentialsLeft.joinToString(", ") { it.title.lowercase() }}, your calls will not reach the office.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         } else {
             Button(onClick = onDone, modifier = Modifier.fillMaxWidth().height(52.dp)) {
