@@ -8,6 +8,7 @@ import com.salesautocall.app.data.AppPrefs
 import com.salesautocall.app.data.Attendance
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.LeadStage
+import com.salesautocall.app.data.LeadWork
 import com.salesautocall.app.data.ChatMsg
 import com.salesautocall.app.data.CampaignStat
 import com.salesautocall.app.data.Company
@@ -106,9 +107,10 @@ data class AppState(
     val leads: List<Contact> = emptyList(),
     /** The canonical stage vocabulary (labels, colours, order, semantics). */
     val leadStages: List<LeadStage> = emptyList(),
-    /** contact id -> derived action state, straight from v_lead_workstate.
-     *  Never computed on the phone: one clock, and it lives in the database. */
-    val actionByLead: Map<String, String> = emptyMap(),
+    /** contact id -> its row from v_lead_workstate: the derived action state
+     *  AND the last real call. Never computed on the phone — one clock, and it
+     *  lives in the database. */
+    val workByLead: Map<String, LeadWork> = emptyMap(),
     /** Company project pins, for geo-fencing site-visit arrivals. */
     val projectSites: List<ProjectSite> = emptyList(),
     val leadsLoading: Boolean = false,
@@ -1276,9 +1278,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Callable = the action queue, same rule the Leads screen power-dials
         // from. It used to be a status list that quietly excluded a lead whose
         // callback was genuinely due just because its disposition was 'called'.
-        val work = _state.value.actionByLead
+        val work = _state.value.workByLead
         val callable = contacts.filter {
-            val a = it.id?.let { id -> work[id] }
+            val a = it.id?.let { id -> work[id]?.actionState }
             a == "overdue" || a == "call_now"
         }
         if (callable.isEmpty()) {
@@ -1468,7 +1470,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         it.copy(
                             leads = list, leadsLoading = false,
                             leadStages = if (stages.isNotEmpty()) stages else it.leadStages,
-                            actionByLead = work.associate { w -> w.contactId to w.actionState },
+                            workByLead = work.associateBy { w -> w.contactId },
                         )
                     }
                     // Keep the on-device phone → lead map fresh so Lead Ring can

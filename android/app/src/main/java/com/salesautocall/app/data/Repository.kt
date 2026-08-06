@@ -1074,7 +1074,9 @@ object Repository {
     suspend fun fetchWorkStates(salespersonId: String): List<LeadWork> =
         runCatching {
             client.from("v_lead_workstate").select(
-                columns = io.github.jan.supabase.postgrest.query.Columns.raw("contact_id, action_state, due_at")
+                columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                    "contact_id, action_state, due_at, last_call_at, last_call_seconds, calls_total",
+                )
             ) {
                 filter { eq("salesperson_id", salespersonId) }
             }.decodeList<LeadWork>()

@@ -94,6 +94,7 @@ import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.FollowUp
 import com.salesautocall.app.data.LeadStage
+import com.salesautocall.app.data.LeadWork
 import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.data.LeaderboardRow
 import kotlin.math.abs
@@ -132,7 +133,73 @@ private data class ActionChip(val code: String, val label: String, val color: Co
  * Contact.id is nullable (a row not yet round-tripped through the server), so
  * this cannot be a bare map lookup.
  */
-private fun AppState.actionOf(c: Contact): String? = c.id?.let { actionByLead[it] }
+private fun AppState.actionOf(c: Contact): String? = c.id?.let { workByLead[it]?.actionState }
+
+/**
+ * When the lead arrived, to the minute: "Today 9:12 am" · "Yest 4:30 pm" ·
+ * "3 Aug 11:05 am".
+ *
+ * The day word alone was useless on a busy morning — thirty leads all said
+ * "Today". The clock is what lets a rep say "the one that came in just before
+ * lunch" and find it.
+ */
+private fun arrivedLabel(iso: String): String {
+    val ms = instantMillis(iso) ?: return ""
+    val d = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault())
+    val today = java.time.LocalDate.now()
+    val day = when (d.toLocalDate()) {
+        today -> "Today"
+        today.minusDays(1) -> "Yest"
+        else -> "${d.dayOfMonth} ${d.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }}"
+    }
+    return "$day ${timeOnly(iso)}"
+}
+
+/** A past instant as "just now" / "12m ago" / "3h ago" / "2d ago".
+ *  relativeDue() renders the past as "Overdue 2h 30m", which is the right words
+ *  for a missed callback and the wrong ones for "when did we last speak". */
+private fun agoLabel(iso: String): String {
+    val ms = instantMillis(iso) ?: return ""
+    val min = (System.currentTimeMillis() - ms) / 60_000
+    return when {
+        min < 1 -> "just now"
+        min < 60 -> "${min}m ago"
+        min < 1440 -> "${min / 60}h ago"
+        else -> "${min / 1440}d ago"
+    }
+}
+
+/** Seconds → "8s" · "4m 12s" · "1h 2m". CallsScreen has its own, but it is
+ *  file-private and renders a ring-out as "0m 08s", which reads like a bug. */
+private fun callLen(sec: Int): String {
+    if (sec < 60) return "${sec}s"
+    val m = sec / 60
+    if (m < 60) return "${m}m ${sec % 60}s"
+    return "${m / 60}h ${m % 60}m"
+}
+
+/**
+ * The last real call, as one line a rep can act on.
+ *
+ * Under 30 seconds is not a conversation — it is a ring-out, a voicemail or a
+ * misdial, and calling it "called" is how a lead gets left alone for a week on
+ * the strength of a call nobody had. The two are coloured differently on
+ * purpose: green means someone spoke, amber means nobody did.
+ */
+private fun lastCallLine(work: LeadWork?): Pair<String, Color>? {
+    val at = work?.lastCallAt ?: return null
+    val secs = work.lastCallSeconds
+    val ago = agoLabel(at)
+    val many = if (work.callsTotal > 1) " · ${work.callsTotal} calls" else ""
+    return if (secs >= 30) {
+        "📞 Talked ${callLen(secs)} · $ago$many" to Green
+    } else {
+        "📞 No talk (${callLen(secs)}) · $ago$many" to Amber
+    }
+}
+
+/** This lead's row from v_lead_workstate — action state plus the last real call. */
+private fun AppState.workOf(c: Contact): LeadWork? = c.id?.let { workByLead[it] }
 
 /**
  * Call now sits FIRST and is what the screen opens on. A telecaller's job is
@@ -528,19 +595,10 @@ private fun GhostIconButton(icon: androidx.compose.ui.graphics.vector.ImageVecto
     }
 }
 
-/** When the lead came in: "Today" / "Yesterday" / "6 Jul" (year added if older). */
-private fun ageLabel(iso: String?): String? {
-    val ms = instantMillis(iso ?: return null) ?: return null
-    val zone = java.time.ZoneId.systemDefault()
-    val d = java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
-    val today = java.time.LocalDate.now(zone)
-    return when {
-        d == today -> "Today"
-        d == today.minusDays(1) -> "Yesterday"
-        d.year == today.year -> d.format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
-        else -> d.format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy"))
-    }
-}
+// ageLabel is gone: the card now shows the exact arrival clock (arrivedLabel)
+// rather than the day word, because thirty leads all saying "Today" told a rep
+// nothing about which one they were looking at.
+
 
 /** "Rahul Sharma" → "RS", "Priya" → "PR", no name → "#". For lead avatars. */
 private fun initialsOf(name: String?): String {
@@ -1400,7 +1458,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     //
     // Both questions are now answered once, by the database, and merely
     // rendered here: `contact.stage` (a column, monotonic, joined to
-    // lead_stages) and `app.actionByLead` (v_lead_action_state). If a count on
+    // lead_stages) and `app.workByLead` (v_lead_workstate). If a count on
     // this screen ever disagrees with the dashboard again, one of them stopped
     // reading these and started deciding for itself.
     val nowMs = System.currentTimeMillis()
@@ -1716,7 +1774,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     val leadCard: @Composable (Contact) -> Unit = { c ->
                         LeadCard(
                             stages = app.leadStages,
-                            action = app.actionOf(c),
+                            work = app.workOf(c),
                             c = c,
                             followUp = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone],
                             cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
@@ -2129,8 +2187,9 @@ private fun LeadCard(
     /** The canonical stage rows. The card renders a stage's label and colour;
      *  it does not get to decide either. Empty only in previews. */
     stages: List<LeadStage> = emptyList(),
-    /** This lead's derived action state — what to do about it now. */
-    action: String? = null,
+    /** This lead's row from v_lead_workstate: what to do now, and the last real
+     *  call against it. */
+    work: LeadWork? = null,
     followUp: FollowUp? = null,
     cloudOn: Boolean,
     selectMode: Boolean = false,
@@ -2269,9 +2328,16 @@ private fun LeadCard(
                         Spacer(Modifier.width(6.dp))
                         Text(tempLabel, fontSize = 10.sp, color = tempColor, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
-                    ageLabel(c.createdAt ?: c.assignedAt)?.let {
+                    // WHEN THIS LEAD ACTUALLY ARRIVED, to the minute.
+                    //
+                    // "Today" was shown for a lead that came in at 9am and one
+                    // that came in four minutes ago. On a morning when thirty
+                    // arrive, that word tells a rep nothing about which to ring
+                    // first, and nothing that helps them remember which lead
+                    // this was.
+                    (c.createdAt ?: c.assignedAt)?.let {
                         Spacer(Modifier.width(6.dp))
-                        Text(it, fontSize = 10.sp, color = muted, maxLines = 1)
+                        Text(arrivedLabel(it), fontSize = 10.sp, color = muted, maxLines = 1)
                     }
                 }
                 // Money, second and prominent — the number a rep sorts by.
@@ -2294,6 +2360,17 @@ private fun LeadCard(
                             color = if (pct >= 60) Teal else if (pct >= 40) Amber else Slate,
                             fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
+                }
+                // DID WE ACTUALLY TALK, AND FOR HOW LONG.
+                //
+                // The card said nothing about the last call, so a three-second
+                // misdial and a twelve-minute conversation looked identical —
+                // 170 of the 419 called leads in this database are under thirty
+                // seconds. A rep about to dial needs to know which kind this
+                // was before they open with "as I was saying".
+                lastCallLine(work)?.let { (text, tint) ->
+                    Text(text, fontSize = 11.5.sp, color = tint,
+                        fontWeight = FontWeight.Medium, maxLines = 1)
                 }
                 // Project and area. Two lines, because real project names are
                 // long and "Kunj Vihari, Bridge Vat…" tells a rep less than
@@ -2334,7 +2411,7 @@ private fun LeadCard(
                     .padding(horizontal = 9.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                ACTIONS.firstOrNull { it.code == action }?.let { a ->
+                ACTIONS.firstOrNull { it.code == work?.actionState }?.let { a ->
                     Text(a.label, fontSize = 11.sp, color = a.color,
                         fontWeight = FontWeight.Bold, maxLines = 1)
                     Spacer(Modifier.width(7.dp))
