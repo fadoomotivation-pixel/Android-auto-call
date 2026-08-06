@@ -84,6 +84,17 @@ export type RepPulse = {
   revenue: number;
   /** What the AI did on its own, aggregated. Never one line per lead. */
   aiUpdates: string[];
+  /**
+   * Can the call numbers above be believed?
+   *
+   * FALSE means this phone has not successfully synced its call log recently —
+   * so `calls` and `connected` are what the CRM RECEIVED, which on a broken
+   * phone is zero no matter how hard the rep worked. Straight from
+   * v_device_sync_health.trustworthy, which has always known this.
+   */
+  callsTrusted: boolean;
+  /** When the phone last synced call logs successfully, for the warning line. */
+  syncedAt: string | null;
   /** The single best thing that happened today, in one sentence. */
   win?: string;
   /** The one thing that could go wrong if nobody acts. */
@@ -158,7 +169,7 @@ export async function buildCompany(
     .select("id, name, phone").eq("company_id", companyId);
   const leadName = new Map((contacts ?? []).map((c) => [c.id, c.name || c.phone || "lead"]));
 
-  const [calls, notes, acts, visits, fups, hot, steps] = await Promise.all([
+  const [calls, notes, acts, visits, fups, hot, steps, health] = await Promise.all([
     // started_at, not created_at: the phone's call-log sync backfills a week of
     // history the first time it runs, and every one of those rows is created
     // TODAY — which reported a whole week as one day's work. off_crm calls are
@@ -187,6 +198,17 @@ export async function buildCompany(
       .eq("company_id", companyId).eq("status", "pending")
       .gte("due_at", start).lte("due_at", `${istDate(2)}T23:59:59+05:30`)
       .order("due_at", { ascending: true }),
+    // CAN WE BELIEVE THE CALL NUMBERS AT ALL?
+    //
+    // This view has answered that since the day it was written and the report
+    // never asked. On 6 Aug the founder was sent "Ankita — 0 calls, 0
+    // connected" for a day she recorded 49 voice notes and moved 130 leads
+    // between 1:23pm and 5:32pm. Her Xiaomi had not synced a call log since the
+    // 5th: last_ok_at NULL, native_seen 0, trustworthy FALSE.
+    //
+    // Zero was what the CRM RECEIVED. The report printed it as what she did.
+    admin.from("v_device_sync_health").select("salesperson_id, last_ok_at, trustworthy")
+      .eq("company_id", companyId),
   ]);
 
   const map = new Map<string, RepPulse>();
@@ -197,7 +219,7 @@ export async function buildCompany(
         id, name: nameById.get(id)!, calls: 0, connected: 0, talkSeconds: 0,
         voiceNotes: [], moves: [], siteVisits: [], visitsArrived: [], followUps: 0, hotLeads: 0,
         topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, bookings: 0,
-        revenue: 0, aiUpdates: [],
+        revenue: 0, aiUpdates: [], callsTrusted: true, syncedAt: null,
       });
     }
     return map.get(id)!;
@@ -291,6 +313,11 @@ export async function buildCompany(
     r.siteVisits.push(who);
     if (v.site_visit_arrived_at) r.visitsArrived.push(who);
   }
+  for (const h of health.data ?? []) {
+    const r = map.get(String(h.salesperson_id)); if (!r) continue;
+    r.callsTrusted = h.trustworthy === true;
+    r.syncedAt = (h.last_ok_at as string | null) ?? null;
+  }
   for (const f of fups.data ?? []) { const r = rep(f.salesperson_id); if (r) r.followUps++; }
   for (const h of hot.data ?? []) { const r = rep(h.salesperson_id); if (r) r.hotLeads++; }
   for (const s of steps.data ?? []) {
@@ -335,7 +362,13 @@ export async function buildCompany(
     // scheduled ones carry the warning in the value itself, because a model
     // skims keys and reads values.
     const facts = {
-      rep: p.name, calls: p.calls, connected: p.connected, talk: fmtDur(p.talkSeconds),
+      rep: p.name,
+      // Hand the model the caveat, not just the number. Given "calls: 0" it
+      // will write "a quiet day for Ankita" about somebody who worked all
+      // afternoon into a phone that was not reporting.
+      ...(p.callsTrusted
+        ? { calls: p.calls, connected: p.connected, talk: fmtDur(p.talkSeconds) }
+        : { call_numbers: "UNAVAILABLE — this rep's phone is not sending its call log, so their real call count is unknown" }),
       visits_confirmed_on_site: p.visitsArrived,
       visits_only_booked_for_today_NOT_confirmed: p.siteVisits
         .filter((v) => !p.visitsArrived.includes(v))
@@ -361,6 +394,11 @@ export async function buildCompany(
           "NEVER repeat the call/connected/talk-time numbers and never list the next " +
           "steps — they are printed directly around your text and a founder reading " +
           "the same thing twice stops reading.\n" +
+          "IF call_numbers SAYS UNAVAILABLE, you do not know how much this rep called. " +
+          "Never say they were quiet, slow, idle, or made few calls — judge them ONLY on " +
+          "the notes and lead moves you were given, and say the call numbers are missing " +
+          "if it matters. Reporting a broken phone as a lazy rep is the worst mistake " +
+          "you can make about a person.\n" +
           "This is a founder, not a supervisor: no call logs. Never write \"call did " +
           "not connect\", \"attempt 1\", \"marked cold\", \"stage changed\" or how many " +
           "seconds a call lasted. Say what it MEANS for the deal.\n" +
@@ -424,6 +462,28 @@ export async function buildCompany(
   return { date, totals, reps: pulses };
 }
 
+/**
+ * ZERO IS NOT A RESULT WHEN THE PHONE IS NOT REPORTING.
+ *
+ * "0 calls | 0 connected" against a rep's name is read by a founder as one
+ * thing only: they did nothing today. On 6 Aug that sentence was sent about
+ * Ankita, who had recorded 49 voice notes and moved 130 leads that afternoon —
+ * her phone simply had not synced a call log since the day before.
+ *
+ * That is a false report about a person, which is worse than a false report
+ * about a deal: the founder cannot check it, the rep is not in the room, and
+ * the number looks like evidence. Where the system does not know, it now says
+ * it does not know.
+ */
+function syncWarning(r: { callsTrusted: boolean; syncedAt: string | null }): string | null {
+  if (r.callsTrusted) return null;
+  // One wording that stays true wherever it is printed. "Call numbers below"
+  // was wrong in both places it landed — the single-rep block replaces them
+  // with "not available", and the team block leads with notes instead.
+  const since = r.syncedAt ? `since ${istDay(r.syncedAt)}` : "— never synced";
+  return `⚠️ Phone not sending call logs ${since} — call count UNKNOWN, not zero.`;
+}
+
 /** Connected out of dialled, as a founder would say it: "7 (88%)". */
 function connectedLine(calls: number, connected: number): string {
   const pct = calls > 0 ? Math.round((connected / calls) * 100) : 0;
@@ -452,6 +512,8 @@ function rupees(n: number): string {
 function kpiBlock(k: {
   bookings: number; revenue: number; visitsFixed: number; hotLeads: number;
   calls: number; connected: number; talkSeconds: number;
+  /** Absent on the company totals block, which is a sum and always printed. */
+  callsTrusted?: boolean;
 }): string[] {
   const L = [`• Bookings: ${k.bookings}`];
   if (k.revenue > 0) L.push(`• Token collected: ${rupees(k.revenue)}`);
@@ -462,12 +524,17 @@ function kpiBlock(k: {
   // here that separates a rep who dialled all day from a rep who had
   // conversations. Dropping it when this block was rewritten lost the only
   // measure of whether the connects were worth anything.
-  L.push(
-    `• Calls: ${k.calls} · connected ${connectedLine(k.calls, k.connected)}` +
-      (k.talkSeconds > 0 ? ` · ${fmtDur(k.talkSeconds)} talk` : ""),
-  );
-  if (k.connected > 0) {
-    L.push(`• Visit rate: ${Math.round((k.visitsFixed / k.connected) * 100)}% of everyone talked to`);
+  if (k.callsTrusted === false) {
+    // No number at all, rather than a zero that reads as a verdict.
+    L.push("• Calls: not available — this phone is not sending its call log");
+  } else {
+    L.push(
+      `• Calls: ${k.calls} · connected ${connectedLine(k.calls, k.connected)}` +
+        (k.talkSeconds > 0 ? ` · ${fmtDur(k.talkSeconds)} talk` : ""),
+    );
+    if (k.connected > 0) {
+      L.push(`• Visit rate: ${Math.round((k.visitsFixed / k.connected) * 100)}% of everyone talked to`);
+    }
   }
   return L;
 }
@@ -586,13 +653,18 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
   const L: string[] = [`📊 ${r.name} | Daily Pulse | ${prettyDate(date)}`];
   if (companyName) L.push(companyName);
 
+  const warn = syncWarning(r);
   const idle = !r.calls && !r.voiceNotes.length && !r.moves.length && !r.siteVisits.length;
   if (idle) {
-    L.push("", "No calls, no notes, no lead moves today.");
+    // "No activity today" about a phone that cannot report is an accusation
+    // dressed as a fact. Say which one this is.
+    L.push("", warn ?? "No calls, no notes, no lead moves today.");
+    if (warn) L.push("Nothing came through from this phone at all — check it before reading anything into today.");
     L.push("", PULSE_FOOTER);
     return L.join("\n");
   }
 
+  if (warn) L.push("", warn);
   L.push("", "🟢 Today", ...kpiBlock(r));
 
   if (r.win) L.push("", "🎯 Biggest win", `✅ ${r.win}`);
@@ -626,6 +698,14 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
 export function pulseText(p: CompanyPulse, companyName?: string | null): string {
   const L: string[] = [`📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse`, prettyDate(p.date)];
   L.push("", "🟢 Today", ...kpiBlock(p.totals));
+  // The totals are a sum of what ARRIVED. With a phone missing they are a
+  // floor, not a count, and a founder comparing today to last week deserves to
+  // know which one they are looking at.
+  const blind = p.reps.filter((r) => !r.callsTrusted);
+  if (blind.length) {
+    L.push(`• ⚠️ Call totals are INCOMPLETE — ${blind.length} phone${blind.length > 1 ? "s" : ""} not reporting (${
+      blind.map((r) => r.name).join(", ")})`);
+  }
 
   const worked = p.reps.filter((r) => r.calls || r.voiceNotes.length || r.moves.length || r.siteVisits.length);
   const idle = p.reps.filter((r) => !worked.includes(r));
@@ -636,7 +716,13 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
   // founder had read a single decision.
   for (const r of worked) {
     L.push("", "━━━━━━━━━━━━━━━", `👤 ${r.name}`);
-    L.push(`${r.calls} calls | ${connectedLine(r.calls, r.connected)} connected` +
+    const warn = syncWarning(r);
+    if (warn) L.push(warn);
+    // With no trustworthy call log, lead the line with what we DO know she did
+    // — the notes and the moves are hers and they arrived.
+    L.push((warn
+      ? `${realNotes(r).length} voice notes | ${newsworthyMoves(r).length} lead updates`
+      : `${r.calls} calls | ${connectedLine(r.calls, r.connected)} connected`) +
       (r.hotLeads ? ` | 🔥 ${r.hotLeads} hot` : "") +
       (r.visitsFixed ? ` | 📍 ${r.visitsFixed} visit${r.visitsFixed > 1 ? "s" : ""} fixed` : "") +
       (r.bookings ? ` | 🎉 ${r.bookings} booked${r.revenue ? ` ${rupees(r.revenue)}` : ""}` : ""));
@@ -647,7 +733,17 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
   }
 
   if (idle.length) {
-    L.push("", "━━━━━━━━━━━━━━━", `⚠️ No activity today: ${idle.map((r) => r.name).join(", ")}`);
+    // Two very different sentences. Lumping a rep whose phone stopped
+    // reporting in with a rep who did not work is how someone gets a talking-to
+    // they did not earn.
+    const quiet = idle.filter((r) => r.callsTrusted);
+    const broken = idle.filter((r) => !r.callsTrusted);
+    L.push("", "━━━━━━━━━━━━━━━");
+    if (quiet.length) L.push(`⚠️ No activity today: ${quiet.map((r) => r.name).join(", ")}`);
+    if (broken.length) {
+      L.push(`📵 Nothing received from these phones — fix the phone before judging the day: ${
+        broken.map((r) => r.name).join(", ")}`);
+    }
   }
 
   L.push("", PULSE_FOOTER);
