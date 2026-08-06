@@ -1,13 +1,17 @@
 package com.salesautocall.app.ui
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,24 +35,58 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Smartphone
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+
+// ════════════════════════════════════════════════════════════════════════════
+//  THE APP DOES NOT OPEN UNTIL IT CAN DO ITS JOB.
+//
+//  This screen used to be a friendly first-run request with a "Skip for now"
+//  underneath it, and skipping is exactly what happened. Today's Phone Health
+//  page, in the founder's own words:
+//
+//    Shweta   · Sync stopped    "Call sync 5 din se band hai"   73 out, 0 in
+//    vishesh  · Permission off  "Incoming aur missed calls CRM me nahi aa rahi"
+//    sneha    · Permission off  same, since 20 July
+//
+//  Every one of those is a permission or a battery setting that was never
+//  granted or got reset — and every one had been sitting there for days,
+//  because the only thing the system did about it was print an instruction on
+//  an admin dashboard for somebody to WhatsApp to the rep. A rep does not read
+//  a WhatsApp about Settings → Apps → Permissions while they are trying to hit
+//  their call target, and the super admin meanwhile has no idea who was called
+//  or for how long.
+//
+//  So the app blocks. If it cannot log calls, the calls it cannot log are
+//  invisible to everyone — and an app that silently reports nothing is worse
+//  than an app that says "one tap and I'm working again".
+//
+//  What makes that fair rather than cruel is that every blocker here is one
+//  tap from being fixed: the button opens the exact system screen, and coming
+//  back re-checks automatically. No menu-hunting, no instructions to follow.
+// ════════════════════════════════════════════════════════════════════════════
 
 private data class Perm(
     val keys: List<String>,
@@ -59,210 +97,231 @@ private data class Perm(
 )
 
 /** Build the list of permissions this app actually uses, in plain language.
- *  POST_NOTIFICATIONS only exists on Android 13+. */
+ *  POST_NOTIFICATIONS only exists on Android 13+.
+ *
+ *  The reasons say what BREAKS, not what the permission is called. "Call
+ *  history" meant nothing to a rep; "without this your calls never reach the
+ *  office" is the thing they actually care about. */
 private fun permRows(): List<Perm> = buildList {
-    add(Perm(listOf(Manifest.permission.CALL_PHONE), Icons.Default.Call, "Phone calls", "Place calls to your leads", true))
-    add(Perm(listOf(Manifest.permission.READ_PHONE_STATE), Icons.Default.Smartphone, "Phone state", "Know when a call ends — to log it and dial the next", true))
-    add(Perm(listOf(Manifest.permission.READ_CALL_LOG), Icons.Default.History, "Call history", "Show your recent calls and match them to leads", true))
-    add(Perm(listOf(Manifest.permission.RECORD_AUDIO), Icons.Default.Mic, "Microphone", "Attach call recordings and voice-type your notes", true))
+    add(Perm(listOf(Manifest.permission.CALL_PHONE), Icons.Default.Call, "Make calls", "So you can dial a lead from the app", true))
+    add(Perm(listOf(Manifest.permission.READ_PHONE_STATE), Icons.Default.Smartphone, "Know when a call ends", "So the app can log it and move to the next lead", true))
+    add(Perm(listOf(Manifest.permission.READ_CALL_LOG), Icons.Default.History, "Call log", "Without this your calls never reach the office", true))
+    add(Perm(listOf(Manifest.permission.RECORD_AUDIO), Icons.Default.Mic, "Microphone", "Call recordings and voice notes", true))
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        add(Perm(listOf(Manifest.permission.POST_NOTIFICATIONS), Icons.Default.Notifications, "Notifications", "Follow-up reminders and new-lead alerts", true))
+        add(Perm(listOf(Manifest.permission.POST_NOTIFICATIONS), Icons.Default.Notifications, "Notifications", "Callback reminders and new lead alerts", true))
     }
-    add(Perm(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), Icons.Default.LocationOn, "Location", "Attendance check-in and territory (optional)", false))
+    add(Perm(listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), Icons.Default.LocationOn, "Location", "Attendance check-in (optional)", false))
     add(Perm(listOf(Manifest.permission.ANSWER_PHONE_CALLS), Icons.Default.Call, "Answer calls", "One-tap answer for cloud callbacks (optional)", false))
 }
 
+private fun permGranted(context: Context, p: Perm): Boolean =
+    p.keys.any { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }
+
+private fun batteryExempt(context: Context): Boolean =
+    (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
+        .isIgnoringBatteryOptimizations(context.packageName)
+
+private fun batteryIntent(context: Context) =
+    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
+
 /**
- * Friendly one-screen permission request — each permission with a reason, a
- * per-row grant, a green tick when done, and one "Allow all" / "Continue".
- * Far higher grant rates than firing raw system dialogs with no context.
+ * Can this phone even offer the Doze exemption?
+ *
+ * Fail OPEN. A handful of OEM builds strip that Settings screen out, and
+ * blocking a rep behind a button that opens nothing would be the one way this
+ * gate could stop someone working for a reason they cannot fix. If the phone
+ * cannot be asked, the app runs — degraded sync beats no app.
  */
+private fun batteryAskable(context: Context): Boolean =
+    runCatching { batteryIntent(context).resolveActivity(context.packageManager) != null }.getOrDefault(false)
+
+/**
+ * Everything the app needs before it is allowed to open. MainActivity checks
+ * this on create AND on every resume, so a permission revoked mid-week puts the
+ * rep back on this screen instead of quietly breaking their sync.
+ */
+fun setupComplete(context: Context): Boolean =
+    permRows().none { it.essential && !permGranted(context, it) } &&
+        (!batteryAskable(context) || batteryExempt(context))
+
 @Composable
-fun PermissionOnboarding(onDone: () -> Unit) {
+fun PermissionOnboarding(onReady: () -> Unit) {
     val context = LocalContext.current
     val rows = remember { permRows() }
+    val canAskBattery = remember { batteryAskable(context) }
     var refresh by remember { mutableIntStateOf(0) }
 
-    fun granted(p: Perm): Boolean = refresh.let {
-        p.keys.any { k -> ContextCompat.checkSelfPermission(context, k) == PackageManager.PERMISSION_GRANTED }
-    }
+    // Which rows we have already fired the system dialog for. A permission
+    // still denied after that is a "Don't ask again" — Android will never show
+    // the dialog again, so the button has to switch to the app's Settings page
+    // or the rep taps a button that visibly does nothing, forever.
+    var tried by remember { mutableStateOf(setOf<String>()) }
+
+    fun granted(p: Perm): Boolean = refresh.let { permGranted(context, p) }
+    fun batteryOk(): Boolean = refresh.let { batteryExempt(context) }
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { refresh++ }
-
-    // BATTERY IS A STEP, NOT AN AFTERTHOUGHT.
-    //
-    // Doze exemption used to be requested only for reps using the in-app SIP
-    // listener (MainActivity.checkBatteryOptimization). Every plain SIM
-    // telecaller — which is most of them — was never asked, so Android
-    // suspended their background call-log sync and their calls arrived at the
-    // CRM hours late or not at all. That is the "Shweta's call log doesn't
-    // match the dashboard" report, and it was never a capture bug.
-    //
-    // It is not a runtime permission, so it cannot ride the permission
-    // launcher: it is a Settings intent, and the result comes back only when
-    // the user returns to the app. Hence the resume re-check below.
-    fun batteryOk(): Boolean = refresh.let {
-        val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
-        pm.isIgnoringBatteryOptimizations(context.packageName)
-    }
-
-    val batteryLauncher = rememberLauncherForActivityResult(
+    // Android returns nothing useful from the battery dialog — the result code
+    // is the same whether they allowed it or backed out — so we simply re-read
+    // the real state when they come back.
+    val settingsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { refresh++ }
 
-    // Android returns nothing useful from the battery dialog, and a rep may
-    // also grant a permission from Settings and come back. Re-check whenever
-    // this screen is resumed so the ticks are never stale.
+    // The whole reason this is easy: fix something in Settings, press back, and
+    // the tick turns green on its own. Nobody has to know to reopen the app.
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
-        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) refresh++
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refresh++
         }
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
-    val essentialsLeft = rows.filter { it.essential && !granted(it) }
-    val anyLeft = rows.filter { !granted(it) }
+    val missing = rows.filter { it.essential && !granted(it) }
+    val batteryBlocking = canAskBattery && !batteryOk()
+    val left = missing.size + if (batteryBlocking) 1 else 0
+
+    // Nothing left to fix — let them in, without a tap. The rep who just
+    // granted the last permission should find themselves in the app, not
+    // looking at a "Continue" button asking them to confirm they are done.
+    //
+    // Wrapped rather than early-returned: an early return out of a @Composable
+    // after emitting nodes is the sort of thing that works until a recomposition
+    // orders it differently, and this screen is the one thing standing between a
+    // rep and a day of unlogged calls.
+    LaunchedEffect(left) { if (left == 0) onReady() }
+
+    fun askPerm(p: Perm) {
+        if (p.keys.all { it in tried } && !granted(p)) {
+            // "Don't ask again" territory: go straight to the app's own page.
+            runCatching {
+                settingsLauncher.launch(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")),
+                )
+            }
+            return
+        }
+        tried = tried + p.keys
+        launcher.launch(p.keys.toTypedArray())
+    }
+
+    if (left == 0) return
 
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState()).padding(24.dp),
+            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(24.dp))
-        Box(Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(38.dp))
+        Spacer(Modifier.height(12.dp))
+        Box(
+            Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Shield, contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(34.dp))
         }
-        Spacer(Modifier.height(16.dp))
-        Text("Allow access", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
+        // Count it, so the rep can see the end of this. "Allow access" with an
+        // unknown number of steps behind it is what makes people back out.
+        Text(
+            if (left == 1) "1 thing to allow" else "$left things to allow",
+            style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
+        )
         Spacer(Modifier.height(6.dp))
         Text(
-            "Call Pro AI needs these to place calls, log your work and remind you — nothing else.",
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            "Tap Allow, then come back. This screen closes on its own.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(18.dp))
+
+        // Battery first when it is the problem. It is the one that stops a
+        // working phone dead — Shweta's sync had been off for five days with
+        // every permission granted — and it is the one a rep would never guess
+        // at, so it should not be at the bottom of a list.
+        if (batteryBlocking) {
+            SetupRow(
+                icon = Icons.Default.BatteryFull,
+                title = "Let the app work in the background",
+                reason = "Your phone is putting the app to sleep, so your calls stop reaching the office",
+                done = false,
+            ) { runCatching { settingsLauncher.launch(batteryIntent(context)) } }
+        }
 
         rows.forEach { p ->
             val ok = granted(p)
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surface).padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                    Icon(p.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-                }
-                Spacer(Modifier.size(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(p.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(p.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Spacer(Modifier.size(10.dp))
-                if (ok) {
-                    Box(Modifier.size(32.dp).clip(CircleShape).background(Color16A34A.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Check, contentDescription = "Granted", tint = Color16A34A, modifier = Modifier.size(20.dp))
-                    }
-                } else {
-                    Box(
-                        Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
-                            .clickable { launcher.launch(p.keys.toTypedArray()) }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                    ) {
-                        Text("Allow", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
+            // Optional rows are shown, never counted, never blocking — a rep
+            // who wants attendance check-in can turn it on right here.
+            SetupRow(p.icon, p.title, p.reason, ok) { askPerm(p) }
         }
 
-        // ── Keep working in the background ──
-        run {
-            val ok = batteryOk()
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surface).padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.BatteryFull, contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-                }
-                Spacer(Modifier.size(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Keep working in background", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(
-                        "Without this your phone stops the app and your calls reach the office late",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.size(10.dp))
-                if (ok) {
-                    Box(Modifier.size(32.dp).clip(CircleShape).background(Color16A34A.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Check, contentDescription = "Allowed", tint = Color16A34A, modifier = Modifier.size(20.dp))
-                    }
-                } else {
-                    Box(
-                        Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
-                            .clickable {
-                                runCatching {
-                                    batteryLauncher.launch(
-                                        android.content.Intent(
-                                            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                            android.net.Uri.parse("package:${context.packageName}"),
-                                        ),
-                                    )
-                                }.onSuccess {
-                                    // Asked here, with a reason attached — so
-                                    // MainActivity's safety net must not ask
-                                    // again the moment this screen closes.
-                                    com.salesautocall.app.data.AppPrefs.setBatteryAsked(context, true)
-                                }
-                            }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                    ) {
-                        Text("Allow", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-        }
-
-        Spacer(Modifier.height(10.dp))
-        if (anyLeft.isNotEmpty()) {
-            Button(
-                onClick = { launcher.launch(anyLeft.flatMap { it.keys }.distinct().toTypedArray()) },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-            ) { Text("Allow all", fontWeight = FontWeight.Bold) }
-            Spacer(Modifier.height(6.dp))
-            TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
-                Text(if (essentialsLeft.isEmpty()) "Continue" else "Skip for now")
-            }
-            // Skipping is allowed — a blocked rep is a rep who cannot work —
-            // but it must not be silent. Naming the consequence is the whole
-            // difference between a rep who denies by accident and one who
-            // chooses to.
-            if (essentialsLeft.isNotEmpty()) {
-                Text(
-                    "Without ${essentialsLeft.joinToString(", ") { it.title.lowercase() }}, your calls will not reach the office.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        } else {
-            Button(onClick = onDone, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Text("Continue", fontWeight = FontWeight.Bold)
-            }
-        }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(14.dp))
+        Text(
+            "Nothing here is optional for your calls to be counted. " +
+                "If a button does not open anything, tell your admin.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(20.dp))
     }
+    // No Skip, and no Continue. Skip is how three reps ended up sitting on the
+    // Phone Health page for days, and Continue is a tap that exists only to
+    // confirm something the app can already see for itself.
 }
 
-private val Color16A34A = androidx.compose.ui.graphics.Color(0xFF4353B8)
+@Composable
+private fun SetupRow(
+    icon: ImageVector,
+    title: String,
+    reason: String,
+    done: Boolean,
+    onAllow: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(42.dp).clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.size(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(reason, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
+        }
+        Spacer(Modifier.size(10.dp))
+        if (done) {
+            Box(
+                Modifier.size(32.dp).clip(CircleShape).background(OkGreen.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.Check, contentDescription = "Allowed", tint = OkGreen,
+                    modifier = Modifier.size(20.dp))
+            }
+        } else {
+            Box(
+                Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
+                    .clickable { onAllow() }.padding(horizontal = 18.dp, vertical = 9.dp),
+            ) {
+                Text("Allow", color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+}
+
+private val OkGreen = Color(0xFF4353B8)
