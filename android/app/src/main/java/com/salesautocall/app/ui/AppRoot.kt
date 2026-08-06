@@ -658,9 +658,16 @@ private fun MainShell(vm: MainViewModel) {
                         // A floating layer over a scrolling list will always
                         // land on somebody's content eventually. In the bar it
                         // cannot, and it is still one tap from every screen.
+                        // Visible, reachable from every screen, and SECONDARY.
+                        // In accent blue it competed with the Call buttons below
+                        // it for the same attention; the one thing on this screen
+                        // that should be the brightest is the button that dials.
+                        // Same weight as Settings now — the sparkle is what makes
+                        // it findable, not the colour.
                         IconButton(onClick = { vm.openCoach() }) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = "AI Coach",
-                                tint = jadeAccent(isSystemInDarkTheme()))
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(21.dp))
                         }
                         IconButton(onClick = { vm.openSettings() }) {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")

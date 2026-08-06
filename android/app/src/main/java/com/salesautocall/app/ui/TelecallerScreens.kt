@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -160,48 +159,35 @@ private val ACTIONS = listOf(
 )
 
 /**
- * One filter row: a tiny inline label and a single scrolling line of chips.
+ * One filter row: a single scrolling line of chips. Nothing else.
  *
- * NO CARD. These were full-width tinted blocks with their own padding, corners
- * and heading — two of them, stacked, costing about 190dp between them before a
- * single lead appeared. A filter is a control, not a section, and on a 6-inch
- * phone every pixel it takes is a lead the rep cannot see.
+ * The row used to carry a 56dp label column ("What to do now" / "Where the
+ * deal is"). It cost width twice over — the words themselves, and then the
+ * first chip was pushed off the left edge, so the most important control on
+ * the screen rendered as a stray "5" where "Call now 95" should have been.
  *
- * The label now sits on the same line as the chips, greyed and small, so the
- * row reads as "What to do now: [Call now 92] [Overdue 0] …" and costs ~40dp.
- * The fade at the right edge still says there is more.
+ * The chips say what they are. Call now / Overdue / Due today cannot be
+ * mistaken for New / Contacted / Interested, and the line under the rows still
+ * explains whichever one is selected — so nothing is left to guess.
  */
 @Composable
-private fun CompactFilterRow(
-    title: String,
-    chips: @Composable () -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            title, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = 12.sp, maxLines = 2,
-            modifier = Modifier.width(56.dp).padding(end = 8.dp),
-        )
-        Box(Modifier.weight(1f)) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                chips()
-                Spacer(Modifier.width(16.dp))
-            }
-            // Swipe hint. Fades to the page, not to a block colour, because
-            // there is no block any more.
-            Box(
-                Modifier.align(Alignment.CenterEnd).width(22.dp).height(30.dp)
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(Color.Transparent, MaterialTheme.colorScheme.background),
-                        ),
-                    ),
-            )
+private fun CompactFilterRow(chips: @Composable () -> Unit) {
+    Box {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            chips()
+            Spacer(Modifier.width(14.dp))
         }
+        Box(
+            Modifier.align(Alignment.CenterEnd).width(20.dp).height(28.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color.Transparent, MaterialTheme.colorScheme.background),
+                    ),
+                ),
+        )
     }
 }
 
@@ -481,40 +467,35 @@ private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Colo
     // An empty chip is shown but not offered: faded, grey badge, no ripple, not
     // clickable. Hiding it would make the row jump around as counts change
     // during the day; leaving it live invites a tap that does nothing.
+    // A CONTROL, NOT A DASHBOARD TILE.
+    //
+    // These were 34dp fully-rounded pills with 13dp padding and a badge in a
+    // capsule of its own — five of them filled a phone's width. A filter is
+    // something a rep hits on the way to a call, so it is now 28dp, softly
+    // squared rather than pill-shaped, and the count rides as plain text
+    // instead of a second bubble.
     val empty = count == 0 && !selected
     val bg = when {
         selected -> accent
-        empty -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
-        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        empty -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     }
     val fg = when {
         selected -> Color.White
-        empty -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+        empty -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(
-        Modifier.height(34.dp).clip(RoundedCornerShape(50)).background(bg)
+        Modifier.height(28.dp).clip(RoundedCornerShape(9.dp)).background(bg)
             .then(if (empty) Modifier else Modifier.clickable { onClick() })
-            .padding(horizontal = 13.dp),
+            .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = fg, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+        Text(label, color = fg, fontSize = 12.sp, maxLines = 1,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-        Spacer(Modifier.width(7.dp))
-        Box(
-            Modifier.defaultMinSize(minWidth = 22.dp).clip(RoundedCornerShape(50))
-                .background(
-                    when {
-                        selected -> Color(0x3DFFFFFF)
-                        empty -> Color.Transparent
-                        else -> MaterialTheme.colorScheme.surface
-                    },
-                )
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("$count", color = fg, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-        }
+        Spacer(Modifier.width(5.dp))
+        Text("$count", fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.Bold,
+            color = if (selected) Color.White.copy(alpha = 0.75f) else fg.copy(alpha = 0.7f))
     }
 }
 
@@ -1475,7 +1456,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // last card's Call must never sit under the nav bar or the raised
             // dial button in front of it.
             contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp),
+            // 11dp, not 7. The gap is what tells a rep the card has ended;
+            // at 7 the list read as one sheet.
+            verticalArrangement = Arrangement.spacedBy(11.dp),
         ) {
             item {
                 if (!selectMode) {
@@ -1557,10 +1540,16 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // little lift under it.
                     val searchAccent = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
                     OutlinedTextField(
-                        query, { query = it }, placeholder = { Text("Search name or phone") },
-                        singleLine = true, shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.weight(1f).height(52.dp)
-                            .shadow(2.dp, RoundedCornerShape(14.dp), clip = false),
+                        query, { query = it },
+                        placeholder = { Text("Search name or phone", fontSize = 13.sp) },
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        // 46dp and inset from the edge. At 52dp full-bleed it was
+                        // the biggest thing on the screen after the header, and a
+                        // rep searches perhaps twice an hour — it should be easy
+                        // to hit, not the first thing the eye lands on.
+                        singleLine = true, shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).height(46.dp)
+                            .shadow(1.dp, RoundedCornerShape(12.dp), clip = false),
                         leadingIcon = {
                             Icon(Icons.Default.Search, contentDescription = null,
                                 tint = searchAccent, modifier = Modifier.size(20.dp))
@@ -1576,15 +1565,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // Same shape and height as the search field and the chips —
                     // one visual language, not a stray circle.
                     Box(
-                        Modifier.height(52.dp).width(52.dp).clip(RoundedCornerShape(14.dp))
+                        Modifier.height(46.dp).width(46.dp).clip(RoundedCornerShape(12.dp))
                             .background(if (filtersOn) searchAccent else MaterialTheme.colorScheme.surface)
-                            .border(1.dp, if (filtersOn) searchAccent else MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+                            .border(1.dp, if (filtersOn) searchAccent else MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
                             .clickable { sheetOpen = true },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(Icons.Default.Sort, contentDescription = "Filters",
                             tint = if (filtersOn) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(21.dp))
+                            modifier = Modifier.size(19.dp))
                     }
                 }
             }
@@ -1601,7 +1590,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // when you said "either wrap, or one row with a clear swipe hint and
             // edge fade" — on a 5-inch screen only the second one survives.
             item {
-                CompactFilterRow("What to do now") {
+                CompactFilterRow {
                     ACTIONS.forEach { a ->
                         val n = app.leads.count { app.actionOf(it) == a.code }
                         val key = "act:${a.code}"
@@ -1612,7 +1601,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 }
             }
             item {
-                CompactFilterRow("Where the deal is") {
+                CompactFilterRow {
                     FilterTab("All", app.leads.size, bucket == "all" && stageFilter == null && quick == null,
                         MaterialTheme.colorScheme.primary) { bucket = "all"; stageFilter = null; quick = null }
                     app.leadStages.filter { it.repVisible }.forEach { st ->
@@ -2234,10 +2223,18 @@ private fun LeadCard(
     // They move to a full-width row along the bottom instead. Nothing floats
     // over them, the note gets the whole card width, and Call is a filled bar
     // that cannot be mistaken for anything else.
+    // WHERE ONE LEAD ENDS AND THE NEXT BEGINS.
+    //
+    // White cards on a near-white page separated only by a 7dp gap: at a
+    // glance the list read as one continuous sheet, and a rep scanning fast
+    // could not tell whose phone number belonged to whom. A hairline border
+    // plus a wider gap draws the boundary without adding a heavy shadow or a
+    // divider line of its own.
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(container)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(container)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
             .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
-            .padding(horizontal = 13.dp, vertical = 11.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
             // Initials avatar — calm graphite by default. The only colour it can
