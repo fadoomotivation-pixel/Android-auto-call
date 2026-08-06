@@ -34,18 +34,10 @@ object AppPrefs {
     fun getAutostartPrompted(context: Context): Boolean = prefs(context).getBoolean("autostart_prompted", false)
     fun setAutostartPrompted(context: Context, v: Boolean) = prefs(context).edit().putBoolean("autostart_prompted", v).apply()
 
-    /**
-     * Whether the Doze-exemption dialog has been thrown at the rep once already.
-     *
-     * The battery ask lives in PermissionOnboarding, where it has a reason next
-     * to it. MainActivity keeps a safety net for installs that predate that
-     * screen — but that check runs on EVERY onResume, so without this flag a rep
-     * who says no gets the Settings screen shoved in their face every single
-     * time they come back to the app. One ask, then the onboarding row (which
-     * they can reach any time) is the only place it lives.
-     */
-    fun getBatteryAsked(context: Context): Boolean = prefs(context).getBoolean("battery_asked", false)
-    fun setBatteryAsked(context: Context, v: Boolean) = prefs(context).edit().putBoolean("battery_asked", v).apply()
+    // getBatteryAsked / setBatteryAsked lived here for exactly one day. They
+    // rate-limited a Settings intent that MainActivity fired on every onResume;
+    // that whole mechanism is gone, replaced by the setup gate, which asks in
+    // one place and re-checks instead of re-asking.
 
     /** The floating AI Coach shrinks to a mini dot for ONE day only — it never
      *  disappears (still one tap away), and returns to full size tomorrow. */
