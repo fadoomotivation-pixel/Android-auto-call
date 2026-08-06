@@ -3320,12 +3320,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Stops the take and ships it: upload → row → AI → refresh the list.
      * Returns false when nothing was saved, so callers can keep their UI open.
      *
-     * The guard below is the backstop for the mis-tap the reps kept hitting: the
-     * Save button used to land exactly where the record button had been, so a
-     * second tap — the natural "did that register?" tap — ended the take after a
-     * second and a half. The buttons no longer overlap and Save stays locked for
-     * the first three seconds, but a take that somehow still comes in under the
-     * minimum is thrown away here rather than saved as a note nobody can use.
+     * The guard below is the ONLY place the 3-second minimum lives now. The
+     * mis-tap it protects against — Save landing exactly where Record had been,
+     * so the reflex "did that register?" tap ended the take after a second and a
+     * half — is fixed by the layout: Cancel occupies that spot, so the stray tap
+     * cancels instead. The sheet used to ALSO lock Save for three seconds and
+     * count down "3, 2, 1" on it, which reads as a time limit and freezes the
+     * only control on screen while the rep is already speaking. That is gone.
+     * A take that still comes in short is rejected here, with the sheet left
+     * open so the rep can simply say it again.
      */
     fun finishVoiceNote(targetContactId: String? = null): Boolean {
         val contactId = targetContactId ?: _state.value.leadDetailId ?: run { cancelVoiceNote(); return false }
@@ -3360,10 +3363,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 // Poll every 5s (up to ~60s) until the AI finishes, then refresh
                 // everything — it may have set a site visit / callback / budget.
+                //
+                // THIS LOOP USED TO ABORT ON ITS FIRST TICK FOR THE PATH REPS
+                // ACTUALLY USE. It opened with `if (leadDetailId != contactId)
+                // return@launch` — a guard meant to stop writing another lead's
+                // notes into an open detail screen. But a note recorded from the
+                // post-call sheet has NO detail screen open, so leadDetailId is
+                // null, the guard was true, and the whole loop returned before
+                // doing anything.
+                //
+                // Everything downstream was lost with it: the kick for a note
+                // stuck in "pending", and the loadLeads/loadFollowUps that show
+                // the rep what the AI decided. Ankita recorded "Not answering"
+                // on Dhananjay, the server transcribed it, counted attempt 2 and
+                // set the lead to callback — and her screen sat there with the
+                // Update button still shaking. "Kuch nahi hua" was exactly right
+                // from where she was sitting.
+                //
+                // The loop now always runs. Only the voiceNotes WRITE is gated,
+                // which is all the guard was ever protecting.
                 var kicked = false
                 repeat(12) { attempt ->
                     kotlinx.coroutines.delay(5_000)
-                    if (_state.value.leadDetailId != contactId) return@launch
                     val fresh = runCatching { Repository.fetchVoiceNotes(contactId) }.getOrNull() ?: return@repeat
                     set { if (it.leadDetailId == contactId) it.copy(voiceNotes = fresh) else it }
                     val mine = fresh.firstOrNull { it.id == note.id } ?: return@repeat
@@ -3372,6 +3393,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             refreshLeadDetail()
                             loadLeads(force = true)
                             loadFollowUps(force = true)
+                            // SAY WHAT IT DID. The rep was told "AI summary ban
+                            // raha hai…" and then never told the answer, so from
+                            // the rep's side a voice note was a thing you spoke
+                            // into that produced silence — even when the AI had
+                            // read it, counted the attempt and moved the lead.
+                            // The server already writes the "⚡ AI did: …" line
+                            // into the summary; it just never reached the phone.
+                            val did = (mine.summary ?: "").lineSequence()
+                                .firstOrNull { it.trimStart().startsWith("⚡") }?.trim()
+                            set { it.copy(message = did ?: "🎤 Voice note read — lead updated.") }
                             return@launch
                         }
                         // "failed" deliberately falls through and keeps polling:
