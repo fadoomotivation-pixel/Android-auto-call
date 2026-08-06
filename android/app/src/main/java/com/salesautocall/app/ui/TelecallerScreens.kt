@@ -145,17 +145,17 @@ private fun AppState.actionOf(c: Contact): String? = c.id?.let { actionByLead[it
  */
 private val ACTIONS = listOf(
     ActionChip("call_now", "Call now", Color(0xFFC98A3E),
-        "Ring these now. Due today, brand new, or nobody picked up last time."),
+        "Ring these now — due, new, or nobody picked up."),
     ActionChip("overdue", "Overdue", Color(0xFFC0452C),
-        "You said you would call earlier and the time has gone. Do these first."),
+        "You promised these earlier. Do them first."),
     ActionChip("due_today", "Due today", Color(0xFF3E7F8A),
-        "Booked for later today. They come to Call now on their own, at their time."),
+        "Booked for later today. They arrive on their own."),
     ActionChip("scheduled", "Later", Color(0xFF5A62C9),
         "Booked for another day. Nothing to do now."),
     ActionChip("awaiting_visit", "Visit", Color(0xFF75629B),
         "Site visit is booked. Waiting for them to come."),
     ActionChip("no_next_step", "No step", Color(0xFF8A6D3B),
-        "You talked to them but nothing is booked. These go cold if you leave them."),
+        "Talked, nothing booked. These go cold."),
 )
 
 /**
@@ -1539,33 +1539,61 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // pill read as decoration; this one has a real edge and a
                     // little lift under it.
                     val searchAccent = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
-                    OutlinedTextField(
-                        query, { query = it },
-                        placeholder = { Text("Search name or phone", fontSize = 13.sp) },
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        // 46dp and inset from the edge. At 52dp full-bleed it was
-                        // the biggest thing on the screen after the header, and a
-                        // rep searches perhaps twice an hour — it should be easy
-                        // to hit, not the first thing the eye lands on.
-                        singleLine = true, shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f).height(46.dp)
-                            .shadow(1.dp, RoundedCornerShape(12.dp), clip = false),
-                        leadingIcon = {
+                    // A BOX AND A BasicTextField, NOT AN OutlinedTextField.
+                    //
+                    // OutlinedTextField carries a Material minimum height of
+                    // 56dp and fixed internal padding. Asking it for 46dp does
+                    // not shrink the padding — it clips the text, which is why
+                    // "Search name or phone" was sliced along the bottom in the
+                    // screenshot. There is no parameter to fix that on the
+                    // simple overload, so the field is built from parts: exact
+                    // height, exact padding, nothing cut.
+                    Box(
+                        Modifier.weight(1f).height(44.dp)
+                            .shadow(1.dp, RoundedCornerShape(12.dp), clip = false)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 11.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Search, contentDescription = null,
-                                tint = searchAccent, modifier = Modifier.size(20.dp))
-                        },
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                            focusedBorderColor = searchAccent,
-                        ),
-                    )
+                                tint = searchAccent, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                if (query.isEmpty()) {
+                                    Text("Search name or phone", fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                }
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = query,
+                                    onValueChange = { query = it },
+                                    singleLine = true,
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 13.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    ),
+                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(searchAccent),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            if (query.isNotEmpty()) {
+                                Box(
+                                    Modifier.size(22.dp).clip(CircleShape).clickable { query = "" },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text("✕", fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
                     val filtersOn = stageFilter != null || tempFilter != null || quick != null || sortBy != "default"
                     // Same shape and height as the search field and the chips —
                     // one visual language, not a stray circle.
                     Box(
-                        Modifier.height(46.dp).width(46.dp).clip(RoundedCornerShape(12.dp))
+                        Modifier.height(44.dp).width(44.dp).clip(RoundedCornerShape(12.dp))
                             .background(if (filtersOn) searchAccent else MaterialTheme.colorScheme.surface)
                             .border(1.dp, if (filtersOn) searchAccent else MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
                             .clickable { sheetOpen = true },
@@ -1626,12 +1654,27 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     bucket.startsWith("act:") ->
                         ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }?.hint
                     bucket.startsWith("stage:") -> STAGE_HINTS[bucket.removePrefix("stage:")]
-                    else -> "Every lead assigned to you, whatever stage it is at."
+                    else -> "Every lead assigned to you."
                 }
                 if (!hint.isNullOrBlank()) {
                     item {
-                        Text(hint, fontSize = 11.5.sp, lineHeight = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // ONE line, contained. As bare text it wrapped to two
+                        // lines on a narrow phone and read as a stray sentence
+                        // between the controls and the list. Capped and given a
+                        // quiet strip of its own, it reads as part of the filter
+                        // row it explains and can never cost a second line.
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                .padding(horizontal = 9.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("✦", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(7.dp))
+                            Text(hint, fontSize = 11.5.sp, maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
@@ -2234,7 +2277,7 @@ private fun LeadCard(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(container)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
             .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 9.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
             // Initials avatar — calm graphite by default. The only colour it can
@@ -2327,11 +2370,11 @@ private fun LeadCard(
         // What to do, and why — the note, three lines, full card width. This is
         // the line a rep reads to decide whether to ring, so it gets the space.
         intent?.let { (label, color) ->
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(7.dp))
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp))
                     .background(color.copy(alpha = 0.09f))
-                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 ACTIONS.firstOrNull { it.code == action }?.let { a ->
@@ -2340,20 +2383,20 @@ private fun LeadCard(
                     Spacer(Modifier.width(7.dp))
                 }
                 Text(label, fontSize = 12.sp, color = color, fontWeight = FontWeight.Medium,
-                    lineHeight = 16.sp, maxLines = 3,
+                    lineHeight = 15.sp, maxLines = 3,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
         }
 
         if (!selectMode) {
-            Spacer(Modifier.height(9.dp))
+            Spacer(Modifier.height(8.dp))
             // ONE ACTION ROW, full width. Update shakes when this lead's call
             // has just ended with nothing written down — that wobble is the
             // whole replacement for the post-call popup on SIM calls.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val updateTint = if (needsUpdate) Amber else MaterialTheme.colorScheme.primary
                 Row(
-                    Modifier.nudgeShake(needsUpdate).weight(1f).height(38.dp)
+                    Modifier.nudgeShake(needsUpdate).weight(1f).height(36.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(updateTint.copy(alpha = if (needsUpdate) 0.20f else 0.10f))
                         .clickable { onUpdate() },
@@ -2365,7 +2408,7 @@ private fun LeadCard(
                 }
                 Spacer(Modifier.width(7.dp))
                 Row(
-                    Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(10.dp))
+                    Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(10.dp))
                         .background(WaGreen.copy(alpha = 0.12f))
                         .clickable { onWhatsApp() },
                     verticalAlignment = Alignment.CenterVertically,
@@ -2378,7 +2421,7 @@ private fun LeadCard(
                 Spacer(Modifier.width(7.dp))
                 // Calling is the job. Solid, widest, unmistakable.
                 Row(
-                    Modifier.weight(1.25f).height(38.dp).clip(RoundedCornerShape(10.dp))
+                    Modifier.weight(1.25f).height(36.dp).clip(RoundedCornerShape(10.dp))
                         .background(jade)
                         .clickable { if (cloudOn) onCloudCall() else onCall() },
                     verticalAlignment = Alignment.CenterVertically,
