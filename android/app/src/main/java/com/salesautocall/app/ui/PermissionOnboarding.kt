@@ -99,13 +99,17 @@ private data class Perm(
 /** Build the list of permissions this app actually uses, in plain language.
  *  POST_NOTIFICATIONS only exists on Android 13+.
  *
- *  The reasons say what BREAKS, not what the permission is called. "Call
- *  history" meant nothing to a rep; "without this your calls never reach the
- *  office" is the thing they actually care about. */
+ *  The reasons say what BREAKS, and they say it from the REP's side. "Call
+ *  history" means nothing to a telecaller, and "your calls never reach the
+ *  office" — the first wording here — reads as surveillance, which is a poor
+ *  argument for handing over a permission. The same fact told the other way
+ *  round is the true one and the persuasive one: without the call log the AI
+ *  has nothing to read, so the coaching, the daily tip and the reminders all
+ *  quietly stop. The rep loses their own tool, not just the office's report. */
 private fun permRows(): List<Perm> = buildList {
     add(Perm(listOf(Manifest.permission.CALL_PHONE), Icons.Default.Call, "Make calls", "So you can dial a lead from the app", true))
     add(Perm(listOf(Manifest.permission.READ_PHONE_STATE), Icons.Default.Smartphone, "Know when a call ends", "So the app can log it and move to the next lead", true))
-    add(Perm(listOf(Manifest.permission.READ_CALL_LOG), Icons.Default.History, "Call log", "Without this your calls never reach the office", true))
+    add(Perm(listOf(Manifest.permission.READ_CALL_LOG), Icons.Default.History, "Call log", "Without this the AI will not work properly — no call coaching, no reminders", true))
     add(Perm(listOf(Manifest.permission.RECORD_AUDIO), Icons.Default.Mic, "Microphone", "Call recordings and voice notes", true))
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         add(Perm(listOf(Manifest.permission.POST_NOTIFICATIONS), Icons.Default.Notifications, "Notifications", "Callback reminders and new lead alerts", true))
@@ -248,7 +252,7 @@ fun PermissionOnboarding(onReady: () -> Unit) {
             SetupRow(
                 icon = Icons.Default.BatteryFull,
                 title = "Let the app work in the background",
-                reason = "Your phone is putting the app to sleep, so your calls stop reaching the office",
+                reason = "Your phone is putting the app to sleep, so the AI stops working for you",
                 done = false,
             ) { runCatching { settingsLauncher.launch(batteryIntent(context)) } }
         }
@@ -262,7 +266,7 @@ fun PermissionOnboarding(onReady: () -> Unit) {
 
         Spacer(Modifier.height(14.dp))
         Text(
-            "Nothing here is optional for your calls to be counted. " +
+            "The app needs all of these to work. " +
                 "If a button does not open anything, tell your admin.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
