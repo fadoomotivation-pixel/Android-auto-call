@@ -188,6 +188,12 @@ data class LeadWork(
     /** overdue | call_now | due_today | scheduled | awaiting_visit | no_next_step | none */
     @SerialName("action_state") val actionState: String,
     @SerialName("due_at") val dueAt: String? = null,
+    /** The last real dial (off-CRM calls excluded) and how long it lasted.
+     *  Duration is what separates a conversation from a ring-out: on the day
+     *  this shipped, 170 of 419 called leads had a last call under 30 seconds. */
+    @SerialName("last_call_at") val lastCallAt: String? = null,
+    @SerialName("last_call_seconds") val lastCallSeconds: Int = 0,
+    @SerialName("calls_total") val callsTotal: Int = 0,
 )
 
 /** A company project's pinned location, used to geo-fence site-visit arrivals. */
