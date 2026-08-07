@@ -77,6 +77,26 @@ export function Sidebar({
         {admin && <NavLink href="/dashboard/coach" label="🤖 AI Coach" />}
         <NavLink href="/dashboard/apps" label="📲 App downloads" />
 
+        {/* THE SECTION THE COMMENT ABOVE PROMISED AND NOBODY BUILT.
+            "act, understand, configure, run the platform, diagnose" — four of
+            those five became sections; "run the platform" did not, and eight
+            working pages were left with no way to reach them. Adding a
+            telecaller is one of them: the page and the server action are both
+            alive at /platform/telecallers/new, the link simply vanished when
+            the sidebar was regrouped, and the only remaining way in was for the
+            rep to self-signup with a company code — which is now failing on
+            Supabase's email rate limit. The admin path sends no email at all.
+            Super admin only: every page here is cross-company by design and
+            already hard-gated on platform_admins (Platform HQ on
+            is_super_admin() inside its RPCs). */}
+        {isSuper && <Section label="Platform" />}
+        {isSuper && <NavLink href="/dashboard/platform/hq" label="🛰 Platform HQ" />}
+        {isSuper && <NavLink href="/dashboard/platform" label="🏢 Companies" />}
+        {isSuper && <NavLink href="/dashboard/platform/telecallers" label="👥 Telecallers · add user" />}
+        {isSuper && <NavLink href="/dashboard/platform/contacts" label="📇 Contacts (all)" />}
+        {isSuper && <NavLink href="/dashboard/ads" label="📈 Ads Manager" />}
+        {isSuper && <NavLink href="/dashboard/platform/storage" label="☁️ Recording storage" />}
+
         <Section label="Diagnostics" />
         {admin && <NavLink href="/dashboard/health" label="📶 Phone Health" />}
         {admin && <NavLink href="/dashboard/integrity" label="🛡 Integrity check" />}

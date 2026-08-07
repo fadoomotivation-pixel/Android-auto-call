@@ -616,6 +616,14 @@ private fun initialsOf(name: String?): String {
 }
 
 /** Group an Indian 10-digit number as "98765 43210" for easy reading; otherwise return as-is. */
+/** The last four digits — how a person actually tells two same-named leads
+ *  apart, out loud and on paper. Falls back to whatever the number is when it
+ *  is too short to have four. */
+private fun last4(raw: String): String {
+    val d = raw.filter { it.isDigit() }
+    return if (d.length >= 4) d.takeLast(4) else d.ifBlank { "?" }
+}
+
 private fun prettyPhone(raw: String): String {
     val d = raw.filter { it.isDigit() }
     return when {
@@ -1508,6 +1516,27 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val filteredIds = filtered.mapNotNull { it.id }.toSet()
     val allSelected = filteredIds.isNotEmpty() && selectedIds.containsAll(filteredIds)
 
+    // SIX PEOPLE CALLED MANOJ.
+    //
+    // Ankita updated five leads and could not tell that anything had happened,
+    // because 59 of her 171 open leads share a first name with another lead —
+    // sanjay ×5, manoj ×5, amit ×4, ram ×4. Six different Manojs, six different
+    // phone numbers, six different people. She works one, and five identical
+    // rows are still sitting there looking untouched.
+    //
+    // The phone was always on the card, but grey and small underneath a bold
+    // name — the eye anchors on the name, and every name was the same. So when
+    // a name is repeated IN THE LIST IN FRONT OF HER, the last four digits ride
+    // on the name line itself. That is how a person tells two Manojs apart out
+    // loud, and it costs four characters.
+    //
+    // Only when it is actually ambiguous: a unique name gets no clutter.
+    val repeatedNames = remember(filtered) {
+        filtered.mapNotNull { it.name?.trim()?.lowercase()?.takeIf { n -> n.isNotBlank() } }
+            .groupingBy { it }.eachCount()
+            .filterValues { it > 1 }.keys
+    }
+
     // The action queue: the ONLY place a power-dial may run from. Dialling a
     // stage tab would ring people whose time has not come — which is what
     // "power-dial the Follow-up tab" used to do before the tab was three
@@ -1789,6 +1818,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             stages = app.leadStages,
                             work = app.workOf(c),
                             c = c,
+                            sharesName = (c.name?.trim()?.lowercase() ?: "") in repeatedNames,
                             followUp = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone],
                             cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
                             selectMode = selectMode,
@@ -2209,6 +2239,9 @@ private fun LeadCard(
     isSelected: Boolean = false,
     /** This lead was just called and nothing was recorded — its Update shakes. */
     needsUpdate: Boolean = false,
+    /** Another lead in the same list has the exact same name — show the last
+     *  four digits beside it so the rep can tell which person this is. */
+    sharesName: Boolean = false,
     onToggleSelect: () -> Unit = {},
     onCall: () -> Unit,
     onCloudCall: () -> Unit,
@@ -2335,8 +2368,21 @@ private fun LeadCard(
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f, fill = false),
                     )
+                    // The four digits that make this Manoj a different Manoj.
+                    // Unweighted, so it takes only the width it needs and the
+                    // name keeps the rest — and `fill = false` above lets a
+                    // short name shrink to its text instead of pushing this off
+                    // to the far edge, where it would read as a separate column
+                    // rather than part of the name.
+                    if (sharesName) {
+                        Text(
+                            " ·${last4(c.phone)}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold, color = jade, maxLines = 1,
+                        )
+                    }
                     if (tempLabel.isNotEmpty()) {
                         Spacer(Modifier.width(6.dp))
                         Text(tempLabel, fontSize = 10.sp, color = tempColor, fontWeight = FontWeight.Bold, maxLines = 1)
