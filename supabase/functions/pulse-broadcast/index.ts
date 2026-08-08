@@ -70,10 +70,29 @@ async function buildText(
     return { text: repText(mine, pulse.date, companyName) };
   }
 
-  // Nothing happened all day: say that in one line rather than sending an
-  // elaborate report full of zeroes, which reads like the CRM is broken.
+  // THIS SHORTCUT SKIPPED EVERY GUARD IN pulseText().
+  //
+  // 8 Aug: "📊 Manas property · Daily Pulse — No calls logged today." Shweta had
+  // updated SIXTY-SEVEN leads that day. The test was `calls === 0 && notes === 0`
+  // — it never looked at lead updates, and it never asked whether the phone was
+  // reporting at all. Hers has never reported once (app_version NULL), so "no
+  // calls logged" was not even a fact; it was an absence of data printed as a
+  // finding, about a person, to her founder.
+  //
+  // pulseText() already handles all of this properly — the per-rep sync
+  // warning, "call totals are INCOMPLETE", and an idle list that separates a rep
+  // who did not work from a phone that is not reporting. The line below was
+  // sitting in front of it and answering first.
+  //
+  // So the terse version now needs the day to be genuinely empty on EVERY
+  // signal, and every phone to be reporting. Anything else goes through the
+  // real report.
+  const anythingHappened = pulse.totals.calls > 0 || pulse.totals.notes > 0 ||
+    pulse.totals.visits > 0 || pulse.totals.bookings > 0 ||
+    pulse.reps.some((r) => r.moves.length > 0);
+  const allPhonesReporting = pulse.reps.every((r) => r.callsTrusted);
   return {
-    text: pulse.totals.calls === 0 && pulse.totals.notes === 0
+    text: !anythingHappened && allPhonesReporting
       ? `📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse\n${date}\n\nNo calls logged today.\n\n${PULSE_FOOTER}`
       : pulseText(pulse, companyName),
   };

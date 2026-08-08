@@ -475,13 +475,23 @@ export async function buildCompany(
  * the number looks like evidence. Where the system does not know, it now says
  * it does not know.
  */
+/** "49 voice notes | 130 lead updates", skipping whichever is zero, and saying
+ *  so plainly when both are — the rep may genuinely not have worked, and that
+ *  is a different sentence from "we cannot see it". */
+function listOfNonZero(notes: number, updates: number): string {
+  const parts: string[] = [];
+  if (notes > 0) parts.push(`${notes} voice note${notes > 1 ? "s" : ""}`);
+  if (updates > 0) parts.push(`${updates} lead update${updates > 1 ? "s" : ""}`);
+  return parts.length ? parts.join(" | ") : "nothing received from this phone today";
+}
+
 function syncWarning(r: { callsTrusted: boolean; syncedAt: string | null }): string | null {
   if (r.callsTrusted) return null;
   // One wording that stays true wherever it is printed. "Call numbers below"
   // was wrong in both places it landed — the single-rep block replaces them
   // with "not available", and the team block leads with notes instead.
-  const since = r.syncedAt ? `since ${istDay(r.syncedAt)}` : "— never synced";
-  return `⚠️ Phone not sending call logs ${since} — call count UNKNOWN, not zero.`;
+  const since = r.syncedAt ? `since ${istDay(r.syncedAt)}` : "at all — not once";
+  return `⚠️ Phone not sending call logs ${since}. Call count UNKNOWN, not zero.`;
 }
 
 /** Connected out of dialled, as a founder would say it: "7 (88%)". */
@@ -697,11 +707,13 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
  */
 export function pulseText(p: CompanyPulse, companyName?: string | null): string {
   const L: string[] = [`📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse`, prettyDate(p.date)];
-  L.push("", "🟢 Today", ...kpiBlock(p.totals));
-  // The totals are a sum of what ARRIVED. With a phone missing they are a
-  // floor, not a count, and a founder comparing today to last week deserves to
-  // know which one they are looking at.
+  // The totals are a sum of what ARRIVED. With a phone missing they are a floor,
+  // not a count — and when NO phone is reporting they are not a number at all,
+  // so the headline says "not available" rather than leading with a 0 that the
+  // eye reads as the answer before it reaches the warning underneath.
   const blind = p.reps.filter((r) => !r.callsTrusted);
+  const anyReporting = p.reps.some((r) => r.callsTrusted);
+  L.push("", "🟢 Today", ...kpiBlock({ ...p.totals, callsTrusted: anyReporting || p.reps.length === 0 }));
   if (blind.length) {
     L.push(`• ⚠️ Call totals are INCOMPLETE — ${blind.length} phone${blind.length > 1 ? "s" : ""} not reporting (${
       blind.map((r) => r.name).join(", ")})`);
@@ -720,9 +732,11 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
     if (warn) L.push(warn);
     // With no trustworthy call log, lead the line with what we DO know she did
     // — the notes and the moves are hers and they arrived.
-    L.push((warn
-      ? `${realNotes(r).length} voice notes | ${newsworthyMoves(r).length} lead updates`
-      : `${r.calls} calls | ${connectedLine(r.calls, r.connected)} connected`) +
+    // With no trustworthy call log, lead with what DID arrive and is hers.
+    // Only the halves that have a number in them: "0 voice notes | 67 lead
+    // updates" reads like a complaint about the zero.
+    const didArrive = listOfNonZero(realNotes(r).length, newsworthyMoves(r).length)
+    L.push((warn ? didArrive : `${r.calls} calls | ${connectedLine(r.calls, r.connected)} connected`) +
       (r.hotLeads ? ` | 🔥 ${r.hotLeads} hot` : "") +
       (r.visitsFixed ? ` | 📍 ${r.visitsFixed} visit${r.visitsFixed > 1 ? "s" : ""} fixed` : "") +
       (r.bookings ? ` | 🎉 ${r.bookings} booked${r.revenue ? ` ${rupees(r.revenue)}` : ""}` : ""));
