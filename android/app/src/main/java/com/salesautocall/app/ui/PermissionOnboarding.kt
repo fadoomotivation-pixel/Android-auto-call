@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.Icon
@@ -144,15 +145,32 @@ private fun batteryAskable(context: Context): Boolean =
  * this on create AND on every resume, so a permission revoked mid-week puts the
  * rep back on this screen instead of quietly breaking their sync.
  */
+private fun autostartNeeded(context: Context): Boolean =
+    com.salesautocall.app.sip.OemAutostart.hasVendorScreen(context) &&
+        !com.salesautocall.app.data.AppPrefs.getAutostartConfirmed(context)
+
 fun setupComplete(context: Context): Boolean =
     permRows().none { it.essential && !permGranted(context, it) } &&
-        (!batteryAskable(context) || batteryExempt(context))
+        (!batteryAskable(context) || batteryExempt(context)) &&
+        !autostartNeeded(context)
 
 @Composable
 fun PermissionOnboarding(onReady: () -> Unit) {
     val context = LocalContext.current
     val rows = remember { permRows() }
     val canAskBattery = remember { batteryAskable(context) }
+    // MIUI / ColorOS / Funtouch kill background work whatever Android's own
+    // battery settings say. Ankita's Xiaomi ran its call-log sync once on 5 Aug
+    // and then not again for three days — Doze exemption was beside the point.
+    // OemAutostart has existed all along and was only ever called when a rep
+    // switched ON cloud incoming calls, so for every SIM telecaller on the
+    // platform it never ran once. Same shape as the battery bug it sits next to.
+    val canAskAutostart = remember { com.salesautocall.app.sip.OemAutostart.hasVendorScreen(context) }
+    // Two taps on purpose: open the vendor screen, come back, confirm. There is
+    // no API to read Autostart state, so this is the only row here that cannot
+    // be verified — see AppPrefs.getAutostartConfirmed. Asking and being told is
+    // strictly better than what happened before, which was never asking.
+    var autostartVisited by remember { mutableStateOf(false) }
     var refresh by remember { mutableIntStateOf(0) }
 
     // Which rows we have already fired the system dialog for. A permission
@@ -187,7 +205,10 @@ fun PermissionOnboarding(onReady: () -> Unit) {
 
     val missing = rows.filter { it.essential && !granted(it) }
     val batteryBlocking = canAskBattery && !batteryOk()
-    val left = missing.size + if (batteryBlocking) 1 else 0
+    val autostartBlocking = refresh.let {
+        canAskAutostart && !com.salesautocall.app.data.AppPrefs.getAutostartConfirmed(context)
+    }
+    val left = missing.size + (if (batteryBlocking) 1 else 0) + (if (autostartBlocking) 1 else 0)
 
     // Nothing left to fix — let them in, without a tap. The rep who just
     // granted the last permission should find themselves in the app, not
@@ -257,6 +278,32 @@ fun PermissionOnboarding(onReady: () -> Unit) {
             ) { runCatching { settingsLauncher.launch(batteryIntent(context)) } }
         }
 
+        // AUTOSTART, second — the one that actually killed Ankita's sync for
+        // three days. Android's battery exemption does not bind MIUI's own app
+        // killer; only this screen does.
+        if (autostartBlocking) {
+            SetupRow(
+                icon = Icons.Default.RestartAlt,
+                title = if (autostartVisited) "Did you switch Autostart on?" else "Let the app start on its own",
+                reason = if (autostartVisited)
+                    "Find Call Pro AI in that list and turn it ON, then tap the tick here"
+                else
+                    "Your phone brand stops apps from starting by themselves. Without this your work stops reaching the office when the app is closed.",
+                done = false,
+                // The confirm tap gets its own label, because "Allow" twice in a
+                // row on the same row is how a rep taps through without reading.
+                actionLabel = if (autostartVisited) "✓ Yes, it's on" else "Open",
+            ) {
+                if (autostartVisited) {
+                    com.salesautocall.app.data.AppPrefs.setAutostartConfirmed(context, true)
+                    refresh++
+                } else {
+                    autostartVisited = true
+                    runCatching { com.salesautocall.app.sip.OemAutostart.open(context) }
+                }
+            }
+        }
+
         rows.forEach { p ->
             val ok = granted(p)
             // Optional rows are shown, never counted, never blocking — a rep
@@ -285,6 +332,10 @@ private fun SetupRow(
     title: String,
     reason: String,
     done: Boolean,
+    /** Button text. "Allow" for a real permission; the Autostart row uses
+     *  "Open" then "✓ Yes, it's on", because two identical Allows in a row is
+     *  how a rep taps through without reading either. */
+    actionLabel: String = "Allow",
     onAllow: () -> Unit,
 ) {
     Row(
@@ -320,7 +371,7 @@ private fun SetupRow(
                 Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
                     .clickable { onAllow() }.padding(horizontal = 18.dp, vertical = 9.dp),
             ) {
-                Text("Allow", color = MaterialTheme.colorScheme.onPrimary,
+                Text(actionLabel, color = MaterialTheme.colorScheme.onPrimary,
                     style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             }
         }
