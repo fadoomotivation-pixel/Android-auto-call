@@ -1364,6 +1364,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setDisposition(contactId: String, status: String, note: String?) {
+        // Out of the queue on the tap, not on the next background sync.
+        markWorkedLocally(contactId, "no_next_step")
         viewModelScope.launch {
             runCatching { Repository.setDisposition(contactId, status, note) }
                 .onSuccess {
@@ -1372,6 +1374,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             if (c.id == contactId) c.copy(status = status, notes = note ?: c.notes) else c
                         })
                     }
+                    // ...and then the server's real answer, which knows whether
+                    // this status is terminal and what the next callback is.
+                    refreshWorkStates()
                 }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
@@ -1382,11 +1387,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * clears the suggestion. Optimistically updates the visible call/lead lists.
      */
     fun applyDisposition(callLogId: String, contactId: String, status: String) {
+        markWorkedLocally(contactId, "no_next_step")
         viewModelScope.launch {
             runCatching {
                 Repository.setDisposition(contactId, status, null)
                 Repository.clearSuggestedDisposition(callLogId)
             }.onSuccess {
+                refreshWorkStates()
                 set { st ->
                     st.copy(
                         callList = st.callList.map { c ->
@@ -1482,6 +1489,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onFailure { set { it.copy(leadsLoading = false, error = "Couldn't refresh leads — check your connection and try again.") } }
             runCatching { Repository.fetchProjectSites() }
                 .onSuccess { sites -> set { it.copy(projectSites = sites) } }
+        }
+    }
+
+    /**
+     * A lead has just been worked — take it out of the calling queue NOW.
+     *
+     * THE 30-60 MINUTE BUG, in one sentence: the write path never touched the
+     * read model. "Call now" is `workByLead[id].actionState`, a snapshot of
+     * v_lead_workstate fetched when the screen loaded, and NOT ONE of the three
+     * disposition paths (postCallDispose, setDisposition, applyDisposition)
+     * updated it. So a rep called Pravesh, updated him, watched him sit in the
+     * queue, and rang him again.
+     *
+     * The server was right the whole time — v_lead_action_state is a plain view,
+     * recomputed on every read, correct the instant the UPDATE lands. Only the
+     * phone's copy was stale, and the things that replaced it were: a manual
+     * pull-to-refresh, leaving the Leads screen and coming back after the 45s
+     * TTL, or a background CallLogSyncWorker pass finishing. That last one is a
+     * 15-minute PERIODIC job, and WorkManager defers periodic work under Doze —
+     * which is exactly why the rep timed it at "aadha ghanta, ek ghanta".
+     *
+     * This is the same optimistic update `leads` has always had, applied to the
+     * other half of the state. The server's answer still wins the moment it
+     * arrives; this only closes the gap in between.
+     */
+    private fun markWorkedLocally(contactId: String, action: String, dueAt: String? = null) {
+        set { st ->
+            val cur = st.workByLead[contactId] ?: return@set st
+            st.copy(workByLead = st.workByLead + (contactId to cur.copy(actionState = action, dueAt = dueAt)))
         }
     }
 
@@ -2129,6 +2165,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     set { it.copy(message = "⏰ Follow-up set for ${shortWhen(dueAtMillis)}") }
                     loadFollowUps()
                     if (contactId != null) {
+                        // A booked callback is not "call this now" — move it out
+                        // of the queue on the spot and say WHEN instead. A time
+                        // still in the future is scheduled; one already past (a
+                        // rep picking "in 5 minutes", or a stale picker) stays
+                        // callable rather than vanishing.
+                        markWorkedLocally(
+                            contactId,
+                            if (dueAtMillis > System.currentTimeMillis()) "scheduled" else "call_now",
+                            iso,
+                        )
+                        refreshWorkStates()
                         if (mirrorStatus) set { st ->
                             st.copy(leads = st.leads.map { c ->
                                 if (c.id == contactId) c.copy(status = "follow_up") else c
@@ -2200,6 +2247,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // whether it was asked by a popup, by the nudge bar, or by the rep
         // opening the lead themselves.
         clearPendingUpdate(contactId)
+        // ...and the lead leaves the calling queue on the same tap. This is the
+        // one the rep actually complained about: "isko maine call kar liya, isko
+        // maine update bhi kar diya, but phir bhi Pravesh show ho raha hai."
+        // The attempt ladder below may immediately book the next try, which
+        // overwrites this with 'scheduled' — correct, and it is a different
+        // sentence to the rep: "booked for later", not "call this now".
+        markWorkedLocally(contactId, "no_next_step")
+        // Whether the attempt ladder below is about to book the next try. If it
+        // is, IT owns the final work state and this function must not re-read
+        // the server first: for no_answer/busy/wrong_person the view still says
+        // 'call_now' until that follow-up row exists, so a refresh landing in
+        // the gap would put the lead straight back in the queue — the exact bug
+        // being fixed, reintroduced by the fix.
+        val ladderWillBook = status in setOf("no_answer", "busy", "wrong_person") &&
+            !phone.isNullOrBlank() &&
+            ((_state.value.leads.find { it.id == contactId }?.attempts ?: 0) + 1) < 3
         viewModelScope.launch {
             runCatching { Repository.setDisposition(contactId, status, cleanNote) }
                 .onSuccess {
@@ -2216,6 +2279,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 .onFailure { e -> set { it.copy(error = e.message) } }
+            // The truth, a moment later: one small view, not the whole lead
+            // list. It settles whether this status was terminal and picks up
+            // any callback the server booked on its own (ensure_callback_followup).
+            if (!ladderWillBook) refreshWorkStates()
         }
         // Attempt ladder: nobody answered (or the wrong person did) → the lead
         // STAYS in New, the next attempt books itself for the next day in the
