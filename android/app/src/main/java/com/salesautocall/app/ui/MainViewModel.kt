@@ -111,6 +111,9 @@ data class AppState(
      *  AND the last real call. Never computed on the phone — one clock, and it
      *  lives in the database. */
     val workByLead: Map<String, LeadWork> = emptyMap(),
+    /** Settings self-check: the Test button's spinner and its visible verdict. */
+    val syncTestBusy: Boolean = false,
+    val syncTestResult: String? = null,
     /** Company project pins, for geo-fencing site-visit arrivals. */
     val projectSites: List<ProjectSite> = emptyList(),
     val leadsLoading: Boolean = false,
@@ -1546,17 +1549,51 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * is not running. A rep proving their setup should not have to wait on the
      * mechanism they are trying to test.
      */
+    /**
+     * Run the call-log sync now and SHOW WHAT HAPPENED.
+     *
+     * "Sent ✓" is not a test result — it is a promise. A rep pressing Test wants
+     * the two numbers that settle the argument: how many calls are on this phone,
+     * and how many of them the office now has. If those disagree, the rep can see
+     * it themselves instead of finding out from a founder reading a Daily Pulse
+     * two days later.
+     *
+     * Deliberately runs the sync inline rather than enqueuing the worker. The
+     * periodic worker is every 15 minutes and WorkManager defers it under Doze,
+     * which on the phones that need testing most is precisely the thing not
+     * running — testing through it would test nothing.
+     */
     fun runSyncNow() {
         val ctx = getApplication<android.app.Application>()
-        set { it.copy(message = "Sending your calls…") }
+        set { it.copy(syncTestBusy = true, syncTestResult = null) }
         viewModelScope.launch {
+            val onPhone = com.salesautocall.app.data.PhoneCheck.readableCalls(ctx)
+            val before = runCatching { Repository.myCallLogCountToday() }.getOrDefault(0)
             val ok = runCatching {
                 withContext(Dispatchers.IO) { Repository.syncCallLogs(ctx) }
             }.isSuccess
-            set {
-                it.copy(message = if (ok) "Sent ✓ — check the dashboard in a minute."
-                                  else "Could not send. Fix the red items above and try again.")
+            val after = runCatching { Repository.myCallLogCountToday() }.getOrDefault(before)
+
+            // Ordered so every branch is reachable. My first version tested
+            // `after >= onPhone.coerceAtMost(after)`, which is min(a,b) <= a —
+            // true for all inputs — so the "no calls on this phone yet" case
+            // below it could never be reached.
+            val sent = (after - before).coerceAtLeast(0)
+            val result = when {
+                onPhone == null ->
+                    "❌ This phone will not let the app read the call log. Tap Fix on the red row above."
+                !ok ->
+                    "❌ Could not reach the office. Check your internet and press Test again."
+                onPhone == 0 ->
+                    "✅ Setup is fine — no calls on this phone yet. Make one and press Test again."
+                after > 0 ->
+                    "✅ Working. This phone: $onPhone calls in 7 days. Office has $after from today" +
+                        (if (sent > 0) " ($sent just sent)." else ".")
+                else ->
+                    "⚠️ Your calls are on the phone but the office has none from today. " +
+                        "If this stays wrong after a minute, tell your admin."
             }
+            set { it.copy(syncTestBusy = false, syncTestResult = result) }
         }
     }
 
