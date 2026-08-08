@@ -1538,6 +1538,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * alone if the network is down rather than blanking it or raising an error
      * banner over a background refresh nobody asked for.
      */
+    /**
+     * Run the call-log sync right now, from the Settings self-check.
+     *
+     * The periodic worker is every 15 minutes and WorkManager defers it under
+     * Doze — which on the phones that need this most is precisely the thing that
+     * is not running. A rep proving their setup should not have to wait on the
+     * mechanism they are trying to test.
+     */
+    fun runSyncNow() {
+        val ctx = getApplication<android.app.Application>()
+        set { it.copy(message = "Sending your calls…") }
+        viewModelScope.launch {
+            val ok = runCatching {
+                withContext(Dispatchers.IO) { Repository.syncCallLogs(ctx) }
+            }.isSuccess
+            set {
+                it.copy(message = if (ok) "Sent ✓ — check the dashboard in a minute."
+                                  else "Could not send. Fix the red items above and try again.")
+            }
+        }
+    }
+
     fun refreshWorkStates() {
         viewModelScope.launch {
             val uid = Repository.currentUserId() ?: return@launch

@@ -60,6 +60,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -1168,6 +1170,11 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(20.dp))
 
+        // FIRST CARD, ON PURPOSE. When a rep opens Settings it is usually because
+        // something is not working, and this is the answer to "sab on hai na?".
+        PhoneCheckCard(vm)
+        Spacer(Modifier.height(16.dp))
+
         // Company: invite code (admin) or join/switch by code (everyone else).
         CompanyCard(vm, app)
         Spacer(Modifier.height(16.dp))
@@ -1464,5 +1471,160 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
             },
             dismissButton = { TextButton(onClick = { noteFor = null }) { Text("Cancel") } },
         )
+    }
+}
+
+/**
+ * The three settings that decide whether this rep's work is visible at all,
+ * checked live, with a Fix button on each.
+ *
+ * Every report this week came back here: Shweta's sync dead five days, Ankita's
+ * background worker last run 5 Aug then nothing for three, vishesh and sneha
+ * with call-log permission off since 20 July. In every case the CRM knew and
+ * the rep did not, because the only place it showed was an admin page they
+ * never open. The setup gate asks at install; this answers any time.
+ */
+@Composable
+private fun PhoneCheckCard(vm: MainViewModel) {
+    val context = LocalContext.current
+    var refresh by remember { mutableIntStateOf(0) }
+
+    // Re-read whenever the rep comes back from a Settings screen, so a fix they
+    // just made turns green without anyone knowing to reopen the app.
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) refresh++
+        }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+
+    val PC = com.salesautocall.app.data.PhoneCheck
+    val calls = refresh.let { PC.readableCalls(context) }
+    val logOk = refresh.let { PC.callLogGranted(context) } && calls != null
+    val battOk = refresh.let { PC.batteryExempt(context) }
+    val hasAutostart = remember { com.salesautocall.app.sip.OemAutostart.hasVendorScreen(context) }
+    val autoOk = refresh.let { PC.autostartConfirmed(context) }
+    val (allGood, verdict) = refresh.let { PC.verdict(context) }
+
+    val good = androidx.compose.ui.graphics.Color(0xFF16A34A)
+    val bad = MaterialTheme.colorScheme.error
+
+    PaperCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            SettingHeader(
+                if (allGood) Icons.Default.CheckCircle else Icons.Default.Warning,
+                "Is my phone working?",
+                "Check that your calls are reaching the office",
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                verdict,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (allGood) good else bad,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(14.dp))
+
+            // The probe, not the permission flag. checkSelfPermission() says
+            // GRANTED on OEM builds that then hand back nothing, so this counts
+            // what the sync worker's own query actually returns.
+            CheckRow(
+                "Call log readable",
+                when {
+                    !PC.callLogGranted(context) -> "Permission is OFF"
+                    calls == null -> "Phone is blocking it"
+                    else -> "$calls calls found on this phone"
+                },
+                logOk,
+            ) {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            android.net.Uri.parse("package:${context.packageName}"),
+                        ),
+                    )
+                }
+            }
+            CheckRow(
+                "Works in background",
+                if (battOk) "Phone will not sleep the app" else "Phone is sleeping the app",
+                battOk,
+            ) {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            android.net.Uri.parse("package:${context.packageName}"),
+                        ),
+                    )
+                }
+            }
+            if (hasAutostart) {
+                // Android gives no way to READ this one, so it shows what the rep
+                // told us and stays one tap from the screen either way.
+                CheckRow(
+                    "Starts on its own",
+                    if (autoOk) "You confirmed this is on" else "Not confirmed yet",
+                    autoOk,
+                ) { runCatching { com.salesautocall.app.sip.OemAutostart.open(context) } }
+            }
+            CheckRow(
+                "Microphone",
+                if (PC.micGranted(context)) "Recordings and voice notes work" else "Permission is OFF",
+                refresh.let { PC.micGranted(context) },
+            ) {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            android.net.Uri.parse("package:${context.packageName}"),
+                        ),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            // Proves it end to end rather than asking the rep to wait 15 minutes
+            // for the periodic worker — which, on the phones that need this most,
+            // is exactly the thing that is not running.
+            Box(
+                Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clickable { vm.runSyncNow(); refresh++ },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("Send my calls now", color = MaterialTheme.colorScheme.onPrimary,
+                    fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CheckRow(title: String, detail: String, ok: Boolean, onFix: () -> Unit) {
+    val good = androidx.compose.ui.graphics.Color(0xFF16A34A)
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(if (ok) "✅" else "❌", fontSize = 16.sp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.bodySmall,
+                color = if (ok) good else MaterialTheme.colorScheme.error)
+        }
+        if (!ok) {
+            Box(
+                Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
+                    .clickable { onFix() }.padding(horizontal = 14.dp, vertical = 7.dp),
+            ) {
+                Text("Fix", color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
