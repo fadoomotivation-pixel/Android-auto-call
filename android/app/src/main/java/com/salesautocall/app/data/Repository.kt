@@ -204,8 +204,14 @@ object Repository {
         val recordAll = runCatching { myCompany()?.recordAllCalls }.getOrNull() == true
 
         // 2. Fetch the user's CRM contacts
+        // company_id is in the column list because Contact REQUIRES it — a
+        // non-null field with no default. Asking for "id, phone" and decoding
+        // into a model that needs a third column is a MissingFieldException
+        // waiting for the right row, and this select is unguarded: it takes the
+        // whole sync down before any heartbeat is written, so the phone reports
+        // nothing at all rather than reporting a failure.
         val myContacts = client.from("contacts")
-            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("id, phone")) {
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("id, phone, company_id")) {
                 filter { eq("company_id", companyId) }
             }.decodeList<Contact>()
 
@@ -224,7 +230,9 @@ object Repository {
         // 3. Fetch recent Supabase call logs to deduplicate
         // Limit to 500 to avoid large memory footprint, enough to catch missing ones.
         val recentLogs = client.from("call_logs")
-            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("phone, started_at")) {
+            .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                "id, phone, started_at, company_id, salesperson_id",
+            )) {
                 filter { eq("salesperson_id", salesId) }
                 order("started_at", Order.DESCENDING)
                 limit(500)
@@ -1090,7 +1098,9 @@ object Repository {
         // client-side predicate is how a green diff becomes a red build.
         return runCatching {
             client.from("call_logs")
-                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("id, started_at, off_crm")) {
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                    "id, started_at, off_crm, phone, company_id, salesperson_id",
+                )) {
                     filter {
                         eq("salesperson_id", uid)
                         gte("started_at", startIst)

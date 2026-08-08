@@ -1569,9 +1569,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val onPhone = com.salesautocall.app.data.PhoneCheck.readableCalls(ctx)
             val before = runCatching { Repository.myCallLogCountToday() }.getOrDefault(0)
-            val ok = runCatching {
+            // KEEP THE REAL ERROR. The first version turned every exception into
+            // "Could not reach the office. Check your internet" — which is a
+            // GUESS dressed as a diagnosis, and the first time it fired the
+            // phone had four green ticks, 199 readable calls and working
+            // internet. A rep reading that goes and restarts their router; the
+            // admin who has to help them learns nothing. If we do not know why
+            // it failed, say what the failure actually was.
+            val failure = runCatching {
                 withContext(Dispatchers.IO) { Repository.syncCallLogs(ctx) }
-            }.isSuccess
+            }.exceptionOrNull()
+            val ok = failure == null
             val after = runCatching { Repository.myCallLogCountToday() }.getOrDefault(before)
 
             // Ordered so every branch is reachable. My first version tested
@@ -1582,8 +1590,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val result = when {
                 onPhone == null ->
                     "❌ This phone will not let the app read the call log. Tap Fix on the red row above."
-                !ok ->
+                // Only claim "internet" when it looks like the network. Anything
+                // else prints its own name, so the next person to see this can
+                // act on it instead of guessing along with me.
+                !ok && looksLikeNetwork(failure) ->
                     "❌ Could not reach the office. Check your internet and press Test again."
+                !ok ->
+                    "❌ Sync failed: ${shortError(failure)}. Send this line to your admin."
                 onPhone == 0 ->
                     "✅ Setup is fine — no calls on this phone yet. Make one and press Test again."
                 after > 0 ->
@@ -1595,6 +1608,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             set { it.copy(syncTestBusy = false, syncTestResult = result) }
         }
+    }
+
+    /** Network-ish failures, so only those get told to check the internet. */
+    private fun looksLikeNetwork(t: Throwable?): Boolean {
+        val s = ((t?.javaClass?.simpleName ?: "") + " " + (t?.message ?: "")).lowercase()
+        return listOf("unknownhost", "timeout", "connect", "socket", "network", "unresolved", "offline")
+            .any { it in s }
+    }
+
+    /** The exception, short enough to read on a phone and specific enough to fix. */
+    private fun shortError(t: Throwable?): String {
+        val name = t?.javaClass?.simpleName?.takeIf { it.isNotBlank() } ?: "Unknown error"
+        val msg = t?.message?.trim()?.replace(Regex("\\s+"), " ").orEmpty()
+        return if (msg.isEmpty()) name else "$name — ${msg.take(140)}"
     }
 
     fun refreshWorkStates() {
