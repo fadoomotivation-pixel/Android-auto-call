@@ -1531,11 +1531,12 @@ private fun PhoneCheckCard(vm: MainViewModel) {
             // GRANTED on OEM builds that then hand back nothing, so this counts
             // what the sync worker's own query actually returns.
             CheckRow(
-                "Call log readable",
+                "Call working",
                 when {
-                    !PC.callLogGranted(context) -> "Permission is OFF"
-                    calls == null -> "Phone is blocking it"
-                    else -> "$calls calls found on this phone"
+                    !PC.callLogGranted(context) -> "Permission is OFF — AI coach cannot read your calls"
+                    calls == null -> "Phone is blocking it — AI coach cannot read your calls"
+                    calls == 0 -> "No calls on this phone yet"
+                    else -> "$calls calls ready for the AI coach"
                 },
                 logOk,
             ) {
@@ -1573,7 +1574,8 @@ private fun PhoneCheckCard(vm: MainViewModel) {
             }
             CheckRow(
                 "Microphone",
-                if (PC.micGranted(context)) "Recordings and voice notes work" else "Permission is OFF",
+                if (PC.micGranted(context)) "Voice notes working for the AI"
+                else "Permission is OFF — the AI cannot hear your voice notes",
                 refresh.let { PC.micGranted(context) },
             ) {
                 runCatching {
@@ -1587,17 +1589,41 @@ private fun PhoneCheckCard(vm: MainViewModel) {
             }
 
             Spacer(Modifier.height(12.dp))
-            // Proves it end to end rather than asking the rep to wait 15 minutes
-            // for the periodic worker — which, on the phones that need this most,
-            // is exactly the thing that is not running.
+            // A TEST, and it shows its answer. "Sent ✓" is a promise, not a
+            // result — the rep wants the two numbers that settle it: how many
+            // calls are on this phone, and how many the office now has.
+            val app by vm.state.collectAsState()
             Box(
                 Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.primary)
-                    .clickable { vm.runSyncNow(); refresh++ },
+                    .clickable(enabled = !app.syncTestBusy) { vm.runSyncNow(); refresh++ },
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Send my calls now", color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold)
+                Text(
+                    if (app.syncTestBusy) "Testing…" else "Test",
+                    color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold,
+                )
+            }
+            app.syncTestResult?.let { r ->
+                Spacer(Modifier.height(10.dp))
+                val bad = r.startsWith("❌") || r.startsWith("⚠️")
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                        .background(
+                            (if (bad) MaterialTheme.colorScheme.error
+                             else androidx.compose.ui.graphics.Color(0xFF16A34A)).copy(alpha = 0.10f),
+                        )
+                        .padding(horizontal = 11.dp, vertical = 9.dp),
+                ) {
+                    Text(
+                        r,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (bad) MaterialTheme.colorScheme.error
+                                else androidx.compose.ui.graphics.Color(0xFF16A34A),
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 17.sp,
+                    )
+                }
             }
         }
     }

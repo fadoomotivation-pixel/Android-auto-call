@@ -1071,6 +1071,34 @@ object Repository {
      * definitions of "due" are exactly how the Follow-up tab and the Follow Ups
      * screen ended up disagreeing about the same clock.
      */
+    /**
+     * How many of MY calls the office actually has for today.
+     *
+     * The other half of the Settings self-check: the phone can say "23 calls on
+     * this handset", but the only number that matters to a founder is how many
+     * of them arrived. Counted from call_logs by started_at in IST, off_crm
+     * excluded — the same rules the Daily Pulse counts by, so the rep's test and
+     * the founder's report cannot give different answers.
+     */
+    suspend fun myCallLogCountToday(): Int {
+        val uid = currentUserId() ?: return 0
+        val startIst = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"))
+            .atStartOfDay(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toString()
+        // off_crm filtered in Kotlin rather than in the query: CallLog carries the
+        // field with a default, and this file's proven select/decode shape is
+        // columns + decodeList<CallLog>. Inventing filter syntax to save one
+        // client-side predicate is how a green diff becomes a red build.
+        return runCatching {
+            client.from("call_logs")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw("id, started_at, off_crm")) {
+                    filter {
+                        eq("salesperson_id", uid)
+                        gte("started_at", startIst)
+                    }
+                }.decodeList<CallLog>().count { !it.offCrm }
+        }.getOrDefault(0)
+    }
+
     suspend fun fetchWorkStates(salespersonId: String): List<LeadWork> =
         runCatching {
             client.from("v_lead_workstate").select(
