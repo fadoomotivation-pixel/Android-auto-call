@@ -42,9 +42,40 @@ jobs:
 
       # One build produces every brand's debug APK (all share applicationId +
       # the committed debug keystore, so each installs cleanly over its own line).
+      # RETRIED, because the thing that fails here is usually not the code.
+      #
+      # 8 Aug: this step failed on main with HTTP 403 from Maven Central —
+      # "Could not GET .../kotlin-stdlib-jdk8-1.8.22.pom" — for a commit whose
+      # identical tree had compiled green on its branch eight minutes earlier.
+      # Nothing was wrong with the build; repo.maven.apache.org rate-limited the
+      # runner. It was the second transient infrastructure failure of the day
+      # (the Supabase deploy had already died on GitHub's own action-download
+      # service returning Service Unavailable).
+      #
+      # The cost of that is not a red tick, it is a SILENT STALE RELEASE: the
+      # publish steps below are `if: success()`, so they skip, main looks merged,
+      # and the reps keep getting yesterday's APK. Exactly what happened — the
+      # self-check card merged and the update channel stayed on the previous
+      # build until someone noticed.
+      #
+      # Three attempts with a widening gap. A genuine compile error fails all
+      # three in about the same time it used to fail once; a throttled registry
+      # gets a second chance instead of costing a release.
       - name: Build debug APKs (all brand flavors)
         working-directory: android
-        run: gradle assembleStandardDebug assembleSndeveloperDebug assembleManaspropertyDebug --stacktrace --no-daemon
+        run: |
+          for attempt in 1 2 3; do
+            if gradle assembleStandardDebug assembleSndeveloperDebug assembleManaspropertyDebug \
+                 --stacktrace --no-daemon; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::Gradle attempt $attempt failed — retrying in $((attempt * 30))s. Usually Maven Central throttling, not the code."
+              sleep $((attempt * 30))
+            fi
+          done
+          echo "::error::Gradle failed three times. A 'Could not GET' or 403 from repo.maven.apache.org means the registry, not the build. Anything else is real."
+          exit 1
 
       # Flatten every flavor's APK into one folder for a simple artifact/publish.
       - name: Collect APKs
