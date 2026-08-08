@@ -1508,7 +1508,7 @@ private fun PhoneCheckCard(vm: MainViewModel) {
     val autoOk = refresh.let { PC.autostartConfirmed(context) }
     val (allGood, verdict) = refresh.let { PC.verdict(context) }
 
-    val good = Color(0xFF16A34A)
+    val good = androidx.compose.ui.graphics.Color(0xFF16A34A)
     val bad = MaterialTheme.colorScheme.error
 
     PaperCard(Modifier.fillMaxWidth()) {
@@ -1605,7 +1605,7 @@ private fun PhoneCheckCard(vm: MainViewModel) {
 
 @Composable
 private fun CheckRow(title: String, detail: String, ok: Boolean, onFix: () -> Unit) {
-    val good = Color(0xFF16A34A)
+    val good = androidx.compose.ui.graphics.Color(0xFF16A34A)
     Row(
         Modifier.fillMaxWidth().padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
