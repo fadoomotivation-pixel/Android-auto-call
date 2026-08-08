@@ -14,6 +14,10 @@ type Rep = {
   moves: { detail: string; lead: string; byAi: boolean }[];
   /** Visit DATED today. A date is a promise, not attendance. */
   siteVisits: string[];
+  /** False when this phone is not sending its call log — so calls/connected/
+   *  talk below are what the CRM RECEIVED, not what the rep did. */
+  callsTrusted?: boolean;
+  syncedAt?: string | null;
   /** Actually checked in on site today. The only evidence anyone came. */
   visitsArrived?: string[];
   followUps: number;
@@ -233,6 +237,13 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14, color: "var(--muted)", fontSize: 13 }}>
               <span><strong style={{ color: "var(--text)" }}>{c.totals.calls}</strong> calls</span>
               <span><strong style={{ color: "#22c55e" }}>{c.totals.connected}</strong> connected</span>
+              {/* The totals are a sum of what ARRIVED. With a phone missing they
+                  are a floor, not a count. */}
+              {c.reps.some((r) => r.callsTrusted === false) && (
+                <span style={{ color: "#fca5a5" }}>
+                  ⚠️ incomplete — {c.reps.filter((r) => r.callsTrusted === false).map((r) => r.name).join(", ")} not reporting
+                </span>
+              )}
               <span><strong style={{ color: "#8b5cf6" }}>{c.totals.notes}</strong> voice notes</span>
               <span><strong style={{ color: "#f59e0b" }}>{c.totals.visits}</strong> site visits</span>
             </div>
@@ -240,7 +251,10 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
             {c.reps.map((r) => {
-              const idle = !r.calls && !r.voiceNotes.length && !r.moves.length && !r.siteVisits.length;
+              // Dimming the card says "this person did nothing". Never say that
+              // about a phone that simply is not reporting.
+              const idle = !r.calls && !r.voiceNotes.length && !r.moves.length &&
+                !r.siteVisits.length && r.callsTrusted !== false;
               return (
                 <div key={r.id} className="card" style={{ padding: 16, background: "var(--panel)", border: "1px solid rgba(255,255,255,0.08)", opacity: idle ? 0.65 : 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -265,10 +279,45 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                     {(r.visitsFixed ?? 0) > 0 && (
                       <span><strong style={{ color: "#f59e0b" }}>📍 {r.visitsFixed}</strong> visits fixed</span>
                     )}
-                    <span><strong style={{ color: "var(--text)" }}>{r.calls}</strong> calls</span>
-                    <span><strong style={{ color: "#22c55e" }}>{r.connected}</strong> conn.</span>
-                    <span><strong style={{ color: "var(--text)" }}>{fmtDur(r.talkSeconds)}</strong> talk</span>
+                    {/* A ZERO FROM A PHONE THAT IS NOT REPORTING IS NOT A ZERO.
+                        This page kept printing "0 calls · 0 conn. · 0m talk"
+                        beside "📍 3 visits fixed" — and those three visits came
+                        from Ankita's own voice notes, so the calls demonstrably
+                        happened. You cannot book a site visit on a call that
+                        did not take place. The 3 was right and the 0 was the
+                        broken number, and the founder had no way to tell which.
+                        The WhatsApp report learned this in #385/#390; the page
+                        renders the DATA rather than that text, so it never did. */}
+                    {r.callsTrusted === false ? (
+                      <span style={{ color: "#fca5a5" }}>
+                        <strong>⚠️ calls not counted</strong> — phone not sending its call log
+                      </span>
+                    ) : (
+                      <>
+                        <span><strong style={{ color: "var(--text)" }}>{r.calls}</strong> calls</span>
+                        <span><strong style={{ color: "#22c55e" }}>{r.connected}</strong> conn.</span>
+                        <span><strong style={{ color: "var(--text)" }}>{fmtDur(r.talkSeconds)}</strong> talk</span>
+                      </>
+                    )}
                   </div>
+
+                  {/* What DID arrive, so the founder can still see the day. These
+                      reach the server straight from the app and were never in
+                      doubt — unlike the call log, which needs a background
+                      worker the OEM is free to kill. */}
+                  {r.callsTrusted === false && (
+                    <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
+                      Recorded by hand today:{" "}
+                      <strong style={{ color: "var(--text)" }}>
+                        {[
+                          r.voiceNotes.length > 0 ? `${r.voiceNotes.length} voice notes` : null,
+                          r.moves.length > 0 ? `${r.moves.length} lead updates` : null,
+                        ].filter(Boolean).join(" · ") || "nothing"}
+                      </strong>
+                      {" — "}
+                      <a href="/dashboard/health" style={{ color: "var(--accent)" }}>fix the phone →</a>
+                    </div>
+                  )}
 
                   {/* The win and the risk — the two things a founder cannot get
                       from the numbers. `narrative` is the older single-blob
