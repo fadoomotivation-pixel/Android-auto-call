@@ -34,6 +34,20 @@ object AppPrefs {
     fun getAutostartPrompted(context: Context): Boolean = prefs(context).getBoolean("autostart_prompted", false)
     fun setAutostartPrompted(context: Context, v: Boolean) = prefs(context).edit().putBoolean("autostart_prompted", v).apply()
 
+    /**
+     * The rep has confirmed they switched Autostart on.
+     *
+     * Android exposes NO way to read a vendor's Autostart state — there is no
+     * permission to check and no API to call. So unlike every other row in the
+     * setup gate this one cannot be verified, only asked, and the honest design
+     * is a deliberate two-tap confirm: open the vendor screen, come back, say
+     * you did it. A rep who lies to this gets a phone that stops syncing and a
+     * Phone Health row explaining why — which is strictly better than the app
+     * never asking, and never asking is what happened to Ankita and Shweta.
+     */
+    fun getAutostartConfirmed(context: Context): Boolean = prefs(context).getBoolean("autostart_confirmed", false)
+    fun setAutostartConfirmed(context: Context, v: Boolean) = prefs(context).edit().putBoolean("autostart_confirmed", v).apply()
+
     // getBatteryAsked / setBatteryAsked lived here for exactly one day. They
     // rate-limited a Settings intent that MainActivity fired on every onResume;
     // that whole mechanism is gone, replaced by the setup gate, which asks in

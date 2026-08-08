@@ -33,6 +33,24 @@ object OemAutostart {
         "com.letv.android.letvsafe" to "com.letv.android.letvsafe.AutobootManageActivity",
     )
 
+    /**
+     * Does this phone actually HAVE a vendor Autostart screen?
+     *
+     * The whole reason to ask a rep about Autostart is that MIUI, ColorOS,
+     * Funtouch and friends kill background work no matter what Android's own
+     * battery settings say — Ankita's Xiaomi ran its call-log sync once on 5 Aug
+     * and then not again for three days, with the Doze exemption irrelevant to
+     * it. On a Pixel there is no such screen and nothing to ask, so the setup
+     * gate must not invent a step the rep cannot complete.
+     */
+    fun hasVendorScreen(context: Context): Boolean = INTENTS.any { (pkg, cls) ->
+        runCatching {
+            context.packageManager.resolveActivity(
+                Intent().apply { component = ComponentName(pkg, cls) }, 0,
+            ) != null
+        }.getOrDefault(false)
+    }
+
     /** Opens the vendor Autostart screen the first time only. */
     fun openIfNeeded(context: Context) {
         if (AppPrefs.getAutostartPrompted(context)) return
