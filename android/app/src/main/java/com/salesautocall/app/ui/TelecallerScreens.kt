@@ -1489,6 +1489,25 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         stageFilter != null -> app.leads.filter { it.stage == stageFilter }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
         quick == "retry" -> app.leads.filter { app.actionOf(it) == "call_now" }
+        // THE HOME DECK'S TWO BUTTONS LAND HERE, and until now they landed
+        // nowhere. "followup" and "new" match neither the "act:" nor the
+        // "stage:" prefix below, so both fell through to `else -> app.leads`
+        // and dropped the rep into the ENTIRE unfiltered list. The comment on
+        // onDueNow says "lands on Follow-up, which opens on Call now — the list
+        // this number counts"; that was the intent and not what the code did.
+        //
+        // It is the "12 vs 8" failure the deck's own newCount comment warns
+        // about, in its worst form: the button says 410 and opens 855.
+        //
+        // "followup" is overdue + call_now because that is exactly what the
+        // deck's Due number counts (see DeckStats above). One rule, used to
+        // both count the badge and build the list it opens, so they cannot
+        // drift apart again.
+        bucket == "followup" -> app.leads
+            .filter { val a = app.actionOf(it); a == "overdue" || a == "call_now" }
+            .sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
+        // Character-for-character the rule the deck's newCount uses.
+        bucket == "new" -> app.leads.filter { it.stage == "new" }
         // Both axes read straight through. There is no client-side re-derivation
         // of either one: the stage is a column, the action state is a view, and
         // a second opinion computed here is exactly the drift being removed.
@@ -1541,7 +1560,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     // stage tab would ring people whose time has not come — which is what
     // "power-dial the Follow-up tab" used to do before the tab was three
     // different jobs under one name.
-    val isActionQueue = bucket == "act:overdue" || bucket == "act:call_now"
+    // "followup" is the deck's work queue (overdue + call_now), so power-dial
+    // belongs there too — it is the same due work, reached by a different tap.
+    val isActionQueue = bucket == "act:overdue" || bucket == "act:call_now" || bucket == "followup"
     val fuCallNow = if (isActionQueue) filtered else emptyList()
 
     fun exitSelect() { selectMode = false; selectedIds = emptySet() }
@@ -1581,9 +1602,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         // count that includes next week's plan cannot go down however
                         // hard a rep works, and a number that never moves is a number
                         // nobody reads.
-                        val dueNow = app.leads.count {
-                            val a = app.actionOf(it); a == "overdue" || a == "call_now"
-                        }
+                        // Same function Home's badge uses — see dueNowCount().
+                        // Two copies of this rule is how the two screens came to
+                        // disagree about the same question.
+                        val dueNow = vm.dueNowCount()
                         val hotCount = app.leads.count { it.temperature == "hot" && !isFinished(app.leadStages, it.stage) }
                         val pipelineValue = app.leads
                             .filter { it.status !in DEAD_STATUSES }
@@ -1865,7 +1887,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // chips on the action row — same three groups, same one
                     // clock, except the clock is the database's and the counts
                     // are the ones the dashboard shows.
-                    if (fuCallNow.isEmpty() && bucket == "act:call_now" && filtered.isEmpty()) {
+                    if (fuCallNow.isEmpty() && (bucket == "act:call_now" || bucket == "followup") && filtered.isEmpty()) {
                         item(key = "fu_clear") { FollowUpAllClear(app.leads.count { app.actionOf(it) == "scheduled" }) }
                     } else {
                         items(filtered, key = { it.id ?: it.phone }) { c -> leadCard(c) }
