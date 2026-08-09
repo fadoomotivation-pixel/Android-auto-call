@@ -546,6 +546,10 @@ function kpiBlock(k: {
   calls: number; connected: number; talkSeconds: number;
   /** Absent on the company totals block, which is a sum and always printed. */
   callsTrusted?: boolean;
+  /** Present for a rep. When there were no CRM-lead calls but the phone was
+   *  busy anyway, these replace the row of zeros — see below. */
+  offCrmCalls?: number;
+  offCrmTalkSeconds?: number;
 }): string[] {
   const L = [`• Bookings: ${k.bookings}`];
   if (k.revenue > 0) L.push(`• Token collected: ${rupees(k.revenue)}`);
@@ -561,8 +565,21 @@ function kpiBlock(k: {
     L.push("• Calls: not available — this phone is not sending its call log");
   } else {
     L.push(
-      `• Calls: ${k.calls} · connected ${connectedLine(k.calls, k.connected)}` +
-        (k.talkSeconds > 0 ? ` · ${fmtDur(k.talkSeconds)} talk` : ""),
+      // A ROW OF ZEROS IS NOT A REPORT. "Calls: 0 · connected 0 · 0m talk"
+      // printed directly above "132 calls to numbers not in the CRM, 59m talk"
+      // on a day the rep was on the phone for an hour. Both true; together they
+      // read as a broken system, and a founder told twice that the phone is
+      // fixed stops reading at the zero. When the only phone work was off-CRM,
+      // the real numbers are the headline — labelled, so 132 can never be
+      // misread as 132 lead calls.
+      (k.calls === 0 && (k.offCrmCalls ?? 0) > 0
+        ? `• Calls: ${k.offCrmCalls} · 0 to CRM leads`
+        : `• Calls: ${k.calls} · connected ${connectedLine(k.calls, k.connected)}`) +
+        // Same rule as the calls line above: show the talk that actually
+        // happened rather than a 0m next to an hour of phone time.
+        (k.calls === 0 && (k.offCrmTalkSeconds ?? 0) > 0
+          ? ` · ${fmtDur(k.offCrmTalkSeconds ?? 0)} talk`
+          : k.talkSeconds > 0 ? ` · ${fmtDur(k.talkSeconds)} talk` : ""),
     );
     if (k.connected > 0) {
       L.push(`• Visit rate: ${Math.round((k.visitsFixed / k.connected) * 100)}% of everyone talked to`);
@@ -787,7 +804,12 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
     // Only the halves that have a number in them: "0 voice notes | 67 lead
     // updates" reads like a complaint about the zero.
     const didArrive = listOfNonZero(realNotes(r).length, newsworthyMoves(r).length)
-    L.push((warn ? didArrive : `${r.calls} calls | ${connectedLine(r.calls, r.connected)} connected`) +
+    // Same rule again — the founder's team report showed "0 calls | 0
+    // connected" beside a rep who had been on the phone for an hour.
+    const callsBit = r.calls === 0 && r.offCrmCalls > 0
+      ? `${r.offCrmCalls} calls | 0 to CRM leads`
+      : `${r.calls} calls | ${connectedLine(r.calls, r.connected)} connected`
+    L.push((warn ? didArrive : callsBit) +
       (r.hotLeads ? ` | 🔥 ${r.hotLeads} hot` : "") +
       (r.visitsFixed ? ` | 📍 ${r.visitsFixed} visit${r.visitsFixed > 1 ? "s" : ""} fixed` : "") +
       (r.bookings ? ` | 🎉 ${r.bookings} booked${r.revenue ? ` ${rupees(r.revenue)}` : ""}` : ""));

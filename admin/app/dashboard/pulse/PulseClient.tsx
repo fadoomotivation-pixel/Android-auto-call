@@ -296,6 +296,26 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                       <span style={{ color: "#fca5a5" }}>
                         <strong>⚠️ calls not counted</strong> — phone not sending its call log
                       </span>
+                    ) : r.calls === 0 && (r.offCrmCalls ?? 0) > 0 ? (
+                      // A ROW OF ZEROS IS NOT A REPORT.
+                      //
+                      // "0 calls · 0 conn. · 0m talk" sat above "132 calls to
+                      // numbers not in the CRM, 59m talk" on the same card, on a
+                      // day this rep was on the phone for an hour. Both lines
+                      // were true and together they read as a broken system —
+                      // and a founder who has been told twice that the phone is
+                      // fixed stops reading the card at the zero.
+                      //
+                      // When the only phone work was off-CRM, the real numbers
+                      // ARE the headline, labelled for exactly what they are.
+                      // The lead-work metric is not inflated: it is stated as
+                      // "0 to CRM leads" in the same breath, so nobody can read
+                      // 132 as 132 lead calls.
+                      <>
+                        <span><strong style={{ color: "var(--text)" }}>{r.offCrmCalls}</strong> calls</span>
+                        <span><strong style={{ color: "var(--text)" }}>{fmtDur(r.offCrmTalkSeconds ?? 0)}</strong> talk</span>
+                        <span style={{ color: "#fbbf24" }}><strong>0</strong> to CRM leads</span>
+                      </>
                     ) : (
                       <>
                         <span><strong style={{ color: "var(--text)" }}>{r.calls}</strong> calls</span>
@@ -321,9 +341,12 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                       border: "1px solid rgba(251,191,36,0.25)",
                       borderRadius: 10, padding: "8px 12px",
                     }}>
-                      📵 <strong>{r.offCrmCalls}</strong> call{r.offCrmCalls === 1 ? "" : "s"} to numbers not in the CRM
-                      {(r.offCrmTalkSeconds ?? 0) > 0 && <>, <strong>{fmtDur(r.offCrmTalkSeconds ?? 0)}</strong> talk</>}
-                      {r.calls === 0 && " — no CRM lead was called today."}
+                      📵 These numbers are <strong>not in the CRM</strong>
+                      {r.calls === 0
+                        ? " — every call today was to someone the CRM has never heard of. Import them as leads and the AI coach can work them."
+                        : <>: <strong>{r.offCrmCalls}</strong> call{r.offCrmCalls === 1 ? "" : "s"}
+                            {(r.offCrmTalkSeconds ?? 0) > 0 && <>, <strong>{fmtDur(r.offCrmTalkSeconds ?? 0)}</strong> talk</>}
+                          </>}
                     </div>
                   )}
 
