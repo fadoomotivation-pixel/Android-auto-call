@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class AppState(
     val loading: Boolean = false,
@@ -1567,46 +1568,89 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ctx = getApplication<android.app.Application>()
         set { it.copy(syncTestBusy = true, syncTestResult = null) }
         viewModelScope.launch {
-            val onPhone = com.salesautocall.app.data.PhoneCheck.readableCalls(ctx)
-            val before = runCatching { Repository.myCallLogCountToday() }.getOrDefault(0)
-            // KEEP THE REAL ERROR. The first version turned every exception into
-            // "Could not reach the office. Check your internet" — which is a
-            // GUESS dressed as a diagnosis, and the first time it fired the
-            // phone had four green ticks, 199 readable calls and working
-            // internet. A rep reading that goes and restarts their router; the
-            // admin who has to help them learns nothing. If we do not know why
-            // it failed, say what the failure actually was.
-            val failure = runCatching {
-                withContext(Dispatchers.IO) { Repository.syncCallLogs(ctx) }
-            }.exceptionOrNull()
-            val ok = failure == null
-            val after = runCatching { Repository.myCallLogCountToday() }.getOrDefault(before)
+            // "Testing…" FOREVER was the whole bug on Shweta's phone.
+            //
+            // Nothing in here had a deadline and nothing was in a finally, so
+            // the one thing this button could not do was stop. Her handset had
+            // never synced once, so it was uploading a full 7-day backlog —
+            // which used to be one HTTP request per call — and the screen had
+            // no way to say "still going" or "gave up". A rep watching that
+            // reasonably concludes the app is broken and stops trusting the
+            // whole screen.
+            //
+            // Two changes, in this order of importance: the work is now fast
+            // (logCallsBulk sends them in one request instead of a hundred),
+            // and the button is now incapable of hanging even when it isn't.
+            // Three minutes is deliberately generous — a genuine first sync on
+            // a bad connection must not be reported as a failure.
+            val outcome = withTimeoutOrNull(3 * 60_000L) {
+                // OFF THE MAIN THREAD. readableCalls() is a ContentResolver
+                // cursor over the whole call log; on a long log it froze the
+                // UI, which is the other half of "the screen is stuck".
+                val onPhone = withContext(Dispatchers.IO) {
+                    com.salesautocall.app.data.PhoneCheck.readableCalls(ctx)
+                }
+                val before = runCatching { Repository.myCallLogCountToday() }.getOrDefault(0)
+                // KEEP THE REAL ERROR. The first version turned every exception
+                // into "Could not reach the office. Check your internet" —
+                // which is a GUESS dressed as a diagnosis, and the first time
+                // it fired the phone had four green ticks, 199 readable calls
+                // and working internet. A rep reading that goes and restarts
+                // their router; the admin who has to help them learns nothing.
+                // If we do not know why it failed, say what the failure was.
+                // try/catch rather than runCatching, because runCatching also
+                // swallows CancellationException — so a run that hit the
+                // 3-minute deadline would report itself as "Sync failed:
+                // JobCancellationException" instead of as a timeout. The
+                // timeout owns that exception; everything else is a real error.
+                val failure = try {
+                    withContext(Dispatchers.IO) { Repository.syncCallLogs(ctx) }
+                    null
+                } catch (c: kotlinx.coroutines.CancellationException) {
+                    throw c
+                } catch (t: Throwable) {
+                    t
+                }
+                val ok = failure == null
+                val after = runCatching { Repository.myCallLogCountToday() }.getOrDefault(before)
 
-            // Ordered so every branch is reachable. My first version tested
-            // `after >= onPhone.coerceAtMost(after)`, which is min(a,b) <= a —
-            // true for all inputs — so the "no calls on this phone yet" case
-            // below it could never be reached.
-            val sent = (after - before).coerceAtLeast(0)
-            val result = when {
-                onPhone == null ->
-                    "❌ This phone will not let the app read the call log. Tap Fix on the red row above."
-                // Only claim "internet" when it looks like the network. Anything
-                // else prints its own name, so the next person to see this can
-                // act on it instead of guessing along with me.
-                !ok && looksLikeNetwork(failure) ->
-                    "❌ Could not reach the office. Check your internet and press Test again."
-                !ok ->
-                    "❌ Sync failed: ${shortError(failure)}. Send this line to your admin."
-                onPhone == 0 ->
-                    "✅ Setup is fine — no calls on this phone yet. Make one and press Test again."
-                after > 0 ->
-                    "✅ Working. This phone: $onPhone calls in 7 days. Office has $after from today" +
-                        (if (sent > 0) " ($sent just sent)." else ".")
-                else ->
-                    "⚠️ Your calls are on the phone but the office has none from today. " +
-                        "If this stays wrong after a minute, tell your admin."
+                // Ordered so every branch is reachable. My first version tested
+                // `after >= onPhone.coerceAtMost(after)`, which is min(a,b) <= a
+                // — true for all inputs — so the "no calls on this phone yet"
+                // case below it could never be reached.
+                val sent = (after - before).coerceAtLeast(0)
+                when {
+                    onPhone == null ->
+                        "❌ This phone will not let the app read the call log. Tap Fix on the red row above."
+                    // Only claim "internet" when it looks like the network.
+                    // Anything else prints its own name, so the next person to
+                    // see this can act on it instead of guessing along with me.
+                    !ok && looksLikeNetwork(failure) ->
+                        "❌ Could not reach the office. Check your internet and press Test again."
+                    !ok ->
+                        "❌ Sync failed: ${shortError(failure)}. Send this line to your admin."
+                    onPhone == 0 ->
+                        "✅ Setup is fine — no calls on this phone yet. Make one and press Test again."
+                    after > 0 ->
+                        "✅ Working. This phone: $onPhone calls in 7 days. Office has $after from today" +
+                            (if (sent > 0) " ($sent just sent)." else ".")
+                    else ->
+                        "⚠️ Your calls are on the phone but the office has none from today. " +
+                            "If this stays wrong after a minute, tell your admin."
+                }
             }
-            set { it.copy(syncTestBusy = false, syncTestResult = result) }
+            // ALWAYS ends. Worked, failed, or ran out of time — the button goes
+            // back to "Test" and the rep is told which of the three happened.
+            // It can no longer sit on "Testing…".
+            set {
+                it.copy(
+                    syncTestBusy = false,
+                    syncTestResult = outcome
+                        ?: "⏱️ Still sending after 3 minutes — your connection looks very slow. " +
+                            "Your calls are safe on the phone and keep uploading in the " +
+                            "background. Press Test again on better internet.",
+                )
+            }
         }
     }
 

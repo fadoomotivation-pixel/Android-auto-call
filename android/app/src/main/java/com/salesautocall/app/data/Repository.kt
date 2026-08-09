@@ -108,6 +108,33 @@ object Repository {
         return client.from("call_logs").insert(log) { select() }.decodeSingleOrNull<CallLog>()?.id
     }
 
+    /**
+     * Insert backfilled call logs in CHUNKS, not one HTTP request each.
+     *
+     * The backfill loop used to call logCall() per row and throw the returned id
+     * away. On a phone that has never synced, that is the entire 7-day call log
+     * in sequential round trips — Ankita's first run backfilled 118 — and on a
+     * telecaller's 4G it takes minutes. That is why Shweta's "Test" button sat
+     * on "Testing…": nothing was broken, it just had a hundred requests to get
+     * through and no way to say so.
+     *
+     * A failed chunk falls back to one-at-a-time for that chunk only, so a
+     * single bad row can't take the other ninety-nine down with it — the
+     * resilience of the old loop, at one request instead of a hundred.
+     */
+    suspend fun logCallsBulk(logs: List<CallLog>): Int {
+        if (logs.isEmpty()) return 0
+        var saved = 0
+        for (chunk in logs.chunked(100)) {
+            if (runCatching { client.from("call_logs").insert(chunk) }.isSuccess) {
+                saved += chunk.size
+            } else {
+                for (one in chunk) if (runCatching { logCall(one) }.isSuccess) saved++
+            }
+        }
+        return saved
+    }
+
     /** Force a call's recording_status (e.g. "failed" when no audio was captured). */
     suspend fun markRecordingStatus(callLogId: String, status: String) {
         client.from("call_logs").update(mapOf("recording_status" to status)) {
@@ -299,7 +326,8 @@ object Repository {
 
         // 5. Greedy bipartite matching
         val matchedSupabaseIds = mutableSetOf<String>()
-        var backfilled = 0
+        // Collected, then written in one go — see logCallsBulk.
+        val toBackfill = mutableListOf<CallLog>()
 
         for (nativeCall in nativeCalls) {
             // Find closest unmatched Supabase log within 120 seconds
@@ -352,9 +380,11 @@ object Repository {
                     // Off-CRM = captured under record-all-calls, number isn't a lead.
                     offCrm = nativeCall.contactId == null,
                 )
-                if (runCatching { logCall(newLog) }.isSuccess) backfilled++
+                toBackfill.add(newLog)
             }
         }
+
+        val backfilled = logCallsBulk(toBackfill)
 
         // A completed scan. native_seen is what the PHONE believes happened;
         // backfilled is how much of it the CRM had missed. A phone reporting
