@@ -3369,8 +3369,10 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
             who = f.name ?: f.phone,
             onDismiss = { rescheduleFor = null },
             onPick = { millis, note ->
-                f.id?.let { vm.completeFollowUp(it) }
-                vm.scheduleFollowUp(f.contactId, f.phone, f.name, millis, note)
+                // ONE call, not close-then-book as two racing coroutines — see
+                // moveFollowUp: the book can rewrite the very row the close is
+                // about to mark done, and the rescheduled callback vanishes.
+                vm.moveFollowUp(f, millis, note ?: f.note)
                 rescheduleFor = null
             },
         )
