@@ -299,15 +299,32 @@ object Repository {
             return
         }
 
-        // 3. Fetch recent Supabase call logs to deduplicate
-        // Limit to 500 to avoid large memory footprint, enough to catch missing ones.
+        // 3. Fetch the CRM rows this scan could possibly be a duplicate of.
+        //
+        // THIS IS WHERE 5,397 DUPLICATE ROWS CAME FROM. It used to take the 500
+        // most recent rows, "enough to catch missing ones" — and it is not,
+        // because the native window below is SEVEN DAYS. Once a rep has more
+        // than 500 rows in seven days, the oldest native calls can no longer
+        // find their existing CRM row, so they are backfilled AGAIN. That adds
+        // rows, which pushes even more of the window past the 500 cap, which
+        // duplicates more calls on the next run. It compounds: one of Ankita's
+        // calls is stored EIGHTY-FOUR times, and 2 Aug holds 4,792 rows for 84
+        // distinct numbers.
+        //
+        // Fetch by the SAME window the scan uses instead of a row count — one
+        // day wider, so a call at the boundary still finds its match. The limit
+        // that remains is a sanity bound, not a correctness assumption.
+        val dedupeSince = java.time.Instant.now().minus(8, java.time.temporal.ChronoUnit.DAYS).toString()
         val recentLogs = client.from("call_logs")
             .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw(
                 "id, phone, started_at, company_id, salesperson_id",
             )) {
-                filter { eq("salesperson_id", salesId) }
+                filter {
+                    eq("salesperson_id", salesId)
+                    gte("started_at", dedupeSince)
+                }
                 order("started_at", Order.DESCENDING)
-                limit(500)
+                limit(20000)
             }.decodeList<CallLog>()
 
         // 4. Query Android CallLog
