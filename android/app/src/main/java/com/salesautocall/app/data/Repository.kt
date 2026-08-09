@@ -458,6 +458,11 @@ object Repository {
             backfilled = backfilled,
             contactsLoaded = contactMap.size,
         )
+        // The gate's proof, kept ON THE PHONE. Every early return above leaves
+        // this untouched on purpose: no permission, no cursor, no contacts and
+        // no network all mean the same thing to a rep — their calls are not
+        // reaching the office — and the gate must not open on any of them.
+        AppPrefs.setLastSyncOkAt(context, System.currentTimeMillis())
     }
 
     /** Uploads a recording file to the recording-upload edge function, which streams
