@@ -48,6 +48,21 @@ object AppPrefs {
     fun getAutostartConfirmed(context: Context): Boolean = prefs(context).getBoolean("autostart_confirmed", false)
     fun setAutostartConfirmed(context: Context, v: Boolean) = prefs(context).edit().putBoolean("autostart_confirmed", v).apply()
 
+    /**
+     * When this handset last completed a call-log sync. 0 = never.
+     *
+     * The gate needs a LOCAL answer. device_sync_health is the server's copy and
+     * is worthless here for the obvious reason: if the phone cannot reach the
+     * server, it cannot read the row that would tell it so. This is stamped by
+     * syncCallLogs the moment a scan finishes, and it is the only thing in the
+     * app that can prove the plumbing works rather than merely look like it
+     * should — three green permission ticks proved nothing on Shweta's phone,
+     * and Ankita's Xiaomi held every permission while syncing nothing for three
+     * days.
+     */
+    fun getLastSyncOkAt(context: Context): Long = prefs(context).getLong("last_sync_ok_at", 0L)
+    fun setLastSyncOkAt(context: Context, v: Long) = prefs(context).edit().putLong("last_sync_ok_at", v).apply()
+
     // getBatteryAsked / setBatteryAsked lived here for exactly one day. They
     // rate-limited a Settings intent that MainActivity fired on every onResume;
     // that whole mechanism is gone, replaced by the setup gate, which asks in

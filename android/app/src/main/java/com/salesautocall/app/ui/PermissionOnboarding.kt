@@ -46,6 +46,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -149,10 +153,50 @@ private fun autostartNeeded(context: Context): Boolean =
     com.salesautocall.app.sip.OemAutostart.hasVendorScreen(context) &&
         !com.salesautocall.app.data.AppPrefs.getAutostartConfirmed(context)
 
+/**
+ * How long a successful sync stays proof. Beyond this the phone has to show it
+ * again before the app opens.
+ *
+ * Twelve hours, not one. The gate must catch a handset that has gone dark for a
+ * DAY — Ankita's went three — without locking a rep out of the app because they
+ * walked into a basement. The periodic worker is every 15 minutes and a call end
+ * triggers one inline, so on a healthy phone this is renewed dozens of times a
+ * shift and the rep never sees the gate at all.
+ */
+private const val SYNC_PROOF_HOURS = 12L
+
+/**
+ * Has this phone actually delivered a call log, recently?
+ *
+ * NOT "is the permission granted". Three green permission ticks proved nothing
+ * on Shweta's phone, and Ankita's Xiaomi held every permission it needed while
+ * syncing nothing for three days. The only honest question is whether a scan
+ * has COMPLETED, and the only place that can be answered offline is the phone
+ * itself — see AppPrefs.getLastSyncOkAt.
+ */
+fun syncProven(context: Context): Boolean {
+    val at = com.salesautocall.app.data.AppPrefs.getLastSyncOkAt(context)
+    if (at <= 0L) return false
+    return System.currentTimeMillis() - at < SYNC_PROOF_HOURS * 60 * 60 * 1000
+}
+
+/** Never synced at all, versus synced once and gone quiet. Different sentences. */
+fun syncNeverRan(context: Context): Boolean =
+    com.salesautocall.app.data.AppPrefs.getLastSyncOkAt(context) <= 0L
+
+/**
+ * THE GATE. Call-log sync is not a setting, it is the product.
+ *
+ * A rep whose calls do not reach the office is not "partly working" — every
+ * screen behind this one lies to them and to their founder. Leads, Follow-up,
+ * the Action Centre and the whole day's work stay shut until the phone has
+ * PROVED it can deliver, not merely claimed it is allowed to.
+ */
 fun setupComplete(context: Context): Boolean =
     permRows().none { it.essential && !permGranted(context, it) } &&
         (!batteryAskable(context) || batteryExempt(context)) &&
-        !autostartNeeded(context)
+        !autostartNeeded(context) &&
+        syncProven(context)
 
 @Composable
 fun PermissionOnboarding(onReady: () -> Unit) {
@@ -208,7 +252,19 @@ fun PermissionOnboarding(onReady: () -> Unit) {
     val autostartBlocking = refresh.let {
         canAskAutostart && !com.salesautocall.app.data.AppPrefs.getAutostartConfirmed(context)
     }
-    val left = missing.size + (if (batteryBlocking) 1 else 0) + (if (autostartBlocking) 1 else 0)
+    // THE LAST STEP, AND THE ONLY ONE THAT IS EVIDENCE.
+    //
+    // Permissions and battery are permission to try. This is whether it worked.
+    // It is checked last because the other three have to be right before a scan
+    // can succeed, so fixing them in order is also the fastest route out of
+    // this screen.
+    val syncBlocking = refresh.let { !syncProven(context) }
+    val left = missing.size + (if (batteryBlocking) 1 else 0) +
+        (if (autostartBlocking) 1 else 0) + (if (syncBlocking) 1 else 0)
+    // Running the proof, and what it said if it failed.
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var checkFailed by remember { mutableStateOf<String?>(null) }
 
     // Nothing left to fix — let them in, without a tap. The rep who just
     // granted the last permission should find themselves in the app, not
@@ -276,6 +332,50 @@ fun PermissionOnboarding(onReady: () -> Unit) {
                 reason = "Your phone is putting the app to sleep, so the AI stops working for you",
                 done = false,
             ) { runCatching { settingsLauncher.launch(batteryIntent(context)) } }
+        }
+
+        // THE PROOF STEP. Everything above is permission to try; this is the
+        // phone actually delivering a call log. It stays shut until a scan has
+        // COMPLETED, because three green permission ticks proved nothing on
+        // Shweta's phone and Ankita's Xiaomi held every permission it needed
+        // while syncing nothing for three days.
+        //
+        // Only offered once the others are done — a scan cannot succeed without
+        // the call-log permission, and a button that always fails teaches the
+        // rep to stop pressing it.
+        if (syncBlocking && missing.isEmpty() && !batteryBlocking && !autostartBlocking) {
+            SetupRow(
+                icon = Icons.Default.History,
+                title = if (checking) "Checking…" else "Send a test to the office",
+                reason = checkFailed
+                    ?: if (syncNeverRan(context))
+                        "One tap to prove your calls reach the office. This is the last step."
+                    else
+                        "Your phone has not sent anything for a while. Tap to send now.",
+                done = false,
+                actionLabel = if (checking) "…" else "Check now",
+            ) {
+                if (!checking) {
+                    checking = true
+                    checkFailed = null
+                    scope.launch {
+                        val err = runCatching {
+                            withContext(Dispatchers.IO) {
+                                com.salesautocall.app.data.Repository.syncCallLogs(context)
+                            }
+                        }.exceptionOrNull()
+                        checking = false
+                        // Never a guess. If it failed, say what failed — the rep
+                        // reads this line out to whoever helps them.
+                        checkFailed = when {
+                            err != null -> "Could not reach the office: ${err.javaClass.simpleName}. Check internet and tap again."
+                            !syncProven(context) -> "The phone still will not hand over its call log. Tell your admin."
+                            else -> null
+                        }
+                        refresh++
+                    }
+                }
+            }
         }
 
         // AUTOSTART, second — the one that actually killed Ankita's sync for
