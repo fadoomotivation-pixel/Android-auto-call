@@ -1154,25 +1154,41 @@ object Repository {
      * definitions of "due" are exactly how the Follow-up tab and the Follow Ups
      * screen ended up disagreeing about the same clock.
      */
+    /** Today's arrivals: [arrived] = every call the office has, [toLeads] = the
+     *  subset that was to a CRM lead. */
+    data class TodaysCalls(val arrived: Int, val toLeads: Int)
+
     /**
      * How many of MY calls the office actually has for today.
      *
-     * The other half of the Settings self-check: the phone can say "23 calls on
-     * this handset", but the only number that matters to a founder is how many
-     * of them arrived. Counted from call_logs by started_at in IST, off_crm
-     * excluded — the same rules the Daily Pulse counts by, so the rep's test and
-     * the founder's report cannot give different answers.
+     * COUNTS EVERYTHING THAT ARRIVED, and returns the lead subset separately.
+     * The first version excluded off_crm "so the rep's test and the founder's
+     * report cannot give different answers" — which sounds right and is the
+     * wrong rule for this question. The Daily Pulse asks "how much WORK did this
+     * rep do", and a personal call is not work. This self-check asks "are my
+     * calls reaching the office", and an off-CRM call reaches it exactly as well
+     * as any other.
+     *
+     * Shweta's phone proved it. Her company has record-all-calls on, she spent
+     * the day ringing numbers that aren't CRM leads, and all four of those calls
+     * landed in the CRM — where a founder can see them. The test counted zero
+     * and told her "your calls are on the phone but the office has none from
+     * today", in red, under three green ticks. The plumbing was perfect; the
+     * question was wrong.
+     *
+     * toLeads is still worth knowing — a day of calls with none to a lead is a
+     * real thing to tell the rep — but it is a separate sentence, not a fault.
      */
-    suspend fun myCallLogCountToday(): Int {
-        val uid = currentUserId() ?: return 0
+    suspend fun myCallLogCountToday(): TodaysCalls {
+        val uid = currentUserId() ?: return TodaysCalls(0, 0)
         val startIst = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kolkata"))
             .atStartOfDay(java.time.ZoneId.of("Asia/Kolkata")).toInstant().toString()
-        // off_crm filtered in Kotlin rather than in the query: CallLog carries the
+        // off_crm split in Kotlin rather than in the query: CallLog carries the
         // field with a default, and this file's proven select/decode shape is
         // columns + decodeList<CallLog>. Inventing filter syntax to save one
         // client-side predicate is how a green diff becomes a red build.
         return runCatching {
-            client.from("call_logs")
+            val rows = client.from("call_logs")
                 .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw(
                     "id, started_at, off_crm, phone, company_id, salesperson_id",
                 )) {
@@ -1180,8 +1196,9 @@ object Repository {
                         eq("salesperson_id", uid)
                         gte("started_at", startIst)
                     }
-                }.decodeList<CallLog>().count { !it.offCrm }
-        }.getOrDefault(0)
+                }.decodeList<CallLog>()
+            TodaysCalls(arrived = rows.size, toLeads = rows.count { !it.offCrm })
+        }.getOrDefault(TodaysCalls(0, 0))
     }
 
     suspend fun fetchWorkStates(salespersonId: String): List<LeadWork> =
