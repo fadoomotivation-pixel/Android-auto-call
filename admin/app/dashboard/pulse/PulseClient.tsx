@@ -17,6 +17,10 @@ type Rep = {
   /** False when this phone is not sending its call log — so calls/connected/
    *  talk below are what the CRM RECEIVED, not what the rep did. */
   callsTrusted?: boolean;
+  /** Calls to numbers that are NOT CRM leads (record-all-calls). Never counted
+   *  as work, never hidden — see offCrmLine in _shared/pulse.ts. */
+  offCrmCalls?: number;
+  offCrmTalkSeconds?: number;
   syncedAt?: string | null;
   /** Actually checked in on site today. The only evidence anyone came. */
   visitsArrived?: string[];
@@ -253,7 +257,7 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
             {c.reps.map((r) => {
               // Dimming the card says "this person did nothing". Never say that
               // about a phone that simply is not reporting.
-              const idle = !r.calls && !r.voiceNotes.length && !r.moves.length &&
+              const idle = !r.calls && !(r.offCrmCalls ?? 0) && !r.voiceNotes.length && !r.moves.length &&
                 !r.siteVisits.length && r.callsTrusted !== false;
               return (
                 <div key={r.id} className="card" style={{ padding: 16, background: "var(--panel)", border: "1px solid rgba(255,255,255,0.08)", opacity: idle ? 0.65 : 1 }}>
@@ -300,6 +304,28 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                       </>
                     )}
                   </div>
+
+                  {/* Phone time that is not lead work, said out loud.
+                      Ankita's card read "0 calls · 0 conn. · 0m talk" on a day
+                      she spent 45 minutes on the phone across 33 calls — every
+                      one to a number that is not in the CRM. By the work rule
+                      the zero is correct, and a founder reading it concludes
+                      the phone is broken again or that she did nothing. The
+                      true and useful reading is the third one: she is working,
+                      just not our leads. Kept OUT of the KPI row on purpose —
+                      this must never inflate the numbers the business judges. */}
+                  {(r.offCrmCalls ?? 0) > 0 && (
+                    <div style={{
+                      fontSize: 13, color: "#fbbf24", marginBottom: 10,
+                      background: "rgba(251,191,36,0.08)",
+                      border: "1px solid rgba(251,191,36,0.25)",
+                      borderRadius: 10, padding: "8px 12px",
+                    }}>
+                      📵 <strong>{r.offCrmCalls}</strong> call{r.offCrmCalls === 1 ? "" : "s"} to numbers not in the CRM
+                      {(r.offCrmTalkSeconds ?? 0) > 0 && <>, <strong>{fmtDur(r.offCrmTalkSeconds ?? 0)}</strong> talk</>}
+                      {r.calls === 0 && " — no CRM lead was called today."}
+                    </div>
+                  )}
 
                   {/* What DID arrive, so the founder can still see the day. These
                       reach the server straight from the app and were never in

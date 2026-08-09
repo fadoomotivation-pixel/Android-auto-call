@@ -89,7 +89,10 @@ async function buildText(
   // real report.
   const anythingHappened = pulse.totals.calls > 0 || pulse.totals.notes > 0 ||
     pulse.totals.visits > 0 || pulse.totals.bookings > 0 ||
-    pulse.reps.some((r) => r.moves.length > 0);
+    pulse.reps.some((r) => r.moves.length > 0) ||
+    // Off-CRM phone time is not work, but a day containing 33 calls is not a
+    // day with "No calls logged today" either. Send the real report.
+    pulse.reps.some((r) => r.offCrmCalls > 0);
   const allPhonesReporting = pulse.reps.every((r) => r.callsTrusted);
   return {
     text: !anythingHappened && allPhonesReporting
