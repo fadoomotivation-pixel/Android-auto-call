@@ -42,6 +42,18 @@ object Repository {
 
     private val client get() = Supabase.client
 
+    /**
+     * Compiled ONCE. `"\\D".toRegex()` inside a loop compiles a fresh Pattern
+     * every iteration, and the call-log matcher runs it per native call PER
+     * recent server log — for Shweta that is 102 × 168 ≈ 17,000 compilations in
+     * a single sync, on an entry-level ITEL. The regex never changes; only the
+     * string does.
+     */
+    private val NON_DIGITS = "\\D".toRegex()
+
+    /** A phone number reduced to its digits. */
+    private fun digitsOf(phone: String?): String = (phone ?: "").replace(NON_DIGITS, "")
+
     fun getSessionToken(): String? = client.auth.currentSessionOrNull()?.accessToken
     fun getFunctionsUrl(): String = com.salesautocall.app.BuildConfig.SUPABASE_URL + "/functions/v1"
 
@@ -243,7 +255,7 @@ object Repository {
             }.decodeList<Contact>()
 
         val contactMap = myContacts.mapNotNull {
-            val p = it.phone.replace("\\D".toRegex(), "")
+            val p = digitsOf(it.phone)
             if (p.isNotEmpty() && it.id != null) p to it.id else null
         }.toMap()
 
@@ -297,7 +309,7 @@ object Repository {
 
             while (c.moveToNext()) {
                 val num = c.getString(numIdx) ?: continue
-                val cleanNum = num.replace("\\D".toRegex(), "")
+                val cleanNum = digitsOf(num)
                 val type = c.getInt(typeIdx)
                 val dateMillis = c.getLong(dateIdx)
                 val durationSec = c.getInt(durIdx)
@@ -334,7 +346,7 @@ object Repository {
             val closestLog = recentLogs
                 .filter { it.id != null && !matchedSupabaseIds.contains(it.id) }
                 .filter {
-                    val sbPhone = it.phone.replace("\\D".toRegex(), "")
+                    val sbPhone = digitsOf(it.phone)
                     sbPhone.endsWith(nativeCall.cleanNum) || nativeCall.cleanNum.endsWith(sbPhone)
                 }
                 .mapNotNull {
