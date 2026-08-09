@@ -42,6 +42,18 @@ object Repository {
 
     private val client get() = Supabase.client
 
+    /**
+     * Compiled ONCE. `"\\D".toRegex()` inside a loop compiles a fresh Pattern
+     * every iteration, and the call-log matcher runs it per native call PER
+     * recent server log — for Shweta that is 102 × 168 ≈ 17,000 compilations in
+     * a single sync, on an entry-level ITEL. The regex never changes; only the
+     * string does.
+     */
+    private val NON_DIGITS = "\\D".toRegex()
+
+    /** A phone number reduced to its digits. */
+    private fun digitsOf(phone: String?): String = (phone ?: "").replace(NON_DIGITS, "")
+
     fun getSessionToken(): String? = client.auth.currentSessionOrNull()?.accessToken
     fun getFunctionsUrl(): String = com.salesautocall.app.BuildConfig.SUPABASE_URL + "/functions/v1"
 
@@ -106,6 +118,66 @@ object Repository {
     /** Inserts a call log and returns its new id (so a recording can be attached). */
     suspend fun logCall(log: CallLog): String? {
         return client.from("call_logs").insert(log) { select() }.decodeSingleOrNull<CallLog>()?.id
+    }
+
+    /**
+     * Insert backfilled call logs in CHUNKS, not one HTTP request each.
+     *
+     * The backfill loop used to call logCall() per row and throw the returned id
+     * away. On a phone that has never synced, that is the entire 7-day call log
+     * in sequential round trips — Ankita's first run backfilled 118 — and on a
+     * telecaller's 4G it takes minutes. That is why Shweta's "Test" button sat
+     * on "Testing…": nothing was broken, it just had a hundred requests to get
+     * through and no way to say so.
+     *
+     * A failed chunk falls back to one-at-a-time for that chunk only, so a
+     * single bad row can't take the other ninety-nine down with it — the
+     * resilience of the old loop, at one request instead of a hundred.
+     */
+    suspend fun logCallsBulk(logs: List<CallLog>): Int {
+        if (logs.isEmpty()) return 0
+        var saved = 0
+        for (chunk in logs.chunked(100)) {
+            val rows = chunk.map { rowFor(it) }
+            if (runCatching { client.from("call_logs").insert(rows) }.isSuccess) {
+                saved += chunk.size
+            } else {
+                for (one in chunk) if (runCatching { logCall(one) }.isSuccess) saved++
+            }
+        }
+        return saved
+    }
+
+    /**
+     * One backfill row, as an explicit map with a FIXED key set.
+     *
+     * Inserting the CallLog objects directly does not work in bulk, and it fails
+     * on the normal path rather than a rare one. kotlinx.serialization omits any
+     * field equal to its default, so the rows genuinely differ in shape: a lead
+     * call carries contact_id and an off-CRM one does not, an incoming call
+     * carries direction and an outgoing one does not, a connected call carries
+     * duration_seconds and a missed one does not. PostgREST builds the column
+     * list from the FIRST object of a bulk insert and rejects the whole batch
+     * with PGRST102 "All object keys must match" the moment a later row differs
+     * — so every chunk would have failed and fallen back to one-at-a-time, which
+     * is slower than the loop this replaced.
+     *
+     * Same keys on every row, nulls written explicitly. `id` is left out
+     * entirely: sending "id": null overrides the column's default instead of
+     * letting Postgres generate one.
+     */
+    private fun rowFor(c: CallLog): JsonObject = buildJsonObject {
+        put("company_id", c.companyId)
+        put("salesperson_id", c.salespersonId)
+        put("contact_id", c.contactId)
+        put("phone", c.phone)
+        put("direction", c.direction)
+        put("outcome", c.outcome)
+        put("started_at", c.startedAt)
+        put("ended_at", c.endedAt)
+        put("duration_seconds", c.durationSeconds)
+        put("recording_status", c.recordingStatus)
+        put("off_crm", c.offCrm)
     }
 
     /** Force a call's recording_status (e.g. "failed" when no audio was captured). */
@@ -216,7 +288,7 @@ object Repository {
             }.decodeList<Contact>()
 
         val contactMap = myContacts.mapNotNull {
-            val p = it.phone.replace("\\D".toRegex(), "")
+            val p = digitsOf(it.phone)
             if (p.isNotEmpty() && it.id != null) p to it.id else null
         }.toMap()
 
@@ -270,7 +342,7 @@ object Repository {
 
             while (c.moveToNext()) {
                 val num = c.getString(numIdx) ?: continue
-                val cleanNum = num.replace("\\D".toRegex(), "")
+                val cleanNum = digitsOf(num)
                 val type = c.getInt(typeIdx)
                 val dateMillis = c.getLong(dateIdx)
                 val durationSec = c.getInt(durIdx)
@@ -299,14 +371,15 @@ object Repository {
 
         // 5. Greedy bipartite matching
         val matchedSupabaseIds = mutableSetOf<String>()
-        var backfilled = 0
+        // Collected, then written in one go — see logCallsBulk.
+        val toBackfill = mutableListOf<CallLog>()
 
         for (nativeCall in nativeCalls) {
             // Find closest unmatched Supabase log within 120 seconds
             val closestLog = recentLogs
                 .filter { it.id != null && !matchedSupabaseIds.contains(it.id) }
                 .filter {
-                    val sbPhone = it.phone.replace("\\D".toRegex(), "")
+                    val sbPhone = digitsOf(it.phone)
                     sbPhone.endsWith(nativeCall.cleanNum) || nativeCall.cleanNum.endsWith(sbPhone)
                 }
                 .mapNotNull {
@@ -352,9 +425,11 @@ object Repository {
                     // Off-CRM = captured under record-all-calls, number isn't a lead.
                     offCrm = nativeCall.contactId == null,
                 )
-                if (runCatching { logCall(newLog) }.isSuccess) backfilled++
+                toBackfill.add(newLog)
             }
         }
+
+        val backfilled = logCallsBulk(toBackfill)
 
         // A completed scan. native_seen is what the PHONE believes happened;
         // backfilled is how much of it the CRM had missed. A phone reporting
