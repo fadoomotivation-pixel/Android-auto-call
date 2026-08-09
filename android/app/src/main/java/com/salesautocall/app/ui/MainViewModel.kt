@@ -1590,7 +1590,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val onPhone = withContext(Dispatchers.IO) {
                     com.salesautocall.app.data.PhoneCheck.readableCalls(ctx)
                 }
-                val before = runCatching { Repository.myCallLogCountToday() }.getOrDefault(0)
+                val before = runCatching { Repository.myCallLogCountToday() }
+                    .getOrDefault(Repository.TodaysCalls(0, 0))
                 // KEEP THE REAL ERROR. The first version turned every exception
                 // into "Could not reach the office. Check your internet" —
                 // which is a GUESS dressed as a diagnosis, and the first time
@@ -1618,7 +1619,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // `after >= onPhone.coerceAtMost(after)`, which is min(a,b) <= a
                 // — true for all inputs — so the "no calls on this phone yet"
                 // case below it could never be reached.
-                val sent = (after - before).coerceAtLeast(0)
+                val sent = (after.arrived - before.arrived).coerceAtLeast(0)
                 when {
                     onPhone == null ->
                         "❌ This phone will not let the app read the call log. Tap Fix on the red row above."
@@ -1631,9 +1632,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         "❌ Sync failed: ${shortError(failure)}. Send this line to your admin."
                     onPhone == 0 ->
                         "✅ Setup is fine — no calls on this phone yet. Make one and press Test again."
-                    after > 0 ->
-                        "✅ Working. This phone: $onPhone calls in 7 days. Office has $after from today" +
-                            (if (sent > 0) " ($sent just sent)." else ".")
+                    // ARRIVED, not "to leads". Counting only lead calls put a red
+                    // warning under three green ticks on a phone whose plumbing
+                    // was perfect — see myCallLogCountToday.
+                    after.arrived > 0 ->
+                        "✅ Working. This phone: $onPhone calls in 7 days. " +
+                            "Office has ${after.arrived} from today" +
+                            (if (sent > 0) " ($sent just sent)." else ".") +
+                            // A true and useful thing, said as a fact rather than
+                            // a fault: the calls are arriving, they just weren't
+                            // to anyone in the CRM.
+                            (if (after.toLeads == 0) " None were to your leads today." else "")
                     else ->
                         "⚠️ Your calls are on the phone but the office has none from today. " +
                             "If this stays wrong after a minute, tell your admin."
