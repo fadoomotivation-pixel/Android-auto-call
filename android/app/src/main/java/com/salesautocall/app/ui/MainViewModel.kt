@@ -3349,10 +3349,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .getOrNull()
     }
 
-    /** Count of follow-ups due now or overdue — the red badge on Home. */
+    /**
+     * The work that is due RIGHT NOW — the red badge on Home, and the Due stat
+     * on the Leads deck. ONE rule, used by both.
+     *
+     * They used to be two. Home counted follow-up ROWS whose due_at had passed
+     * by the phone's clock; the Leads deck counted LEADS whose server action
+     * state is overdue or call_now. Those are different populations answered by
+     * different clocks — a brand-new lead with no callback booked is due work
+     * and has no follow-up row at all, so Home under-counted it, while a
+     * follow-up on a lead that has since been closed kept counting after the
+     * work was finished. A rep flipping between the two screens saw two numbers
+     * for the same question, which is precisely how a number stops being read.
+     *
+     * v_lead_workstate is the answer, because it is the same one the queue
+     * filters and power-dial obey. The phone does not get a second opinion
+     * about whose time has come.
+     */
     fun dueNowCount(): Int {
-        val now = System.currentTimeMillis()
-        return _state.value.followUpList.count { parseInstant(it.dueAt) <= now }
+        val st = _state.value
+        return st.leads.count { c ->
+            val a = c.id?.let { st.workByLead[it]?.actionState }
+            a == "overdue" || a == "call_now"
+        }
     }
 
     // ---------- attendance ----------
