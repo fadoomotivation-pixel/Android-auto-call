@@ -2248,8 +2248,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         note = note,
                         dueAtMillis = dueAtMillis,
                     )
-                    set { it.copy(message = "⏰ Follow-up set for ${shortWhen(dueAtMillis)}") }
-                    loadFollowUps()
+                    // The booked callback appears NOW. This used to call the
+                    // throttled loadFollowUps(), which returns without doing
+                    // anything if the list was fetched inside the last 45s —
+                    // and opening Follow Ups then booking from it is well
+                    // inside 45s, so the rep's brand-new callback was simply
+                    // missing until something else forced a reload. The server
+                    // already handed back the saved row; use it, and only pay
+                    // for a round trip when it didn't.
+                    val row = saved?.takeIf { it.id != null }
+                    set { st ->
+                        st.copy(
+                            message = "⏰ Follow-up set for ${shortWhen(dueAtMillis)}",
+                            followUpList = if (row != null && st.followUpList.none { it.id == row.id })
+                                (st.followUpList + row).sortedBy { dueMillis(it.dueAt) } else st.followUpList,
+                        )
+                    }
+                    if (row == null) loadFollowUps(force = true)
                     if (contactId != null) {
                         // A booked callback is not "call this now" — move it out
                         // of the queue on the spot and say WHEN instead. A time
@@ -2283,35 +2298,69 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun rescheduleFollowUps(items: List<FollowUp>, dueAtMillis: Long) {
         if (items.isEmpty()) return
         val iso = java.time.Instant.ofEpochMilli(dueAtMillis).toString()
+        // Move them on screen first. This is a BULK button — twenty-four overdue
+        // callbacks is twenty-four sequential round trips, and the rep watched
+        // every one of them still sitting in Call now until the last reply
+        // landed. The writes below are the same writes; only the waiting is gone.
+        val ids = items.mapNotNull { it.id }.toSet()
+        set { st ->
+            st.copy(
+                followUpList = st.followUpList.map { if (it.id in ids) it.copy(dueAt = iso) else it }
+                    .sortedBy { dueMillis(it.dueAt) },
+                message = "Moved ${items.size} follow-up${if (items.size == 1) "" else "s"} to ${shortWhen(dueAtMillis)}",
+            )
+        }
         viewModelScope.launch {
             items.forEach { f ->
                 val id = f.id ?: return@forEach
                 runCatching { Repository.rescheduleFollowUp(id, iso) }
                 FollowUpReminder.schedule(getApplication(), id, f.name, f.phone, f.note, dueAtMillis)
             }
-            set { it.copy(message = "Moved ${items.size} follow-up${if (items.size == 1) "" else "s"} to tomorrow 10 AM") }
+            // Server truth, once, after all of them — not once per row.
             loadFollowUps(force = true)
         }
     }
 
+    /**
+     * The row leaves the list on the TAP, not on the reply.
+     *
+     * "Follow-up update super fast hona chahiye, aur thodi der ke baad ho raha
+     * hai." It was waiting on `Repository.completeFollowUp` to come back before
+     * it removed anything — one Supabase round trip on a telecaller's 4G, which
+     * is a second on a good day and several on a bad one. In that gap the card
+     * the rep just finished is still sitting there, still saying "Call now", so
+     * the rep taps it again.
+     *
+     * Same shape as the optimistic update `leads` and `workByLead` already use:
+     * change the screen now, let the server confirm, and put the row BACK if the
+     * write actually failed. Restoring matters — a silently dropped callback is
+     * worse than a slow one, because nobody ever finds out about it.
+     */
     fun completeFollowUp(id: String) {
+        val removed = _state.value.followUpList.find { it.id == id }
+        set { st -> st.copy(followUpList = st.followUpList.filterNot { it.id == id }) }
         viewModelScope.launch {
             runCatching { Repository.completeFollowUp(id) }
-                .onSuccess {
-                    set { st -> st.copy(followUpList = st.followUpList.filterNot { it.id == id }) }
+                .onFailure { e ->
+                    set { st ->
+                        st.copy(
+                            followUpList = if (removed != null && st.followUpList.none { it.id == id })
+                                (st.followUpList + removed).sortedBy { dueMillis(it.dueAt) } else st.followUpList,
+                            error = e.message,
+                        )
+                    }
                 }
-                .onFailure { e -> set { it.copy(error = e.message) } }
         }
     }
 
     /** Snooze a follow-up: complete the old one and create a new one +[hours] from now. */
     fun snoozeFollowUp(id: String, hours: Int = 1) {
         val f = _state.value.followUpList.find { it.id == id } ?: return
-        viewModelScope.launch {
-            runCatching { Repository.completeFollowUp(id) }
-            val newDue = System.currentTimeMillis() + hours * 3600_000L
-            scheduleFollowUp(f.contactId, f.phone, f.name, newDue, f.note)
-        }
+        // Drop it now — completeFollowUp restores it if the write fails, and the
+        // rep sees the snooze land immediately either way.
+        completeFollowUp(id)
+        val newDue = System.currentTimeMillis() + hours * 3600_000L
+        scheduleFollowUp(f.contactId, f.phone, f.name, newDue, f.note)
     }
 
     // ---------- post-call disposition ----------
@@ -3670,6 +3719,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * fallback keeps "Z" timestamps working.
      */
     private fun parseInstant(iso: String): Long =
+        runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }
+            .recoverCatching { java.time.Instant.parse(iso).toEpochMilli() }
+            .getOrDefault(Long.MAX_VALUE)
+
+    /** A follow-up's due time as millis. Sorting the ISO strings directly is a
+     *  trap: the server writes "+00:00" and the app writes "Z", so two callbacks
+     *  in the same second can order backwards. */
+    private fun dueMillis(iso: String): Long =
         runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }
             .recoverCatching { java.time.Instant.parse(iso).toEpochMilli() }
             .getOrDefault(Long.MAX_VALUE)

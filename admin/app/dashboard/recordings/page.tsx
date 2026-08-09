@@ -59,29 +59,44 @@ export default async function RecordingsPage({
     .from("call_logs")
     .select("*")
     .eq("recording_status", "ready")
-    .order("created_at", { ascending: false })
+    .order("started_at", { ascending: false, nullsFirst: false })
     .limit(500);
   if (repFilter) recQuery = recQuery.eq("salesperson_id", repFilter);
   if (dirFilter) recQuery = recQuery.eq("direction", dirFilter);
   if (coFilter) recQuery = recQuery.eq("company_id", coFilter);
   if (kindFilter) recQuery = recQuery.eq("off_crm", kindFilter === "offcrm");
-  if (days) recQuery = recQuery.gte("created_at", new Date(Date.now() - days * 864e5).toISOString());
+  // "Last N days" means the CALL happened in the last N days, not the row. A
+  // handset that syncs after three days dark creates a month of rows today, and
+  // filtering on created_at dated every one of them today. started_at is
+  // nullable, so rows without one still qualify on created_at.
+  if (days) {
+    const since = new Date(Date.now() - days * 864e5).toISOString();
+    recQuery = recQuery.or(`started_at.gte.${since},and(started_at.is.null,created_at.gte.${since})`);
+  }
 
   const [{ data: calls, error }, { data: people }, { data: contacts }, { data: companies }] = await Promise.all([
     recQuery.returns<CallLog[]>(),
     supabase.from("profiles").select("id, full_name, company_id").returns<(Profile & { company_id: string | null })[]>(),
-    supabase.from("contacts").select("id, name, phone").limit(5000).returns<{ id: string; name: string | null; phone: string }[]>(),
+    supabase.from("contacts").select("id, company_id, name, phone").limit(5000).returns<{ id: string; company_id: string; name: string | null; phone: string }[]>(),
     supabase.from("companies").select("id, name").returns<{ id: string; name: string }[]>(),
   ]);
 
   const nameById = new Map((people ?? []).map((p) => [p.id, p.full_name]));
   const companyById = new Map((companies ?? []).map((c) => [c.id, c.name]));
   const leadById = new Map((contacts ?? []).map((c) => [c.id, c.name]));
+  // Keyed by company as well as number: for the super admin this map spans
+  // every tenant, and eleven phone numbers in this database belong to a contact
+  // in more than one company — a bare-tail key labelled one company's call with
+  // another company's lead name.
   const leadByPhone = new Map(
-    (contacts ?? []).filter((c) => c.name).map((c) => [tail10(c.phone), c.name] as const),
+    (contacts ?? [])
+      .filter((c) => c.name)
+      .map((c) => [`${c.company_id}|${tail10(c.phone)}`, c.name] as const),
   );
   const leadName = (c: CallLog) =>
-    (c.contact_id && leadById.get(c.contact_id)) || leadByPhone.get(tail10(c.phone)) || null;
+    (c.contact_id && leadById.get(c.contact_id)) ||
+    leadByPhone.get(`${c.company_id}|${tail10(c.phone)}`) ||
+    null;
 
   let rows = calls ?? [];
   if (q) {

@@ -1536,7 +1536,9 @@ private fun PhoneCheckCard(vm: MainViewModel) {
                     !PC.callLogGranted(context) -> "Permission is OFF — AI coach cannot read your calls"
                     calls == null -> "Phone is blocking it — AI coach cannot read your calls"
                     calls == 0 -> "No calls on this phone yet"
-                    else -> "$calls calls ready for the AI coach"
+                    // The count was noise. A rep does not need to know the number
+                    // of rows on their handset — they need to know it works.
+                    else -> "Your calls reach the AI coach"
                 },
                 logOk,
             ) {

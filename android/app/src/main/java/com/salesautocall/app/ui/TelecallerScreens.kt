@@ -3051,6 +3051,7 @@ private fun TimeChip(label: String, modifier: Modifier = Modifier, onClick: () -
 }
 
 /** Reusable quick-schedule chips used in both PostCallDisposition and ScheduleFollowUpDialog. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QuickScheduleChips(
     who: String,
@@ -3063,6 +3064,10 @@ private fun QuickScheduleChips(
     val now = java.time.ZonedDateTime.now()
     fun at(days: Long, hour: Int) = now.plusDays(days).withHour(hour).withMinute(0).withSecond(0).toInstant().toEpochMilli()
     val currentHour = now.hour
+
+    var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
+    var pickedDate by remember { mutableStateOf<Long?>(null) }
 
     // This is the screen a rep sees between two calls, so it is measured in
     // seconds. It used to be seven FULL-WIDTH buttons stacked down the page —
@@ -3109,6 +3114,23 @@ private fun QuickScheduleChips(
             Spacer(Modifier.weight(1f))
         }
 
+        // The five chips cover most calls and none of the real ones: "call me
+        // Monday morning", "after Diwali", "when my wife is back on the 14th".
+        // The Follow Ups card has had this escape hatch all along; the sheet the
+        // rep actually lands on after a call did not, so the only way to book a
+        // real date was to save a wrong time and go fix it somewhere else.
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "📅 Pick another time",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                .clickable { showDate = true }
+                .padding(vertical = 9.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+
         if (onSkip != null) {
             Spacer(Modifier.height(6.dp))
             TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) { Text(skipLabel) }
@@ -3117,6 +3139,41 @@ private fun QuickScheduleChips(
             Spacer(Modifier.height(2.dp))
             TextButton(onClick = onBack) { Text("← Back to disposition") }
         }
+    }
+
+    if (showDate) {
+        val dps = rememberDatePickerState(initialSelectedDateMillis = now.toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                TextButton(onClick = { pickedDate = dps.selectedDateMillis; showDate = false; showTime = true }) { Text("Next") }
+            },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text("Cancel") } },
+        ) { DatePicker(state = dps) }
+    }
+
+    if (showTime) {
+        val tps = rememberTimePickerState(initialHour = 10, initialMinute = 0, is24Hour = false)
+        AlertDialog(
+            onDismissRequest = { showTime = false },
+            title = { Text("Pick a time") },
+            text = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { TimePicker(state = tps) } },
+            confirmButton = {
+                TextButton(onClick = {
+                    // The date picker hands back UTC midnight for the day the rep
+                    // tapped, so the day is read back in UTC and the time is
+                    // attached in the phone's zone — read it back locally and a
+                    // pre-05:30 IST offset silently books the day before.
+                    val base = pickedDate ?: now.toInstant().toEpochMilli()
+                    val day = java.time.Instant.ofEpochMilli(base).atZone(java.time.ZoneId.of("UTC")).toLocalDate()
+                    val millis = day.atTime(tps.hour, tps.minute)
+                        .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    showTime = false
+                    onPick(millis, null)
+                }) { Text("Set reminder") }
+            },
+            dismissButton = { TextButton(onClick = { showTime = false }) { Text("Back") } },
+        )
     }
 }
 

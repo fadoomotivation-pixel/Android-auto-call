@@ -27,9 +27,14 @@ interface Props {
   repNames: Record<string, string>;
   companyNames: Record<string, string>;
   leadById: Record<string, string>;
+  /** Keyed "<company_id>|<10-digit tail>" — a bare tail leaks names between companies. */
   leadByPhone: Record<string, string>;
   isSuper: boolean;
   range: string;
+  /** Start of the selected window, so live rows can't jump it. null = all time. */
+  sinceIso: string | null;
+  /** The viewer's company, or null for the super admin (who sees every company). */
+  scopeCompanyId: string | null;
 }
 
 const tail10 = (p: string | null | undefined) => (p ?? "").replace(/\D/g, "").slice(-10);
@@ -52,6 +57,8 @@ export function CallsBoard({
   leadByPhone,
   isSuper,
   range,
+  sinceIso,
+  scopeCompanyId,
 }: Props) {
   const router = useRouter();
   const [rows, setRows] = useState<CallRow[]>(initialCalls);
@@ -71,12 +78,31 @@ export function CallsBoard({
   }, [initialCalls]);
 
   const leadName = (c: CallRow) =>
-    (c.contact_id && leadById[c.contact_id]) || leadByPhone[tail10(c.phone)] || null;
+    (c.contact_id && leadById[c.contact_id]) ||
+    leadByPhone[`${c.company_id}|${tail10(c.phone)}`] ||
+    null;
 
   // ---- Real-time: new calls + recording/outcome updates land instantly. ----
   useEffect(() => {
     const supabase = createClient();
+    // The subscription is on the whole call_logs table with no filter, and the
+    // payload goes straight into the rendered list — so the client has to apply
+    // the same two limits the server query applied, or the page shows rows this
+    // admin's own page-load would never have returned:
+    //
+    //   • company — a company admin must never see another company's calls,
+    //     live or otherwise. Belt and braces over RLS, and it is one comparison.
+    //   • the range window — a backfilled call from last month arriving during
+    //     a "Today" view is not today's work, and counting it in the totals
+    //     above is exactly the created_at-vs-started_at mistake that made
+    //     Platform HQ and the Daily Pulse disagree.
+    const inScope = (r: CallRow) => {
+      if (scopeCompanyId && r.company_id !== scopeCompanyId) return false;
+      if (sinceIso && (r.started_at ?? r.created_at) < sinceIso) return false;
+      return true;
+    };
     const merge = (r: CallRow, isNew: boolean) => {
+      if (!inScope(r)) return;
       setRows((cur) => {
         const without = cur.filter((x) => x.id !== r.id);
         const next = [r, ...without];
@@ -108,7 +134,8 @@ export function CallsBoard({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+    // Re-subscribed on a range change so inScope() closes over the new window.
+  }, [scopeCompanyId, sinceIso]);
 
   const companyOptions = useMemo(() => {
     const ids = new Set(rows.map((r) => r.company_id));
