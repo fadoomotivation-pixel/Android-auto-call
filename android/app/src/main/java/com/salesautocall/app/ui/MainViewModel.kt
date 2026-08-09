@@ -2248,8 +2248,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         note = note,
                         dueAtMillis = dueAtMillis,
                     )
-                    set { it.copy(message = "⏰ Follow-up set for ${shortWhen(dueAtMillis)}") }
-                    loadFollowUps()
+                    // The booked callback appears NOW. This used to call the
+                    // throttled loadFollowUps(), which returns without doing
+                    // anything if the list was fetched inside the last 45s —
+                    // and opening Follow Ups then booking from it is well
+                    // inside 45s, so the rep's brand-new callback was simply
+                    // missing until something else forced a reload. The server
+                    // already handed back the saved row; use it, and only pay
+                    // for a round trip when it didn't.
+                    //
+                    // REPLACE-or-append, not skip-if-present. The repository
+                    // MOVES a lead's existing pending row and hands the same id
+                    // back, so "already in the list" is the common case, not the
+                    // duplicate case — skipping it left the moved callback on
+                    // screen at its OLD time, still sitting in Call now, which
+                    // is the whole complaint.
+                    val row = saved?.takeIf { it.id != null }
+                    set { st ->
+                        st.copy(
+                            message = "⏰ Follow-up set for ${shortWhen(dueAtMillis)}",
+                            followUpList = if (row != null)
+                                (st.followUpList.filterNot { it.id == row.id } + row)
+                                    .sortedBy { dueMillis(it.dueAt) }
+                            else st.followUpList,
+                        )
+                    }
+                    if (row == null) loadFollowUps(force = true)
                     if (contactId != null) {
                         // A booked callback is not "call this now" — move it out
                         // of the queue on the spot and say WHEN instead. A time
@@ -2283,34 +2307,119 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun rescheduleFollowUps(items: List<FollowUp>, dueAtMillis: Long) {
         if (items.isEmpty()) return
         val iso = java.time.Instant.ofEpochMilli(dueAtMillis).toString()
+        // Move them on screen first. This is a BULK button — twenty-four overdue
+        // callbacks is twenty-four sequential round trips, and the rep watched
+        // every one of them still sitting in Call now until the last reply
+        // landed. The writes below are the same writes; only the waiting is gone.
+        val ids = items.mapNotNull { it.id }.toSet()
+        set { st ->
+            st.copy(
+                followUpList = st.followUpList.map { if (it.id in ids) it.copy(dueAt = iso) else it }
+                    .sortedBy { dueMillis(it.dueAt) },
+                message = "Moved ${items.size} follow-up${if (items.size == 1) "" else "s"} to ${shortWhen(dueAtMillis)}",
+            )
+        }
         viewModelScope.launch {
             items.forEach { f ->
                 val id = f.id ?: return@forEach
                 runCatching { Repository.rescheduleFollowUp(id, iso) }
                 FollowUpReminder.schedule(getApplication(), id, f.name, f.phone, f.note, dueAtMillis)
             }
-            set { it.copy(message = "Moved ${items.size} follow-up${if (items.size == 1) "" else "s"} to tomorrow 10 AM") }
+            // Server truth, once, after all of them — not once per row.
             loadFollowUps(force = true)
         }
     }
 
+    /**
+     * The row leaves the list on the TAP, not on the reply.
+     *
+     * "Follow-up update super fast hona chahiye, aur thodi der ke baad ho raha
+     * hai." It was waiting on `Repository.completeFollowUp` to come back before
+     * it removed anything — one Supabase round trip on a telecaller's 4G, which
+     * is a second on a good day and several on a bad one. In that gap the card
+     * the rep just finished is still sitting there, still saying "Call now", so
+     * the rep taps it again.
+     *
+     * Same shape as the optimistic update `leads` and `workByLead` already use:
+     * change the screen now, let the server confirm, and put the row BACK if the
+     * write actually failed. Restoring matters — a silently dropped callback is
+     * worse than a slow one, because nobody ever finds out about it.
+     */
     fun completeFollowUp(id: String) {
-        viewModelScope.launch {
-            runCatching { Repository.completeFollowUp(id) }
-                .onSuccess {
-                    set { st -> st.copy(followUpList = st.followUpList.filterNot { it.id == id }) }
-                }
-                .onFailure { e -> set { it.copy(error = e.message) } }
-        }
+        val removed = dropFollowUpLocally(id)
+        viewModelScope.launch { pushComplete(id, removed) }
     }
 
-    /** Snooze a follow-up: complete the old one and create a new one +[hours] from now. */
+    /** Take the row off screen straight away, handing back what was removed so a
+     *  failed write can put it back. */
+    private fun dropFollowUpLocally(id: String): FollowUp? {
+        val removed = _state.value.followUpList.find { it.id == id }
+        set { st -> st.copy(followUpList = st.followUpList.filterNot { it.id == id }) }
+        return removed
+    }
+
+    private suspend fun pushComplete(id: String, removed: FollowUp?) {
+        runCatching { Repository.completeFollowUp(id) }
+            .onFailure { e ->
+                set { st ->
+                    st.copy(
+                        followUpList = if (removed != null && st.followUpList.none { it.id == id })
+                            (st.followUpList + removed).sortedBy { dueMillis(it.dueAt) } else st.followUpList,
+                        error = e.message,
+                    )
+                }
+            }
+    }
+
+    /** Snooze a follow-up: move it [hours] from now. */
     fun snoozeFollowUp(id: String, hours: Int = 1) {
         val f = _state.value.followUpList.find { it.id == id } ?: return
+        moveFollowUp(f, System.currentTimeMillis() + hours * 3600_000L, f.note)
+    }
+
+    /**
+     * Move ONE callback to a new time — "In 1 hour", or "Pick another time".
+     *
+     * Instant on screen, strictly ordered on the wire. Both callers used to fire
+     * completeFollowUp and scheduleFollowUp as two independent coroutines, and
+     * they race in a way that silently loses the callback: Repository
+     * .scheduleFollowUp MOVES the lead's existing pending row rather than
+     * stacking a second one (it hands the same id back), so if its SELECT runs
+     * before completeFollowUp's UPDATE commits, the complete lands on the row
+     * the move just rewrote and marks the rescheduled callback done. The rep
+     * picks Friday 4 PM, the screen agrees, and the callback is gone by the next
+     * refresh — indistinguishable from "the follow-up bug is still running".
+     *
+     * A lead-linked follow-up needs no completion at all: the move rewrites that
+     * very row, and migration 0153's BEFORE INSERT trigger closes any other open
+     * one. Only an UNLINKED follow-up (contact_id null, where the repository
+     * inserts instead of updating) has to be closed by hand first.
+     */
+    fun moveFollowUp(f: FollowUp, dueAtMillis: Long, note: String?) {
+        val id = f.id
+        val linked = f.contactId != null
+        val iso = java.time.Instant.ofEpochMilli(dueAtMillis).toString()
+        // Instant either way, but two different shapes: a linked callback is the
+        // SAME row at a new time, so rewrite it in place and it slides out of
+        // Call now with no flicker. An unlinked one is genuinely replaced, so
+        // the old row goes and scheduleFollowUp brings the new one back.
+        var removed: FollowUp? = null
+        if (id != null) {
+            if (linked) {
+                set { st ->
+                    st.copy(
+                        followUpList = st.followUpList
+                            .map { if (it.id == id) it.copy(dueAt = iso, note = note ?: it.note) else it }
+                            .sortedBy { dueMillis(it.dueAt) },
+                    )
+                }
+            } else {
+                removed = dropFollowUpLocally(id)
+            }
+        }
         viewModelScope.launch {
-            runCatching { Repository.completeFollowUp(id) }
-            val newDue = System.currentTimeMillis() + hours * 3600_000L
-            scheduleFollowUp(f.contactId, f.phone, f.name, newDue, f.note)
+            if (id != null && !linked) pushComplete(id, removed)
+            scheduleFollowUp(f.contactId, f.phone, f.name, dueAtMillis, note)
         }
     }
 
@@ -2454,6 +2563,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val contactId = s.postCallContactId
         val phone = s.postCallPhone ?: return
         val name = s.postCallName
+        // DON'T let postCallDispose close the callback we are about to book.
+        //
+        // This is the Update-from-Follow-Ups path: the rep opens callback X,
+        // says "call back later", picks tomorrow 10 AM. Repository
+        // .scheduleFollowUp MOVES the lead's existing pending row rather than
+        // stacking a second one — and for this lead the existing pending row IS
+        // X. So the booking rewrites X to tomorrow, and then postCallDispose
+        // reaches `fromFollowUp?.let { completeFollowUp(it) }` and marks X done.
+        // The rep picked a time, the sheet closed, and the lead was left with no
+        // callback at all. Two coroutines, so it was a coin flip which landed
+        // last — which is what an intermittent "follow-up bug" looks like.
+        //
+        // Nothing needs closing when the follow-up is lead-linked: the booking
+        // rewrote that very row, and 0153's trigger closes any other open one.
+        // An UNLINKED follow-up (contact_id null) really does get a brand-new
+        // row, so that one still has to be closed by hand.
+        val movedId = s.postCallFollowUpId?.takeIf { contactId != null }
+        if (movedId != null) {
+            val iso = java.time.Instant.ofEpochMilli(dueAtMillis).toString()
+            set { st ->
+                st.copy(
+                    postCallFollowUpId = null,
+                    // ...and show the new time NOW rather than after the write,
+                    // so the callback leaves Call now on the tap that booked it.
+                    followUpList = st.followUpList
+                        .map { if (it.id == movedId) it.copy(dueAt = iso, note = note ?: it.note) else it }
+                        .sortedBy { dueMillis(it.dueAt) },
+                )
+            }
+        }
         // postCallDispose (below) stamps the real status; don't let the
         // follow-up mirror overwrite it. A "callback" lead must STAY callback
         // so it sleeps in Working and wakes back up in New at its due time.
@@ -3670,6 +3809,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * fallback keeps "Z" timestamps working.
      */
     private fun parseInstant(iso: String): Long =
+        runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }
+            .recoverCatching { java.time.Instant.parse(iso).toEpochMilli() }
+            .getOrDefault(Long.MAX_VALUE)
+
+    /** A follow-up's due time as millis. Sorting the ISO strings directly is a
+     *  trap: the server writes "+00:00" and the app writes "Z", so two callbacks
+     *  in the same second can order backwards. */
+    private fun dueMillis(iso: String): Long =
         runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }
             .recoverCatching { java.time.Instant.parse(iso).toEpochMilli() }
             .getOrDefault(Long.MAX_VALUE)

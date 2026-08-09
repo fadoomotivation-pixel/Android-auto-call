@@ -60,8 +60,22 @@ Deno.serve(async (req) => {
 
   // One round trip: which of these leads have already been called? Calls are
   // mostly logged by phone (contact_id is often null), so match on either.
+  //
+  // started_at, NOT created_at. created_at is when the ROW reached the CRM, and
+  // a handset that has been dark for days uploads its whole backlog in one sync
+  // — every one of those rows dated now. Filtering on created_at therefore let
+  // a call made LAST WEEK count as "this lead has been called", and the 5-minute
+  // rule went quiet on exactly the leads it exists to protect. started_at is
+  // nullable, so rows without one still qualify on created_at.
+  //
+  // Ordered because .limit() without one truncates arbitrarily: if the window
+  // ever holds more than 2000 calls, the rows we keep must be the most recent,
+  // or leads that WERE called start getting nudged.
   const { data: calls } = await admin.from("call_logs")
-    .select("contact_id, phone").gte("created_at", freshAfter).limit(2000);
+    .select("contact_id, phone")
+    .or(`started_at.gte.${freshAfter},and(started_at.is.null,created_at.gte.${freshAfter})`)
+    .order("started_at", { ascending: false, nullsFirst: false })
+    .limit(2000);
   const norm = (p: string | null | undefined) => (p ?? "").replace(/\D/g, "").slice(-10);
   const calledIds = new Set((calls ?? []).map((c) => c.contact_id as string | null).filter(Boolean));
   const calledPhones = new Set((calls ?? []).map((c) => norm(c.phone)).filter((p) => p.length >= 7));
