@@ -9,6 +9,7 @@ import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.salesautocall.app.MainActivity
+import kotlinx.coroutines.launch
 import com.salesautocall.app.R
 
 /**
@@ -69,6 +70,7 @@ class LeadRingReceiver : BroadcastReceiver() {
                 // so it is safe on every call. The log lands in seconds and the
                 // recording ~2 min later, once the phone finishes writing it.
                 scheduleImmediateSync(context)
+                syncInlineNow(context)
 
                 val num = ringingNumber ?: return
                 val wasAnswered = answered
@@ -168,6 +170,47 @@ class LeadRingReceiver : BroadcastReceiver() {
         val nm = NotificationManagerCompat.from(context)
         if (nm.areNotificationsEnabled()) runCatching { nm.notify(id, n) }
     }
+
+    /**
+     * Sync the call log HERE, in the receiver, not only via WorkManager.
+     *
+     * scheduleImmediateSync() below does the right thing and it is not enough.
+     * It ENQUEUES work; whether that work ever runs is the OEM's decision, and
+     * on the handsets the reps actually carry the answer is often no. Ankita's
+     * Xiaomi went 3h07m without a single sync today (last 15:28 IST, checked at
+     * 18:35) while she worked her way down her call log. Every lead she rang in
+     * those three hours — Vicky, Sunil Mishra, Rajvir Panwar, twenty more — was
+     * sitting on the handset, so the founder's Pulse showed her with 0 calls
+     * and 0 minutes. Nothing was mislabelled; the rows simply never arrived.
+     *
+     * goAsync() takes the work out of WorkManager's hands entirely: the system
+     * keeps the process alive for a short window (~10s) for this broadcast, and
+     * PHONE_STATE is delivered to a manifest receiver even when the app is not
+     * running. A delta sync now takes one request rather than one per call, so
+     * it comfortably fits.
+     *
+     * The enqueue STAYS. This is a fast path, not a replacement: if the window
+     * closes first, or there is no network this second, WorkManager and the
+     * 15-minute periodic job are still the safety net. Bounded and
+     * crash-guarded, because this runs while a call is being torn down and a
+     * throw here would take the app down on every single call.
+     */
+    private fun syncInlineNow(context: Context) = runCatching {
+        val pending = goAsync()
+        val app = context.applicationContext
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                kotlinx.coroutines.withTimeoutOrNull(9_000L) {
+                    com.salesautocall.app.data.Repository.syncCallLogs(app)
+                }
+            } catch (_: Throwable) {
+                // WorkManager still has it. Never let a teardown-time failure
+                // surface as a crash on the rep's phone.
+            } finally {
+                runCatching { pending.finish() }
+            }
+        }
+    }.getOrElse { }
 
     /** One-shot call-log sync right away + a recording harvest ~2 minutes later
      *  (the phone's recorder needs a moment to close the file). Unique names
