@@ -138,13 +138,46 @@ object Repository {
         if (logs.isEmpty()) return 0
         var saved = 0
         for (chunk in logs.chunked(100)) {
-            if (runCatching { client.from("call_logs").insert(chunk) }.isSuccess) {
+            val rows = chunk.map { rowFor(it) }
+            if (runCatching { client.from("call_logs").insert(rows) }.isSuccess) {
                 saved += chunk.size
             } else {
                 for (one in chunk) if (runCatching { logCall(one) }.isSuccess) saved++
             }
         }
         return saved
+    }
+
+    /**
+     * One backfill row, as an explicit map with a FIXED key set.
+     *
+     * Inserting the CallLog objects directly does not work in bulk, and it fails
+     * on the normal path rather than a rare one. kotlinx.serialization omits any
+     * field equal to its default, so the rows genuinely differ in shape: a lead
+     * call carries contact_id and an off-CRM one does not, an incoming call
+     * carries direction and an outgoing one does not, a connected call carries
+     * duration_seconds and a missed one does not. PostgREST builds the column
+     * list from the FIRST object of a bulk insert and rejects the whole batch
+     * with PGRST102 "All object keys must match" the moment a later row differs
+     * — so every chunk would have failed and fallen back to one-at-a-time, which
+     * is slower than the loop this replaced.
+     *
+     * Same keys on every row, nulls written explicitly. `id` is left out
+     * entirely: sending "id": null overrides the column's default instead of
+     * letting Postgres generate one.
+     */
+    private fun rowFor(c: CallLog): JsonObject = buildJsonObject {
+        put("company_id", c.companyId)
+        put("salesperson_id", c.salespersonId)
+        put("contact_id", c.contactId)
+        put("phone", c.phone)
+        put("direction", c.direction)
+        put("outcome", c.outcome)
+        put("started_at", c.startedAt)
+        put("ended_at", c.endedAt)
+        put("duration_seconds", c.durationSeconds)
+        put("recording_status", c.recordingStatus)
+        put("off_crm", c.offCrm)
     }
 
     /** Force a call's recording_status (e.g. "failed" when no audio was captured). */
