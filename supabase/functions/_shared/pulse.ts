@@ -99,6 +99,10 @@ export type RepPulse = {
    * v_device_sync_health.trustworthy, which has always known this.
    */
   callsTrusted: boolean;
+  /** The raw staleness answer from v_device_sync_health, kept so a phone that
+   *  delivered today but has since gone quiet can carry a soft note instead of
+   *  the hard "not reporting" warning. */
+  rawTrusted?: boolean;
   /** When the phone last synced call logs successfully, for the warning line. */
   syncedAt: string | null;
   /** The single best thing that happened today, in one sentence. */
@@ -357,7 +361,23 @@ export async function buildCompany(
   }
   for (const h of health.data ?? []) {
     const r = map.get(String(h.salesperson_id)); if (!r) continue;
-    r.callsTrusted = h.trustworthy === true;
+    // A PHONE THAT ALREADY DELIVERED TODAY IS NOT "NOT REPORTING".
+    //
+    // v_device_sync_health.trustworthy goes false three hours after the last
+    // successful scan. That is the right rule for Phone Health, which asks "is
+    // this handset alive right now". It is the wrong rule for an evening
+    // report: at 11pm a rep who finished at 7pm has a four-hour-old sync and is
+    // perfectly fine. Ankita was flagged "calls not counted" tonight while 47
+    // of her calls were sitting in this very query, alongside 39 voice notes,
+    // 125 lead updates and 5 visits booked.
+    //
+    // Losing real numbers to a staleness clock is worse than the zero it was
+    // built to prevent — that guard exists so an absent phone is not read as an
+    // idle rep, and it must not turn a working day into one either. If calls
+    // arrived today, the phone reported today. Say the number, and hang the
+    // caveat off it instead of in place of it.
+    r.rawTrusted = h.trustworthy === true;
+    r.callsTrusted = h.trustworthy === true || r.calls > 0;
     r.syncedAt = (h.last_ok_at as string | null) ?? null;
   }
   for (const f of fups.data ?? []) { const r = rep(f.salesperson_id); if (r) r.followUps++; }
@@ -525,6 +545,21 @@ function listOfNonZero(notes: number, updates: number): string {
   if (notes > 0) parts.push(`${notes} voice note${notes > 1 ? "s" : ""}`);
   if (updates > 0) parts.push(`${updates} lead update${updates > 1 ? "s" : ""}`);
   return parts.length ? parts.join(" | ") : "nothing received from this phone today";
+}
+
+/**
+ * The caveat, and only when it is the whole story.
+ *
+ * [staleWithData] is the softer case: calls DID arrive today and the handset
+ * has since gone quiet, so the number below is real but may be short. That
+ * reads very differently from a phone that has sent nothing at all, and
+ * printing the harsher sentence over a working day is how a founder learns to
+ * distrust the report.
+ */
+function staleNote(r: { calls: number; syncedAt: string | null; rawTrusted?: boolean }): string | null {
+  if (r.rawTrusted !== false || r.calls === 0) return null;
+  return `ℹ️ Phone last sent at ${r.syncedAt ? istTime(r.syncedAt) : "an unknown time"} — ` +
+    `later calls may not be counted yet.`;
 }
 
 function syncWarning(r: { callsTrusted: boolean; syncedAt: string | null }): string | null {
@@ -758,6 +793,8 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
 
   if (warn) L.push("", warn);
   L.push("", "🟢 Today", ...kpiBlock(r));
+  const stale = staleNote(r);
+  if (stale) L.push(stale);
   const offCrm = offCrmLine(r);
   if (offCrm) L.push(offCrm);
 
@@ -833,6 +870,8 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
       (r.hotLeads ? ` | 🔥 ${r.hotLeads} hot` : "") +
       (r.visitsFixed ? ` | 📍 ${r.visitsFixed} visit${r.visitsFixed > 1 ? "s" : ""} fixed` : "") +
       (r.bookings ? ` | 🎉 ${r.bookings} booked${r.revenue ? ` ${rupees(r.revenue)}` : ""}` : ""));
+    const stale = staleNote(r);
+    if (stale) L.push(stale);
     const offCrm = offCrmLine(r);
     if (offCrm) L.push(offCrm);
     if (r.win) L.push(`✅ ${r.win}`);
