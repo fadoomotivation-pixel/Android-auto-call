@@ -94,12 +94,26 @@ fun CallsScreen(vm: MainViewModel) {
     fun nameFor(c: CallLog): String? =
         c.contactId?.let { nameById[it] } ?: nameByPhone[c.phone.filter { it.isDigit() }.takeLast(10)]
 
-    // Memoized derivations — computed once per data change, never per frame.
-    val followUps = remember(app.callList) {
-        app.callList.filter { it.outcome == "no_answer" || it.outcome == "failed" }.distinctBy { it.phone }
+    // ONE list, and every tab and every count derives from it.
+    //
+    // The counts used to be built from app.callList while the rendered rows were
+    // built from app.callList.filter { !it.offCrm }. On a phone whose calls are
+    // mostly off-CRM that reads as a broken app, and it did: "Follow-up (56)"
+    // sitting directly above "No follow-ups — every call connected 🎉".
+    //
+    // The filter is gone rather than copied into the counts. It was there to
+    // keep a rep's personal calls out of the app, and it was not doing that:
+    // the Phone tab right next to it lists the device's ENTIRE call log,
+    // personal calls included. So it protected nothing and cost the rep every
+    // call she had actually made — including the Play button, which is why not
+    // one recording could be heard on a freshly logged-in phone. These are her
+    // own calls; she is allowed to see them.
+    val visible = app.callList
+    val followUps = remember(visible) {
+        visible.filter { it.outcome == "no_answer" || it.outcome == "failed" }.distinctBy { it.phone }
     }
-    val missed = remember(app.callList) {
-        app.callList.filter { it.direction == "incoming" && it.outcome != "connected" }
+    val missed = remember(visible) {
+        visible.filter { it.direction == "incoming" && it.outcome != "connected" }
     }
     val recentsGrouped = remember(app.deviceRecents) {
         app.deviceRecents.groupBy { dayBucket(it.timeMillis) }.toList()
@@ -177,14 +191,14 @@ fun CallsScreen(vm: MainViewModel) {
             return@Column
         }
 
-        // Off-CRM calls (record-all-calls capture of numbers that aren't leads —
-        // often the rep's personal calls) are for the web admin only, never shown
-        // to the telecaller in the app.
+        // Same source as the tab counts above — see `visible`. No second filter
+        // here: a number the count includes and the list drops is the bug this
+        // screen shipped with.
         val rows = when (sub) {
             2 -> missed
             3 -> followUps
-            else -> app.callList
-        }.filter { !it.offCrm }
+            else -> visible
+        }
 
         when {
             app.callsLoading -> Box(Modifier.fillMaxWidth().padding(32.dp)) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
