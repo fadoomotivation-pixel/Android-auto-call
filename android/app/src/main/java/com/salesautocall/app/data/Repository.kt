@@ -395,10 +395,28 @@ object Repository {
             // Find closest unmatched Supabase log within 120 seconds
             val closestLog = recentLogs
                 .filter { it.id != null && !matchedSupabaseIds.contains(it.id) }
-                .filter {
-                    val sbPhone = digitsOf(it.phone)
-                    sbPhone.endsWith(nativeCall.cleanNum) || nativeCall.cleanNum.endsWith(sbPhone)
-                }
+                // EXACT last-10 match, not endsWith either way.
+                //
+                // The loose rule is what stopped Ankita's lead calls reaching
+                // the CRM. Her heartbeat: native_seen 760, backfilled 18 — the
+                // app decided 742 of her calls were already here, on a day the
+                // CRM held 47. Nine leads she demonstrably rang (Deepak, Govind,
+                // Jp, Kanhiya, Pankaj, Sunny, Xwed, Ramroop) have ZERO call rows
+                // between them, ever.
+                //
+                // "a.endsWith(b) || b.endsWith(a)" is a suffix test, and Indian
+                // mobile numbers share suffixes constantly. Paired with a
+                // 120-second window and a recentLogs set that #402 widened to
+                // eight days and twenty thousand rows — 6,068 of them duplicates
+                // — a native call could nearly always find SOME row that looked
+                // like a match. Every one it found was a call it then refused to
+                // send.
+                //
+                // Two numbers are the same number when their last ten digits are
+                // the same. That is the rule link_call_to_contact and
+                // backlink_calls_to_new_contact already use server-side, so all
+                // three now agree.
+                .filter { digitsOf(it.phone).takeLast(10) == nativeCall.cleanNum.takeLast(10) }
                 .mapNotNull {
                     // Instant.parse rejects the API's "+00:00" offset. When it
                     // failed, this returned null and the candidate was dropped —
