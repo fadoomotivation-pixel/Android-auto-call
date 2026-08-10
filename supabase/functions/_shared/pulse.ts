@@ -172,8 +172,16 @@ export async function buildCompany(
 
   // Contact names for pretty labels.
   const { data: contacts } = await admin.from("contacts")
-    .select("id, name, phone").eq("company_id", companyId);
+    .select("id, name, phone, stage").eq("company_id", companyId);
   const leadName = new Map((contacts ?? []).map((c) => [c.id, c.name || c.phone || "lead"]));
+  const leadStage = new Map((contacts ?? []).map((c) => [c.id, String(c.stage ?? "")]));
+
+  // WHICH STAGES ARE A SALE — asked of the table that defines them, never
+  // guessed. lead_stages.counts_as_sale is true for token_paid and won, and it
+  // is the same column the pipeline, analytics and the web dashboard read.
+  const { data: saleStages } = await admin.from("lead_stages")
+    .select("code").eq("counts_as_sale", true);
+  const SALE = new Set((saleStages ?? []).map((r) => String(r.code)));
 
   const [calls, notes, acts, visits, fups, hot, steps, health] = await Promise.all([
     // started_at, not created_at: the phone's call-log sync backfills a week of
@@ -309,10 +317,22 @@ export async function buildCompany(
   // Budget is what a customer said they could spend; reporting it as revenue
   // would be inventing money, and a founder who catches that once stops
   // believing the whole report.
+  //
+  // THE PULSE COULD NOT REPORT A SALE. This used to test the activity's prose
+  // with /\bbook(ed|ing)\b/i, and nothing the app writes contains that word:
+  // every status line reads "Stage → Callback", "Stage → Lost", "Stage → Site
+  // Visit". A closed deal writes "Stage → Won". Across thirty days of activity
+  // not one row matched, so a founder could have sold ten plots and read a
+  // report that mentioned none of them.
+  //
+  // The taxonomy has answered this all along — lead_stages.counts_as_sale, true
+  // for token_paid and won. Asking the table also means a stage added next
+  // month is counted the day it is added, with no code change and no second
+  // opinion for the web dashboard to disagree with.
   const bookedByRep = new Map<string, Set<string>>();
   for (const a of acts.data ?? []) {
     const r = rep(a.actor_id); if (!r || !a.contact_id) continue;
-    if (a.type === "status" && /\bbook(ed|ing)\b/i.test(String(a.detail ?? ""))) {
+    if (a.type === "status" && SALE.has(leadStage.get(String(a.contact_id)) ?? "")) {
       if (!bookedByRep.has(r.id)) bookedByRep.set(r.id, new Set());
       bookedByRep.get(r.id)!.add(String(a.contact_id));
     }
