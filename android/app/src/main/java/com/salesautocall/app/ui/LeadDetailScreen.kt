@@ -805,7 +805,7 @@ private fun IdentityBlock(
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(contact.name ?: prettyNum(contact.phone), style = MaterialTheme.typography.headlineSmall,
+                    Text(prettyName(contact.name) ?: prettyNum(contact.phone), style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold, color = Ink, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(8.dp))
                     Box(
@@ -852,6 +852,16 @@ private fun IdentityBlock(
                 LeadChip(label, col)
             }
             budgetLabel(contact.budget)?.let { LeadChip("💰 ₹ $it", GreenL) }
+            // EVERY OTHER ANSWER THEY GAVE THE FORM — not the first three.
+            //
+            // The list card has room for a few; this is the screen a rep opens
+            // when they are about to talk to the person, so it shows the lot.
+            // Purpose, whether they want a site visit, city, anything a future
+            // form adds — read straight out of extra.raw_fields, so a new
+            // question appears here the day the ads team adds it.
+            leadAnswers(contact).forEach { (label, value) ->
+                LeadChip(if (label == null) value else "$label · $value", SubInk)
+            }
             contact.territory?.takeIf { it.isNotBlank() }?.let { LeadChip("📍 $it", SubInk) }
             isoMs(contact.createdAt)?.let { LeadChip("Added ${fmtWhen(it)}", SubInk) }
         }
