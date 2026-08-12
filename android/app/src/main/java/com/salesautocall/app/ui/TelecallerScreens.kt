@@ -3215,33 +3215,68 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     // rung at 3:40 and the screen took the blame for being "late".
     val now = rememberNowTick()
     val all = app.followUpList
-    fun at(f: FollowUp) = instantMillis(f.dueAt) ?: Long.MAX_VALUE
 
-    // ONE list for "what do I call now": every callback whose time has come,
-    // whether it fell due an hour ago or last Tuesday. Oldest first, because
-    // the customer who has waited longest is the one to ring first.
+    // EVERY DATE PARSED ONCE PER LOAD, NOT ONCE PER COMPARISON.
     //
-    // Splitting these apart is what confused the reps. The screen used to open
-    // on "Today", and "Today" meant only callbacks dated today — so a rep with
-    // nothing dated today but twenty-four waiting from last week opened Follow
-    // Ups and saw an EMPTY LIST. Four of the five reps were in exactly that
-    // state. Nobody trusts a screen that shows nothing while work is piling up.
-    val toCall = all.filter { at(it) <= now }.sortedBy { at(it) }
-    // Map them to lead rows so we can power-dial back-to-back.
-    val dueContacts = toCall.mapNotNull { f -> app.leads.find { it.id == f.contactId } }
-    val laterToday = all.filter { at(it) > now && dayLabel(it.dueAt) == "Today" }.sortedBy { at(it) }
-    // Tomorrow gets its own tab because that is how a telecaller plans — "kal
-    // kisko karna hai" is a real question, and it was buried inside a 7-day
-    // list. It also makes the movement VISIBLE: book a callback for tomorrow,
-    // watch it sit here, and find it in Call now when its time comes. Nothing
-    // schedules that hop — the tabs are just today's clock read against due_at,
-    // so a lead lands in the right one on its own, every time the screen opens.
-    val tomorrow = all.filter { dayLabel(it.dueAt) == "Tomorrow" }.sortedBy { at(it) }
-    // Genuinely ahead of us — a plan, not a backlog. The old "This week" had no
-    // lower bound, so every ancient overdue callback counted as "this week" too.
-    val weekList = all.filter { at(it) > now && at(it) <= now + 7L * 24 * 3600_000L }.sortedBy { at(it) }
-    // Older than today: what the bulk-reschedule button acts on.
-    val overdueStrict = all.filter { at(it) < now && dayLabel(it.dueAt) != "Today" }
+    // "Follow up bahut slow hai." It was, and this is where. None of the six
+    // buckets below was remembered, so all of it re-ran on every single
+    // recomposition — and rememberNowTick() forces one every minute on top of
+    // every scroll frame. Each pass re-parsed the ISO due_at of all 148 rows,
+    // and sortedBy re-parses inside the comparator, so one sort alone was
+    // roughly a thousand date parses. Five sorts, two dayLabel() passes, then
+    // dueContacts doing a LINEAR SCAN of 271 leads for each of 112 due rows:
+    // thirty thousand comparisons, repeated, on a mid-range phone.
+    //
+    // Parse once into a small record, bucket from that, and look leads up in a
+    // map. The screen shows exactly what it showed before.
+    data class FuAt(val f: FollowUp, val ms: Long, val day: String)
+    val parsed = remember(all) {
+        all.map { FuAt(it, instantMillis(it.dueAt) ?: Long.MAX_VALUE, dayLabel(it.dueAt)) }
+    }
+    val leadById = remember(app.leads) { app.leads.mapNotNull { l -> l.id?.let { it to l } }.toMap() }
+
+    // Bucketed in ONE pass, and only when the list or the minute actually
+    // changes. `now` is a key because these are clock questions — that is the
+    // whole point of the tick — but the answer is computed once per tick, not
+    // once per frame.
+    val buckets = remember(parsed, now) {
+        val toCallL = ArrayList<FuAt>(); val laterL = ArrayList<FuAt>()
+        val tomorrowL = ArrayList<FuAt>(); val weekL = ArrayList<FuAt>()
+        val overdueL = ArrayList<FuAt>()
+        val weekEnd = now + 7L * 24 * 3600_000L
+        for (x in parsed) {
+            // ONE list for "what do I call now": every callback whose time has
+            // come, whether it fell due an hour ago or last Tuesday. Splitting
+            // these apart is what confused the reps — a rep with nothing dated
+            // today but twenty-four waiting from last week opened Follow Ups
+            // and saw an EMPTY LIST.
+            if (x.ms <= now) {
+                toCallL.add(x)
+                // Older than today: what the bulk-reschedule button acts on.
+                if (x.ms < now && x.day != "Today") overdueL.add(x)
+            } else {
+                if (x.day == "Today") laterL.add(x)
+                if (x.ms <= weekEnd) weekL.add(x)
+            }
+            // Tomorrow gets its own tab because that is how a telecaller plans
+            // — "kal kisko karna hai" is a real question, and it was buried
+            // inside a 7-day list.
+            if (x.day == "Tomorrow") tomorrowL.add(x)
+        }
+        val byTime = compareBy<FuAt> { it.ms }
+        listOf(toCallL, laterL, tomorrowL, weekL).forEach { it.sortWith(byTime) }
+        listOf(toCallL, laterL, tomorrowL, weekL, overdueL)
+    }
+    val toCall = buckets[0].map { it.f }
+    val laterToday = buckets[1].map { it.f }
+    val tomorrow = buckets[2].map { it.f }
+    val weekList = buckets[3].map { it.f }
+    val overdueStrict = buckets[4].map { it.f }
+    // Map them to lead rows so we can power-dial back-to-back — one map hit
+    // each, not a scan of the whole lead list per row.
+    val dueContacts = remember(buckets, leadById) {
+        buckets[0].mapNotNull { it.f.contactId?.let { id -> leadById[id] } }
+    }
 
     // Land on the list that HAS the work. Only once the rep taps a tab does
     // their choice take over — so the screen is never empty by default while
@@ -3252,12 +3287,16 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         laterToday.isNotEmpty() -> "later"
         else -> "all"
     }
+    // Hoisted OUT of the when below: remember() is positional, and calling it
+    // inside a branch that appears and disappears as the rep switches tabs
+    // changes the call order between recompositions.
+    val allSorted = remember(parsed) { parsed.sortedBy { it.ms }.map { it.f } }
     val shown = when (filter) {
         "tocall" -> toCall
         "later" -> laterToday
         "tomorrow" -> tomorrow
         "week" -> weekList
-        else -> all.sortedBy { at(it) }
+        else -> allSorted
     }
     val blurb = when (filter) {
         "tocall" -> "Their time has come — oldest first. Call these now."
