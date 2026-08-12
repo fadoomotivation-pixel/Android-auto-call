@@ -1839,5 +1839,33 @@ object Repository {
             buildJsonObject { put("p_period", JsonPrimitive(period)) },
         ).decodeList<LeaderboardRow>()
     }
+
+    // ---------- handing a lead to a colleague ----------
+
+    /** The other telecallers in this rep's company, name and id only. */
+    suspend fun fetchTeammates(): List<Teammate> {
+        if (currentUserId() == null) return emptyList()
+        return client.postgrest.rpc("my_teammates").decodeList<Teammate>()
+    }
+
+    /**
+     * Give leads to a colleague. Returns how many actually moved.
+     *
+     * The RPC is the only door on purpose: a straight update of
+     * contacts.salesperson_id moves the NAME on the lead and leaves the work
+     * behind, because follow_ups carries its own salesperson_id and that is what
+     * builds a rep's day. reassign_contacts moves both, and refuses a target who
+     * is not in the same company as the leads.
+     */
+    suspend fun handOverLeads(contactIds: List<String>, toSalespersonId: String): Int {
+        if (contactIds.isEmpty()) return 0
+        return client.postgrest.rpc(
+            "reassign_contacts",
+            buildJsonObject {
+                put("p_contact_ids", buildJsonArray { contactIds.forEach { add(JsonPrimitive(it)) } })
+                put("p_salesperson_id", JsonPrimitive(toSalespersonId))
+            },
+        ).decodeAs<Int>()
+    }
 }
 

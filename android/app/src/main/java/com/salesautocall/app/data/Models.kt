@@ -309,6 +309,21 @@ data class Attendance(
     val status: String = "present",
 )
 
+/**
+ * A colleague this rep can hand a lead to (from the my_teammates RPC).
+ *
+ * Name and id only, on purpose. A rep cannot read a teammate's profile row —
+ * RLS gives them their own and nothing else — so this comes through a narrow
+ * SECURITY DEFINER function that returns exactly what a picker needs. No phone,
+ * no email. Widening the profile policy for the sake of a dropdown would have
+ * handed every rep every colleague's number.
+ */
+@Serializable
+data class Teammate(
+    val id: String,
+    @SerialName("full_name") val fullName: String = "Telecaller",
+)
+
 /** One row of the company leaderboard (from the get_team_leaderboard RPC). */
 @Serializable
 data class LeaderboardRow(

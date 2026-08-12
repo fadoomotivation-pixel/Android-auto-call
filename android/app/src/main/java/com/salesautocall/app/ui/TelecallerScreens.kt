@@ -93,6 +93,7 @@ import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.FollowUp
 import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.LeadWork
+import com.salesautocall.app.data.Teammate
 import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.data.LeaderboardRow
 import kotlin.math.abs
@@ -1449,6 +1450,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     }
     var contentFor by remember { mutableStateOf<Contact?>(null) }
     var projectsFor by remember { mutableStateOf<Contact?>(null) }
+    var handOverFor by remember { mutableStateOf<Contact?>(null) }
     var selectMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
 
@@ -2114,7 +2116,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             onShareContent = { actionFor = null; contentFor = c },
             onProjects = { actionFor = null; projectsFor = c },
             onArrived = { c.id?.let { vm.arriveAtSite(c) } },
+            onHandOver = { actionFor = null; handOverFor = c },
         )
+    }
+    handOverFor?.let { c ->
+        HandOverDialog(vm = vm, c = c, onDismiss = { handOverFor = null })
     }
     contentFor?.let { c ->
         ContentShareDialog(vm = vm, contact = c, onDismiss = { contentFor = null })
@@ -2563,6 +2569,7 @@ private fun LeadActionSheet(
     onShareContent: () -> Unit = {},
     onProjects: () -> Unit = {},
     onArrived: () -> Unit = {},
+    onHandOver: () -> Unit = {},
 ) {
     // The rep can fix the name here. Imports arrive with blanks, initials and
     // "Unknown", and until now the only person who could correct that was an
@@ -2712,6 +2719,13 @@ private fun LeadActionSheet(
                     OutlinedButton(onClick = onProjects, modifier = Modifier.weight(1f)) { Text("🏢 Projects") }
                     OutlinedButton(onClick = onShareContent, modifier = Modifier.weight(1f)) { Text("📚 Share content") }
                 }
+                Spacer(Modifier.height(8.dp))
+                // Hand the lead to a colleague. On leave, on a site visit, or
+                // simply the wrong person for this customer — a rep should be
+                // able to pass it on without ringing the office.
+                OutlinedButton(onClick = onHandOver, modifier = Modifier.fillMaxWidth()) {
+                    Text("🤝 Give to a teammate")
+                }
             }
         },
         confirmButton = {
@@ -2729,6 +2743,98 @@ private fun LeadActionSheet(
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * Give this lead to somebody else on the team.
+ *
+ * Two taps, and the second one says out loud what it does. A rep handing over a
+ * customer needs to know the callback goes too — otherwise they keep the
+ * reminder in their head "just in case", which is the same as not handing it
+ * over at all.
+ */
+@Composable
+private fun HandOverDialog(vm: MainViewModel, c: Contact, onDismiss: () -> Unit) {
+    val app by vm.state.collectAsState()
+    var picked by remember { mutableStateOf<Teammate?>(null) }
+    // Cached names are fine to reuse; an empty list is not, because "nobody is
+    // on your team" and "the fetch failed" look identical once it is on screen.
+    LaunchedEffect(Unit) { vm.loadTeammates(force = app.teammates.isEmpty()) }
+
+    val who = picked
+    AlertDialog(
+        onDismissRequest = { if (!app.handingOver) onDismiss() },
+        title = { Text(if (who == null) "Give this lead to" else "Give to ${who.fullName}?") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (who == null) {
+                    Text(
+                        "${c.name ?: c.phone} moves to their list. Pick who.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    when {
+                        app.teammatesLoading && app.teammates.isEmpty() ->
+                            Text("Loading your team…", style = MaterialTheme.typography.bodyMedium)
+                        // Two different sentences, never the same one. Telling a
+                        // rep "nobody is on your team" when the list simply did
+                        // not load sends them to the office to ask a question
+                        // that has no answer.
+                        app.teammatesFailed && app.teammates.isEmpty() ->
+                            Text(
+                                "Couldn't load your team. Check your internet and open this again.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Amber,
+                            )
+                        app.teammates.isEmpty() ->
+                            Text(
+                                "There is nobody else in your team yet. Ask the office to add a telecaller first.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        else -> app.teammates.forEach { t ->
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                    .clickable { picked = t }
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("👤", style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.width(10.dp))
+                                Text(t.fullName, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+                } else {
+                    // The whole point of the feature, in the two lines that matter.
+                    Text(
+                        "${c.name ?: c.phone} and its next call both go to ${who.fullName}.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "The lead leaves your list. Your old calls and notes on it stay yours.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (who != null) {
+                TextButton(
+                    enabled = !app.handingOver,
+                    onClick = { c.id?.let { vm.handOverLead(it, who) }; onDismiss() },
+                ) { Text(if (app.handingOver) "Giving…" else "Give the lead") }
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !app.handingOver, onClick = { if (who != null) picked = null else onDismiss() }) {
+                Text(if (who != null) "Back" else "Cancel")
+            }
+        },
     )
 }
 
