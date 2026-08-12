@@ -17,6 +17,10 @@ type Rep = {
   /** False when this phone is not sending its call log — so calls/connected/
    *  talk below are what the CRM RECEIVED, not what the rep did. */
   callsTrusted?: boolean;
+  /** Raw staleness from v_device_sync_health. True/undefined = fresh. When this
+   *  is false but calls > 0 the phone DID deliver today and merely went quiet —
+   *  a caveat, not a failure. */
+  rawTrusted?: boolean;
   /** Calls to numbers that are NOT CRM leads (record-all-calls). Never counted
    *  as work, never hidden — see offCrmLine in _shared/pulse.ts. */
   offCrmCalls?: number;
@@ -292,6 +296,10 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                         broken number, and the founder had no way to tell which.
                         The WhatsApp report learned this in #385/#390; the page
                         renders the DATA rather than that text, so it never did. */}
+                    {/* Only when the phone sent NOTHING. A four-hour-old sync
+                        at 11pm is a rep who went home, and blanking 47 real
+                        calls to say "not counted" is the failure this guard was
+                        supposed to prevent, not cause. */}
                     {r.callsTrusted === false ? (
                       <span style={{ color: "#fca5a5" }}>
                         <strong>⚠️ calls not counted</strong> — phone not sending its call log
@@ -324,6 +332,12 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                       </>
                     )}
                   </div>
+
+                  {r.callsTrusted !== false && r.rawTrusted === false && r.calls > 0 && (
+                    <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>
+                      ℹ️ Phone last sent a while ago — later calls may not be counted yet.
+                    </div>
+                  )}
 
                   {/* Phone time that is not lead work, said out loud.
                       Ankita's card read "0 calls · 0 conn. · 0m talk" on a day
