@@ -99,7 +99,10 @@ function verdict(r: Row): { title: string; why: string; fix: string | null } {
     default:
       return {
         title: "Sab theek chal raha hai",
-        why: `${r.calls} calls, ${r.incoming} incoming, ${r.off_crm} off-CRM, ${r.recordings_ready} recordings. Phone CRM ko sahi feed kar raha hai.`,
+        // No off-CRM count in the verdict sentence. It is super-admin-only
+        // information and this line is read by every company admin; the number
+        // itself is on the stat row above, where it is properly gated.
+        why: `${r.calls} calls, ${r.incoming} incoming, ${r.recordings_ready} recordings. Phone CRM ko sahi feed kar raha hai.`,
         fix: null,
       };
   }
@@ -242,7 +245,7 @@ export function PhoneHealth({ isSuper }: { isSuper: boolean }) {
                 <span>📤 {r.outgoing} out</span>
                 <span>📥 {r.incoming} in</span>
                 <span>↩︎ {r.missed} missed</span>
-                <span>👤 {r.off_crm} off-CRM</span>
+                {isSuper && <span>👤 {r.off_crm} off-CRM</span>}
                 <span>🎧 {r.recordings_ready}/{r.connected} recorded</span>
                 <span>🔄 last sync {ist(r.last_sync_row_at)}</span>
                 <span>📞 last call {ist(r.last_call_at)}</span>

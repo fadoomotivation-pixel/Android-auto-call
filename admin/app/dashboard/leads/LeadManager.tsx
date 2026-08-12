@@ -328,8 +328,25 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
       setBusy(false);
       if (!ok) { setTimeout(() => setMsg(null), 3500); return; }
     } else {
+      // A HANDOVER IS NOT ONE COLUMN.
+      //
+      // This was a bare update of contacts.salesperson_id, which left the lead's
+      // pending callbacks with the OLD rep — follow_ups carries its own
+      // salesperson_id and the app builds a rep's day out of it. So the new
+      // owner's Follow-up tab stayed empty for a lead that owed a call today,
+      // and the old rep kept being told to ring a customer who was no longer
+      // theirs. reassign_contacts() moves both, and refuses a target who is not
+      // in the same company as the leads.
       for (const batch of chunk(ids, 500)) {
-        await supabase.from("contacts").update({ salesperson_id: assignTo }).in("id", batch);
+        const { error } = await supabase.rpc("reassign_contacts", {
+          p_contact_ids: batch, p_salesperson_id: assignTo,
+        });
+        if (error) {
+          setBusy(false);
+          setMsg(`Assign failed: ${error.message}`);
+          setTimeout(() => setMsg(null), 3500);
+          return;
+        }
       }
       setBusy(false);
     }

@@ -65,6 +65,16 @@ export default async function RecordingsPage({
   if (dirFilter) recQuery = recQuery.eq("direction", dirFilter);
   if (coFilter) recQuery = recQuery.eq("company_id", coFilter);
   if (kindFilter) recQuery = recQuery.eq("off_crm", kindFilter === "offcrm");
+  // OFF-CRM RECORDINGS ARE SUPER-ADMIN ONLY.
+  //
+  // This was the sharpest edge of the whole leak: not a count on a report but
+  // the AUDIO of a telecaller's personal calls, playable by their company's
+  // owner. Record-all-calls exists so the platform owner can tell a dead phone
+  // from a private list; it was never a licence for an employer to listen to
+  // an employee's other calls. Filtered in the query, so the rows never reach
+  // the page. `is.null` is included because rows predating the column are
+  // ordinary lead calls.
+  if (!isSuper) recQuery = recQuery.or("off_crm.is.null,off_crm.eq.false");
   // "Last N days" means the CALL happened in the last N days, not the row. A
   // handset that syncs after three days dark creates a month of rows today, and
   // filtering on created_at dated every one of them today. started_at is
@@ -170,9 +180,11 @@ export default async function RecordingsPage({
         <a href={linkWith({ dir: "outgoing" })} style={chip(dirFilter === "outgoing")}>↗ Outgoing</a>
         <a href={linkWith({ dir: "incoming" })} style={chip(dirFilter === "incoming")}>↙ Incoming</a>
         <span style={{ opacity: 0.35 }}>|</span>
-        <a href={linkWith({ kind: "" })} style={chip(!kindFilter)}>All numbers</a>
-        <a href={linkWith({ kind: "lead" })} style={chip(kindFilter === "lead")}>CRM leads</a>
-        <a href={linkWith({ kind: "offcrm" })} style={chip(kindFilter === "offcrm")}>⚠ Off-CRM</a>
+        {isSuper && <>
+          <a href={linkWith({ kind: "" })} style={chip(!kindFilter)}>All numbers</a>
+          <a href={linkWith({ kind: "lead" })} style={chip(kindFilter === "lead")}>CRM leads</a>
+          <a href={linkWith({ kind: "offcrm" })} style={chip(kindFilter === "offcrm")}>⚠ Off-CRM</a>
+        </>}
       </div>
 
       <form method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "8px 0" }}>
@@ -266,7 +278,7 @@ export default async function RecordingsPage({
                   {isSuper && <td>{companyById.get(c.company_id) || "—"}</td>}
                   <td>{nameById.get(c.salesperson_id) || "—"}</td>
                   <td>
-                    {c.off_crm ? (
+                    {isSuper && c.off_crm ? (
                       <span
                         title="Not a CRM lead — captured by record-all-calls monitoring"
                         style={{ color: "var(--danger, #C0452C)", fontWeight: 600 }}

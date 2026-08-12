@@ -114,6 +114,17 @@ export default async function CallsPage({
       `started_at.gte.${since},and(started_at.is.null,created_at.gte.${since})`,
     );
   }
+  // OFF-CRM IS SUPER-ADMIN ONLY, AND IT IS FILTERED IN THE QUERY.
+  //
+  // A rep's calls to numbers that are not in the CRM are how the PLATFORM owner
+  // tells a dead phone from a private list. A company owner has no business
+  // reading their telecaller's other calls, and hiding the rows in the component
+  // would still ship them to that owner's browser. So they never leave the
+  // database. `is.null` is in the test because rows written before the column
+  // existed have no value and are ordinary lead calls, not off-CRM ones.
+  if (!isSuper) {
+    callQuery = callQuery.or("off_crm.is.null,off_crm.eq.false");
+  }
 
   const [{ data: calls, error }, { data: people }, { data: companies }, contacts] =
     await Promise.all([
