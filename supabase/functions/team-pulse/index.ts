@@ -43,36 +43,54 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const date = typeof body?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : istDate(0);
 
+  // ONE read of `companies`, not two. The super-admin path selected `id` and
+  // then immediately selected `id, name` from the same table.
+  const nameById = new Map<string, string>();
   let companyIds: string[];
-  if (isSuper && body?.company_id) companyIds = [body.company_id];
-  else if (isSuper) {
-    const { data: cs } = await admin.from("companies").select("id");
-    companyIds = (cs ?? []).map((c) => c.id);
+  if (isSuper) {
+    const { data: cs } = await admin.from("companies").select("id, name");
+    for (const c of cs ?? []) nameById.set(c.id, c.name);
+    companyIds = body?.company_id ? [String(body.company_id)] : (cs ?? []).map((c) => c.id);
   } else {
     if (!me?.company_id) return json({ ok: false, error: "No company" }, 400);
     companyIds = [me.company_id];
   }
 
-  const nameById = new Map<string, string>();
-  if (isSuper) {
-    const { data: cs } = await admin.from("companies").select("id, name");
-    for (const c of cs ?? []) nameById.set(c.id, c.name);
-  }
+  // COMPANIES IN PARALLEL, NOT ONE AFTER ANOTHER.
+  //
+  // This was a plain `for … await`, so the super admin's Daily Pulse paid the
+  // full cost of every company end to end: eight companies, each waiting on its
+  // own database round trips AND one AI brief per active rep before the next
+  // company was allowed to start. That is why the page is slow — not one slow
+  // query, just eight of everything, in single file.
+  //
+  // Bounded, though. Each company fires an AI call per active rep and the
+  // shared provider chain is rate limited, so letting all eight go at once
+  // would trade a slow page for one that 429s. Four lanes turns eight rounds
+  // into two and keeps the burst small. Results are written back by index, so
+  // the company order the founder sees does not change with the weather.
+  const targets = companyIds.slice(0, 20);
+  const built = new Array<Record<string, unknown>>(targets.length);
+  let next = 0;
+  const LANES = 4;
+  await Promise.all(
+    Array.from({ length: Math.min(LANES, targets.length) }, async () => {
+      for (let i = next++; i < targets.length; i = next++) {
+        const cid = targets[i];
+        const pulse = await buildCompany(admin, cid, date);
+        const companyName = nameById.get(cid) ?? null;
+        built[i] = {
+          company_id: cid,
+          company_name: companyName,
+          ...pulse,
+          // Exactly what pulse-broadcast will send tonight — so "Copy report"
+          // and the 7pm WhatsApp are the same words, not two attempts at them.
+          text: pulseText(pulse, companyName),
+          reps: pulse.reps.map((r) => ({ ...r, text: repText(r, pulse.date, companyName) })),
+        };
+      }
+    }),
+  );
 
-  const companies = [];
-  for (const cid of companyIds.slice(0, 20)) {
-    const pulse = await buildCompany(admin, cid, date);
-    const companyName = nameById.get(cid) ?? null;
-    companies.push({
-      company_id: cid,
-      company_name: companyName,
-      ...pulse,
-      // Exactly what pulse-broadcast will send tonight — so "Copy report" and
-      // the 7pm WhatsApp are the same words, not two attempts at them.
-      text: pulseText(pulse, companyName),
-      reps: pulse.reps.map((r) => ({ ...r, text: repText(r, pulse.date, companyName) })),
-    });
-  }
-
-  return json({ ok: true, date, companies });
+  return json({ ok: true, date, companies: built });
 });
