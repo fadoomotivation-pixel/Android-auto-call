@@ -59,6 +59,17 @@ async function buildText(
 
   const pulse = await buildCompany(admin, sub.company_id, date);
 
+  // NOTHING THAT LEAVES HERE CARRIES OFF-CRM, EVER.
+  //
+  // Both writers below omit the showOffCrm flag on purpose, and that is the
+  // whole policy: a WhatsApp cannot check who is holding the phone it lands on,
+  // and forwarding it is one tap. This message goes to company owners and — via
+  // pulse_subscribers.salesperson_id — to TELECALLERS about their own day, which
+  // is how "📵 33 calls to numbers not in the CRM" was arriving on the handset of
+  // the person it was written about. Off-CRM is the platform owner's signal for
+  // telling a dead phone from a private list. It belongs on the super admin's
+  // web page and nowhere else. Do not pass true here.
+  //
   // A telecaller recipient gets repText for their own row — the same wording
   // the Pulse page's per-rep WhatsApp button sends, so a rep who has been
   // forwarded their day by the manager and a rep who subscribed to it get the

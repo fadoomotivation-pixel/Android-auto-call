@@ -19,6 +19,7 @@ import com.salesautocall.app.data.DayReview
 import com.salesautocall.app.data.FollowUp
 import com.salesautocall.app.data.LeadProjectInterest
 import com.salesautocall.app.data.LeaderboardRow
+import com.salesautocall.app.data.Teammate
 import com.salesautocall.app.data.ParseResult
 import com.salesautocall.app.data.Profile
 import com.salesautocall.app.data.ProjectSite
@@ -158,6 +159,15 @@ data class AppState(
     // follow-up calendar (includes completed)
     val calendar: List<FollowUp> = emptyList(),
     val calendarLoading: Boolean = false,
+    /** Colleagues this rep can hand a lead to. Loaded on demand — most days
+     *  nobody opens the picker, and it is one round trip when they do. */
+    val teammates: List<Teammate> = emptyList(),
+    val teammatesLoading: Boolean = false,
+    /** The list could not be fetched. Kept apart from "the list is empty",
+     *  because those are two different sentences and only one of them is
+     *  "there is nobody else on your team". */
+    val teammatesFailed: Boolean = false,
+    val handingOver: Boolean = false,
     // team leaderboard
     val leaderboard: List<LeaderboardRow> = emptyList(),
     val leaderboardPeriod: String = "today",
@@ -3442,6 +3452,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     set { it.copy(leaderboard = sorted, leaderboardLoading = false) }
                 }
                 .onFailure { e -> set { it.copy(leaderboardLoading = false, error = e.message) } }
+        }
+    }
+
+    // ---------- handing a lead to a colleague ----------
+
+    /** Names for the picker. Cheap, and only when the rep opens it. */
+    fun loadTeammates(force: Boolean = false) {
+        if (!shouldLoad("teammates", force)) return
+        viewModelScope.launch {
+            set { it.copy(teammatesLoading = true, teammatesFailed = false) }
+            runCatching { Repository.fetchTeammates() }
+                .onSuccess { rows -> set { it.copy(teammates = rows, teammatesLoading = false, teammatesFailed = false) } }
+                .onFailure { set { it.copy(teammatesLoading = false, teammatesFailed = true) } }
+        }
+    }
+
+    /**
+     * Give one lead to a colleague, and take it off this rep's screen.
+     *
+     * The lead AND its pending callbacks move together — that is the whole point,
+     * and it is why this goes through reassign_contacts rather than an update.
+     * Locally we drop both for the same reason: a lead that is no longer yours
+     * sitting in your list until the next refresh is how a rep rings a customer
+     * who now belongs to somebody else.
+     */
+    fun handOverLead(contactId: String, to: Teammate) {
+        if (_state.value.handingOver) return
+        viewModelScope.launch {
+            set { it.copy(handingOver = true) }
+            runCatching { Repository.handOverLeads(listOf(contactId), to.id) }
+                .onSuccess { moved ->
+                    if (moved <= 0) {
+                        set { it.copy(handingOver = false, error = "That lead didn't move. Pull down to refresh and try again.") }
+                        return@onSuccess
+                    }
+                    set { s ->
+                        s.copy(
+                            handingOver = false,
+                            leads = s.leads.filterNot { it.id == contactId },
+                            followUpList = s.followUpList.filterNot { it.contactId == contactId },
+                            workByLead = s.workByLead - contactId,
+                            message = "Given to ${to.fullName}. The lead and its next call are theirs now.",
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    set {
+                        it.copy(
+                            handingOver = false,
+                            error = if (looksLikeNetwork(e)) "No internet. Try again when you're back online."
+                            else shortError(e),
+                        )
+                    }
+                }
         }
     }
 

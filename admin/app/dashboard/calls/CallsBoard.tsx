@@ -211,11 +211,16 @@ export function CallsBoard({
           <option value="outgoing">📤 Outgoing</option>
           <option value="incoming">📥 Incoming</option>
         </select>
-        <select value={kind} onChange={(e) => setKind(e.target.value)} style={selStyle}>
-          <option value="all">Leads &amp; off-CRM</option>
-          <option value="leads">CRM leads only</option>
-          <option value="offcrm">Off-CRM only</option>
-        </select>
+        {/* Off-CRM is the platform owner's signal, not the company owner's.
+            A regular admin is never sent those rows (see page.tsx), so a
+            picker offering to filter by them would only ever return nothing. */}
+        {isSuper && (
+          <select value={kind} onChange={(e) => setKind(e.target.value)} style={selStyle}>
+            <option value="all">Leads &amp; off-CRM</option>
+            <option value="leads">CRM leads only</option>
+            <option value="offcrm">Off-CRM only</option>
+          </select>
+        )}
         <select
           value={range}
           onChange={(e) => router.push(`/dashboard/calls?range=${e.target.value}`)}
@@ -267,9 +272,11 @@ export function CallsBoard({
         <span>
           <strong>{withRec}</strong> with recording
         </span>
-        <span>
-          <strong>{offCrm}</strong> off-CRM
-        </span>
+        {isSuper && (
+          <span>
+            <strong>{offCrm}</strong> off-CRM
+          </span>
+        )}
       </div>
 
       {/* Outgoing without a single inbound call isn't a quiet week — it's the
@@ -335,9 +342,9 @@ export function CallsBoard({
                       </td>
                     )}
                     <td>
-                      <strong>{name || (c.off_crm ? "Off-CRM number" : "Unknown")}</strong>
+                      <strong>{name || (isSuper && c.off_crm ? "Off-CRM number" : "Unknown")}</strong>
                       <div style={{ fontSize: 12, opacity: 0.7 }}>{c.phone}</div>
-                      {c.off_crm && (
+                      {isSuper && c.off_crm && (
                         <span
                           className="badge"
                           style={{ background: "var(--border)", color: "var(--muted)", fontSize: 11 }}

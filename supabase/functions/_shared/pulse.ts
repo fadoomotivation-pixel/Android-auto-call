@@ -623,10 +623,13 @@ function kpiBlock(k: {
   /** Absent on the company totals block, which is a sum and always printed. */
   callsTrusted?: boolean;
   /** Present for a rep. When there were no CRM-lead calls but the phone was
-   *  busy anyway, these replace the row of zeros — see below. */
+   *  busy anyway, these replace the row of zeros — see below. SUPER ADMIN ONLY;
+   *  the caller decides, and the default is not to show them. */
   offCrmCalls?: number;
   offCrmTalkSeconds?: number;
-}): string[] {
+}, showOffCrm = false): string[] {
+  const offCalls = showOffCrm ? (k.offCrmCalls ?? 0) : 0;
+  const offTalk = showOffCrm ? (k.offCrmTalkSeconds ?? 0) : 0;
   const L = [`• Bookings: ${k.bookings}`];
   if (k.revenue > 0) L.push(`• Token collected: ${rupees(k.revenue)}`);
   L.push(`• Site visits fixed: ${k.visitsFixed}`);
@@ -648,13 +651,20 @@ function kpiBlock(k: {
       // fixed stops reading at the zero. When the only phone work was off-CRM,
       // the real numbers are the headline — labelled, so 132 can never be
       // misread as 132 lead calls.
-      (k.calls === 0 && (k.offCrmCalls ?? 0) > 0
-        ? `• Calls: ${k.offCrmCalls} · 0 to CRM leads`
+      //
+      // For everyone except the super admin the off-CRM numbers are not printed
+      // at all, so this reads "Calls: 0 to leads" — true, actionable, and it
+      // still does not call a rep idle. What her phone did outside the CRM is
+      // not the company owner's line to read.
+      (k.calls === 0 && offCalls > 0
+        ? `• Calls: ${offCalls} · 0 to CRM leads`
+        : k.calls === 0
+        ? "• Calls: 0 to leads"
         : `• Calls: ${k.calls} · connected ${connectedLine(k.calls, k.connected)}`) +
         // Same rule as the calls line above: show the talk that actually
         // happened rather than a 0m next to an hour of phone time.
-        (k.calls === 0 && (k.offCrmTalkSeconds ?? 0) > 0
-          ? ` · ${fmtDur(k.offCrmTalkSeconds ?? 0)} talk`
+        (k.calls === 0 && offTalk > 0
+          ? ` · ${fmtDur(offTalk)} talk`
           : k.talkSeconds > 0 ? ` · ${fmtDur(k.talkSeconds)} talk` : ""),
     );
     if (k.connected > 0) {
@@ -794,7 +804,26 @@ export function offCrmLine(r: RepPulse): string | null {
     (r.calls === 0 ? " — no CRM lead was called today." : ".");
 }
 
-export function repText(r: RepPulse, date: string, companyName?: string | null): string {
+/**
+ * OFF-CRM IS THE SUPER ADMIN'S LINE AND NOBODY ELSE'S.
+ *
+ * What numbers a telecaller dialled that are not in the CRM is platform-level
+ * information: it is how the owner of the PLATFORM tells a dead phone from a
+ * rep working a private list. It is not a company owner's business and it is
+ * certainly not a telecaller's, and it was going to both — on the Daily Pulse
+ * WhatsApp that every pulse_subscriber receives, and on the web Pulse card.
+ *
+ * So every writer below takes an explicit flag and DEFAULTS TO OFF. Nothing has
+ * to remember to hide it; a caller has to ask for it, and only the super admin's
+ * surfaces do. WhatsApp never does — a message cannot check who is holding the
+ * phone it lands on, and forwarding is one tap.
+ */
+export function repText(
+  r: RepPulse,
+  date: string,
+  companyName?: string | null,
+  showOffCrm = false,
+): string {
   const L: string[] = [`📊 ${r.name} | Daily Pulse | ${prettyDate(date)}`];
   if (companyName) L.push(companyName);
 
@@ -813,10 +842,10 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
   }
 
   if (warn) L.push("", warn);
-  L.push("", "🟢 Today", ...kpiBlock(r));
+  L.push("", "🟢 Today", ...kpiBlock(r, showOffCrm));
   const stale = staleNote(r);
   if (stale) L.push(stale);
-  const offCrm = offCrmLine(r);
+  const offCrm = showOffCrm ? offCrmLine(r) : null;
   if (offCrm) L.push(offCrm);
 
   if (r.win) L.push("", "🎯 Biggest win", `✅ ${r.win}`);
@@ -847,7 +876,11 @@ export function repText(r: RepPulse, date: string, companyName?: string | null):
  * report that only lists activity lets a silent rep disappear, and a silent rep
  * is the thing the founder most needs to see.
  */
-export function pulseText(p: CompanyPulse, companyName?: string | null): string {
+export function pulseText(
+  p: CompanyPulse,
+  companyName?: string | null,
+  showOffCrm = false,
+): string {
   const L: string[] = [`📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse`, prettyDate(p.date)];
   // The totals are a sum of what ARRIVED. With a phone missing they are a floor,
   // not a count — and when NO phone is reporting they are not a number at all,
@@ -855,7 +888,7 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
   // eye reads as the answer before it reaches the warning underneath.
   const blind = p.reps.filter((r) => !r.callsTrusted);
   const anyReporting = p.reps.some((r) => r.callsTrusted);
-  L.push("", "🟢 Today", ...kpiBlock({ ...p.totals, callsTrusted: anyReporting || p.reps.length === 0 }));
+  L.push("", "🟢 Today", ...kpiBlock({ ...p.totals, callsTrusted: anyReporting || p.reps.length === 0 }, showOffCrm));
   if (blind.length) {
     L.push(`• ⚠️ Call totals are INCOMPLETE — ${blind.length} phone${blind.length > 1 ? "s" : ""} not reporting (${
       blind.map((r) => r.name).join(", ")})`);
@@ -884,8 +917,10 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
     const didArrive = listOfNonZero(realNotes(r).length, newsworthyMoves(r).length)
     // Same rule again — the founder's team report showed "0 calls | 0
     // connected" beside a rep who had been on the phone for an hour.
-    const callsBit = r.calls === 0 && r.offCrmCalls > 0
+    const callsBit = r.calls === 0 && showOffCrm && r.offCrmCalls > 0
       ? `${r.offCrmCalls} calls | 0 to CRM leads`
+      : r.calls === 0
+      ? "0 calls to leads"
       : `${r.calls} calls | ${connectedLine(r.calls, r.connected)} connected`
     L.push((warn ? didArrive : callsBit) +
       (r.hotLeads ? ` | 🔥 ${r.hotLeads} hot` : "") +
@@ -893,7 +928,7 @@ export function pulseText(p: CompanyPulse, companyName?: string | null): string 
       (r.bookings ? ` | 🎉 ${r.bookings} booked${r.revenue ? ` ${rupees(r.revenue)}` : ""}` : ""));
     const stale = staleNote(r);
     if (stale) L.push(stale);
-    const offCrm = offCrmLine(r);
+    const offCrm = showOffCrm ? offCrmLine(r) : null;
     if (offCrm) L.push(offCrm);
     if (r.win) L.push(`✅ ${r.win}`);
     if (r.risk) L.push(`🔸 ${r.risk}`);

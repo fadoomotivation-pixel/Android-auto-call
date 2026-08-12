@@ -85,8 +85,21 @@ Deno.serve(async (req) => {
           ...pulse,
           // Exactly what pulse-broadcast will send tonight — so "Copy report"
           // and the 7pm WhatsApp are the same words, not two attempts at them.
-          text: pulseText(pulse, companyName),
-          reps: pulse.reps.map((r) => ({ ...r, text: repText(r, pulse.date, companyName) })),
+          text: pulseText(pulse, companyName, isSuper),
+          // OFF-CRM IS STRIPPED HERE, NOT HIDDEN IN THE PAGE.
+          //
+          // A company admin's browser must never be sent these numbers at all.
+          // Rendering them behind an `isSuper &&` in the component would still
+          // put "Ankita: 33 calls to numbers not in the CRM" in the JSON on
+          // their machine, one devtools tab away. What a rep dials outside the
+          // CRM is the platform owner's signal for telling a dead phone from a
+          // private list — it is not the company owner's business.
+          reps: pulse.reps.map((r) => {
+            const text = repText(r, pulse.date, companyName, isSuper);
+            if (isSuper) return { ...r, text };
+            const { offCrmCalls: _c, offCrmTalkSeconds: _t, ...rest } = r;
+            return { ...rest, text };
+          }),
         };
       }
     }),
