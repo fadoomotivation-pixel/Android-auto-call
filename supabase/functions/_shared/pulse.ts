@@ -169,25 +169,40 @@ export async function buildCompany(
 ): Promise<CompanyPulse> {
   const { start, end } = dayBounds(date);
 
-  const { data: reps } = await admin.from("profiles")
-    .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson");
-  const repList = reps ?? [];
-  const nameById = new Map(repList.map((r) => [r.id, r.full_name || "Telecaller"]));
-
-  // Contact names for pretty labels.
-  const { data: contacts } = await admin.from("contacts")
-    .select("id, name, phone, stage").eq("company_id", companyId);
-  const leadName = new Map((contacts ?? []).map((c) => [c.id, c.name || c.phone || "lead"]));
-  const leadStage = new Map((contacts ?? []).map((c) => [c.id, String(c.stage ?? "")]));
-
-  // WHICH STAGES ARE A SALE — asked of the table that defines them, never
-  // guessed. lead_stages.counts_as_sale is true for token_paid and won, and it
-  // is the same column the pipeline, analytics and the web dashboard read.
-  const { data: saleStages } = await admin.from("lead_stages")
-    .select("code").eq("counts_as_sale", true);
-  const SALE = new Set((saleStages ?? []).map((r) => String(r.code)));
-
-  const [calls, notes, acts, visits, fups, hot, steps, health] = await Promise.all([
+  // ELEVEN QUERIES, ONE ROUND TRIP.
+  //
+  // profiles, contacts and lead_stages used to be three awaits in a row before
+  // the batch below even started, so every company cost four sequential waits
+  // instead of one. None of the three depends on the others — they were
+  // sequential only because they were written on separate lines. On the Daily
+  // Pulse page, where the super admin builds eight companies, that was
+  // twenty-four avoidable round trips before a single call log was read.
+  const [
+    { data: reps },
+    { data: contacts },
+    { data: saleStages },
+    calls,
+    notes,
+    acts,
+    visits,
+    fups,
+    hot,
+    steps,
+    health,
+  ] = await Promise.all([
+    admin.from("profiles")
+      .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson"),
+    // Contact names for pretty labels. Explicit limit: PostgREST silently caps
+    // an unlimited select at 1000 rows, and the two biggest tenants are already
+    // past 300 and taking twenty Facebook leads a day. Truncating here would not
+    // error — it would quietly start labelling real leads "lead" and, worse,
+    // drop them out of leadStage so a sale stopped counting as a sale.
+    admin.from("contacts")
+      .select("id, name, phone, stage").eq("company_id", companyId).limit(50000),
+    // WHICH STAGES ARE A SALE — asked of the table that defines them, never
+    // guessed. lead_stages.counts_as_sale is true for token_paid and won, and it
+    // is the same column the pipeline, analytics and the web dashboard read.
+    admin.from("lead_stages").select("code").eq("counts_as_sale", true),
     // started_at, not created_at: the phone's call-log sync backfills a week of
     // history the first time it runs, and every one of those rows is created
     // TODAY — which reported a whole week as one day's work. off_crm calls are
@@ -236,6 +251,12 @@ export async function buildCompany(
     admin.from("v_device_sync_health").select("salesperson_id, last_ok_at, trustworthy")
       .eq("company_id", companyId),
   ]);
+
+  const repList = reps ?? [];
+  const nameById = new Map(repList.map((r) => [r.id, r.full_name || "Telecaller"]));
+  const leadName = new Map((contacts ?? []).map((c) => [c.id, c.name || c.phone || "lead"]));
+  const leadStage = new Map((contacts ?? []).map((c) => [c.id, String(c.stage ?? "")]));
+  const SALE = new Set((saleStages ?? []).map((r) => String(r.code)));
 
   const map = new Map<string, RepPulse>();
   const rep = (id: string | null): RepPulse | null => {

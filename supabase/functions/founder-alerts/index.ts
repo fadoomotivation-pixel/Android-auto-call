@@ -70,39 +70,72 @@ async function findAlerts(admin: SupabaseClient, companyId: string): Promise<Ale
   const since = new Date(Date.now() - 24 * 3600_000).toISOString();
   const out: Alert[] = [];
 
-  const [{ data: reps }, { data: rows }] = await Promise.all([
+  // READ `stage`, NOT `status`. Since the canonical lead lifecycle landed, stage
+  // is the lead's furthest progress and status is only the current action — so a
+  // customer who has fixed a visit AND has a callback booked reads status
+  // 'callback' and stage 'site_visit'. This function was still asking status, so
+  // for Sumer Singh, Govind, vinod and Nitin it saw a callback and nothing more.
+  // And there is no `booked` stage in the taxonomy at all, which made the
+  // BOOKING CONFIRMED branch unreachable from the day the taxonomy shipped.
+  const [{ data: reps }, { data: rows }, { data: stageRows }, { data: acts }] = await Promise.all([
     admin.from("profiles").select("id, full_name").eq("company_id", companyId),
     admin.from("contacts")
-      .select("id, name, phone, status, token_amount, site_visit_at, " +
+      .select("id, name, phone, stage, token_amount, site_visit_at, " +
         "salesperson_id, updated_at, site_visit_project")
       .eq("company_id", companyId)
       .gte("updated_at", since)
       .limit(500),
+    // Which stages are a sale is the taxonomy's answer, not this file's. A stage
+    // added next month counts the day it is added, and the Pulse and the alerts
+    // cannot drift apart into two opinions about what a sale is.
+    admin.from("lead_stages").select("code, outcome, counts_as_sale").eq("counts_as_sale", true),
+    // WHEN the visit was fixed, which `updated_at` cannot tell us. A contact row
+    // is touched for all sorts of reasons — a call linking to it stamps
+    // last_contacted_at — so "stage is site_visit and the row moved today" would
+    // announce visits fixed a week ago every time the call log syncs. The
+    // activity feed records the moment the stage actually changed, and that is
+    // the only thing here that is genuinely news.
+    admin.from("lead_activities").select("contact_id, type, detail")
+      .eq("company_id", companyId).gte("created_at", since)
+      .in("type", ["site_visit", "status"]).limit(2000),
   ]);
   const repName = new Map((reps ?? []).map((r) => [String(r.id), String(r.full_name ?? "Executive")]));
+  const saleOutcome = new Map(
+    (stageRows ?? []).map((s) => [String(s.code), String(s.outcome ?? "")]),
+  );
+  const visitFixedToday = new Set<string>();
+  for (const a of acts ?? []) {
+    if (!a.contact_id) continue;
+    if (String(a.type) === "site_visit" || /site\s*visit/i.test(String(a.detail ?? ""))) {
+      visitFixedToday.add(String(a.contact_id));
+    }
+  }
 
   for (const c of rows ?? []) {
     const lead = String(c.name ?? c.phone ?? "Lead");
     const who = c.salesperson_id ? repName.get(String(c.salesperson_id)) ?? "Executive" : "Unassigned";
     const project = c.site_visit_project ? `\n📍 Project: ${c.site_visit_project}` : "";
     const id = String(c.id);
-    const status = String(c.status ?? "");
+    const stage = String(c.stage ?? "");
     const token = Number(c.token_amount ?? 0) || 0;
 
-    if (status === "booked") {
-      out.push({
-        kind: "booking_confirmed", contactId: id,
-        text: `🎉 BOOKING CONFIRMED\n\n👤 Customer: ${lead}\n👩 Executive: ${who}${project}` +
-          (token > 0 ? `\n💰 Booking amount: ${rupees(token)}` : ""),
-      });
-      continue; // A booked lead is not also a site-visit story.
-    }
-    if (status === "token_paid" && token > 0) {
-      out.push({
-        kind: "sale_closed", contactId: id,
-        text: `🏆 PAYMENT RECEIVED\n\n👤 Customer: ${lead}\n👩 Executive: ${who}${project}\n💰 ${rupees(token)}`,
-      });
-      continue;
+    if (saleOutcome.has(stage)) {
+      // A won deal is the booking; a sale stage short of won is the money
+      // landing on the way to it.
+      if (saleOutcome.get(stage) === "won") {
+        out.push({
+          kind: "booking_confirmed", contactId: id,
+          text: `🎉 BOOKING CONFIRMED\n\n👤 Customer: ${lead}\n👩 Executive: ${who}${project}` +
+            (token > 0 ? `\n💰 Booking amount: ${rupees(token)}` : ""),
+        });
+      } else {
+        out.push({
+          kind: "sale_closed", contactId: id,
+          text: `🏆 PAYMENT RECEIVED\n\n👤 Customer: ${lead}\n👩 Executive: ${who}${project}` +
+            (token > 0 ? `\n💰 ${rupees(token)}` : ""),
+        });
+      }
+      continue; // A sold lead is not also a site-visit story.
     }
     // A customer who came to the site and has not been rung back used to alert
     // here too. It was cut deliberately: the founder's list is Site Visit Fixed,
@@ -112,14 +145,25 @@ async function findAlerts(admin: SupabaseClient, companyId: string): Promise<Ale
     // and escalated to the rep by the assistant. Nothing was lost by removing
     // the buzz; a fifth kind of alert is how the first four stop being read.
 
-    // A visit on the books, in the future. Not "a visit exists" — a date that
-    // has already gone by is not news, it is a chase.
-    const visitAt = c.site_visit_at ? Date.parse(String(c.site_visit_at)) : NaN;
-    if (Number.isFinite(visitAt) && visitAt > Date.now()) {
+    // THE LEAD REACHING THE SITE-VISIT STAGE IS THE NEWS. The date is a detail.
+    //
+    // This used to require site_visit_at to be set AND in the future, and that
+    // is why the founder never got a single one for Manas property. Of 31 leads
+    // standing at this stage across the platform, 14 have no date at all and
+    // only 2 have a future one. Today Shweta's voice note moved Gaurav Sharma to
+    // Site visit at 2:02pm; the AI wrote the stage, nobody typed a date, and the
+    // alert that should have buzzed within fifteen minutes could never fire.
+    //
+    // A rep saying "visit fixed" is worth interrupting a founder for whether or
+    // not a time is in the diary yet — the missing time is itself something the
+    // founder would want to chase. So the stage change triggers it, and the date
+    // rides along when it is known. The sent-log still guarantees exactly one of
+    // these per lead, ever.
+    if (stage === "site_visit" && visitFixedToday.has(id)) {
       out.push({
         kind: "site_visit_fixed", contactId: id,
         text: `📍 SITE VISIT FIXED\n\n👤 Customer: ${lead}\n👩 Executive: ${who}${project}\n` +
-          `📅 Visit: ${istWhen(String(c.site_visit_at))}`,
+          `📅 Visit: ${istWhen(c.site_visit_at ? String(c.site_visit_at) : null) ?? "time not set yet"}`,
       });
     }
   }
