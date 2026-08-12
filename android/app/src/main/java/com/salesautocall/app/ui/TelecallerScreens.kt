@@ -95,6 +95,9 @@ import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.LeadWork
 import com.salesautocall.app.data.Teammate
 import com.salesautocall.app.data.WhatsAppMessage
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import com.salesautocall.app.data.LeaderboardRow
 import kotlin.math.abs
 
@@ -668,6 +671,62 @@ private fun formatRupees(v: Double): String = when {
 internal fun budgetLabel(s: String?): String? =
     s?.replace('_', ' ')?.replace(Regex("\\s+"), " ")?.trim()
         ?.trimStart('₹', ' ')?.trim()?.takeIf { it.isNotBlank() }
+
+/**
+ * "GaneshChauhan" → "Ganesh Chauhan".
+ *
+ * Facebook hands back whatever the customer typed into one box, and on a phone
+ * keyboard that is regularly two names run together. Split only where a
+ * lowercase letter meets an uppercase one, which leaves "AJAY MEHAK",
+ * "phoolmati" and "Dr R K Gupta" exactly as they are. Display only — the
+ * customer's own spelling is never rewritten in the database.
+ */
+internal fun prettyName(s: String?): String? =
+    s?.trim()?.takeIf { it.isNotBlank() }
+        ?.replace(Regex("(?<=\\p{Ll})(?=\\p{Lu})"), " ")
+
+/**
+ * WHAT THE CUSTOMER TOLD US WHEN THEY FILLED THE FORM.
+ *
+ * Every answer is already in extra.raw_fields — the CRM has been storing the
+ * whole lead form since facebook-poll was written, and the phone showed one
+ * field of it. On the "dholera vishesh" form that meant a rep saw "₹15–25l" and
+ * never saw "industrial" or "just information", which is the difference between
+ * a site visit this month and a brochure.
+ *
+ * Read generically, never by field name. Forms are created by whoever runs the
+ * ads; a hardcoded `purpose` would show nothing the day somebody adds a
+ * question, and every company here already asks a different set.
+ *
+ * Skipped: the name and phone (they are the card's headline), and whatever
+ * answer already appears as the budget — compared on the cleaned VALUE rather
+ * than the key, because the same question is asked in Hindi by one company and
+ * English by another.
+ */
+internal fun leadAnswers(c: Contact): List<Pair<String?, String>> {
+    val raw = (c.extra?.get("raw_fields") as? JsonObject) ?: return emptyList()
+    val budget = budgetLabel(c.budget)?.lowercase()
+    val out = mutableListOf<Pair<String?, String>>()
+    for ((key, v) in raw) {
+        val k = key.lowercase()
+        if (k.contains("name") || k.contains("phone") || k.contains("email")) continue
+        val value = (v as? JsonPrimitive)?.contentOrNull
+            ?.replace('_', ' ')?.replace(Regex("\\s+"), " ")?.trim()
+            ?.takeIf { it.isNotBlank() } ?: continue
+        if (budget != null && value.trimStart('₹', ' ').trim().lowercase() == budget) continue
+        // An ASCII key is a usable label ("site_visit?" → "Site visit"). A
+        // question written in Hindi is a whole sentence and would swamp a chip,
+        // so those show the answer alone — "₹3 – 5 लाख" says what it is.
+        val ascii = key.all { it.code < 128 }
+        val label = if (!ascii) null else key.trimEnd('?', ' ').replace('_', ' ').trim()
+            .replaceFirstChar { it.uppercase() }.takeIf { it.isNotBlank() }
+        // Both branches must be String — `it.uppercase()` is a String and a bare
+        // `it` is a Char, and that mix resolves to neither replaceFirstChar
+        // overload.
+        out += label to value.replaceFirstChar { if (it.isLowerCase()) it.uppercase() else it.toString() }
+    }
+    return out
+}
 
 /** 0-100 composite of calls-vs-goal and connect rate for the Today gauge. */
 private fun perfScore(app: AppState): Int {
@@ -2392,7 +2451,7 @@ private fun LeadCard(
                 // letter "N".
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        c.name?.takeIf { it.isNotBlank() } ?: prettyPhone(c.phone),
+                        prettyName(c.name) ?: prettyPhone(c.phone),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -2427,14 +2486,45 @@ private fun LeadCard(
                         Text(arrivedLabel(it), fontSize = 10.sp, color = muted, maxLines = 1)
                     }
                 }
-                // Money, second and prominent — the number a rep sorts by.
-                budgetLabel(c.budget)?.let {
-                    Text("₹ $it", style = MaterialTheme.typography.bodyMedium, color = jade,
-                        fontWeight = FontWeight.Bold, maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                // WHAT THIS CUSTOMER ACTUALLY SAID, on one line.
+                //
+                // The card used to print the budget and stop, so two leads who
+                // wanted completely different things looked identical — same
+                // avatar, same money, same three buttons. Everything else they
+                // told the form was sitting in extra.raw_fields, unread.
+                //
+                // Money keeps the lead position and the strongest weight (it is
+                // what a rep sorts by), and the rest follow as quiet chips in
+                // the order the form asked them.
+                val money = budgetLabel(c.budget)
+                val answers = remember(c.id, c.extra, c.budget) { leadAnswers(c) }
+                if (money != null || answers.isNotEmpty()) {
+                    Spacer(Modifier.height(3.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        money?.let {
+                            Text("₹ $it", style = MaterialTheme.typography.bodyMedium, color = jade,
+                                fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                        answers.take(3).forEach { (label, value) ->
+                            Box(
+                                Modifier.clip(RoundedCornerShape(6.dp))
+                                    .background(muted.copy(alpha = 0.09f))
+                                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    if (label == null) value else "$label · $value",
+                                    fontSize = 11.sp, color = muted, fontWeight = FontWeight.Medium,
+                                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("📞 ${prettyPhone(c.phone)}", fontSize = 12.sp, color = muted,
+                    Text(prettyPhone(c.phone), fontSize = 11.5.sp, color = muted.copy(alpha = 0.75f),
                         letterSpacing = 0.2.sp, maxLines = 1)
                     if (c.attempts > 0) {
                         val due = followUp?.let { instantMillis(it.dueAt) }
@@ -2528,21 +2618,29 @@ private fun LeadCard(
                         color = updateTint, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
                 Spacer(Modifier.width(7.dp))
-                Row(
-                    Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(10.dp))
-                        .background(WaGreen.copy(alpha = 0.12f))
+                // ONE FILLED BUTTON PER CARD.
+                //
+                // Update was lavender, WhatsApp was a green block and Call was
+                // solid blue — three tinted slabs of near-equal weight, times
+                // three hundred and twenty-one leads. Nothing on the screen said
+                // "do this one", and the green fought the brand on every row.
+                //
+                // WhatsApp is a square icon now: same tap target, no shouting,
+                // and the width it gives up goes to Call. It is still visible —
+                // it was only ever reachable by a swipe before this.
+                Box(
+                    Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
+                        .background(muted.copy(alpha = 0.08f))
                         .clickable { onWhatsApp() },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Default.Chat, contentDescription = null, tint = WaGreen, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("WhatsApp", fontSize = 12.5.sp, color = WaGreen, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WaGreen,
+                        modifier = Modifier.size(17.dp))
                 }
                 Spacer(Modifier.width(7.dp))
-                // Calling is the job. Solid, widest, unmistakable.
+                // Calling is the job. The only filled button on the card.
                 Row(
-                    Modifier.weight(1.25f).height(38.dp).clip(RoundedCornerShape(10.dp))
+                    Modifier.weight(1.4f).height(38.dp).clip(RoundedCornerShape(10.dp))
                         .background(jade)
                         .clickable { if (cloudOn) onCloudCall() else onCall() },
                     verticalAlignment = Alignment.CenterVertically,

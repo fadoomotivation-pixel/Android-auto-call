@@ -2,6 +2,7 @@ package com.salesautocall.app.data
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class WebrtcConfig(
@@ -138,6 +139,20 @@ data class Contact(
      *  close they are, which is the number a manager actually sorts by. */
     @SerialName("close_probability") val closeProbability: Int? = null,
     @SerialName("close_probability_at") val closeProbabilityAt: String? = null,
+    /**
+     * EVERYTHING THE CUSTOMER ACTUALLY ANSWERED, exactly as the source sent it.
+     *
+     * facebook-poll has always stored the whole lead form under
+     * extra.raw_fields, and the phone has never asked for it. The "dholera
+     * vishesh" form asks three questions — budget, purpose, and whether they
+     * want a site visit this month — and a rep opening that lead saw only the
+     * budget. "Industrial, just information" and "future home, this month" are
+     * the same card today, and they are not the same call.
+     *
+     * Read-only on the phone: the app never writes it back, so a locally built
+     * Contact leaves it null and bulk inserts keep one shared key set.
+     */
+    val extra: JsonObject? = null,
     @SerialName("created_at") val createdAt: String? = null,
     @SerialName("assigned_at") val assignedAt: String? = null,
     /** When this lead was last CALLED (any direction). A call alone is not work:
