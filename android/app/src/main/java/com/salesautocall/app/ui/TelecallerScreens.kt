@@ -2853,7 +2853,7 @@ private fun LeadActionSheet(
  * over at all.
  */
 @Composable
-private fun HandOverDialog(vm: MainViewModel, c: Contact, onDismiss: () -> Unit) {
+internal fun HandOverDialog(vm: MainViewModel, c: Contact, onDismiss: () -> Unit) {
     val app by vm.state.collectAsState()
     var picked by remember { mutableStateOf<Teammate?>(null) }
     // Cached names are fine to reuse; an empty list is not, because "nobody is

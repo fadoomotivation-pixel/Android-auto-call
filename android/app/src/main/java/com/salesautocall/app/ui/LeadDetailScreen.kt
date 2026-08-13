@@ -188,6 +188,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
     var confirmMoveKey by remember { mutableStateOf<String?>(null) }
     var confirmClearVisit by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
+    var handOverOpen by remember { mutableStateOf(false) }
     var editIdentityOpen by remember { mutableStateOf(false) }
     var funnelExpanded by remember { mutableStateOf(false) }
     var journeyExpanded by remember { mutableStateOf(false) }
@@ -256,6 +257,20 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                                 DropdownMenuItem(text = { Text("Copy number") }, onClick = { moreOpen = false; copyNumber() })
                                 DropdownMenuItem(text = { Text("Set reminder") }, onClick = { moreOpen = false; scheduleOpen = true })
+                                // WHERE A REP ACTUALLY LOOKS FOR IT.
+                                //
+                                // The hand-over shipped at the bottom of the Update
+                                // sheet, under the name field, the stage chips, the
+                                // temperature chips, budget, notes and two more
+                                // buttons. The founder opened a rep's account looking
+                                // for it and could not find it; a telecaller never
+                                // would either. It stays there for anyone mid-edit,
+                                // and it also lives here — in the menu that already
+                                // holds every other thing you DO to a lead rather
+                                // than type into it.
+                                DropdownMenuItem(text = { Text("🤝 Give to a teammate") }, onClick = {
+                                    moreOpen = false; handOverOpen = true
+                                })
                                 DropdownMenuItem(text = { Text("Not interested") }, onClick = {
                                     moreOpen = false; contact.id?.let { vm.applyLead(it, "not_interested", null, null, null, null, null, null) }
                                 })
@@ -650,6 +665,8 @@ fun LeadDetailScreen(vm: MainViewModel) {
             )
         }
     }
+
+    if (handOverOpen) HandOverDialog(vm = vm, c = contact, onDismiss = { handOverOpen = false })
 
     if (scheduleOpen) PickWhenDialog(
         title = "Follow-up · ${contact.name ?: contact.phone}", onDismiss = { scheduleOpen = false },
