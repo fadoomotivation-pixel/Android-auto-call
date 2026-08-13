@@ -70,7 +70,7 @@ function prettyIst(date: string, time?: string | null): string {
   return s;
 }
 
-function systemPrompt(): string {
+function systemPrompt(projects: string[]): string {
   const { date, weekday } = istToday();
   return (
     "A real-estate telecaller has recorded a voice note, in their own words, " +
@@ -119,8 +119,24 @@ function systemPrompt(): string {
     "rupees as a number ('50 hazar token diya' → 50000, '2 lakh' → 200000); null otherwise. " +
     "alt_phone: a SECOND phone number spoken for THIS customer ('dusra number …', " +
     "'WhatsApp number alag hai'), digits as spoken; null unless clearly a phone number. " +
-    "project: the project/site name the customer is interested in ('Gaur City wala', " +
-    "'ABC Heights me 2BHK'); null if no project named. " +
+    // PICK FROM THE LIST — DO NOT WRITE A NAME.
+    //
+    // Asking a model to transcribe a project name off Hindi audio produced
+    // forty-eight spellings of two projects: Brij Vatika became Bridge Vatika,
+    // Bridgewater, Bridgevatica, Bridgewartika; Shree Kunj Bihari Enclave became
+    // Kunj Vihari, Kunji Bihari, Puzh Vihari, Conju Bihari. No transcriber will
+    // ever fix that — in spoken Hindi "Brij Vatika" IS "Bridge Vatika". The only
+    // fix is to stop asking it to spell and start asking it to choose.
+    (projects.length
+      ? "project: which of THESE company projects the customer is interested in. " +
+        "Copy the name EXACTLY as written here, character for character — do not " +
+        "translate, shorten, re-spell or invent. The caller will say it in Hindi and " +
+        "it will sound different (Brij Vatika sounds like 'Bridge Vatika'): match it " +
+        "to the closest one in the list anyway. null if the customer named no project, " +
+        "or named something not on this list.\nProjects: " +
+        projects.map((p) => `"${p}"`).join(", ") + ". "
+      : "project: the project/site name the customer is interested in ('Gaur City wala', " +
+        "'ABC Heights me 2BHK'); null if no project named. ") +
     "temperature: ALWAYS rate the buyer's intent in this call — 'hot' (ready to " +
     "visit/book/negotiating, very keen), 'warm' (interested but needs time / will " +
     "discuss with family / comparing), or 'cold' (not interested, only enquiring, " +
@@ -250,8 +266,13 @@ Deno.serve(async (req) => {
     // Mistral leads). This is the step that ran out of daily tokens by lunchtime
     // and left every afternoon note reading "AI summary failed".
     // (Transcription above is a separate quota and was never the bottleneck.)
+    // The company's real projects, so the model chooses instead of spelling.
+    const { data: projectRows } = await admin.from("company_projects")
+      .select("name").eq("company_id", note.company_id).order("name");
+    const projectNames = ((projectRows ?? []) as Array<{ name: string }>).map((r) => r.name);
+
     const { text: raw } = await chatJson(
-      systemPrompt(),
+      systemPrompt(projectNames),
       `Voice note transcript:\n\n${transcript.slice(0, 12000)}`,
       { temperature: 0.2 },
     );
@@ -396,6 +417,38 @@ Deno.serve(async (req) => {
         await admin.from("contacts").update({ alt_phone: altPhone }).eq("id", contact.id);
         actions.push(`Alt number saved`);
         await logAct("identity", `Second number heard: ${altPhone} (from voice note)`);
+      }
+    }
+
+    // THE NET UNDER THE PROMPT.
+    //
+    // Telling the model to pick from a list is the fix; this is what catches the
+    // times it still answers off-list — a half-heard name, two projects in one
+    // sentence, a model in a hurry. snap_project matches the guess against the
+    // company's canonical names and their confirmed aliases, and returns NULL
+    // rather than a wrong guess.
+    //
+    // And NULL means we write nothing. A blank project is a gap somebody can
+    // fill in ten seconds; a confidently wrong one is a number nobody can trust,
+    // which is exactly how this CRM ended up unable to say how many leads want
+    // Brij Vatika. Only companies that have a list get this treatment — one that
+    // has not set its projects up keeps the old free-text behaviour rather than
+    // losing the information entirely.
+    if (project && projectNames.length) {
+      const { data: snapped } = await admin.rpc("snap_project", {
+        p_company: note.company_id, p_guess: project,
+      });
+      const canonical = typeof snapped === "string" ? snapped.trim() : "";
+      if (canonical) {
+        project = canonical;
+      } else {
+        // Worth knowing about: either a real project missing from the list, or
+        // the model wandering. Either way the founder can see it and add an alias.
+        await admin.rpc("log_knowledge_gap", {
+          p_company: note.company_id,
+          p_question: `Voice note named a project that is not in the company list: "${project}"`,
+        });
+        project = null;
       }
     }
 
