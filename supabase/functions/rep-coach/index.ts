@@ -35,10 +35,24 @@ const embedModel = new (Supabase as any).ai.Session("gte-small");
 async function playbookFacts(admin: SupabaseClient, companyId: string, text: string): Promise<string[]> {
   try {
     const embedding = await embedModel.run(text.slice(0, 1200), { mean_pool: true, normalize: true });
+    // THREE CHUNKS AT 400 CHARS WAS A BUDGET FOR A BRAIN THAT WAS NOT THERE.
+    //
+    // Until migration 0160 this call could only ever see the fourteen chunks of
+    // the shared global guidebook — match_knowledge silently dropped every
+    // company row when called with the service-role client. Three generic
+    // paragraphs was a sensible ration of nothing.
+    //
+    // Now it reaches the company's own price sheet, project brains and
+    // harvested wins, and the shape of the answer changes: a price question
+    // needs the row AND the payment plan under it, which is more than 400
+    // characters into a chunk. Six at 700 is roughly 4k characters — still one
+    // short prompt, still one Groq call, and the difference between "Brij
+    // Vatika ka rate ₹15,525 per sq yard, 40 months plan" and a paragraph of
+    // advice about building rapport.
     const { data } = await admin.rpc("match_knowledge", {
-      p_company: companyId, p_embedding: embedding, p_match_count: 3, p_min_similarity: 0.25,
+      p_company: companyId, p_embedding: embedding, p_match_count: 6, p_min_similarity: 0.25,
     });
-    return ((data ?? []) as Array<{ content: string }>).map((k) => String(k.content).slice(0, 400));
+    return ((data ?? []) as Array<{ content: string }>).map((k) => String(k.content).slice(0, 700));
   } catch {
     return [];
   }
