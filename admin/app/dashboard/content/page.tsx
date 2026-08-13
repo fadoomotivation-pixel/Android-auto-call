@@ -10,6 +10,8 @@ type Asset = {
   description: string | null;
   active: boolean;
   created_at: string;
+  storage_path: string | null;
+  trained: boolean | null;
 };
 
 type Share = {
@@ -41,7 +43,7 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
 
   const { data: assets } = companyId
     ? await supabase.from("content_assets")
-        .select("id, kind, title, url, description, active, created_at")
+        .select("id, kind, title, url, description, active, created_at, storage_path, trained")
         .eq("company_id", companyId)
         .order("created_at", { ascending: false })
         .returns<Asset[]>()
@@ -64,12 +66,14 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
       <h2>📚 Content Library</h2>
       <p style={{ color: "var(--muted)", marginTop: -6 }}>
         Brochures, videos, reviews &amp; testimonials your reps can share with buyers over WhatsApp.
-        Shared links are tracked — when a buyer opens one, the lead is automatically re-engaged.
+        Upload the file itself — a PDF&apos;s text also goes into this company&apos;s AI brain, so the
+        Coach can quote it to reps. Shared links are tracked: when a buyer opens one, the lead is
+        automatically re-engaged.
       </p>
       {isSuper && <CompanyPicker companies={companies} selected={companyId} />}
       {!companyId
         ? <div className="empty">No company selected.</div>
-        : <ContentLibrary companyId={companyId} assets={assets ?? []} />}
+        : <ContentLibrary companyId={companyId} assets={assets ?? []} isSuper={isSuper} />}
 
       {companyId && (
         <div className="card" style={{ marginTop: 20 }}>
