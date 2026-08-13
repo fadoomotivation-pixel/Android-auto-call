@@ -45,6 +45,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.facebook-poll]
 verify_jwt = false
+[functions.projects-sync]
+verify_jwt = false
 [functions.manager-digest]
 verify_jwt = false
 [functions.lead-sla]
