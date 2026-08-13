@@ -423,6 +423,33 @@ export async function buildCompany(
   // model estimated for them.
   for (const p of pulses) p.aiUpdates = aiUpdateLines(p);
 
+  // THE SAME DAY, OPENED AGAIN, SHOULD NOT COST THE SAME SIX SECONDS.
+  //
+  // Parallelising the companies took the Daily Pulse page from 45–150 seconds
+  // to about six. What is left is almost entirely this block: one AI brief per
+  // active rep, and the founder opens the page several times a day to read
+  // sentences that have not changed since the last time.
+  //
+  // So each brief is cached against a FINGERPRINT of the facts it was written
+  // from, not against the date. A cache keyed on the date alone would show a
+  // founder an 11am sentence at 6pm and be quietly wrong — the worst kind of
+  // fast. When any of the numbers behind the sentence move, the fingerprint
+  // moves with them and the brief is rewritten.
+  const fingerprint = (p: RepPulse) =>
+    [p.calls, p.connected, p.talkSeconds, realNotes(p).length, p.moves.length,
+     p.siteVisits.length, p.visitsArrived.length, p.followUps, p.hotLeads,
+     p.bookings, p.nextSteps.length].join(".");
+  const cached = new Map<string, { fp: string; win: string; risk: string }>();
+  try {
+    const { data: rows } = await admin.from("coach_briefs")
+      .select("salesperson_id, content")
+      .eq("company_id", companyId).eq("brief_date", date).eq("slot", "pulse");
+    for (const r of (rows ?? []) as Array<{ salesperson_id: string; content: string }>) {
+      const c = JSON.parse(r.content);
+      if (c && typeof c.fp === "string") cached.set(String(r.salesperson_id), c);
+    }
+  } catch { /* a cold cache is a slow page, not a broken one */ }
+
   // The win and the risk, one sentence each. This goes through the shared
   // provider chain rather than straight to Groq: this report now runs
   // unattended every evening for every company, and Groq's free daily token
@@ -437,6 +464,16 @@ export async function buildCompany(
   await Promise.all(pulses.map(async (p) => {
     const active = p.calls || p.voiceNotes.length || p.moves.length || p.siteVisits.length;
     if (!active) { p.narrative = "No activity today — check in with them."; return; }
+
+    const fp = fingerprint(p);
+    const hit = cached.get(p.id);
+    if (hit && hit.fp === fp) {
+      if (hit.win) p.win = hit.win;
+      if (hit.risk) p.risk = hit.risk;
+      const n = [hit.win, hit.risk].filter(Boolean).join(" ");
+      if (n) p.narrative = n;
+      return;
+    }
     // LABEL THE FACT, DON'T JUST HAND IT OVER.
     //
     // This used to pass `site_visits: ["Anuj"]` — a list of leads whose visit
@@ -524,6 +561,12 @@ export async function buildCompany(
       // this change, so it keeps getting one — built from the same two lines.
       const n = [win, risk].filter(Boolean).join(" ");
       if (n) p.narrative = n;
+      // Keyed by rep and day, one row, overwritten as the day moves — so the
+      // cache cannot grow a row per call made.
+      await admin.from("coach_briefs").upsert({
+        salesperson_id: p.id, company_id: companyId, brief_date: date, slot: "pulse",
+        content: JSON.stringify({ fp, win, risk }),
+      }, { onConflict: "salesperson_id,brief_date,slot" });
     } catch (_) {
       // A missing narrative costs a nice-to-have line. Losing the whole report
       // because one model was rate-limited costs the founder their evening
