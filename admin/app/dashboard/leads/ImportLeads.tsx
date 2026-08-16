@@ -30,6 +30,10 @@ export function ImportLeads({
 }) {
   const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  // The company picker sits at the top of the modal; with a few hundred rows
+  // previewed, the footer is a long scroll below it. Held so a blocked import
+  // can scroll the rep back to the field that is actually blocking them.
+  const companyRef = useRef<HTMLSelectElement>(null);
   // The company these leads land in (and dedupe against). A regular admin is
   // always their own company; a super admin picks it here — REQUIRED before
   // importing, because the platform-HQ tenant would silently bypass the real
@@ -37,6 +41,11 @@ export function ImportLeads({
   const [targetCompany, setTargetCompany] = useState(companyId);
   // Only that company's reps may receive its leads — never another tenant's.
   const scopedReps = salespeople.filter((sp) => sp.company_id == null || sp.company_id === targetCompany);
+  // Super admin with no company chosen yet: the one thing standing between
+  // them and the import, and the reason the footer used to look broken.
+  // Only when there is in fact a picker to send them to.
+  const needsCompany = !targetCompany && !!companies?.length;
+  const targetCompanyName = companies?.find(([id]) => id === targetCompany)?.[1] ?? "";
   const [mode, setMode] = useState<"file" | "paste">("file");
   const [paste, setPaste] = useState("");
   const [parsed, setParsed] = useState<ParsedLead[]>([]);
@@ -94,7 +103,16 @@ export function ImportLeads({
 
   async function doImport() {
     if (parsed.length === 0) return;
-    if (!targetCompany) { setError("Pick which company these leads import into."); return; }
+    if (!targetCompany) {
+      // Say it, then TAKE THEM THERE. This guard used to be unreachable: the
+      // button was disabled whenever it would have fired, so the one sentence
+      // explaining the block never rendered and the picker was scrolled off
+      // the top of the modal behind the row preview.
+      setError("Pick which company these leads import into.");
+      companyRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      companyRef.current?.focus();
+      return;
+    }
     setBusy(true);
     setError(null);
 
@@ -212,6 +230,7 @@ export function ImportLeads({
               Import into:
             </span>
             <select
+              ref={companyRef}
               value={targetCompany}
               disabled={busy}
               onChange={(e) => {
@@ -378,25 +397,50 @@ export function ImportLeads({
             </div>
           </div>
         ) : (
-          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 13, color: "var(--muted)" }}>Assign to (optional):</span>
-            <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input} disabled={!targetCompany}>
-              <option value="">Leave unassigned</option>
-              {scopedReps.map((sp) => (
-                <option key={sp.id} value={sp.id}>{sp.full_name || sp.id.slice(0, 8)}</option>
-              ))}
-            </select>
-            <div style={{ flex: 1 }} />
-            <button className="link" onClick={onClose}>Cancel</button>
-            <button
-              className="primary"
-              style={{ width: "auto", padding: "9px 18px" }}
-              disabled={busy || parsed.length === 0 || !targetCompany}
-              title={targetCompany ? "" : "Pick which company these leads import into."}
-              onClick={doImport}
-            >
-              {busy ? "Importing…" : `Import ${parsed.length || ""}`}
-            </button>
+          <div style={{ marginTop: 16 }}>
+            {/* The blocker, stated where the rep is looking. The picker that
+                clears it is at the top of the modal, several hundred preview
+                rows away — a greyed button down here told them nothing. */}
+            {needsCompany && (
+              <div style={{ fontSize: 13, color: "#f59e0b", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <span>⚠️</span>
+                <span>
+                  Choose a company at the top of this box first —{" "}
+                  <button
+                    className="link"
+                    style={{ padding: "2px 8px", fontSize: 13, color: "#f59e0b" }}
+                    onClick={() => {
+                      companyRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      companyRef.current?.focus();
+                    }}
+                  >
+                    take me there
+                  </button>
+                </span>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: "var(--muted)" }}>Assign to (optional):</span>
+              <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input} disabled={!targetCompany}>
+                <option value="">Leave unassigned</option>
+                {scopedReps.map((sp) => (
+                  <option key={sp.id} value={sp.id}>{sp.full_name || sp.id.slice(0, 8)}</option>
+                ))}
+              </select>
+              <div style={{ flex: 1 }} />
+              <button className="link" onClick={onClose}>Cancel</button>
+              <button
+                className="primary"
+                style={{ width: "auto", padding: "9px 18px" }}
+                // NOT disabled on a missing company: doImport explains that one
+                // and scrolls to the field. Only a real dead end greys it out.
+                disabled={busy || parsed.length === 0}
+                title={targetCompany ? "" : "Pick which company these leads import into."}
+                onClick={doImport}
+              >
+                {busy ? "Importing…" : `Import ${parsed.length || ""}${targetCompanyName ? ` → ${targetCompanyName}` : ""}`}
+              </button>
+            </div>
           </div>
         )}
 
