@@ -306,18 +306,85 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                // ---- Voice note ----
-                item { VoiceNoteCard(vm, recording = app.voiceRecording, uploading = app.voiceUploading) }
-                items(app.voiceNotes, key = { it.id ?: it.audioPath }) { n ->
-                    Box(Modifier.padding(horizontal = 16.dp)) {
-                        VoiceNoteRow(
-                            n = n,
-                            playing = n.id != null && n.id == app.playingNoteId,
-                            onPlay = { vm.playVoiceNote(n) },
-                            onStop = { vm.stopVoiceNotePlayback() },
-                            onRefreshAi = { vm.refreshVoiceNotes() },
-                            onApplyDisposition = { key -> contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) } },
-                        )
+                // ══ THE ASSISTANT, IN ONE BREATH ═════════════════════════════
+                //
+                // These four blocks used to be scattered down the screen with a
+                // funnel and a voice recorder between them: AI Coach at position
+                // 5, Wada at 6, Next step at 7, Call Coach at 10. Four cards, four
+                // headers, four different robots — and a rep who has just hung up
+                // has to work out which one to open.
+                //
+                // They are now contiguous and in the order a person actually
+                // thinks after a call:
+                //
+                //     what was said        → Wada
+                //     how it went          → Call Coach
+                //     what to say next     → the three tabs
+                //     what to do, and when → Next step
+                //
+                // Nothing merged into anything, nothing lost — the same four
+                // composables with the same inputs, read as one voice instead of
+                // four products. The two that announced themselves as tools
+                // ("AI COACH", "CALL COACH") now say what they are FOR.
+                //
+                // ---- Wada: what the AI heard on the latest call. It applies
+                // ITSELF (server-side, or on open) — the card just shows the
+                // receipt: promise set, facts saved, zero typing. ----
+                run {
+                    val wadaCall = app.leadDetailCalls.firstOrNull {
+                        it.aiActions != null && it.wadaState in setOf("pending", "applied")
+                    }
+                    if (wadaCall != null) {
+                        item {
+                            WadaCard(
+                                call = wadaCall,
+                                onDismiss = { vm.dismissWada(wadaCall) },
+                            )
+                        }
+                    }
+                }
+
+                // ---- Call Coach — honest rating + guidance from THIS lead's last
+                // real recording. The coach "observes" the call and rates it; a
+                // good call only gets motivation, no forced suggestion. ----
+                if (app.leadCoachLoading || app.leadCoach != null) {
+                    item {
+                        val coach = app.leadCoach
+                        SectionCard {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("HOW THAT CALL WENT", style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp,
+                                    modifier = Modifier.weight(1f))
+                                coach?.rating?.let { r ->
+                                    Text("⭐".repeat(r.coerceIn(1, 5)) + " $r/5",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold, color = IndigoL)
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            if (coach == null) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("Aakhri call ki recording analyse ho rahi hai…",
+                                        style = MaterialTheme.typography.bodySmall, color = SubInk)
+                                }
+                            } else {
+                                coach.good?.takeIf { it.isNotBlank() }?.let {
+                                    Text("✅ $it", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                coach.improve?.takeIf { it.isNotBlank() }?.let {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("💡 $it", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                if ((coach.rating ?: 0) >= 4 && coach.improve.isNullOrBlank()) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Text("🔥 Shaandaar call! Aise hi karte rahiye.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold, color = IndigoL)
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -344,23 +411,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         onClearDraft = { vm.clearMessageDraft() },
                         error = app.coachError,
                     )
-                }
-
-                // ---- Wada: what the AI heard on the latest call. It applies
-                // ITSELF (server-side, or on open) — the card just shows the
-                // receipt: promise set, facts saved, zero typing. ----
-                run {
-                    val wadaCall = app.leadDetailCalls.firstOrNull {
-                        it.aiActions != null && it.wadaState in setOf("pending", "applied")
-                    }
-                    if (wadaCall != null) {
-                        item {
-                            WadaCard(
-                                call = wadaCall,
-                                onDismiss = { vm.dismissWada(wadaCall) },
-                            )
-                        }
-                    }
                 }
 
                 // ---- Next step banner ----
@@ -425,6 +475,49 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
+                // ---- Voice note ----
+                item { VoiceNoteCard(vm, recording = app.voiceRecording, uploading = app.voiceUploading) }
+                items(app.voiceNotes, key = { it.id ?: it.audioPath }) { n ->
+                    Box(Modifier.padding(horizontal = 16.dp)) {
+                        VoiceNoteRow(
+                            n = n,
+                            playing = n.id != null && n.id == app.playingNoteId,
+                            onPlay = { vm.playVoiceNote(n) },
+                            onStop = { vm.stopVoiceNotePlayback() },
+                            onRefreshAi = { vm.refreshVoiceNotes() },
+                            onApplyDisposition = { key -> contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) } },
+                        )
+                    }
+                }
+
+                // ---- Calls & recordings — always open, and directly under the
+                // voice note, so hearing what was said and recording what it
+                // meant sit together instead of a screen apart. ----
+                item {
+                    SectionCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Call, null, tint = BlueL, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("CALLS & RECORDINGS", style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp)
+                            val n = app.leadDetailCalls.size
+                            if (n > 0) {
+                                Spacer(Modifier.width(8.dp))
+                                Text("$n", style = MaterialTheme.typography.labelMedium, color = SubInk)
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        when {
+                            app.leadDetailLoading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                            app.leadDetailCalls.isEmpty() -> Text("No calls logged for this lead yet.", style = MaterialTheme.typography.bodySmall, color = SubInk)
+                            else -> app.leadDetailCalls.forEach { call ->
+                                LeadCallRow(call, playing = call.id != null && call.id == app.playingCallId,
+                                    onPlay = { call.id?.let { vm.playRecording(it) } }, onStop = { vm.stopRecording() })
+                            }
+                        }
+                    }
+                }
+
                 // ---- Sales funnel ----
                 item {
                     SectionCard {
@@ -475,77 +568,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                // ---- Call Coach — honest rating + guidance from THIS lead's last
-                // real recording. The coach "observes" the call and rates it; a
-                // good call only gets motivation, no forced suggestion. ----
-                if (app.leadCoachLoading || app.leadCoach != null) {
-                    item {
-                        val coach = app.leadCoach
-                        SectionCard {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("🎯 CALL COACH", style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp,
-                                    modifier = Modifier.weight(1f))
-                                coach?.rating?.let { r ->
-                                    Text("⭐".repeat(r.coerceIn(1, 5)) + " $r/5",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold, color = IndigoL)
-                                }
-                            }
-                            Spacer(Modifier.height(10.dp))
-                            if (coach == null) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                                    Spacer(Modifier.width(10.dp))
-                                    Text("Aakhri call ki recording analyse ho rahi hai…",
-                                        style = MaterialTheme.typography.bodySmall, color = SubInk)
-                                }
-                            } else {
-                                coach.good?.takeIf { it.isNotBlank() }?.let {
-                                    Text("✅ $it", style = MaterialTheme.typography.bodyMedium)
-                                }
-                                coach.improve?.takeIf { it.isNotBlank() }?.let {
-                                    Spacer(Modifier.height(6.dp))
-                                    Text("💡 $it", style = MaterialTheme.typography.bodyMedium)
-                                }
-                                if ((coach.rating ?: 0) >= 4 && coach.improve.isNullOrBlank()) {
-                                    Spacer(Modifier.height(6.dp))
-                                    Text("🔥 Shaandaar call! Aise hi karte rahiye.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold, color = IndigoL)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ---- Calls & recordings — always open, right under the funnel so
-                // the rep hears the recording without hunting for a tap. ----
-                item {
-                    SectionCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Call, null, tint = BlueL, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("CALLS & RECORDINGS", style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp)
-                            val n = app.leadDetailCalls.size
-                            if (n > 0) {
-                                Spacer(Modifier.width(8.dp))
-                                Text("$n", style = MaterialTheme.typography.labelMedium, color = SubInk)
-                            }
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        when {
-                            app.leadDetailLoading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                            app.leadDetailCalls.isEmpty() -> Text("No calls logged for this lead yet.", style = MaterialTheme.typography.bodySmall, color = SubInk)
-                            else -> app.leadDetailCalls.forEach { call ->
-                                LeadCallRow(call, playing = call.id != null && call.id == app.playingCallId,
-                                    onPlay = { call.id?.let { vm.playRecording(it) } }, onStop = { vm.stopRecording() })
-                            }
-                        }
-                    }
-                }
-
                 // ---- Token amount (only when at Token Paid) ----
                 if (contact.status == "token_paid") {
                     item {
@@ -583,7 +605,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                // ---- Temperature · Journey (2 columns; Calls moved under the funnel) ----
+                // ---- Temperature · Journey (2 columns) ----
                 item {
                     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         MiniCard("TEMPERATURE", Modifier.weight(1f).fillMaxHeight()) {
@@ -1034,12 +1056,16 @@ private fun AiCoachCard(
             .clip(RoundedCornerShape(20.dp)).background(CardBg).padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // NOT "AI COACH". A rep does not want a tool, they want to be told
+            // what to say. Naming the robot makes them decide whether to open it;
+            // naming the JOB makes them read it. The three tabs underneath say
+            // what it does, so the header does not have to.
             Text("🤖", fontSize = 18.sp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("AI COACH", style = MaterialTheme.typography.labelLarge,
+                Text("WHAT TO SAY", style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
-                Text("Your assistant for the whole call — before, during, after",
+                Text("Opening line, the counter to their objection, a message to send",
                     style = MaterialTheme.typography.labelSmall, color = SubInk)
             }
         }

@@ -533,6 +533,80 @@ private fun Pill(text: String, fg: Color, bg: Color) {
     }
 }
 
+/**
+ * THE WORK GRID — six numbers a rep can see without scrolling.
+ *
+ * This replaces two horizontally-scrolled chip rows. The problem with those was
+ * not that they were ugly: six action chips do not fit on a 360dp phone, so
+ * Later, Visit and No step lived off the right edge — three of the six answers
+ * to "what do I do now", permanently out of sight behind a swipe nobody makes.
+ *
+ * Two rows of three fit, always, at any font scale, with the COUNT leading.
+ * "Overdue 113" is the sentence a telecaller opens this screen to read, and a
+ * count set in the state's own colour says which of the six is on fire without
+ * six competing pills.
+ *
+ * The stage row that used to sit under this is gone from the screen and NOT
+ * gone from the app: every stage is already in the filter sheet, where the
+ * other browsing filters live. Stage answers "where is this deal", which is a
+ * question a rep asks a few times a day — not the one they ask every time the
+ * screen opens.
+ *
+ * Tapping the selected tile clears it, which is how a rep gets back to All
+ * without hunting for an All chip.
+ */
+@Composable
+private fun WorkGrid(
+    counts: List<Pair<ActionChip, Int>>,
+    selectedCode: String?,
+    onPick: (String?) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        counts.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { (a, n) ->
+                    val on = selectedCode == a.code
+                    val empty = n == 0 && !on
+                    val border = when {
+                        on -> a.color
+                        empty -> MaterialTheme.colorScheme.outlineVariant
+                        else -> MaterialTheme.colorScheme.outline
+                    }
+                    Column(
+                        Modifier.weight(1f).height(56.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (on) a.color.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surface)
+                            .border(1.dp, border, RoundedCornerShape(10.dp))
+                            // An empty state is shown but not offered — hiding it
+                            // would make the grid jump as counts change through
+                            // the day, and leaving it live invites a tap that
+                            // does nothing.
+                            .then(if (empty) Modifier else Modifier.clickable { onPick(if (on) null else a.code) })
+                            .padding(horizontal = 8.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Text(
+                            n.toString(),
+                            fontSize = 19.sp, lineHeight = 21.sp, fontWeight = FontWeight.Bold,
+                            color = if (empty) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f) else a.color,
+                            maxLines = 1,
+                        )
+                        Text(
+                            a.label,
+                            fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.Medium,
+                            color = if (empty) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                // A short last row keeps its tiles the same width as the row above.
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
 @Composable
 private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Color, onClick: () -> Unit) {
     // EVERY chip is the same height and carries its count in the same place, at
@@ -1760,42 +1834,36 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     }
                 }
             }
-            // ── The two rows, compact ───────────────────────────────────
+            // ── The work grid ───────────────────────────────────────────
             //
-            // These WRAPPED, and on a real phone the two blocks ate roughly a
-            // thousand pixels — about forty percent of the screen — leaving one
-            // lead card half-visible at the bottom. Nothing was cut off and
-            // nothing could be read either, which is the worse trade: a rep
-            // opens this screen to see LEADS.
+            // Two chip rows stood here. They wrapped first — the two blocks ate
+            // about forty percent of a phone screen — then they were made to
+            // scroll sideways, which fixed the height and created a worse
+            // problem: six action chips do not fit on a 360dp phone, so Later,
+            // Visit and No step sat off the right edge. Three of the six answers
+            // to "what do I do now", behind a swipe nobody makes.
             //
-            // So: one line each, scrolled sideways, with a fade at the right
-            // edge that says there is more. That is the alternative you offered
-            // when you said "either wrap, or one row with a clear swipe hint and
-            // edge fade" — on a 5-inch screen only the second one survives.
+            // Two rows of three fit at any font scale, count first. The stage
+            // row underneath is gone from the screen and NOT from the app —
+            // every stage is in the filter sheet with the other browsing
+            // filters, and the sheet was already showing them.
             item {
-                CompactFilterRow {
-                    ACTIONS.forEach { a ->
-                        val n = app.leads.count { app.actionOf(it) == a.code }
-                        val key = "act:${a.code}"
-                        FilterTab(a.label, n, bucket == key && stageFilter == null && quick == null, a.color) {
-                            bucket = key; stageFilter = null; quick = null
-                        }
-                    }
+                // Counted ONCE per lead-list change, not six times per frame.
+                // This was six passes over three hundred leads on every
+                // recomposition, and this screen recomposes on every scroll.
+                val actionCounts = remember(app.leads, app.workByLead) {
+                    ACTIONS.map { a -> a to app.leads.count { app.actionOf(it) == a.code } }
                 }
-            }
-            item {
-                CompactFilterRow {
-                    FilterTab("All", app.leads.size, bucket == "all" && stageFilter == null && quick == null,
-                        MaterialTheme.colorScheme.primary) { bucket = "all"; stageFilter = null; quick = null }
-                    app.leadStages.filter { it.repVisible }.forEach { st ->
-                        val n = app.leads.count { it.stage == st.code }
-                        val key = "stage:${st.code}"
-                        FilterTab(st.shortLabel.ifBlank { st.label }, n,
-                            bucket == key && stageFilter == null && quick == null, parseHex(st.color)) {
-                            bucket = key; stageFilter = null; quick = null
-                        }
-                    }
-                }
+                WorkGrid(
+                    counts = actionCounts,
+                    selectedCode = bucket.removePrefix("act:").takeIf {
+                        bucket.startsWith("act:") && stageFilter == null && quick == null
+                    },
+                    onPick = { code ->
+                        bucket = if (code == null) "all" else "act:$code"
+                        stageFilter = null; quick = null
+                    },
+                )
             }
             // ONE line explaining whatever is selected.
             //
@@ -2422,11 +2490,36 @@ private fun LeadCard(
     // could not tell whose phone number belonged to whom. A hairline border
     // plus a wider gap draws the boundary without adding a heavy shadow or a
     // divider line of its own.
-    Column(
+    // URGENCY LIVES ON THE EDGE OF THE CARD, NOT INSIDE IT.
+    //
+    // A rep scrolling a list of three hundred is not reading; they are scanning
+    // for the ones that are on fire. A 3dp stripe in the action state's own
+    // colour answers that at the speed of a glance, and it does it in the one
+    // place nothing else is competing for — so the inside of the card can drop
+    // back to plain graphite and be READ instead of decoded.
+    //
+    // Only states that ask for something get a stripe. A lead booked for next
+    // Tuesday is not urgent and gets nothing, which is what makes the coloured
+    // ones mean anything.
+    val urgency = when (work?.actionState) {
+        "overdue" -> Red
+        "call_now" -> Amber
+        "due_today" -> Teal
+        "no_next_step" -> Amber.copy(alpha = 0.55f)
+        else -> null
+    }
+    Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(container)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
             .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .height(IntrinsicSize.Min),
+    ) {
+        Box(
+            Modifier.width(3.dp).fillMaxHeight()
+                .background(urgency ?: Color.Transparent),
+        )
+    Column(
+        Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
             // Initials avatar — calm graphite by default. The only colour it can
@@ -2553,7 +2646,20 @@ private fun LeadCard(
                 // long and "Kunj Vihari, Bridge Vat…" tells a rep less than
                 // nothing — they cannot tell which of two sites this lead asked
                 // about.
+                // STAGE, PROJECT, AREA — one muted line, no colour.
+                //
+                // Stage was taken off this card once for a good reason: it read
+                // "Contacted" on a hundred and forty leads and helped nobody
+                // decide anything. It comes back because a rep does need to know
+                // where a deal stands — but as plain grey text beside the
+                // project, not as a tenth coloured pill. Colour on this card now
+                // means exactly one thing: urgency, on the edge stripe. A stage
+                // is context; it does not get to shout.
+                val stageLabel = stages.firstOrNull { it.code == c.stage }
+                    ?.let { it.shortLabel.ifBlank { it.label } }
+                    ?.takeIf { c.stage != "new" }        // "New" is already said by the arrival time
                 val extras = listOfNotNull(
+                    stageLabel,
                     c.companyName?.takeIf { it.isNotBlank() }?.let { "🏢 $it" },
                     c.territory?.takeIf { it.isNotBlank() }?.let { "📍 $it" },
                 )
@@ -2652,6 +2758,7 @@ private fun LeadCard(
                 }
             }
         }
+    }
     }
 }
 
