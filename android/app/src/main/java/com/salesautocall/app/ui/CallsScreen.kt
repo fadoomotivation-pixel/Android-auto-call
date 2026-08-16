@@ -91,6 +91,17 @@ fun CallsScreen(vm: MainViewModel) {
     val nameById = remember(app.leads) {
         app.leads.mapNotNull { l -> l.id?.let { id -> l.name?.takeIf { it.isNotBlank() }?.let { id to it } } }.toMap()
     }
+    // Project, looked up the same memoised way the name is. A linear scan per
+    // visible row is what made this list jank in the first place.
+    val projectById = remember(app.leads) {
+        app.leads.mapNotNull { l -> l.id?.let { id -> l.companyName?.takeIf { it.isNotBlank() }?.let { id to it } } }.toMap()
+    }
+    val projectByPhone = remember(app.leads) {
+        app.leads.mapNotNull { l -> l.companyName?.takeIf { it.isNotBlank() }?.let { l.phone.filter { c -> c.isDigit() }.takeLast(10) to it } }.toMap()
+    }
+    fun projectFor(c: CallLog): String? =
+        c.contactId?.let { projectById[it] } ?: projectByPhone[c.phone.filter { it.isDigit() }.takeLast(10)]
+
     fun nameFor(c: CallLog): String? =
         c.contactId?.let { nameById[it] } ?: nameByPhone[c.phone.filter { it.isDigit() }.takeLast(10)]
 
@@ -215,7 +226,8 @@ fun CallsScreen(vm: MainViewModel) {
                 // Summary rides inside the list so it scrolls away like a native header.
                 item(key = "summary") { SummaryStrip(app.callSummary) }
                 items(rows, key = { it.id ?: "${it.phone}-${it.startedAt}" }) {
-                    CallRow(it, name = nameFor(it), playing = it.id != null && it.id == app.playingCallId,
+                    CallRow(it, name = nameFor(it), project = projectFor(it),
+                        playing = it.id != null && it.id == app.playingCallId,
                         summarizing = it.id != null && it.id == app.summarizingCallId,
                         onPlay = { it.id?.let { id -> vm.playRecording(id) } }, onStop = { vm.stopRecording() },
                         onSummarize = { it.id?.let { id -> vm.generateSummary(id) } },
@@ -399,10 +411,24 @@ private fun SummaryStat(label: String, value: String, color: Color = Color.Unspe
  * button, tap to expand extras (play/WhatsApp/copy). AI summary + suggested
  * disposition stay inline because they're actionable, not decoration.
  */
+/** A single, quiet signal on a call row. Same height, same weight, every time —
+ *  so three of them read as one line rather than three competing badges. */
+@Composable
+private fun CallSignal(label: String, tint: Color) {
+    Box(
+        Modifier.clip(RoundedCornerShape(5.dp)).background(tint.copy(alpha = 0.11f))
+            .padding(horizontal = 6.dp, vertical = 1.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tint,
+            fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
 @Composable
 private fun CallRow(
     c: CallLog,
     name: String?,
+    project: String?,
     playing: Boolean,
     summarizing: Boolean,
     onPlay: () -> Unit,
@@ -458,6 +484,47 @@ private fun CallRow(
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    )
+                }
+                // WHAT THIS CALL PRODUCED — not just that it happened.
+                //
+                // This row said number, direction, time, duration: an Android
+                // call log. A twelve-minute conversation that booked a site visit
+                // and a three-second misdial looked identical until you tapped
+                // both open.
+                //
+                // Only what is NOT already on the row goes here. The suggested
+                // stage has its own actionable line below (DispositionSuggestion)
+                // and a ready recording already lights the play button on the
+                // right — repeating either would just be the same word twice.
+                // That leaves two real gaps: the promise the rep made on this
+                // call, and which project it was about.
+                val owesFollowUp = c.wadaState == "pending"
+                if (project != null || owesFollowUp) {
+                    Spacer(Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (owesFollowUp) {
+                            CallSignal("↻ Follow up", CAmberM)
+                            Spacer(Modifier.width(5.dp))
+                        }
+                        project?.let {
+                            Text("🏢 $it", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                // The first line of what was actually said. AiSummarySection
+                // below shows only a "✨ AI Summary / Show" header until it is
+                // opened — a label with none of the content. This is the bit
+                // that lets a rep scan the day without tapping anything.
+                c.summary?.trim()?.takeIf { it.isNotEmpty() }?.let { sum ->
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        sum.lineSequence().first().trim(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                 }
             }
