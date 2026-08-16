@@ -104,12 +104,11 @@ export function ImportLeads({
   async function doImport() {
     if (parsed.length === 0) return;
     if (!targetCompany) {
-      // Say it, then TAKE THEM THERE. This guard used to be unreachable: the
-      // button was disabled whenever it would have fired, so the one sentence
-      // explaining the block never rendered and the picker was scrolled off
-      // the top of the modal behind the row preview.
-      setError("Pick which company these leads import into.");
-      companyRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // This guard used to be unreachable: the button was disabled whenever it
+      // would have fired, so the sentence explaining the block never rendered.
+      // The picker now sits in the same sticky footer as the button, so all
+      // this has to do is say which field and put the cursor in it.
+      setError("Choose a company first — “Leave unassigned” only means no rep is given these leads.");
       companyRef.current?.focus();
       return;
     }
@@ -222,33 +221,12 @@ export function ImportLeads({
           <button className="link" onClick={onClose}>✕</button>
         </div>
 
-        {/* Super admin: pick the tenant these leads belong to. Required — the
-            dedup check and the reps list are both scoped to this company. */}
-        {companies && companies.length > 0 && (
-          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: targetCompany ? "var(--muted)" : "#f59e0b" }}>
-              Import into:
-            </span>
-            <select
-              ref={companyRef}
-              value={targetCompany}
-              disabled={busy}
-              onChange={(e) => {
-                setTargetCompany(e.target.value);
-                setAssignTo(""); // reps belong to the previous company
-                setDuplicateConflicts([]); // stale — dedup was vs the previous company
-                setFreshLeads([]);
-                setError(null);
-              }}
-              style={{ ...input, borderColor: targetCompany ? "var(--border)" : "#f59e0b" }}
-            >
-              <option value="">— pick a company —</option>
-              {companies.map(([id, name]) => (
-                <option key={id} value={id}>{name}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* The company picker used to live here, at the top. It is REQUIRED —
+            the dedup check and the reps list are both scoped to it — and it
+            sat several hundred preview rows above the Import button, so the
+            one mandatory field was off-screen at the moment of the click while
+            the OPTIONAL "Assign to" sat right beside the button. It now lives
+            in the footer next to the action it gates. */}
 
         <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
           <button
@@ -368,10 +346,27 @@ export function ImportLeads({
           </div>
         )}
 
-        {error && <div className="error" style={{ marginTop: 8 }}>{error}</div>}
+        {/* EVERYTHING that answers "what happens when I press the button" is
+            pinned to the bottom of the scrolling card: the error, the
+            duplicate decision, the two dropdowns, the button. With 661 rows
+            previewed, anything not pinned here is off-screen at the moment it
+            matters — which is how a required field and, worse, the duplicate
+            prompt that REPLACES this footer could both go unseen. */}
+        <div
+          style={{
+            position: "sticky",
+            bottom: 0,
+            marginTop: 16,
+            paddingTop: 12,
+            background: "rgba(10, 10, 12, 0.94)",
+            backdropFilter: "blur(24px)",
+            borderTop: "1px solid rgba(255,255,255,0.08)",
+          }}
+        >
+        {error && <div className="error" style={{ marginBottom: 10 }}>{error}</div>}
 
         {duplicateConflicts.length > 0 ? (
-          <div className="card" style={{ marginTop: 12, background: "rgba(245, 158, 11, 0.05)", border: "1px solid rgba(245, 158, 11, 0.2)" }}>
+          <div className="card" style={{ marginBottom: 12, background: "rgba(245, 158, 11, 0.05)", border: "1px solid rgba(245, 158, 11, 0.2)" }}>
             <strong style={{ color: "#f59e0b" }}>⚠️ Found {duplicateConflicts.length} duplicate leads</strong>
             <p className="subtitle" style={{ marginTop: 4 }}>
               These numbers already exist in your system or appear multiple times in your file.
@@ -397,30 +392,44 @@ export function ImportLeads({
             </div>
           </div>
         ) : (
-          <div style={{ marginTop: 16 }}>
-            {/* The blocker, stated where the rep is looking. The picker that
-                clears it is at the top of the modal, several hundred preview
-                rows away — a greyed button down here told them nothing. */}
-            {needsCompany && (
-              <div style={{ fontSize: 13, color: "#f59e0b", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                <span>⚠️</span>
-                <span>
-                  Choose a company at the top of this box first —{" "}
-                  <button
-                    className="link"
-                    style={{ padding: "2px 8px", fontSize: 13, color: "#f59e0b" }}
-                    onClick={() => {
-                      companyRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-                      companyRef.current?.focus();
-                    }}
-                  >
-                    take me there
-                  </button>
+          <div>
+            {/* TWO dropdowns, and they are not the same question. Company =
+                which business owns these leads (required, decides the dedup
+                set). Rep = who calls them (optional). "Leave unassigned"
+                answers the second one, and was read as answering both. */}
+            {companies && companies.length > 0 && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: targetCompany ? "var(--muted)" : "#f59e0b", minWidth: 132 }}>
+                  Which company? *
                 </span>
+                <select
+                  ref={companyRef}
+                  value={targetCompany}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setTargetCompany(e.target.value);
+                    setAssignTo(""); // reps belong to the previous company
+                    setDuplicateConflicts([]); // stale — dedup was vs the previous company
+                    setFreshLeads([]);
+                    setError(null);
+                  }}
+                  style={{ ...input, flex: 1, minWidth: 200, borderColor: targetCompany ? "var(--border)" : "#f59e0b" }}
+                >
+                  <option value="">— required: pick a company —</option>
+                  {companies.map(([id, name]) => (
+                    <option key={id} value={id}>{name}</option>
+                  ))}
+                </select>
               </div>
             )}
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ fontSize: 13, color: "var(--muted)" }}>Assign to (optional):</span>
+            {needsCompany && (
+              <div style={{ fontSize: 12.5, color: "#f59e0b", marginBottom: 10 }}>
+                These {parsed.length} leads need a company before they can import.
+                “Leave unassigned” below only means no rep is given the leads — it does not answer this.
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", paddingBottom: 12 }}>
+              <span style={{ fontSize: 13, color: "var(--muted)", minWidth: 132 }}>Which rep? (optional)</span>
               <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input} disabled={!targetCompany}>
                 <option value="">Leave unassigned</option>
                 {scopedReps.map((sp) => (
@@ -432,8 +441,8 @@ export function ImportLeads({
               <button
                 className="primary"
                 style={{ width: "auto", padding: "9px 18px" }}
-                // NOT disabled on a missing company: doImport explains that one
-                // and scrolls to the field. Only a real dead end greys it out.
+                // NOT disabled on a missing company: doImport says why and
+                // focuses the field. Only a real dead end greys it out.
                 disabled={busy || parsed.length === 0}
                 title={targetCompany ? "" : "Pick which company these leads import into."}
                 onClick={doImport}
@@ -444,8 +453,10 @@ export function ImportLeads({
           </div>
         )}
 
+        {/* Inside the pinned region too — a progress bar you have to scroll to
+            find is indistinguishable from a button that did nothing. */}
         {progress && (
-          <div style={{ marginTop: 14 }}>
+          <div style={{ paddingBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
               <span>Importing…</span>
               <span>{progress.done} / {progress.total}</span>
@@ -460,6 +471,7 @@ export function ImportLeads({
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
