@@ -292,12 +292,18 @@ object Repository {
             if (p.isNotEmpty() && it.id != null) p to it.id else null
         }.toMap()
 
-        // With monitoring off and no CRM contacts, there's nothing to match against.
-        if (contactMap.isEmpty() && !recordAll) {
-            reportSyncHealth(companyId, salesId, "no_contacts",
-                "No CRM leads to match this phone's calls against.", contactsLoaded = 0)
-            return
-        }
+        // A company with no leads yet is NOT a broken phone.
+        //
+        // This used to `return` here, before the proof below is written — so a
+        // rep in a brand-new tenant could never satisfy the setup gate and
+        // never get into the app at all. It is the state EVERY new company is
+        // in on its first day: the admin cannot import leads until the team is
+        // set up, and the team cannot get past the gate until leads exist.
+        //
+        // The scan now runs to the end. With no contacts and monitoring off,
+        // every native call is skipped, nothing is uploaded, and the heartbeat
+        // says so honestly with contacts_loaded = 0 — which is the same
+        // information the old "no_contacts" outcome carried, minus the deadlock.
 
         // 3. Fetch the CRM rows this scan could possibly be a duplicate of.
         //
@@ -464,6 +470,31 @@ object Repository {
             }
         }
 
+        // NOTHING TO SEND IS NOT A FAILED PHONE.
+        //
+        // The proof used to be the LAST statement of this function, after the
+        // upload — so a phone with nothing to upload could never write it, and
+        // the setup gate never opened. devansh singh sat on "1 thing to allow"
+        // pressing Check now: his company runs record-all-calls with zero
+        // leads, so his first scan had to ship his ENTIRE seven-day phone
+        // history — 96 calls, sent one at a time when the bulk insert falls
+        // back, which took two full minutes. The proof only landed if that
+        // whole job survived on a coroutine scope tied to a screen showing
+        // nothing but "…", and any interruption threw it away.
+        //
+        // When there is nothing to back-fill, everything the gate asks has
+        // already been answered above: the profile and contacts queries
+        // returned (network and auth are fine), READ_CALL_LOG is granted, and
+        // the OS handed over its cursor. Requiring an upload that by
+        // definition cannot happen is a gate with no key.
+        //
+        // When there IS something to send, the proof still waits for the
+        // upload — deliberately. That is the case the gate was built for:
+        // Shweta's phone held every permission, showed three green ticks, and
+        // delivered nothing for five days. A read that works is not a delivery
+        // that works, and this must keep saying so.
+        if (toBackfill.isEmpty()) AppPrefs.setLastSyncOkAt(context, System.currentTimeMillis())
+
         val backfilled = logCallsBulk(toBackfill)
 
         // A completed scan. native_seen is what the PHONE believes happened;
@@ -476,10 +507,10 @@ object Repository {
             backfilled = backfilled,
             contactsLoaded = contactMap.size,
         )
-        // The gate's proof, kept ON THE PHONE. Every early return above leaves
-        // this untouched on purpose: no permission, no cursor, no contacts and
-        // no network all mean the same thing to a rep — their calls are not
-        // reaching the office — and the gate must not open on any of them.
+        // A delivery actually happened — renew the proof, so the 12-hour window
+        // is measured from the last END-TO-END success. The remaining early
+        // returns above (no permission, no cursor, no network) still leave this
+        // untouched, and the gate must not open on any of them.
         AppPrefs.setLastSyncOkAt(context, System.currentTimeMillis())
     }
 
