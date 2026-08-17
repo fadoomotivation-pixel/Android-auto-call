@@ -63,6 +63,25 @@ object AppPrefs {
     fun getLastSyncOkAt(context: Context): Long = prefs(context).getLong("last_sync_ok_at", 0L)
     fun setLastSyncOkAt(context: Context, v: Long) = prefs(context).edit().putLong("last_sync_ok_at", v).apply()
 
+    /**
+     * Why the last heartbeat write failed, or null when it landed.
+     *
+     * device_sync_health is the table the office uses to find out why a phone
+     * has gone blind, and reportSyncHealth wrote it inside a runCatching whose
+     * Result was thrown away. devansh singh's phone ran a full scan, uploaded
+     * 96 calls, and wrote NO heartbeat — while Ankita's row updated the same
+     * morning, so the write path itself was fine. Nobody could see the
+     * difference, and the whole diagnosis had to be reconstructed from
+     * call_logs timestamps instead of read off Phone Health.
+     *
+     * A diagnostic that fails silently is worse than no diagnostic: it reports
+     * a healthy phone as no phone at all. Kept on the handset because that is
+     * the one place still reachable when the server write is what broke.
+     */
+    fun getHealthWriteError(context: Context): String? = prefs(context).getString("health_write_error", null)
+    fun setHealthWriteError(context: Context, v: String?) =
+        prefs(context).edit().apply { if (v == null) remove("health_write_error") else putString("health_write_error", v.take(200)) }.apply()
+
     // getBatteryAsked / setBatteryAsked lived here for exactly one day. They
     // rate-limited a Settings intent that MainActivity fired on every onResume;
     // that whole mechanism is gone, replaced by the setup gate, which asks in

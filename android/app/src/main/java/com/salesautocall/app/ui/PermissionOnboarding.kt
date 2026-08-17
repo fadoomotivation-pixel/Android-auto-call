@@ -43,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -292,6 +293,22 @@ fun PermissionOnboarding(onReady: () -> Unit) {
         }
     }
 
+    // THE WAY OUT WHEN THIS SCREEN ITSELF IS THE BUG.
+    //
+    // The in-app updater lives BEHIND this gate, so a rep the gate has locked
+    // out cannot reach it. When devansh singh was stuck, the fix was already
+    // published and his phone had no way to ask for it — the only remedy left
+    // was the founder sending him an APK link by hand, per rep, per bug.
+    //
+    // Offered whenever a newer build exists, never as a blocker: it does not
+    // count toward `left`, and a rep who does not need it never sees it.
+    var newBuild by remember { mutableStateOf<com.salesautocall.app.update.AppUpdater.Release?>(null) }
+    var downloading by remember { mutableStateOf(false) }
+    var downloadPct by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        newBuild = runCatching { com.salesautocall.app.update.AppUpdater.checkForUpdate() }.getOrNull()
+    }
+
     fun askPerm(p: Perm) {
         if (p.keys.all { it in tried } && !granted(p)) {
             // "Don't ask again" territory: go straight to the app's own page.
@@ -336,6 +353,36 @@ fun PermissionOnboarding(onReady: () -> Unit) {
             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(18.dp))
+
+        // The escape hatch, first, because if this screen is wrong then nothing
+        // below it can be trusted to let the rep through.
+        newBuild?.let { rel ->
+            SetupRow(
+                icon = Icons.Default.RestartAlt,
+                title = if (downloading) "Downloading update…" else "A newer app is ready",
+                reason = if (downloading)
+                    "${(downloadPct * 100).toInt()}% — the installer opens on its own when it finishes"
+                else
+                    "You are on ${com.salesautocall.app.BuildConfig.VERSION_NAME}, and ${rel.versionName} is out. " +
+                        "If this screen will not let you in, update first — the fix may already be in it.",
+                done = false,
+                actionLabel = if (downloading) "…" else "Update",
+            ) {
+                if (!downloading) {
+                    downloading = true
+                    downloadPct = 0f
+                    scope.launch {
+                        val file = runCatching {
+                            com.salesautocall.app.update.AppUpdater.download(context, rel) { p -> downloadPct = p }
+                        }.getOrNull()
+                        if (file != null) {
+                            com.salesautocall.app.update.AppUpdater.install(context, file)
+                        }
+                        downloading = false
+                    }
+                }
+            }
+        }
 
         // Battery first when it is the problem. It is the one that stops a
         // working phone dead — Shweta's sync had been off for five days with
@@ -389,8 +436,15 @@ fun PermissionOnboarding(onReady: () -> Unit) {
                         checking = false
                         // Never a guess. If it failed, say what failed — the rep
                         // reads this line out to whoever helps them.
+                        // Name what failed. "Tell your admin" with nothing to
+                        // tell them is what turned devansh singh's lockout into
+                        // a three-round guessing game — the heartbeat write was
+                        // failing silently and the screen had no way to say so.
+                        val healthErr = com.salesautocall.app.data.AppPrefs.getHealthWriteError(context)
                         checkFailed = when {
                             err != null -> "Could not reach the office: ${err.javaClass.simpleName}. Check internet and tap again."
+                            !syncProven(context) && healthErr != null ->
+                                "The office would not accept this phone's report — $healthErr. Show this to your admin."
                             !syncProven(context) -> "The phone still will not hand over its call log. Tell your admin."
                             else -> null
                         }
