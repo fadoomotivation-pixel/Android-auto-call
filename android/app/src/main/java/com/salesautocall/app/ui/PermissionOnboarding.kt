@@ -276,6 +276,22 @@ fun PermissionOnboarding(onReady: () -> Unit) {
     // rep and a day of unlogged calls.
     LaunchedEffect(left) { if (left == 0) onReady() }
 
+    // A rep who is only held up by the sync proof should not have to know to
+    // press anything. If the office already has calls from this phone, that IS
+    // the proof — check once, silently, the moment this becomes the last thing
+    // standing. Keyed on syncBlocking, so it runs once and stops the moment it
+    // succeeds rather than looping on its own refresh.
+    LaunchedEffect(syncBlocking) {
+        if (syncBlocking) {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    com.salesautocall.app.data.Repository.serverSeenDelivery(context)
+                }
+            }
+            refresh++
+        }
+    }
+
     fun askPerm(p: Perm) {
         if (p.keys.all { it in tried } && !granted(p)) {
             // "Don't ask again" territory: go straight to the app's own page.
@@ -362,6 +378,12 @@ fun PermissionOnboarding(onReady: () -> Unit) {
                         val err = runCatching {
                             withContext(Dispatchers.IO) {
                                 com.salesautocall.app.data.Repository.syncCallLogs(context)
+                                // Local flag missing does not mean the phone
+                                // never delivered — ask the office. See
+                                // Repository.serverSeenDelivery.
+                                if (!syncProven(context)) {
+                                    com.salesautocall.app.data.Repository.serverSeenDelivery(context)
+                                }
                             }
                         }.exceptionOrNull()
                         checking = false
