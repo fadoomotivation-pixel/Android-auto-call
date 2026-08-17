@@ -249,6 +249,45 @@ object Repository {
     }
 
     /**
+     * ASK THE OFFICE WHETHER THIS PHONE HAS DELIVERED.
+     *
+     * The setup gate's proof lived ONLY in this phone's SharedPreferences. That
+     * makes a locked-out rep unrecoverable from here: if the flag fails to
+     * stick for any reason, the app stays shut and there is nothing the founder
+     * can do about it remotely — no setting, no toggle, no re-send.
+     *
+     * devansh singh is that rep. His phone read its call log and delivered 96
+     * calls at 08:39 this morning; the rows are in call_logs, timestamped, with
+     * his salesperson_id on them. The office can SEE his phone working. The
+     * gate never asked, kept showing "The phone still will not hand over its
+     * call log", and no reinstall could clear it because the evidence it wanted
+     * was the one thing that had gone missing locally.
+     *
+     * So the gate now accepts the server's own record as proof, and caches it
+     * back into the local flag. This is strictly harder to fake than the local
+     * pref, not easier: rows in call_logs are something the phone can only
+     * produce by actually reading its call log and successfully uploading.
+     */
+    suspend fun serverSeenDelivery(context: Context): Boolean {
+        val salesId = currentUserId() ?: return false
+        val since = java.time.Instant.now().minus(12, java.time.temporal.ChronoUnit.HOURS).toString()
+        val delivered = runCatching {
+            client.from("call_logs")
+                .select(columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                    "id, phone, started_at, company_id, salesperson_id",
+                )) {
+                    filter {
+                        eq("salesperson_id", salesId)
+                        gte("created_at", since)
+                    }
+                    limit(1)
+                }.decodeList<CallLog>().isNotEmpty()
+        }.getOrDefault(false)
+        if (delivered) AppPrefs.setLastSyncOkAt(context, System.currentTimeMillis())
+        return delivered
+    }
+
+    /**
      * Safety net: Reads the native Android CallLog, compares with Supabase,
      * and backfills any missing calls made to our CRM contacts.
      *
