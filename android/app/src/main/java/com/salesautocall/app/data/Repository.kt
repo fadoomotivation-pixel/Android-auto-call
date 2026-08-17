@@ -216,8 +216,18 @@ object Repository {
      *
      * Best-effort on purpose. Reporting the heartbeat must never be able to
      * break the sync it is reporting on — if this throws, the calls still go up.
+     *
+     * But best-effort is not the same as UNOBSERVED. The Result was previously
+     * discarded, so a heartbeat that never landed looked identical to a phone
+     * that never ran. devansh singh's handset completed a scan and uploaded 96
+     * calls this morning and wrote no row at all, while Ankita's row updated
+     * the same morning — so the write path worked and something about his
+     * failed, and there was no way to find out which. The failure is now kept
+     * on the handset, where it is still reachable when the server write is the
+     * thing that broke, and shown on the setup screen.
      */
     private suspend fun reportSyncHealth(
+        context: Context,
         companyId: String,
         salesId: String,
         outcome: String,
@@ -226,7 +236,7 @@ object Repository {
         backfilled: Int = 0,
         contactsLoaded: Int = 0,
     ) {
-        runCatching {
+        val result = runCatching {
             val now = java.time.Instant.now().toString()
             client.from("device_sync_health").upsert(buildJsonObject {
                 put("salesperson_id", salesId)
@@ -246,6 +256,10 @@ object Repository {
                 put("updated_at", now)
             }) { onConflict = "salesperson_id" }
         }
+        AppPrefs.setHealthWriteError(
+            context,
+            result.exceptionOrNull()?.let { "${it.javaClass.simpleName}: ${it.message ?: "no message"}" },
+        )
     }
 
     /**
@@ -304,7 +318,7 @@ object Repository {
             // The single most common way this phone goes blind, and until now
             // the most silent. Say it out loud so Phone Health can name the
             // rep, the handset and the setting to change.
-            reportSyncHealth(companyId, salesId, "no_permission",
+            reportSyncHealth(context, companyId, salesId, "no_permission",
                 "READ_CALL_LOG is not granted, so the app cannot see this phone's calls.")
             return
         }
@@ -388,7 +402,7 @@ object Repository {
         ) ?: run {
             // The OS refused the query even though the permission looked
             // granted — happens on some OEM builds after a restore.
-            reportSyncHealth(companyId, salesId, "no_cursor",
+            reportSyncHealth(context, companyId, salesId, "no_cursor",
                 "Android returned no call-log cursor.", contactsLoaded = contactMap.size)
             return
         }
@@ -541,7 +555,7 @@ object Repository {
         // fifteen seen and fourteen backfilled every run is a phone whose live
         // capture is dead and whose safety net is quietly carrying the day.
         reportSyncHealth(
-            companyId, salesId, "ok",
+            context, companyId, salesId, "ok",
             nativeSeen = nativeCalls.size,
             backfilled = backfilled,
             contactsLoaded = contactMap.size,
