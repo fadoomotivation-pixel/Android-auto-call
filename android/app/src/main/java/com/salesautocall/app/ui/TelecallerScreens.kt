@@ -1121,7 +1121,19 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         item { PerformanceCard(app) }
 
         // Lead pipeline
-        item {
+        //
+        // Drawn only when there ARE stages. stageCounts comes from
+        // app.leadStages, which is empty in two ordinary situations: the split
+        // second after login before fetchLeadStages() returns, and any time
+        // that fetch fails (it returns emptyList on error). A pipeline with no
+        // stages has nothing to show anyway — and drawing it crashed the app.
+        //
+        // devansh singh cleared his app data, signed in, and Home died on
+        // NoSuchElementException at the maxOf below: maxOf throws on an empty
+        // list. He had no cached stages because the install was fresh, so the
+        // very first composition after his first successful login was the one
+        // that hit it.
+        if (stageCounts.isNotEmpty()) item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -1133,7 +1145,10 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                     Spacer(Modifier.height(14.dp))
                     // One row per stage — full label, count, and a bar you can
                     // actually read. No wrapped words, no 7-way squeeze.
-                    val maxCount = stageCounts.maxOf { it.second }.coerceAtLeast(1)
+                    // maxOfOrNull, not maxOf: the guard above already keeps an
+                    // empty list out, and this makes sure a future caller
+                    // cannot reintroduce the crash by dropping it.
+                    val maxCount = (stageCounts.maxOfOrNull { it.second } ?: 0).coerceAtLeast(1)
                     Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
                         stageCounts.forEach { (stage, n) ->
                             val stageColor = parseHex(stage.color)
