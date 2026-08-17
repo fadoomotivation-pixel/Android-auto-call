@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.viewModels
@@ -47,8 +49,35 @@ class MainActivity : ComponentActivity() {
                     // reps whose permissions were fine on install and got reset
                     // or Doze'd weeks later — Shweta's sync had been dead five
                     // days with nothing on her phone saying so.
-                    if (setupOk.value) AppRoot(vm)
-                    else PermissionOnboarding(onReady = { setupOk.value = true })
+                    //
+                    // THE GATE GUARDS A SIGNED-IN REP, AND ONLY A SIGNED-IN REP.
+                    //
+                    // It used to be mounted on `!setupOk` alone, with no regard
+                    // for auth — so a phone whose session had died was shown a
+                    // PERMISSIONS screen and no way to reach the login screen
+                    // behind it. Every button on that screen needs a session to
+                    // do anything, so all of them failed, and the one it offers
+                    // reported the failure as "The phone still will not hand
+                    // over its call log. Tell your admin."
+                    //
+                    // devansh singh sat in that trap for two hours. His session
+                    // was created at 08:37, its refresh token was never once
+                    // exchanged, and his access token expired around 09:38 —
+                    // after which syncCallLogs returned on its second line, at
+                    // `currentUserId() ?: return`, before it could even record
+                    // that it had run. He was told his call log was broken, told
+                    // to call his admin, and handed a button that could not
+                    // possibly work. Three APK updates changed nothing, because
+                    // the app was never the problem.
+                    //
+                    // Signed out now means the login screen, which is what a
+                    // signed-out phone should have shown all along.
+                    val state by vm.state.collectAsState()
+                    if (state.signedIn && !setupOk.value) {
+                        PermissionOnboarding(onReady = { setupOk.value = true })
+                    } else {
+                        AppRoot(vm)
+                    }
                 }
             }
         }
@@ -87,6 +116,13 @@ class MainActivity : ComponentActivity() {
         // time they open the app — instead of letting them work all day into a
         // CRM that is not receiving any of it.
         setupOk.value = setupComplete(this)
+        // Re-resolve auth too. It used to run only at ViewModel init and at
+        // login, so a session that DIED while the app was alive left signedIn
+        // stuck at true forever — which is exactly how devansh singh stayed on
+        // the setup screen for two hours after his token expired underneath
+        // him. Only a genuinely absent session flips this to false (a network
+        // blip leaves signedIn alone), so it cannot log a working rep out.
+        vm.refreshSession()
         // Trigger a one-off sync when the app opens (deduped by REPLACE), gated on a
         // network so it doesn't spin without connectivity.
         WorkManager.getInstance(this).enqueueUniqueWork(

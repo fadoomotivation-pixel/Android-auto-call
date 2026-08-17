@@ -310,8 +310,23 @@ object Repository {
      * telecaller a day's credit and the founder their trust in the dashboard.
      */
     suspend fun syncCallLogs(context: Context) {
-        val companyId = myProfile()?.companyId ?: return
-        val salesId = currentUserId() ?: return
+        // NO SESSION IS NOT A CALL-LOG PROBLEM.
+        //
+        // These two lines are the only exits that cannot report to the server —
+        // reporting needs the very session they just found missing. So they
+        // report to the handset instead. Without this the scan returned on line
+        // two in total silence, and the setup screen, seeing no proof and no
+        // exception, told devansh singh "The phone still will not hand over its
+        // call log. Tell your admin." His call log was fine. His token had
+        // expired an hour earlier.
+        val salesId = currentUserId() ?: run {
+            AppPrefs.setHealthWriteError(context, "signed out — sign in again")
+            return
+        }
+        val companyId = myProfile()?.companyId ?: run {
+            AppPrefs.setHealthWriteError(context, "signed out or profile unreadable — sign in again")
+            return
+        }
 
         // 1. Check permission
         if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
