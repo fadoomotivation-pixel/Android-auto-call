@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
@@ -83,6 +84,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
@@ -1467,6 +1469,7 @@ private fun LeadsDeck(
     onRefresh: () -> Unit,
     onScore: () -> Unit,
     onSelect: () -> Unit,
+    onToday: () -> Unit,
     onDueNow: () -> Unit,
     onHot: () -> Unit,
     onNew: () -> Unit,
@@ -1530,6 +1533,14 @@ private fun LeadsDeck(
                             text = { Text("Select leads") },
                             leadingIcon = { Icon(Icons.Default.Checklist, contentDescription = null) },
                             onClick = { menuOpen = false; onSelect() },
+                        )
+                        // The rep's own day, on the screen where they spend it.
+                        // In the menu rather than on the deck because it is a
+                        // thing you go and check, not a number you work from.
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("What I did today") },
+                            leadingIcon = { Icon(Icons.Default.History, contentDescription = null) },
+                            onClick = { menuOpen = false; onToday() },
                         )
                     }
                 }
@@ -1606,6 +1617,123 @@ private fun FollowUpAllClear(laterCount: Int) {
     }
 }
 
+/**
+ * "What you did today" — the rep's own day, in one sheet.
+ *
+ * THE COMPLAINT THIS ANSWERS: "jo telecaller update kara vo kaha gya."
+ *
+ * Recording an outcome is the one thing this app asks a rep to do all day, and
+ * it is the one thing that leaves no trace on screen. The update is correct and
+ * its effect is to make the lead LEAVE: it moves stage, so it drops out of the
+ * bucket being looked at; or the next callback books itself for Friday, so it
+ * disappears from Call now. From the rep's chair a saved update and a lost
+ * update look identical — which is how a rep who had worked all afternoon came
+ * to believe the app was eating their work.
+ *
+ * Nothing here is new data. Every one of those writes already logs a row to
+ * lead_activities and the lead page already draws them one lead at a time. This
+ * is the same rows, for one day, across all of the rep's leads, with the lead's
+ * name on them and a tap to go back.
+ *
+ * The AI and the call-log importer write under the rep's own actor_id, so their
+ * entries arrive too — and they should: "the AI moved this to Interested from
+ * your voice note" is exactly the kind of thing a rep suspects did not happen.
+ * They are labelled so it is never mistaken for something the rep typed.
+ */
+@Composable
+private fun TodayWorkSheet(app: AppState, onOpenLead: (String) -> Unit) {
+    // Named per lead, from the list the screen already has in memory. A lead
+    // the rep worked today is a lead assigned to them, so it is loaded.
+    val nameById = remember(app.leads) {
+        app.leads.mapNotNull { l -> l.id?.let { it to (prettyName(l.name) ?: prettyPhone(l.phone)) } }.toMap()
+    }
+    // Grouped by lead, most recently touched first. A rep who called the same
+    // person three times wants one entry with three lines, not three entries
+    // scattered down a list.
+    val groups = remember(app.todayActivities, nameById) {
+        app.todayActivities
+            .groupBy { it.contactId }
+            .entries
+            .sortedByDescending { e -> e.value.firstOrNull()?.createdAt ?: "" }
+    }
+    val me = app.profile?.fullName?.trim()
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = Space.l).padding(bottom = Space.xl)) {
+        Text("What you did today", style = AppType.title, color = AppColors.TextPrimary)
+        Spacer(Modifier.height(Space.xxs))
+        Text(
+            when {
+                app.todayActivitiesLoading && app.todayActivities.isEmpty() -> "Loading your day…"
+                groups.isEmpty() -> "Nothing recorded yet today."
+                else -> "${app.todayActivities.size} updates on ${groups.size} leads"
+            },
+            style = AppType.meta, color = AppColors.TextSecondary,
+        )
+        Spacer(Modifier.height(Space.m))
+
+        if (groups.isEmpty() && !app.todayActivitiesLoading) {
+            Text(
+                "Every update you make gets saved here with the time — the stage you set, the note you wrote, the callback you booked. Update a lead and come back to see it.",
+                style = AppType.body, color = AppColors.TextSecondary,
+            )
+            return@Column
+        }
+
+        // Capped against the SCREEN, not a fixed dp. A busy rep logs a few dozen
+        // updates a day, and a flat 460dp cap is taller than the whole usable
+        // area of a 4-inch phone — the header above would have been pushed out
+        // of the sheet on exactly the handsets this app has to work on.
+        val maxList = (LocalConfiguration.current.screenHeightDp * 0.55f).dp
+        LazyColumn(
+            Modifier.fillMaxWidth().heightIn(max = maxList),
+            verticalArrangement = Arrangement.spacedBy(Space.s),
+        ) {
+            items(groups, key = { it.key }) { (cid, acts) ->
+                Column(
+                    Modifier.fillMaxWidth().clip(Radii.card)
+                        .background(AppColors.SurfaceMuted)
+                        .clickable { onOpenLead(cid) }
+                        .padding(horizontal = Space.m, vertical = Space.s),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            // A lead the rep worked today is assigned to them, so
+                            // it is in the loaded list — but a hand-over between
+                            // the update and now would take it out, and a blank
+                            // row is worse than a plain word.
+                            nameById[cid] ?: "Lead",
+                            style = AppType.rowTitle, color = AppColors.TextPrimary,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(Space.s))
+                        Text(timeOnly(acts.firstOrNull()?.createdAt), style = AppType.tag,
+                            color = AppColors.TextTertiary, maxLines = 1)
+                    }
+                    // Four lines is a whole conversation's worth of updates on
+                    // one lead. Past that the lead's own page is the right place
+                    // to read it, and the row says so.
+                    acts.take(4).forEach { a ->
+                        val byOther = me.isNullOrBlank() || a.actorName?.trim() != me
+                        Spacer(Modifier.height(Space.xxs))
+                        Text(
+                            if (byOther && !a.actorName.isNullOrBlank()) "${a.detail}  ·  ${a.actorName}"
+                            else a.detail,
+                            style = AppType.meta, color = AppColors.TextSecondary,
+                            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (acts.size > 4) {
+                        Spacer(Modifier.height(Space.xxs))
+                        Text("+${acts.size - 4} more — open the lead to read them all",
+                            style = AppType.tag, color = AppColors.TextTertiary)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
@@ -1642,6 +1770,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
     var sortBy by remember { mutableStateOf("default") }          // "default" | "score" | "recent"
     var sheetOpen by remember { mutableStateOf(false) }
+    var todayOpen by remember { mutableStateOf(false) }  // "What I did today"
     var reviveOpen by remember { mutableStateOf(false) } // RAG v13 — Second Chance sheet
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
@@ -1856,6 +1985,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
                         onScore = { vm.scoreLeads() },
                         onSelect = { selectMode = true },
+                        onToday = { todayOpen = true; vm.loadTodayActivities() },
                         // "Due now" lands on Follow-up, which opens on Call now
                         // — the list this number counts. It used to drop the rep
                         // into New, where none of these leads live any more.
@@ -2149,6 +2279,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             text = { Text("Call ${dialList.size}", fontWeight = FontWeight.Bold) },
         )
     }
+    }
+
+    if (todayOpen) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { todayOpen = false }) {
+            TodayWorkSheet(
+                app = app,
+                onOpenLead = { id -> todayOpen = false; vm.openLeadDetail(id) },
+            )
+        }
     }
 
     // FILTERS — all the fine-grained power, one sheet away.
@@ -3611,6 +3750,7 @@ private fun QuickScheduleChips(
 // ════════════════════════════════════════════════════════════
 //  FOLLOW-UPS
 // ════════════════════════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val app by vm.state.collectAsState()
@@ -3618,6 +3758,11 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     LaunchedEffect(Unit) { vm.loadFollowUps(); vm.loadLeads() }
 
     var rescheduleFor by remember { mutableStateOf<FollowUp?>(null) }
+    // The same "What I did today" sheet the Leads screen shows. This screen
+    // needs it more, not less: finishing a callback books the next one, so the
+    // card the rep just worked on either vanishes or comes back looking
+    // untouched, and there was nothing anywhere saying the update landed.
+    var todayOpen by remember { mutableStateOf(false) }
     // Ticks once a minute, so a callback whose time arrives while the rep is
     // looking at this screen walks into Call now by itself. It used to need the
     // rep to leave and come back — which is how a callback booked for 3 PM got
@@ -3729,6 +3874,13 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Follow Ups", style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { todayOpen = true; vm.loadTodayActivities() },
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Icon(Icons.Default.History, contentDescription = "What I did today",
+                        modifier = Modifier.size(19.dp))
+                }
                 IconButton(onClick = { vm.loadFollowUps(force = true) }, modifier = Modifier.size(34.dp)) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(19.dp))
                 }
@@ -3834,6 +3986,15 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
     }
 
+    if (todayOpen) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { todayOpen = false }) {
+            TodayWorkSheet(
+                app = app,
+                onOpenLead = { id -> todayOpen = false; vm.openLeadDetail(id) },
+            )
+        }
+    }
+
     rescheduleFor?.let { f ->
         ScheduleFollowUpDialog(
             who = f.name ?: f.phone,
@@ -3869,10 +4030,21 @@ private fun whyThisCallback(f: FollowUp): String {
             "🎤 ${note.removePrefix("AI:").removePrefix("ai:").trim()}"
         // The no-answer ladder books these, and the note already counts the try.
         note.contains("Attempt", ignoreCase = true) -> "🔁 Nobody picked up — $note"
+        // The database booked this one, not the rep.
+        //
+        // book_callback_if_missing writes exactly this sentence whenever a lead
+        // is set to Callback with no time chosen. Without this branch it fell
+        // through to "You said:", which told a rep they had typed something
+        // they never typed — on the most common note in the table.
+        note == AUTO_CALLBACK_NOTE -> "⏰ $note"
         note.isNotEmpty() -> "📝 You said: $note"
         else -> "↻ You booked a call back"
     }
 }
+
+/** The note `book_callback_if_missing` stamps on a callback nobody timed —
+ *  migration 0166. Matched, never written, by the app. */
+private const val AUTO_CALLBACK_NOTE = "No call time was set, so we booked one for 11 AM"
 
 /**
  * [onUpdate] is null when the callback isn't linked to a lead — there is no

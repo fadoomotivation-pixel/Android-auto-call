@@ -219,6 +219,10 @@ data class AppState(
     /** "Who did what, when" timeline entries for the open lead. */
     val leadDetailActivities: List<com.salesautocall.app.data.LeadActivity> = emptyList(),
     val leadDetailLoading: Boolean = false,
+    /** Everything logged against this rep's leads since midnight IST — the
+     *  "What I did today" sheet on Leads and Follow Ups. */
+    val todayActivities: List<com.salesautocall.app.data.LeadActivity> = emptyList(),
+    val todayActivitiesLoading: Boolean = false,
     // Per-lead call coach: honest rating + guidance from THIS lead's last real
     // call recording. Shown on the lead's own page.
     val leadCoach: com.salesautocall.app.data.CoachCallFeedback? = null,
@@ -3605,6 +3609,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val picks = runCatching { Repository.fetchSecondChance() }.getOrDefault(emptyList())
             set { it.copy(revivePicks = picks, reviveLoading = false, reviveLoaded = true) }
+        }
+    }
+
+    /**
+     * Loads the rep's own day — every update logged against their leads since
+     * midnight IST.
+     *
+     * Always [force]d: the sheet is opened deliberately, right after the rep
+     * has been updating leads, and a 45-second cache would show them a day that
+     * is missing the very update they came to check on.
+     */
+    fun loadTodayActivities() {
+        viewModelScope.launch {
+            set { it.copy(todayActivitiesLoading = true) }
+            val acts = runCatching { Repository.fetchMyActivitiesToday() }.getOrDefault(emptyList())
+            set { it.copy(todayActivities = acts, todayActivitiesLoading = false) }
         }
     }
 
