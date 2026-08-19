@@ -79,6 +79,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AiPanel
+import com.salesautocall.app.ui.design.AppType
+import com.salesautocall.app.ui.design.InlineNotice
+import com.salesautocall.app.ui.design.Radii
+import com.salesautocall.app.ui.design.RoundIconButton
+import com.salesautocall.app.ui.design.Space
+import com.salesautocall.app.ui.design.StatusTone
 
 // ── shared helpers (file-private copies; intentionally self-contained) ──
 private val OkGreen = AppColors.Positive
@@ -111,23 +118,33 @@ private fun localDateOf(iso: String?): LocalDate? =
     ms(iso)?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
 
 @Composable
+/**
+ * Same treatment as Home's StatTile: the value leads, in the accent; the label
+ * explains it underneath. The 32dp tinted square holding an emoji is gone —
+ * four of these side by side were four coloured chips and four stickers
+ * competing with the only thing that mattered, the number.
+ *
+ * Signature kept so every call site is untouched; emoji is ignored.
+ */
+@Suppress("UNUSED_PARAMETER")
+@Composable
 private fun Tile(emoji: String, value: String, label: String, accent: Color, modifier: Modifier = Modifier, labelLines: Int = 2) {
-    Card(modifier, elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
-        Column(Modifier.padding(horizontal = 11.dp, vertical = 13.dp)) {
-            Box(Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-                Text(emoji)
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(
-                label,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = labelLines,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 14.sp,
-            )
-        }
+    Column(
+        modifier
+            .clip(Radii.card)
+            .background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.card)
+            .padding(horizontal = Space.m, vertical = Space.m),
+    ) {
+        Text(value, style = AppType.metric, color = accent, maxLines = 1)
+        Spacer(Modifier.height(Space.xxs))
+        Text(
+            label,
+            style = AppType.meta,
+            color = AppColors.TextSecondary,
+            maxLines = labelLines,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -241,33 +258,39 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
         item { TopRow("Attendance", "GPS-verified check-in", onBack) }
 
         item {
+            // The last gradient in the light app. Shift state is a STATE, so it
+            // gets the state colours: green on shift or complete, indigo when
+            // there is an action waiting. White-on-indigo-gradient made "Ready
+            // to check in?" and "Shift complete" look identical at a glance.
+            val shiftTone = if (onShift || done) StatusTone(AppColors.Positive, AppColors.PositiveSoft)
+                            else StatusTone(AppColors.Indigo, AppColors.IndigoSoft)
             Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-                    .background(Brush.linearGradient(listOf(Color(0xFF4353B8), Color(0xFF333A8F)))).padding(20.dp),
+                Modifier.fillMaxWidth().clip(Radii.card)
+                    .background(shiftTone.bg).padding(Space.l),
             ) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(64.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                            Icon(if (onShift || done) Icons.Default.CheckCircle else Icons.Default.LocationOn, contentDescription = null, tint = Color.White)
+                        Box(Modifier.size(52.dp).clip(CircleShape).background(AppColors.Surface), contentAlignment = Alignment.Center) {
+                            Icon(if (onShift || done) Icons.Default.CheckCircle else Icons.Default.LocationOn, contentDescription = null, tint = shiftTone.fg)
                         }
-                        Spacer(Modifier.width(14.dp))
+                        Spacer(Modifier.width(Space.l))
                         Column {
                             Text(
                                 when { done -> "Shift complete"; onShift -> "You're on shift"; else -> "Ready to check in?" },
-                                style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold,
+                                style = AppType.title, color = shiftTone.fg,
                             )
                             Text(
                                 when { done -> "In ${hhmm(a?.punchInAt)} · Out ${hhmm(a?.punchOutAt)}"; onShift -> "Since ${hhmm(a?.punchInAt)}"; else -> "Punch in with your location" },
-                                style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.88f),
+                                style = AppType.meta, color = AppColors.TextSecondary,
                             )
                         }
                     }
                     a?.locationLabel?.takeIf { it.isNotBlank() }?.let {
                         Spacer(Modifier.height(12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = Color.White, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(5.dp))
-                            Text(it, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f))
+                            Icon(Icons.Default.LocationOn, contentDescription = "Location", tint = AppColors.TextSecondary, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(Space.xs + Space.xxs))
+                            Text(it, style = AppType.meta, color = AppColors.TextSecondary)
                         }
                     }
                     if (onShift) {
@@ -277,22 +300,31 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
                             while (true) { elapsed = ((System.currentTimeMillis() - start) / 1000).toInt(); delay(1000) }
                         }
                         Spacer(Modifier.height(10.dp))
-                        Text("⏱  ${dur(elapsed.toLong())} on shift", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        // Monospaced so a ticking shift clock does not shuffle.
+                        Text("${dur(elapsed.toLong())} on shift", style = AppType.timer, color = shiftTone.fg)
                     }
                     Spacer(Modifier.height(16.dp))
                     val canPunch = !app.attendanceBusy && !done
+                    // A filled action on the tinted ground, not a white button
+                    // on a gradient. Punching in/out is the only thing this
+                    // screen exists to do, so it gets the solid treatment.
                     Box(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White)
+                        Modifier.fillMaxWidth().clip(Radii.control)
+                            .background(if (canPunch) shiftTone.fg else AppColors.SurfaceMuted)
                             .clickable(enabled = canPunch) {
                                 if (onShift) vm.punchOut() else punchInWithLocation()
-                            }.padding(vertical = 14.dp),
+                            }.padding(vertical = Space.l),
                         contentAlignment = Alignment.Center,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (!onShift && !done) { Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color(0xFF333A8F), modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
+                            if (!onShift && !done) {
+                                Icon(Icons.Default.LocationOn, contentDescription = null, tint = AppColors.Surface, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(Space.s))
+                            }
                             Text(
-                                when { app.attendanceBusy -> "Please wait…"; done -> "Shift done for today ✓"; onShift -> "Punch out"; else -> "Punch in" },
-                                color = Color(0xFF333A8F), fontWeight = FontWeight.Bold,
+                                when { app.attendanceBusy -> "Please wait…"; done -> "Shift done for today"; onShift -> "Punch out"; else -> "Punch in" },
+                                style = AppType.label,
+                                color = if (canPunch) AppColors.Surface else AppColors.TextTertiary,
                             )
                         }
                     }
@@ -560,23 +592,21 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
         item { TopRow("AI Coach", "Your smart sales coach", onBack) }
 
         item {
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF4353B8), Color(0xFF333A8F)))).padding(20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(46.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI", tint = Color.White)
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text("Hi $firstName!", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("I analysed your pipeline and found ${hotNew.size + overdueFu.size} quick wins.",
-                            style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.9f))
-                    }
-                }
+            // The assistant's own screen now wears the assistant's own panel.
+            // It was a full-bleed indigo gradient banner with a white circle and
+            // white type — the loudest thing in the app, and a fourth idea of
+            // what "AI" looks like after Home, Calls and Lead detail.
+            AiPanel(title = "Your assistant") {
+                Text("Hi $firstName", style = AppType.rowTitle, color = AppColors.TextPrimary)
+                Spacer(Modifier.height(Space.xxs))
+                Text(
+                    "I went through your pipeline and found ${hotNew.size + overdueFu.size} quick wins.",
+                    style = AppType.body, color = AppColors.TextSecondary,
+                )
             }
         }
 
-        item { Text("Insights", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        item { Text("INSIGHTS", style = AppType.sectionLabel, color = AppColors.TextTertiary) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Tile("🔥", hotNew.size.toString(), "Hot leads not contacted", BadRed, Modifier.weight(1f))
@@ -591,18 +621,14 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
         top?.let {
             item {
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("🏆", style = MaterialTheme.typography.titleLarge)
-                        Spacer(Modifier.width(12.dp))
-                        Text("${it.fullName ?: "Top rep"} is leading today with ${it.leads} leads and ${it.connected} connects.",
-                            style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
+                InlineNotice(
+                    "${it.fullName ?: "Top rep"} is leading today with ${it.leads} leads and ${it.connected} connects.",
+                    StatusTone(AppColors.Indigo, AppColors.IndigoSoft),
+                )
             }
         }
 
-        item { Text("Recommended next actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        item { Text("RECOMMENDED NEXT ACTIONS", style = AppType.sectionLabel, color = AppColors.TextTertiary) }
         val recs = buildList {
             hotNew.take(3).forEach { add(Triple("Call ${it.name ?: it.phone}", "Hot lead, never contacted", it.phone)) }
             overdueFu.take(3).forEach { add(Triple("Follow up ${it.name ?: it.phone}", "Callback overdue", it.phone)) }
@@ -613,20 +639,21 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
             item { Text("You're all caught up — no urgent actions right now. 🎉", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             items(recs, key = { it.first + it.third }) { (title, sub, phone) ->
-                Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Bolt, contentDescription = "Quick action", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                            Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                        }
-                        Box(Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary).clickable { vm.dialManual(phone) }.padding(horizontal = 14.dp, vertical = 8.dp)) {
-                            Text("Call", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
-                        }
+                Row(
+                    Modifier.fillMaxWidth().clip(Radii.card)
+                        .background(AppColors.Surface)
+                        .border(1.dp, AppColors.Border, Radii.card)
+                        .padding(horizontal = Space.m, vertical = Space.m),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(title, style = AppType.rowTitle, color = AppColors.TextPrimary, maxLines = 1)
+                        Text(sub, style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
                     }
+                    Spacer(Modifier.width(Space.m))
+                    // The lightning bolt in a tinted square told the rep nothing
+                    // the sentence did not. The action gets the emphasis instead.
+                    RoundIconButton(Icons.Default.Call, "Call $title") { vm.dialManual(phone) }
                 }
             }
         }
@@ -646,40 +673,39 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
         // come from the company's own playbook. Start it, or (mid-call) score it.
         item {
             if (!roleplay) {
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-                        .background(Brush.linearGradient(listOf(Color(0xFF75629B), Color(0xFF52466F))))
+                // Was a purple gradient with a 🎭 on it. Practice mode is a
+                // feature of the assistant, so it reads as one: violet accent on
+                // a soft violet ground, same geometry as everything else.
+                Row(
+                    Modifier.fillMaxWidth().clip(Radii.card)
+                        .background(AppColors.VioletSoft)
                         .clickable(enabled = !app.assistantThinking) { vm.startRoleplay() }
-                        .padding(16.dp),
+                        .padding(Space.l),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🎭", fontSize = 22.sp)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Practice with a tough customer", style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("AI plays a real customer — pitch by voice or text.",
-                                style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.9f))
-                        }
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
+                    Column(Modifier.weight(1f)) {
+                        Text("Practice with a tough customer", style = AppType.rowTitle, color = AppColors.Violet)
+                        Spacer(Modifier.height(Space.xxs))
+                        Text("The AI plays a real customer — pitch by voice or text.",
+                            style = AppType.meta, color = AppColors.TextSecondary)
                     }
+                    Spacer(Modifier.width(Space.m))
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = AppColors.Violet)
                 }
             } else {
-                Card(
-                    Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF75629B).copy(alpha = 0.10f)),
+                Row(
+                    Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.VioletSoft)
+                        .padding(horizontal = Space.l, vertical = Space.m),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("🎭", fontSize = 18.sp)
-                        Spacer(Modifier.width(10.dp))
-                        Text("Live practice — the AI is your customer. Tap 'Score me' when you finish.",
-                            style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        Box(
-                            Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF75629B))
-                                .clickable(enabled = !app.assistantThinking) { vm.askAssistant("score") }
-                                .padding(horizontal = 12.dp, vertical = 7.dp),
-                        ) { Text("Score me", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
-                    }
+                    Text("Live practice — the AI is your customer. Tap Score me when you finish.",
+                        style = AppType.meta, color = AppColors.TextSecondary, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(Space.m))
+                    Box(
+                        Modifier.clip(Radii.tag).background(AppColors.Violet)
+                            .clickable(enabled = !app.assistantThinking) { vm.askAssistant("score") }
+                            .padding(horizontal = Space.m, vertical = Space.s),
+                    ) { Text("Score me", color = AppColors.Surface, style = AppType.label) }
                 }
             }
         }
