@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -53,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -63,8 +66,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -175,6 +180,12 @@ private fun isoMs(iso: String?): Long? = iso?.let {
         }.getOrNull()
 }
 
+/** Same calendar day as right now, in the phone's own zone. */
+private fun isSameDayAsNow(ms: Long): Boolean {
+    val zone = java.time.ZoneId.systemDefault()
+    return java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate() == java.time.LocalDate.now(zone)
+}
+
 private fun fmtWhen(ms: Long): String {
     val zone = java.time.ZoneId.systemDefault()
     val d = java.time.Instant.ofEpochMilli(ms).atZone(zone)
@@ -236,6 +247,21 @@ fun LeadDetailScreen(vm: MainViewModel) {
         (it.contactId != null && it.contactId == contact.id) || it.phone == contact.phone
     }
 
+    // The call the rep is being asked about, in their own words. Only today's:
+    // "Talked 3m 20s" next to a call from last Tuesday would be answering a
+    // different question. Under 30 seconds is a ring-out, not a conversation —
+    // the same line the lead cards draw, and the same threshold.
+    val lastCallLineToday = remember(app.leadDetailCalls) {
+        val c = app.leadDetailCalls.firstOrNull()
+        val ms = isoMs(c?.startedAt)
+        if (c == null || ms == null || !isSameDayAsNow(ms)) null
+        else {
+            val s = c.durationSeconds
+            val len = if (s >= 60) "${s / 60}m ${s % 60}s" else "${s}s"
+            if (s >= 30) "Talked $len · ${fmtWhen(ms)}" else "No talk ($len) · ${fmtWhen(ms)}"
+        }
+    }
+
     // Voice-to-text for the "Add Note" shortcut in Quick Notes.
     val latestNote by rememberUpdatedState(note)
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -267,11 +293,19 @@ fun LeadDetailScreen(vm: MainViewModel) {
         android.widget.Toast.makeText(context, "Number copied", android.widget.Toast.LENGTH_SHORT).show()
     }
 
+    // Measured, not guessed. The outcome bar grows when it has a question to
+    // ask and shrinks again after; a hardcoded bottom padding would either
+    // leave a gap or hide the last card exactly when the strip is open.
+    var bottomBarsPx by remember { mutableIntStateOf(0) }
+    val bottomInset = with(LocalDensity.current) { bottomBarsPx.toDp() }
+
     Box(Modifier.fillMaxSize().background(ScreenBg)) {
         Refreshable(onRefresh = { vm.refreshLeadDetail(); vm.refreshVoiceNotes(); vm.loadFollowUps(force = true) }) {
             LazyColumn(
                 Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 96.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    bottom = (if (bottomBarsPx == 0) 96.dp else bottomInset) + 12.dp,
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 // ---- Top bar: back · title · quick call / whatsapp / more ----
@@ -718,8 +752,36 @@ fun LeadDetailScreen(vm: MainViewModel) {
             }
         }
 
-        // ---- The app's real bottom navigation (not a duplicate action bar) ----
-        Box(Modifier.align(Alignment.BottomCenter)) {
+        // ---- Outcome bar, then the app's real bottom navigation ----
+        //
+        // Stacked, never overlaid. The nav bar was already the bottom of this
+        // screen; the outcome bar sits on top of it and the list's bottom
+        // padding is measured from the pair, so nothing the rep needs ever ends
+        // up underneath either one.
+        Column(
+            Modifier.align(Alignment.BottomCenter)
+                .onSizeChanged { bottomBarsPx = it.height },
+        ) {
+            LeadActionBar(
+                contact = contact,
+                pending = app.pendingUpdates.firstOrNull { it.contactId == contact.id },
+                callLine = lastCallLineToday,
+                onCall = { doCall() },
+                onWhatsApp = { doWhats() },
+                onOpenUpdate = {
+                    vm.openFollowUpUpdate(contact.id, contact.phone, contact.name, followUp?.id)
+                },
+                onOutcome = { status ->
+                    contact.id?.let {
+                        vm.disposeFromLead(it, contact.phone, contact.name, status, followUp?.id)
+                    }
+                },
+                onBookCallback = { scheduleOpen = true },
+                onBookVisit = { visitOpen = true },
+                onQuickCallback = { millis ->
+                    vm.scheduleFollowUp(contact.id, contact.phone, contact.name, millis, null)
+                },
+            )
             FloatingCallBar(
                 current = "leads",
                 onTab = { vm.goToTab(it) },
@@ -1593,6 +1655,183 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
 }
 
 // ---------------- Reused detail rows ----------------
+
+/**
+ * The sticky outcome bar: CALL → OUTCOME → NEXT ACTION, without scrolling.
+ *
+ * The lead page is eleven sections deep and the one thing a rep does after
+ * every single call — record what happened — was buried in the fourth of them.
+ * A rep who has just hung up should not have to go looking.
+ *
+ * IT IS SMALL WHEN THERE IS NOTHING TO ANSWER. Browsing a lead, this is one
+ * 44dp row: Call · WhatsApp · Update, the same three buttons as the lead card
+ * the rep already knows. The outcome strip appears only when a call has
+ * actually ended without an outcome, and removes itself the moment one is
+ * recorded. A bar that is always big is a bar that always steals a 4-inch
+ * screen from the content it sits under.
+ *
+ * ONE TAP, OR TWO:
+ *   Wrong number / No answer / Busy / Not interested → one tap, done. No answer
+ *   and Busy book their own retry through the attempt ladder, so the next
+ *   action needs no tap at all.
+ *   Connected / Interested → the outcome SAVES on that first tap, then the
+ *   strip asks for the next call. Walking away after tap one loses nothing.
+ *
+ * Wrong number is one tap and asks for nothing else. There is nothing for a
+ * telecaller to record about a number that was never the customer's.
+ *
+ * NO RULES LIVE HERE. Every chip calls vm.disposeFromLead, which hands
+ * straight to postCallDispose — the same code the post-call popup runs. Visit
+ * and Call back open the dialogs this screen already had. Anything the strip
+ * does not cover is one tap away on Update, which opens the full existing
+ * sheet with its temperature, note and voice-note capture untouched.
+ */
+@Composable
+private fun LeadActionBar(
+    contact: Contact,
+    /** Non-null when a call ended and no outcome was recorded for it. */
+    pending: PendingUpdate?,
+    /** "Talked 3m 20s · Today, 6:06 PM" — this lead's last call, if it was today. */
+    callLine: String?,
+    onCall: () -> Unit,
+    onWhatsApp: () -> Unit,
+    onOpenUpdate: () -> Unit,
+    onOutcome: (String) -> Unit,
+    onBookCallback: () -> Unit,
+    onBookVisit: () -> Unit,
+    onQuickCallback: (Long) -> Unit,
+) {
+    // Which half of the strip is showing. Keyed to the lead so opening another
+    // one never inherits the last lead's half-finished answer.
+    var askNext by remember(contact.id) { mutableStateOf(false) }
+    // The strip closes itself when the outcome lands: `pending` goes null the
+    // moment postCallDispose clears it, and asking for a next step after the
+    // rep has already booked one would be nagging.
+    //
+    // Keyed on the call's timestamp as well as the lead, so a SECOND call to
+    // the same person re-opens it. Keyed on the lead alone, a rep who dismissed
+    // the strip, rang again from the button right below it and hung up would
+    // get no prompt at all — the one case where the page is guaranteed to be
+    // the thing they are looking at.
+    var dismissed by remember(contact.id, pending?.at) { mutableStateOf(false) }
+    val stripOpen = !dismissed && (pending != null || askNext)
+
+    Column(
+        Modifier.fillMaxWidth()
+            // A fade rather than a hard edge, so a card scrolling under the bar
+            // dissolves into it instead of being sliced off.
+            .background(Brush.verticalGradient(listOf(Color.Transparent, ScreenBg, ScreenBg)))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        if (stripOpen) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                    .background(AppColors.Surface)
+                    .border(1.dp, AppColors.Border, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
+            ) {
+                Text(
+                    when {
+                        askNext -> "Saved. When is the next call?"
+                        pending?.connected == false -> "Nobody picked up — what now?"
+                        else -> "What happened on the call?"
+                    },
+                    style = AppType.metaStrong, color = Ink, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                // The call itself, so the rep is not answering from memory.
+                callLine?.let {
+                    Text(it, style = AppType.tag, color = SubInk, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.height(7.dp))
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (askNext) {
+                        BarChip("Tomorrow 11 AM", IndigoL) {
+                            dismissed = true; askNext = false
+                            onQuickCallback(
+                                java.time.ZonedDateTime.now().plusDays(1)
+                                    .withHour(11).withMinute(0).withSecond(0)
+                                    .toInstant().toEpochMilli(),
+                            )
+                        }
+                        BarChip("Pick a time", IndigoL) { dismissed = true; askNext = false; onBookCallback() }
+                        BarChip("🏠 Book visit", PurpleL) { dismissed = true; askNext = false; onBookVisit() }
+                        BarChip("No next step", SubInk) { dismissed = true; askNext = false }
+                    } else if (pending?.connected == false) {
+                        // A call that never connected has no funnel stage to
+                        // pick, so it is not offered one — the same rule the
+                        // post-call popup follows. These two book their own
+                        // retry, which is why neither leads to the next step.
+                        BarChip("📵 No answer", RedL) { onOutcome("no_answer") }
+                        BarChip("⏳ Busy", AmberL) { onOutcome("busy") }
+                        BarChip("✖️ Wrong number", RedL) { onOutcome("invalid") }
+                        BarChip("↻ Call back", IndigoL) { dismissed = true; onBookCallback() }
+                    } else {
+                        BarChip("✓ Connected", GreenL) { onOutcome("called"); askNext = true }
+                        BarChip("⭐ Interested", GreenL) { onOutcome("interested"); askNext = true }
+                        BarChip("🏠 Site visit", PurpleL) { dismissed = true; onBookVisit() }
+                        BarChip("❌ Not interested", SubInk) { onOutcome("not_interested") }
+                        BarChip("✖️ Wrong number", RedL) { onOutcome("invalid") }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        // Call and WhatsApp stay the primary actions, in reach at the bottom of
+        // a long page instead of only at the top of it.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.weight(1.3f).height(44.dp).clip(RoundedCornerShape(12.dp))
+                    .background(IndigoL).clickable { onCall() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Call", color = Color.White, style = AppType.label, maxLines = 1)
+            }
+            Spacer(Modifier.width(7.dp))
+            Box(
+                Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
+                    .background(WhatsGreen.copy(alpha = 0.13f)).clickable { onWhatsApp() },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsGreen, modifier = Modifier.size(18.dp)) }
+            Spacer(Modifier.width(7.dp))
+            // Everything the strip does not cover — temperature, a typed note, a
+            // voice note — is behind this, in the sheet that already does it.
+            val tint = if (pending != null && !stripOpen) AmberL else IndigoL
+            Row(
+                Modifier.nudgeShake(pending != null && !stripOpen)
+                    .weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
+                    .background(tint.copy(alpha = 0.12f))
+                    .clickable { onOpenUpdate() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text("✎ Update", color = tint, style = AppType.label, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** One pill in the outcome strip. Small, tinted, single line — a row of these
+ *  has to stay under about 34dp or the bar stops being a bar. */
+@Composable
+private fun BarChip(label: String, tint: Color, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(9.dp))
+            .background(tint.copy(alpha = 0.12f))
+            .clickable { onClick() }
+            .padding(horizontal = 11.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = AppType.tag, color = tint, maxLines = 1)
+    }
+}
 
 /** Vertical detailed funnel (shown when "View All" is expanded): every stage on
  *  its own line, tap a done step to walk back, edit/cancel the site visit. */

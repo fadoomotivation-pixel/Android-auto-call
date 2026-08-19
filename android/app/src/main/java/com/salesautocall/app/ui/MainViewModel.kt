@@ -2156,6 +2156,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun applyLead(contactId: String, status: String?, temperature: String?, budget: String?, note: String?, svProj: String? = null, svAt: String? = null, tokenAmount: String? = null, name: String? = null) {
+        // Setting a status IS answering "what happened on that call", so the
+        // nudge stops. It did not: the shake and the amber Update button are
+        // driven by pendingUpdates, which only postCallDispose ever cleared, so
+        // a rep who moved the lead on the funnel instead of through the popup
+        // kept being asked about a call they had already written up. Same
+        // one-line clear the popup path calls — not a second copy of the rule.
+        if (status != null) clearPendingUpdate(contactId)
         viewModelScope.launch {
             // Persist a positive token amount whenever it's supplied. The sheet
             // asks for it on BOOKED as well as Token Paid, so paid-at has to be
@@ -2603,6 +2610,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * moves, the temperature, the note, the voice note and the rescheduling all
      * behave identically whether the rep answers it after a call or from here.
      */
+    /**
+     * Record a call outcome straight from the lead page's action bar.
+     *
+     * This deliberately owns NO rules. Everything an outcome means — clearing
+     * the pending-update nudge, taking the lead out of the calling queue, the
+     * no-answer attempt ladder and its cold-after-three, closing the callback
+     * the rep was working, re-reading the work state afterwards — lives in
+     * postCallDispose and must keep living there. A second copy on the lead
+     * page is how the phone and the popup start disagreeing about what
+     * "no answer" does.
+     *
+     * So this primes the same fields the post-call prompt sets and hands over.
+     * The prompt never appears: `set` writes synchronously and postCallDispose
+     * calls dismissPostCall() before this function returns, so Compose only
+     * ever sees the state after both — there is no frame in between to render.
+     */
+    fun disposeFromLead(
+        contactId: String,
+        phone: String,
+        name: String?,
+        status: String,
+        /** The callback this lead was being worked from, so answering closes it. */
+        followUpId: String? = null,
+    ) {
+        set {
+            it.copy(
+                postCallContactId = contactId, postCallPhone = phone, postCallName = name,
+                postCallCampaignId = null, postCallConnected = true, postCallManual = true,
+                postCallFollowUpId = followUpId,
+            )
+        }
+        postCallDispose(status, null, null)
+    }
+
     fun openFollowUpUpdate(contactId: String?, phone: String, name: String?, followUpId: String?) = set {
         it.copy(
             postCallContactId = contactId, postCallPhone = phone,
