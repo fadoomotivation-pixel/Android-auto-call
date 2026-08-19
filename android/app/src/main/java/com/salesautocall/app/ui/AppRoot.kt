@@ -1097,7 +1097,7 @@ private fun CoachSheet(
             // (Hindi/Hinglish/English), jawab company brain (playbook + guidebook
             // + past wins) se aata hai, hamesha agle funnel step ki taraf.
             Spacer(Modifier.height(16.dp))
-            Text("💬 Coach se poochho", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Ask the coach", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "Koi bhi sawaal — pitch, price, follow-up, site visit tak kaise le jaayein. Coach guide karega.",
                 style = MaterialTheme.typography.bodySmall,
@@ -1117,7 +1117,7 @@ private fun CoachSheet(
                 enabled = ask.isNotBlank() && !answerLoading,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (answerLoading) "Soch raha hoon…" else "Poochho →", fontWeight = FontWeight.Bold)
+                Text(if (answerLoading) "Thinking…" else "Poochho →", fontWeight = FontWeight.Bold)
             }
             answer?.let { a ->
                 Spacer(Modifier.height(12.dp))
@@ -1179,7 +1179,7 @@ private fun CoachSheet(
                 enabled = objection.isNotBlank() && !rebuttalLoading,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (rebuttalLoading) "Soch raha hoon…" else "Jawab batao →", fontWeight = FontWeight.Bold)
+                Text(if (rebuttalLoading) "Thinking…" else "Jawab batao →", fontWeight = FontWeight.Bold)
             }
             rebuttal?.let { r ->
                 Spacer(Modifier.height(12.dp))

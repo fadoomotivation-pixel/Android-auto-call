@@ -497,18 +497,19 @@ private fun openWhatsApp(context: android.content.Context, phone: String, messag
     com.salesautocall.app.data.WhatsAppLauncher.open(context, phone, message)
 }
 
-/** A ready-to-send Hinglish opener so the rep doesn't retype the same intro 100×/day.
- *  [speaksAs] conjugates it to the REP — Hindi inflects the first person, so a
- *  fixed "kar raha hoon" was wrong for every woman on the team. */
+/** A ready-to-send opener so the rep doesn't retype the same intro 100x/day.
+ *  Simple Indian English — the plain, polite register a property advisor
+ *  actually writes on WhatsApp. [speaksAs] is kept on the signature so every
+ *  call site is unchanged; English does not inflect the first person, so the
+ *  gendered Hindi conjugation this used to need is gone. */
 private fun waTemplate(name: String?, project: String?, agent: String?, company: String?, speaksAs: String? = null): String {
-    val sv = com.salesautocall.app.data.SelfVoice
     val hi = name?.trim()?.takeIf { it.isNotBlank() }?.let { "Namaste $it ji," } ?: "Namaste,"
-    val who = agent?.trim()?.ifBlank { null } ?: "aapka property advisor"
+    val who = agent?.trim()?.ifBlank { null } ?: "your property advisor"
     val co = company?.trim()?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
-    val ref = project?.trim()?.takeIf { it.isNotBlank() }?.let { " Aapne $it ke liye enquiry ki thi." }
-        ?: " Aapki property enquiry ke regarding."
-    return "$hi ${sv.iAm(speaksAs)} $who$co se baat ${sv.doing(speaksAs, "kar")}.$ref " +
-        "Property ki details aur best offer share karna ${sv.want(speaksAs)} — kya abhi baat kar sakte hain?"
+    val ref = project?.trim()?.takeIf { it.isNotBlank() }?.let { " You had enquired about $it." }
+        ?: " This is regarding your property enquiry."
+    return "$hi I am $who$co.$ref " +
+        "I would like to share the details and our best offer — can we talk now?"
 }
 
 /**
