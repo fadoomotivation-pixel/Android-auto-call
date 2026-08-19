@@ -53,6 +53,38 @@ object AppColors {
     val CallAccept = Color(0xFF15803D)
     val Recording = Color(0xFFD03535)
 
+    /**
+     * THE ONE DARK SURFACE, AND WHY IT IS ALLOWED TO BE DARK.
+     *
+     * Everything else in this app is light on purpose. The full-screen call
+     * surfaces are the exception: they are what a rep stares at with the phone
+     * against their face, often in a car or a site office at night, and every
+     * platform including iOS runs them dark. A white screen at full brightness
+     * during a call is the one place the light canvas is actively wrong.
+     *
+     * It is a deliberate, tokenised dark — graphite, white primary type, muted
+     * secondary, the SAME indigo for active controls, and red reserved for one
+     * thing only: ending the call. No gradients, no glass, no gold.
+     */
+    object Call {
+        val Bg = Color(0xFF121316)
+        val BgElevated = Color(0xFF1C1E22)
+        val Control = Color(0xFF25282E)
+        val ControlActive = Indigo
+        val Hairline = Color(0xFF2E323A)
+
+        val TextPrimary = Color(0xFFF5F6F8)
+        val TextSecondary = Color(0xFF9BA1AC)
+        val TextTertiary = Color(0xFF6B7280)
+
+        /** Answer. The only green on the surface. */
+        val Accept = Color(0xFF17A34A)
+        /** End. The only red on the surface — nothing else may borrow it. */
+        val End = Color(0xFFDC2626)
+        /** Live recording dot. */
+        val Recording = Color(0xFFEF4444)
+    }
+
     /** Deterministic, low-saturation avatar tints. */
     val avatarTints = listOf(
         Color(0xFFEDEEFB),

@@ -46,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -56,16 +55,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.dialer.SimCallMonitor
 import kotlinx.coroutines.delay
+import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AppType
 
-// Premium dark palette (matches the app drawer).
-private val CallBgTop = Color(0xFF13214A)
-private val CallBgBottom = Color(0xFF0C1426)
-private val CallText = Color(0xFFEDF1FA)
-private val CallMuted = Color(0xFF8A97AE)
-private val EndRed = Color(0xFFD64545)
-private val RecRed = Color(0xFFE05B5B)
-private val OkGreen = Color(0xFF8189E6)
-private val ChipBg = Color(0x1FFFFFFF)
+// The call surface stays dark — see AppColors.Call for why that is the one
+// deliberate exception to a light app. Every value now comes from there rather
+// than from this file's own eight constants, which had drifted into a navy
+// (#13214A → #0C1426) that matched nothing else and carried a blue-tinted
+// gradient behind the whole screen.
+private val CallBgTop = AppColors.Call.Bg
+private val CallBgBottom = AppColors.Call.Bg
+private val CallText = AppColors.Call.TextPrimary
+private val CallMuted = AppColors.Call.TextSecondary
+private val EndRed = AppColors.Call.End
+private val RecRed = AppColors.Call.Recording
+private val OkGreen = AppColors.Call.Accept
+private val ChipBg = AppColors.Call.Control
 
 /**
  * In-app SIM call screen — shown while ManualCallService / AutoDialerService is
@@ -113,7 +118,9 @@ fun SimCallScreen() {
 
     BackHandler { SimCallMonitor.setMinimized(true) }
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(CallBgTop, CallBgBottom)))) {
+    // Flat graphite. The vertical navy gradient it replaces is the "old dark
+    // gradient" look the design direction rules out, and on OLED it banded.
+    Box(Modifier.fillMaxSize().background(AppColors.Call.Bg)) {
         Column(
             Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -127,14 +134,16 @@ fun SimCallScreen() {
             Spacer(Modifier.height(4.dp))
             Text(
                 if (ui.phase == "active") CallTimerText(ui.activeAtMillis, ui.phase) else "Calling…",
-                style = MaterialTheme.typography.titleMedium, color = CallMuted, fontWeight = FontWeight.SemiBold,
+                // Monospaced: a proportional timer shifts sideways every time a
+                // digit changes, which is unreadable at arm's length mid-call.
+                style = AppType.timer, color = AppColors.Call.TextSecondary,
             )
             Spacer(Modifier.height(24.dp))
 
             val label = displayName ?: ui.phone
             Box(
                 Modifier.size(100.dp).clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFF8189E6), Color(0xFF4353B8)))),
+                    .background(AppColors.Call.BgElevated),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(label.trim().take(1).uppercase().ifBlank { "#" }, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Color.White)

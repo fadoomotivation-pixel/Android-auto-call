@@ -41,6 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AppType
+import androidx.compose.ui.graphics.SolidColor
 
 /** Full-screen in-app call UI for an OUTGOING cloud call. SIP registration,
  *  auto-answer and audio are handled natively by [com.salesautocall.app.sip.SipManager];
@@ -124,7 +127,7 @@ fun SoftphoneScreen(vm: MainViewModel) {
             }
 
             Spacer(Modifier.height(28.dp))
-            RoundCallButton(Icons.Default.CallEnd, Color(0xFFD64545)) { vm.endCloudCall() }
+            RoundCallButton(Icons.Default.CallEnd, AppColors.Call.End) { vm.endCloudCall() }
             Spacer(Modifier.height(8.dp))
             Text("End call", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
             Spacer(Modifier.height(28.dp))
@@ -173,7 +176,7 @@ private fun CallerdeskCallCard(
                 ),
             )
             Spacer(Modifier.height(24.dp))
-            RoundCallButton(Icons.Default.CallEnd, Color(0xFFD64545)) { onClose() }
+            RoundCallButton(Icons.Default.CallEnd, AppColors.Call.End) { onClose() }
             Spacer(Modifier.height(8.dp))
             Text("Close", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
         }
@@ -183,7 +186,13 @@ private fun CallerdeskCallCard(
 // ---- shared "native dialer" call-UI pieces (also used by IncomingCallActivity) ----
 
 @Composable
-fun callGradient(): Brush = Brush.verticalGradient(listOf(Color(0xFF0C1426), Color(0xFF1E3A8A)))
+/**
+ * Kept as a Brush so the ~4 call sites are untouched, but it is a FLAT
+ * graphite now, not a navy-to-blue vertical gradient. That gradient is the
+ * "old dark gradient" the design direction rules out, and it also meant the
+ * incoming-call screen and the in-call screen were two different blues.
+ */
+fun callGradient(): Brush = SolidColor(AppColors.Call.Bg)
 
 /** Big circular avatar showing the contact's first letter (or a dialled-number glyph). */
 @Composable
@@ -209,7 +218,9 @@ fun CallStatusLine(connectedAt: Long, fallback: String) {
     }
     if (connectedAt > 0L) {
         val s = ((now - connectedAt) / 1000).coerceAtLeast(0)
-        Text("%02d:%02d".format(s / 60, s % 60), color = Color(0xFF86EFAC), fontSize = 18.sp, fontWeight = FontWeight.Medium)
+        // Was mint green (#86EFAC) — green on this surface now means one thing,
+        // Answer. A live timer is not a success state, it is information.
+        Text("%02d:%02d".format(s / 60, s % 60), style = AppType.timer, color = AppColors.Call.TextPrimary)
     } else {
         Text(fallback, color = Color.White.copy(alpha = 0.85f), fontSize = 16.sp)
     }
@@ -228,7 +239,7 @@ fun RoundCallButton(icon: ImageVector, color: Color, size: Int = 72, onClick: ()
 @Composable
 fun CallToggle(label: String, icon: ImageVector, active: Boolean, onClick: () -> Unit) {
     val bg = if (active) Color.White else Color.White.copy(alpha = 0.15f)
-    val fg = if (active) Color(0xFF0C1426) else Color.White
+    val fg = if (active) AppColors.Call.Bg else AppColors.Call.TextPrimary
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.size(60.dp).clip(CircleShape).background(bg)
