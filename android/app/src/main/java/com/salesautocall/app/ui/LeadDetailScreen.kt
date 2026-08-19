@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.Contact
+import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.Wada
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
@@ -138,6 +139,19 @@ private val FUNNEL = listOf(
     FunnelStep("won", "Booked 🏆", true),
 )
 
+/**
+ * Last-resort short words for the compact funnel.
+ *
+ * The real ones are `lead_stages.short_label`, set by the admin and shared with
+ * the dashboard. These only render in the seconds before that table has loaded,
+ * or if a tenant left a short label blank — never as a competing taxonomy.
+ */
+private val FALLBACK_SHORT = mapOf(
+    "new" to "New", "contacted" to "Contact", "interested" to "Interest",
+    "site_visit" to "Visit", "negotiation" to "Nego", "token_paid" to "Token",
+    "won" to "Booked",
+)
+
 /** Ways a lead leaves the funnel (or loops back for another call). */
 private val EXITS = listOf(
     "callback" to "Callback", "not_interested" to "Not interested",
@@ -175,9 +189,21 @@ private fun fmtWhen(ms: Long): String {
     return "$day, $h12:${"%02d".format(d.minute)} ${if (d.hour < 12) "AM" else "PM"}"
 }
 
-/** Label for a canonical STAGE code (falls back to a disposition label). */
-private fun stageLabel(stage: String): String =
-    FUNNEL.firstOrNull { it.key == stage }?.label?.removeSuffix(" 🏆")
+/**
+ * Label for a canonical STAGE code. lead_stages WINS.
+ *
+ * FUNNEL carries a hardcoded label per step ("Booked 🏆", "Site Visit"), and
+ * lead_stages carries the real one the admin configured. When those disagreed
+ * the phone quietly showed its own wording while the dashboard showed the
+ * admin's — the exact drift the stage table exists to prevent. Rename a stage
+ * on the web and the handset follows it now.
+ *
+ * FUNNEL keeps the drawing ORDER and which steps a rep may set, because those
+ * are product rules the table does not express. Only the words come from data.
+ */
+private fun stageLabel(stages: List<LeadStage>, stage: String): String =
+    stages.firstOrNull { it.code == stage }?.label?.takeIf { it.isNotBlank() }
+        ?: FUNNEL.firstOrNull { it.key == stage }?.label?.removeSuffix(" 🏆")
         ?: SETTABLE.firstOrNull { it.first == stage }?.second
         ?: stage.replaceFirstChar { it.uppercase() }
 
@@ -302,6 +328,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 item {
                     IdentityBlock(
                         contact,
+                        stages = app.leadStages,
                         onCopy = { copyNumber() },
                         onNextTap = { scheduleOpen = true },
                         onEdit = { editIdentityOpen = true },
@@ -544,7 +571,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                     .padding(horizontal = 6.dp, vertical = 4.dp))
                         }
                         Spacer(Modifier.height(16.dp))
-                        HorizontalFunnel(contact) { key ->
+                        HorizontalFunnel(contact, app.leadStages) { key ->
                             when (key) {
                                 "site_visit" -> visitOpen = true
                                 else -> {
@@ -564,6 +591,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             Spacer(Modifier.height(6.dp))
                             FunnelStepper(
                                 contact = contact,
+                                stages = app.leadStages,
                                 onSet = { key -> if (key == "site_visit") visitOpen = true else contact.id?.let {
                                     vm.applyLead(it, key, null, null, null, null, null,
                                         if (key == "token_paid") token.ifBlank { null } else null)
@@ -721,7 +749,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
         },
     )
     confirmMoveKey?.let { key ->
-        val label = FUNNEL.firstOrNull { it.key == key }?.label ?: key
+        val label = stageLabel(app.leadStages, key)
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { confirmMoveKey = null },
             title = { Text("Move back to $label?") },
@@ -838,6 +866,8 @@ private fun tempRing(t: String?): Color = when (t) {
 @Composable
 private fun IdentityBlock(
     contact: Contact,
+    /** Canonical stages — the chip renders the admin's label, never its own. */
+    stages: List<LeadStage>,
     onCopy: () -> Unit,
     onNextTap: () -> Unit,
     onEdit: () -> Unit,
@@ -897,7 +927,7 @@ private fun IdentityBlock(
         }
         Spacer(Modifier.height(14.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LeadChip(stageLabel(contact.stage), tempRing(null))
+            LeadChip(stageLabel(stages, contact.stage), tempRing(null))
             contact.temperature?.takeIf { it.isNotBlank() }?.let { t ->
                 val (label, col) = when (t) { "hot" -> "🔥 Hot" to RedL; "warm" -> "☀ Warm" to AmberL; else -> "❄ Cold" to ColdL }
                 LeadChip(label, col)
@@ -1377,7 +1407,7 @@ private fun WadaRow(emoji: String, label: String, value: String) {
 
 /** Horizontal 7-step funnel with a connecting rail — the compact overview. */
 @Composable
-private fun HorizontalFunnel(contact: Contact, onTap: (String) -> Unit) {
+private fun HorizontalFunnel(contact: Contact, stages: List<LeadStage>, onTap: (String) -> Unit) {
     val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
     Row(Modifier.fillMaxWidth()) {
         FUNNEL.forEachIndexed { i, step ->
@@ -1412,22 +1442,28 @@ private fun HorizontalFunnel(contact: Contact, onTap: (String) -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                // Short single-word labels: the full names ("Contacted",
-                // "Negotiation") hyphen-broke mid-word at 1/7th screen width.
-                val short = when (step.key) {
-                    "new" -> "New"
-                    "contacted" -> "Contact"
-                    "interested" -> "Interest"
-                    "site_visit" -> "Visit"
-                    "negotiation" -> "Nego."
-                    "token_paid" -> "Token"
-                    else -> "Booked"
-                }
+                // The word under each circle is the admin's own short label,
+                // the same one the dashboard prints. This used to be a private
+                // when-block ("Nego.", "Interest") that drifted the moment a
+                // stage was renamed on the web.
+                //
+                // Seven steps share the width — about 45dp each on a 4-inch
+                // phone. Two lines at 11sp hold "Contacted" whole instead of
+                // hyphen-breaking it mid-word, the height is fixed so short and
+                // long labels keep the row level, and ellipsis is the floor
+                // under a long label a tenant might configure.
+                val short = stages.firstOrNull { it.code == step.key }
+                    ?.let { it.shortLabel.ifBlank { it.label } }
+                    ?: FALLBACK_SHORT[step.key] ?: step.label
                 Text(short,
                     style = AppType.tag,
+                    fontSize = 10.sp, lineHeight = 12.sp,
                     color = when { current -> PurpleL; done -> GreenL; else -> SubInk },
-                    textAlign = TextAlign.Center, maxLines = 1,
-                    modifier = Modifier.padding(horizontal = 2.dp))
+                    textAlign = TextAlign.Center, maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    // heightIn, not height: at a large system font scale two
+                    // lines need more than 24dp and a fixed box would clip them.
+                    modifier = Modifier.heightIn(min = 24.dp).padding(horizontal = 1.dp))
             }
         }
     }
@@ -1561,7 +1597,7 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
 /** Vertical detailed funnel (shown when "View All" is expanded): every stage on
  *  its own line, tap a done step to walk back, edit/cancel the site visit. */
 @Composable
-private fun FunnelStepper(contact: Contact, onSet: (String) -> Unit, onMoveBack: (String) -> Unit, onEditVisit: () -> Unit, onClearVisit: () -> Unit) {
+private fun FunnelStepper(contact: Contact, stages: List<LeadStage>, onSet: (String) -> Unit, onMoveBack: (String) -> Unit, onEditVisit: () -> Unit, onClearVisit: () -> Unit) {
     val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
     Column(Modifier.fillMaxWidth()) {
         FUNNEL.forEachIndexed { i, step ->
@@ -1586,7 +1622,7 @@ private fun FunnelStepper(contact: Contact, onSet: (String) -> Unit, onMoveBack:
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f).padding(bottom = if (i < FUNNEL.lastIndex) 12.dp else 0.dp)) {
-                    Text(step.label, style = if (current) AppType.rowTitle else AppType.bodyStrong,
+                    Text(stageLabel(stages, step.key), style = if (current) AppType.rowTitle else AppType.bodyStrong,
                         color = when { current -> PurpleL; done -> Ink; else -> SubInk })
                     val sub = when (step.key) {
                         "site_visit" -> isoMs(contact.siteVisitAt)?.let { ms -> listOfNotNull(fmtWhen(ms), contact.siteVisitProject?.takeIf { it.isNotBlank() }).joinToString(" · ") }

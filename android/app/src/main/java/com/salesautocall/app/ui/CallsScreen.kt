@@ -88,7 +88,10 @@ fun CallsScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
     val context = LocalContext.current
     LaunchedEffect(Unit) { vm.loadCalls(); vm.loadLeads(); vm.loadDeviceRecents() }
-    var sub by remember { mutableIntStateOf(0) } // 0 = Phone, 1 = App, 2 = Missed, 3 = Follow-up
+    // Opens on App — the calls made through the CRM. Phone is the handset's
+    // entire log, personal calls included, and it is not what a telecaller
+    // comes here to check.
+    var sub by remember { mutableIntStateOf(1) } // 0 = Phone, 1 = App, 2 = Missed, 3 = Follow-up
 
     // Build phone/id → name lookups ONCE per lead-list change, not per row per
     // scroll frame. A linear app.leads.find() on every visible row was the fling jank.
@@ -175,8 +178,10 @@ fun CallsScreen(vm: MainViewModel) {
         androidx.compose.material3.ScrollableTabRow(selectedTabIndex = sub, edgePadding = 8.dp) {
             Tab(selected = sub == 0, onClick = { sub = 0 }, text = { Text("Phone") })
             Tab(selected = sub == 1, onClick = { sub = 1 }, text = { Text("App") })
-            Tab(selected = sub == 2, onClick = { sub = 2 }, text = { Text("Missed (${missed.size})") })
-            Tab(selected = sub == 3, onClick = { sub = 3 }, text = { Text("Follow-up (${followUps.size})") })
+            Tab(selected = sub == 2, onClick = { sub = 2 },
+                text = { Text(if (missed.isEmpty()) "Missed" else "Missed ${missed.size}") })
+            Tab(selected = sub == 3, onClick = { sub = 3 },
+                text = { Text(if (followUps.isEmpty()) "Follow-up" else "Follow-up ${followUps.size}") })
         }
 
         if (sub == 0) {
@@ -580,14 +585,22 @@ private fun CallRow(
         // happened, and here is what I would do about it", so they are now one
         // panel with the suggestion as its footer action. Same callbacks, same
         // summarize/apply/dismiss behaviour.
-        CallAiPanel(
-            c = c,
-            summarizing = summarizing,
-            onSummarize = onSummarize,
-            onApplyDisposition = onApplyDisposition,
-            onDismissDisposition = onDismissDisposition,
-        )
-        if (expanded) Hairline()
+        //
+        // OPEN ROWS ONLY. The header it replaced was one line, so leaving it
+        // ungated cost nothing; this is a full padded card, and drawing it on
+        // every call with a recording left two calls visible per screen and
+        // made the list heavy to fling. The collapsed row already shows the
+        // first line of the summary.
+        if (expanded) {
+            CallAiPanel(
+                c = c,
+                summarizing = summarizing,
+                onSummarize = onSummarize,
+                onApplyDisposition = onApplyDisposition,
+                onDismissDisposition = onDismissDisposition,
+            )
+            Hairline()
+        }
     }
 }
 

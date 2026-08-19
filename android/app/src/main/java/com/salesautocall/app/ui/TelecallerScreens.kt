@@ -1538,10 +1538,10 @@ private fun LeadsDeck(
             // The four counters, still one tap each, now one line instead of a
             // row of 60dp tiles.
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                DeckStat("⏰", dueNow, "Due", dueNow > 0, Modifier.weight(1f), onDueNow)
-                DeckStat("🔥", hotCount, "Hot", false, Modifier.weight(1f), onHot)
-                DeckStat("✨", newCount, "New", false, Modifier.weight(1f), onNew)
-                if (reviveCount > 0) DeckStat("💎", reviveCount, "Revive", false, Modifier.weight(1f), onRevive)
+                DeckStat(dueNow, "Due", dueNow > 0, Modifier.weight(1f), onDueNow)
+                DeckStat(hotCount, "Hot", false, Modifier.weight(1f), onHot)
+                DeckStat(newCount, "New", false, Modifier.weight(1f), onNew)
+                if (reviveCount > 0) DeckStat(reviveCount, "Revive", false, Modifier.weight(1f), onRevive)
             }
         }
     }
@@ -1549,21 +1549,30 @@ private fun LeadsDeck(
 
 /** One glass counter on the deck — a number that is also a one-tap filter. */
 @Composable
-private fun DeckStat(emoji: String, value: Int, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun DeckStat(value: Int, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     // One line, 26dp. Two-line tiles cost 60dp each and said nothing extra.
+    //
+    // The emoji is gone because it was eating the label. Four chips share the
+    // width; each held a glyph, a number and a word. With a three-digit count
+    // that is too much, and the last chip rendered "195 Revi" — clipped
+    // mid-word, because maxLines=1 with no overflow set just cuts. Dropping the
+    // glyph gives back the width the word needed, and the word was always the
+    // part carrying the meaning. Ellipsis is the floor under that: a five-digit
+    // count degrades to "Revi…" instead of a word sliced at a random letter.
     Row(
         modifier.height(26.dp).clip(RoundedCornerShape(8.dp))
             .background(Color.White.copy(alpha = if (highlight) 0.26f else 0.12f))
             .clickable { onClick() }
-            .padding(horizontal = 7.dp),
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        Text(emoji, fontSize = 10.sp)
-        Spacer(Modifier.width(4.dp))
         Text("$value", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
         Spacer(Modifier.width(4.dp))
-        Text(label, fontSize = 9.5.sp, color = Color.White.copy(alpha = 0.8f), maxLines = 1)
+        Text(
+            label, fontSize = 9.5.sp, color = Color.White.copy(alpha = 0.8f),
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
     }
 }
 
