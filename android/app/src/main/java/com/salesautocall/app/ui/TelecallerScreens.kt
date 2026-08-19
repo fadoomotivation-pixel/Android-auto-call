@@ -612,7 +612,11 @@ private fun WorkGrid(
                         else -> MaterialTheme.colorScheme.outline
                     }
                     Column(
-                        Modifier.weight(1f).height(56.dp)
+                        // heightIn, not height. The tile holds a 19sp number
+                        // over an 11sp word; at a large system font scale those
+                        // two lines need more than 56dp and a fixed box clipped
+                        // the label away, leaving six bare numbers.
+                        Modifier.weight(1f).heightIn(min = 56.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (on) a.color.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surface)
                             .border(1.dp, border, RoundedCornerShape(10.dp))
@@ -2861,8 +2865,14 @@ private fun LeadCard(
                 // seconds. A rep about to dial needs to know which kind this
                 // was before they open with "as I was saying".
                 lastCallLine(work)?.let { (text, tint) ->
+                    // Ellipsis because this line is the longest one on the card
+                    // and the only one built from three variable parts: "📞 No
+                    // talk (1h 05m) · 3 days ago · 12 calls" is wider than the
+                    // text column on a 4-inch phone, and maxLines=1 with no
+                    // overflow set cuts it mid-word rather than saying so.
                     Text(text, fontSize = 11.5.sp, color = tint,
-                        fontWeight = FontWeight.Medium, maxLines = 1)
+                        fontWeight = FontWeight.Medium, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
                 // Project and area. Two lines, because real project names are
                 // long and "Kunj Vihari, Bridge Vat…" tells a rep less than
@@ -3763,6 +3773,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     // card the rep just worked on either vanishes or comes back looking
     // untouched, and there was nothing anywhere saying the update landed.
     var todayOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
     // Ticks once a minute, so a callback whose time arrives while the rep is
     // looking at this screen walks into Call now by itself. It used to need the
     // rep to leave and come back — which is how a callback booked for 3 PM got
@@ -3845,14 +3856,35 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     // inside a branch that appears and disappears as the rep switches tabs
     // changes the call order between recompositions.
     val allSorted = remember(parsed) { parsed.sortedBy { it.ms }.map { it.f } }
-    val shown = when (filter) {
+    val inTab = when (filter) {
         "tocall" -> toCall
         "later" -> laterToday
         "tomorrow" -> tomorrow
         "week" -> weekList
         else -> allSorted
     }
-    val blurb = when (filter) {
+    // SEARCH. The Leads page has had it all along; this one never did, and it is
+    // the page with a hundred and forty rows on it. A rep who remembers a name
+    // — "that Sharma I promised to call back" — had no way to reach that
+    // callback except scrolling every tab.
+    //
+    // It searches the WHOLE list, not the open tab: the whole point is that the
+    // rep does not know which tab their callback fell into. Typing therefore
+    // shows results across every bucket, and clearing the box puts the tab back.
+    val shown = remember(inTab, allSorted, query) {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) inTab
+        else allSorted.filter {
+            (it.name?.lowercase()?.contains(q) == true) || it.phone.filter { c -> c.isDigit() }.contains(q)
+        }
+    }
+    // Searching overrides the tab, so the line under the chips has to say so —
+    // otherwise the chips look selected while showing something else, which is
+    // exactly the kind of "this screen is lying to me" moment this page has
+    // already been fixed for once.
+    val blurb = if (query.isNotBlank()) {
+        "${shown.size} found across every list — clear the search to go back to the tabs."
+    } else when (filter) {
         "tocall" -> "Their time has come — oldest first. Call these now."
         "later" -> "Booked for later today. Nothing to do yet."
         "tomorrow" -> "Booked for tomorrow. These move into Call now on their own, at their time."
@@ -3890,6 +3922,15 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 ) { Text("Back", fontSize = 13.sp) }
             }
         }
+        // Above the chips, because it overrides them.
+        item {
+            AppSearchField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = "Search name or phone",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         // The chips ARE the counts. Same row, same look, same behaviour as the
         // Leads screen — one line of "Call now 24 · Later today 3 · Tomorrow 6"
         // with the fade at the right edge showing there is more to scroll.
@@ -3916,7 +3957,12 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // defeat, in that order. "Auto queue mode" was a full card with an icon
         // circle, a title and a subtitle wrapped around a button — three lines
         // of explanation for a thing whose whole meaning fits on the button.
-        if (dueContacts.isNotEmpty() || overdueStrict.isNotEmpty()) {
+        //
+        // Both hide while searching. They act on the whole due pile, not on
+        // what is on screen, and "Call all 24 due" sitting above two search
+        // results is a button that does something other than what the rep is
+        // looking at.
+        if (query.isBlank() && (dueContacts.isNotEmpty() || overdueStrict.isNotEmpty())) {
             item {
                 Column {
                     if (dueContacts.isNotEmpty()) {
@@ -3960,6 +4006,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 // count of 24 is what taught reps to distrust this screen.
                 Text(
                     when {
+                        query.isNotBlank() -> "No callback matches \"${query.trim()}\". This searches your callbacks only — the lead may still be on the Leads page."
                         all.isEmpty() -> "No callbacks scheduled. Book one from any lead."
                         toCall.isNotEmpty() -> "Nothing in this list — but ${toCall.size} are waiting in Call now."
                         filter == "tocall" -> "All caught up. Nothing to call right now. 👍"
