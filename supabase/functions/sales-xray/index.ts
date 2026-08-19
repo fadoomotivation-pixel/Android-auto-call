@@ -38,15 +38,15 @@ const SYSTEM = (
   '"winning": [string], ' +
   '"gold": [{"name": string, "phone": string, "why": string, "opener": string}], ' +
   '"advice": [string]}. ' +
-  "headline: 1-2 punchy Hinglish sentences — the state of this pipeline. " +
+  "headline: 1-2 punchy sentences in simple Indian English — the state of this pipeline. " +
   "objections: the ranked deal-killers ACROSS calls (price, location, loan, trust, " +
   "timing …) with how many leads said it, one real quote (translated to simple " +
-  "Hinglish), and a concrete counter-script the telecallers should use. Max 5. " +
+  "simple Indian English), and a concrete counter-script the telecallers should use. Max 5. " +
   "demand: what buyers asked for — BHK types, locations, budget bands, plot/flat. Max 6. " +
   "winning: 2-3 things the calls that reached site-visit/booked had in common. " +
   "gold: leads that LOOK dead (callback ignored / not_interested with a soft reason / " +
   "went silent) but are genuinely winnable — pick up to 6, why in one line, and a " +
-  "natural Hinglish opening line for the win-back call. NEVER pick dnc/invalid/booked. " +
+  "natural opening line in simple Indian English for the win-back call. NEVER pick dnc/invalid/booked. " +
   "advice: 3 concrete moves for the owner this week. Ground EVERYTHING in the data; " +
   "never invent leads or numbers."
 );

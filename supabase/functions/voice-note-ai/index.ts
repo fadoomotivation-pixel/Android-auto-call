@@ -152,7 +152,7 @@ function systemPrompt(projects: string[]): string {
     "belongs to someone else ('galat number', 'aisa koi nahi', 'wrong person', 'kisi " +
     "aur ka number'). A phone that is merely SWITCHED OFF, busy, unreachable or not " +
     "picked is NOT phone_invalid — that is just a call that didn't connect (connected=false). " +
-    "facts: 0-3 SHORT lines (each ≤80 chars, Hinglish OK) for any " +
+    "facts: 0-3 SHORT lines (each ≤80 chars, simple Indian English) for any " +
     "OTHER update the telecaller spoke that none of the fields above captured — " +
     "e.g. \"WhatsApp pe brochure bhej diya\", \"Bhai ke saath aayenge\", \"Pehle Noida " +
     "me flat dekha tha\". Empty array if nothing extra. NEVER repeat what a field " +

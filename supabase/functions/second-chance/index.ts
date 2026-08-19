@@ -32,7 +32,7 @@ const SYSTEM_PROMPT =
   "— ids exactly as given, best first.\n" +
   "reason: max ~10 words, simple English, why THIS one is revivable (e.g. 'New payment " +
   "plan fits their loan problem').\n" +
-  "opener: 1-2 short natural Hinglish lines the rep will SAY on the phone. ALWAYS address " +
+  "opener: 1-2 short natural lines in simple Indian English the rep will SAY on the phone. ALWAYS address " +
   "the customer with respectful 'aap' — never tu/tum. Politely acknowledge the earlier " +
   "conversation, then give the NEW reason for calling (a real fact from COMPANY FACTS when " +
   "it fits — never invent a price or offer). Warm, zero pressure, end with a soft question.";
