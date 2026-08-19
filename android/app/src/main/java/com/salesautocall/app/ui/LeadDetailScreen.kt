@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -79,6 +78,9 @@ import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
 import com.salesautocall.app.ui.design.Radii
 import com.salesautocall.app.ui.design.Space
+import com.salesautocall.app.ui.design.StatusTag
+import com.salesautocall.app.ui.design.StatusTone
+import androidx.compose.material.icons.filled.Close
 
 // ---- Palette: paper & ink, ONE jade accent — same language as the Leads page.
 // The old rainbow constants keep their names but now resolve to ink/jade (with
@@ -90,9 +92,16 @@ private val Ink = AppColors.TextPrimary
 private val SubInk = AppColors.TextSecondary
 private val Hair = AppColors.Border
 private val JadeL = AppColors.Indigo
-private val GreenL = JadeL          // success = jade
-private val IndigoL = JadeL         // primary accent = jade
-private val PurpleL = JadeL         // "current step" = jade
+// GreenL, IndigoL and PurpleL were all aliases of JadeL — one colour wearing
+// three names. That collapsed the funnel: a COMPLETED step and the CURRENT step
+// were painted identically, so the one thing the pipeline exists to show — where
+// this lead has got to — could only be read from the tick glyph, not the colour.
+//
+// Done is now Positive and current is Indigo, which is the same green/indigo
+// pairing Analytics uses for Done vs In progress. Two states, two colours.
+private val GreenL = AppColors.Positive   // a step that is behind us
+private val IndigoL = JadeL               // primary accent
+private val PurpleL = JadeL               // the step we are on NOW
 private val BlueL = JadeL           // call actions = jade
 private val AmberL = AppColors.Warning   // muted amber: warnings + "warm"
 private val RedL = AppColors.Danger     // muted terracotta: overdue, "hot", destructive
@@ -959,27 +968,31 @@ private fun EditIdentityDialog(contact: Contact, onDismiss: () -> Unit, onSave: 
 
 @Composable
 private fun NextStepBanner(color: Color, title: String, detail: String, cta: String, onCta: () -> Unit, onDelete: (() -> Unit)?) {
+    // The bell went. This banner is the lead's NEXT STEP — a callback, a booked
+    // site visit, or nothing planned — and a notification glyph in front of all
+    // three said only "alert", which is the one thing they have in common and
+    // the least useful thing about any of them. The title already says which it
+    // is, and dropping the icon gives the detail line back the width it needed
+    // for a date, a time and a project name without truncating.
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(16.dp))
-            .background(color.copy(alpha = 0.10f)).padding(14.dp),
+        Modifier.fillMaxWidth().padding(horizontal = Space.l).clip(Radii.card)
+            .background(color.copy(alpha = 0.10f)).padding(Space.l),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.Notifications, null, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = color)
+            Text(title, style = AppType.rowTitle, color = color)
             detail.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = SubInk, maxLines = 2)
+                Text(it, style = AppType.meta, color = SubInk, maxLines = 2)
             }
         }
-        Spacer(Modifier.width(10.dp))
-        Box(Modifier.clip(RoundedCornerShape(50)).background(color).clickable { onCta() }.padding(horizontal = 16.dp, vertical = 9.dp)) {
-            Text(cta, color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(Space.m))
+        Box(Modifier.clip(Radii.tag).background(color).clickable { onCta() }.padding(horizontal = Space.l, vertical = Space.s + Space.xxs)) {
+            Text(cta, color = AppColors.OnIndigo, style = AppType.label)
         }
         onDelete?.let {
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(Space.s))
             Box(Modifier.size(30.dp).clip(CircleShape).background(color.copy(alpha = 0.14f)).clickable { it() }, contentAlignment = Alignment.Center) {
-                Text("✕", color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.Close, contentDescription = "Remove next step", tint = color, modifier = Modifier.size(15.dp))
             }
         }
     }
@@ -1411,9 +1424,8 @@ private fun HorizontalFunnel(contact: Contact, onTap: (String) -> Unit) {
                     else -> "Booked"
                 }
                 Text(short,
-                    style = MaterialTheme.typography.labelSmall, fontSize = 10.sp, lineHeight = 12.sp,
-                    color = if (current) PurpleL else if (done) Ink else SubInk,
-                    fontWeight = if (current) FontWeight.Bold else FontWeight.Medium,
+                    style = AppType.tag,
+                    color = when { current -> PurpleL; done -> GreenL; else -> SubInk },
                     textAlign = TextAlign.Center, maxLines = 1,
                     modifier = Modifier.padding(horizontal = 2.dp))
             }
@@ -1574,28 +1586,26 @@ private fun FunnelStepper(contact: Contact, onSet: (String) -> Unit, onMoveBack:
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f).padding(bottom = if (i < FUNNEL.lastIndex) 12.dp else 0.dp)) {
-                    Text(step.label, style = MaterialTheme.typography.bodyLarge, fontWeight = if (current) FontWeight.Bold else FontWeight.Medium,
+                    Text(step.label, style = if (current) AppType.rowTitle else AppType.bodyStrong,
                         color = when { current -> PurpleL; done -> Ink; else -> SubInk })
                     val sub = when (step.key) {
                         "site_visit" -> isoMs(contact.siteVisitAt)?.let { ms -> listOfNotNull(fmtWhen(ms), contact.siteVisitProject?.takeIf { it.isNotBlank() }).joinToString(" · ") }
                         "token_paid" -> contact.tokenAmount?.takeIf { it > 0 }?.let { "₹${if (it % 1.0 == 0.0) it.toLong() else it}" }
                         else -> null
                     }
-                    sub?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = SubInk) }
+                    sub?.let { Text(it, style = AppType.meta, color = SubInk) }
                 }
                 val hasVisit = step.key == "site_visit" && !contact.siteVisitAt.isNullOrBlank()
                 when {
                     hasVisit -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.clip(RoundedCornerShape(50)).background(PurpleL.copy(alpha = 0.12f)).clickable { onEditVisit() }.padding(horizontal = 10.dp, vertical = 4.dp)) {
-                            Text("Edit", color = PurpleL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Box(Modifier.clip(Radii.tag).background(AppColors.IndigoSoft).clickable { onEditVisit() }.padding(horizontal = Space.m, vertical = Space.xs)) {
+                            Text("Edit", color = PurpleL, style = AppType.tag)
                         }
                         Box(Modifier.size(24.dp).clip(CircleShape).background(RedL.copy(alpha = 0.12f)).clickable { onClearVisit() }, contentAlignment = Alignment.Center) {
                             Text("✕", color = RedL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                         }
                     }
-                    current -> Box(Modifier.clip(RoundedCornerShape(50)).background(PurpleL.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                        Text("NOW", color = PurpleL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                    }
+                    current -> StatusTag("NOW", StatusTone(PurpleL, AppColors.IndigoSoft))
                 }
             }
         }
