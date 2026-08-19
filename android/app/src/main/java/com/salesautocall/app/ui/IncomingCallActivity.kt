@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.notify.IncomingCallNotifier
 import com.salesautocall.app.sip.SipManager
+import com.salesautocall.app.ui.design.AppColors
 
 /** Full-screen ringing + in-call screen for an incoming cloud (SIP) call. Stays in
  *  the foreground while the call is connected, which keeps the mic/audio alive and
@@ -106,11 +107,11 @@ class IncomingCallActivity : ComponentActivity() {
                                 }
                             }
                             Spacer(Modifier.height(28.dp))
-                            CallButton("Hang up", Icons.Default.CallEnd, Color(0xFFD64545)) { decline() }
+                            CallButton("Hang up", Icons.Default.CallEnd, AppColors.Call.End) { decline() }
                         } else {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                CallButton("Decline", Icons.Default.CallEnd, Color(0xFFD64545)) { decline() }
-                                CallButton("Answer", Icons.Default.Call, Color(0xFF4353B8)) {
+                                CallButton("Decline", Icons.Default.CallEnd, AppColors.Call.End) { decline() }
+                                CallButton("Answer", Icons.Default.Call, AppColors.Call.Accept) {
                                     doAccept(); inCall = true
                                 }
                             }
@@ -141,7 +142,7 @@ class IncomingCallActivity : ComponentActivity() {
 
 @Composable
 private fun callBackground() = androidx.compose.ui.graphics.Brush.verticalGradient(
-    listOf(Color(0xFF0C1426), Color(0xFF1E3A8A)),
+    listOf(AppColors.Call.Bg, AppColors.Call.Bg),
 )
 
 @Composable
@@ -158,7 +159,7 @@ private fun CallButton(label: String, icon: ImageVector, color: Color, onClick: 
 @Composable
 private fun ToggleButton(label: String, icon: ImageVector, active: Boolean, onClick: () -> Unit) {
     val bg = if (active) Color.White else Color.White.copy(alpha = 0.15f)
-    val fg = if (active) Color(0xFF0C1426) else Color.White
+    val fg = if (active) AppColors.Call.Bg else AppColors.Call.TextPrimary
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.size(60.dp).clip(CircleShape).background(bg)

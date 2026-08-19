@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallMissed
 import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Person
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.AssistChip
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -61,13 +59,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.DeviceCall
+import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AiChip
+import com.salesautocall.app.ui.design.AiPanel
+import com.salesautocall.app.ui.design.AppType
+import com.salesautocall.app.ui.design.MetaTag
+import com.salesautocall.app.ui.design.RoundIconButton
+import com.salesautocall.app.ui.design.Space
+import com.salesautocall.app.ui.design.StatusTag
+import com.salesautocall.app.ui.design.StatusTone
 
 // Paper & ink: jade is the only accent; heat/warnings stay muted, never neon.
 private val WhatsAppGreen = Color(0xFF25D366) // brand — kept recognisable
-private val CJade = Color(0xFF4353B8)
-private val CTerra = Color(0xFFC0452C)   // missed / failed
-private val CAmberM = Color(0xFFB8860B)  // no answer
-private val CSlate = Color(0xFF5D6862)   // outgoing / neutral
+private val CJade = AppColors.Indigo
+private val CTerra = AppColors.Danger    // missed / failed
+private val CAmberM = AppColors.Warning  // no answer
+private val CSlate = AppColors.Slate     // outgoing / neutral
 
 /**
  * Calls — rebuilt to feel like the phone's own dialer, and to scroll like it:
@@ -439,7 +446,6 @@ private fun CallRow(
 ) {
     val context = LocalContext.current
     var expanded by remember(c.id) { mutableStateOf(false) }
-    var summaryOpen by remember(c.id) { mutableStateOf(false) }
     val title = name?.takeIf { it.isNotBlank() } ?: prettyNum(c.phone)
     val missed = c.direction == "incoming" && c.outcome != "connected"
     val accent = when {
@@ -466,6 +472,11 @@ private fun CallRow(
                 Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
                     color = if (missed) CTerra else MaterialTheme.colorScheme.onSurface, maxLines = 1)
                 Spacer(Modifier.height(1.dp))
+                // The outcome moved OUT of this sentence and onto its own tag at
+                // the end of the row. "Connected · 4:12 pm · 3m 20s" made the
+                // one word a rep scans for — did this call reach anybody — the
+                // hardest thing to find, because it sat in the same weight and
+                // colour as the timestamp next to it.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         when {
@@ -475,15 +486,17 @@ private fun CallRow(
                         },
                         contentDescription = c.direction, tint = accent, modifier = Modifier.size(14.dp),
                     )
-                    Spacer(Modifier.width(5.dp))
+                    Spacer(Modifier.width(Space.xs + Space.xxs))
                     Text(
                         buildString {
-                            append(outcomeLabel(c.outcome))
-                            c.startedAt?.let { append(" · ${prettyTime(it)}") }
-                            if (c.durationSeconds > 0) append(" · ${formatDuration(c.durationSeconds)}")
+                            c.startedAt?.let { append(prettyTime(it)) }
+                            if (c.durationSeconds > 0) {
+                                if (isNotEmpty()) append(" · ")
+                                append(formatDuration(c.durationSeconds))
+                            }
                         },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                        style = AppType.meta,
+                        color = AppColors.TextSecondary, maxLines = 1,
                     )
                 }
                 // WHAT THIS CALL PRODUCED — not just that it happened.
@@ -494,11 +507,11 @@ private fun CallRow(
                 // both open.
                 //
                 // Only what is NOT already on the row goes here. The suggested
-                // stage has its own actionable line below (DispositionSuggestion)
-                // and a ready recording already lights the play button on the
-                // right — repeating either would just be the same word twice.
-                // That leaves two real gaps: the promise the rep made on this
-                // call, and which project it was about.
+                // stage is carried by CallAiPanel below, the outcome by the tag
+                // at the end of this row, and a ready recording already lights
+                // the play button — repeating any of them would print the same
+                // fact twice. That leaves two real gaps: the promise the rep
+                // made on this call, and which project it was about.
                 val owesFollowUp = c.wadaState == "pending"
                 if (project != null || owesFollowUp) {
                     Spacer(Modifier.height(3.dp))
@@ -514,10 +527,9 @@ private fun CallRow(
                         }
                     }
                 }
-                // The first line of what was actually said. AiSummarySection
-                // below shows only a "✨ AI Summary / Show" header until it is
-                // opened — a label with none of the content. This is the bit
-                // that lets a rep scan the day without tapping anything.
+                // The first line of what was actually said. The full summary
+                // lives in CallAiPanel, which only opens with the row — this is
+                // the bit that lets a rep scan the day without tapping at all.
                 c.summary?.trim()?.takeIf { it.isNotEmpty() }?.let { sum ->
                     Spacer(Modifier.height(3.dp))
                     Text(
@@ -528,18 +540,23 @@ private fun CallRow(
                     )
                 }
             }
+            OutcomeTag(c.outcome)
             if (c.recordingStatus == "ready") {
+                Spacer(Modifier.width(Space.s))
                 IconButton(onClick = { if (playing) onStop() else onPlay() }) {
                     Icon(
                         if (playing) Icons.Default.Stop else Icons.Default.PlayArrow,
                         contentDescription = if (playing) "Stop recording" else "Play recording",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = AppColors.TextPrimary,
                     )
                 }
+            } else {
+                Spacer(Modifier.width(Space.m))
             }
-            IconButton(onClick = { QuickActions.call(context, c.phone) }) {
-                Icon(Icons.Default.Call, contentDescription = "Call back", tint = CJade, modifier = Modifier.size(22.dp))
-            }
+            // One filled, indigo, unmistakably tappable target — the action a
+            // rep opens this screen to take. It used to be a bare grey-on-white
+            // icon button the same size and weight as Copy.
+            RoundIconButton(Icons.Default.Call, "Call back") { QuickActions.call(context, c.phone) }
         }
 
         if (expanded) {
@@ -555,8 +572,21 @@ private fun CallRow(
         if (playing && c.id != null) {
             AudioPlayer(callLogId = c.id!!, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
-        AiSummarySection(c, summarizing, summaryOpen, onToggle = { summaryOpen = !summaryOpen }, onSummarize = onSummarize)
-        DispositionSuggestion(c, onApply = onApplyDisposition, onDismiss = onDismissDisposition)
+        // ONE AI surface per call, not two stacked strangers.
+        //
+        // This was an "✨ AI Summary / Show" header and, three lines below it, a
+        // separate "✨ AI: set lead to Interested?" row — two sparkle icons, two
+        // headings, one call. They are the same assistant saying "here is what
+        // happened, and here is what I would do about it", so they are now one
+        // panel with the suggestion as its footer action. Same callbacks, same
+        // summarize/apply/dismiss behaviour.
+        CallAiPanel(
+            c = c,
+            summarizing = summarizing,
+            onSummarize = onSummarize,
+            onApplyDisposition = onApplyDisposition,
+            onDismissDisposition = onDismissDisposition,
+        )
         if (expanded) Hairline()
     }
 }
@@ -575,94 +605,104 @@ private fun dispositionLabel(status: String): String = when (status) {
     else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
 }
 
-private fun outcomeLabel(outcome: String?): String = when (outcome) {
-    "connected" -> "Connected"
-    "no_answer" -> "No answer"
-    "failed" -> "Failed"
-    else -> outcome ?: "—"
-}
-
 /**
- * One-tap AI auto-disposition: the summarizer guessed the lead's stage from the
- * call. The rep confirms (applies it to the linked lead) or dismisses it.
+ * ONE AI surface per call.
+ *
+ * Replaces the old pair: an "✨ AI Summary / Show" collapsible and, three lines
+ * under it, a separate "✨ AI: set lead to Interested?" row. Two sparkle marks,
+ * two headings and two visual languages for one assistant talking about one
+ * call — which is exactly how AI ends up reading as a bolted-on feature rather
+ * than something working on the rep's behalf.
+ *
+ * The summary is the body; the AI's suggested stage is the footer action. Same
+ * inputs, same callbacks, same rules about when it appears — nothing about the
+ * summarize / apply / dismiss behaviour changed.
  */
 @Composable
-private fun DispositionSuggestion(c: CallLog, onApply: (String) -> Unit, onDismiss: () -> Unit) {
-    val status = c.suggestedDisposition ?: return
-    val canApply = c.contactId != null
-    Row(
-        Modifier.fillMaxWidth().padding(start = 74.dp, end = 12.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            if (canApply) "✨ AI: set lead to ${dispositionLabel(status)}?"
-            else "✨ AI: ${dispositionLabel(status)}",
-            style = MaterialTheme.typography.labelMedium, color = CJade,
-            fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
-        )
-        if (canApply) {
-            AssistChip(
-                onClick = { onApply(status) },
-                label = { Text("Apply") },
-                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, Modifier.size(16.dp)) },
-            )
-            Spacer(Modifier.width(6.dp))
-        }
-        IconButton(onClick = onDismiss) {
-            Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-/**
- * Inline AI call summary: shows the text (collapsible) when ready, a spinner
- * while it generates (auto after each recording), or a one-tap "Summarize"
- * action for older recordings that don't have one yet.
- */
-@Composable
-private fun AiSummarySection(
+private fun CallAiPanel(
     c: CallLog,
     summarizing: Boolean,
-    expanded: Boolean,
-    onToggle: () -> Unit,
     onSummarize: () -> Unit,
+    onApplyDisposition: (String) -> Unit,
+    onDismissDisposition: () -> Unit,
 ) {
     val processing = summarizing || c.summaryStatus == "processing"
     val hasSummary = !c.summary.isNullOrBlank()
-    // Nothing to show unless there's a recording to summarize.
-    if (c.recordingStatus != "ready" && !hasSummary) return
+    val suggestion = c.suggestedDisposition
+    // Unchanged rule: nothing to show without a recording, a summary or a
+    // suggestion. A plain logged call still renders as a bare row.
+    if (c.recordingStatus != "ready" && !hasSummary && suggestion == null) return
 
-    Column(Modifier.fillMaxWidth().padding(start = 74.dp, end = 16.dp, bottom = 4.dp)) {
-        when {
-            hasSummary -> {
-                Row(
-                    Modifier.fillMaxWidth().clickable { onToggle() },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("✨ AI Summary", style = MaterialTheme.typography.labelMedium,
-                        color = CJade, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.weight(1f))
-                    Text(if (expanded) "Hide" else "Show",
-                        style = MaterialTheme.typography.labelMedium, color = CJade)
+    Box(Modifier.padding(horizontal = Space.l, vertical = Space.xs)) {
+        AiPanel(
+            title = "AI call summary",
+            loading = processing,
+            footer = if (suggestion != null) {
+                {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Apply only when the call is linked to a lead — there
+                        // is nothing to move otherwise. Same guard as before.
+                        if (c.contactId != null) {
+                            AiChip("Set lead to ${dispositionLabel(suggestion)}") { onApplyDisposition(suggestion) }
+                        } else {
+                            MetaTag(dispositionLabel(suggestion), AppColors.Indigo, AppColors.Surface)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        IconButton(onClick = onDismissDisposition, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Dismiss suggestion",
+                                tint = AppColors.TextTertiary,
+                                modifier = Modifier.size(15.dp),
+                            )
+                        }
+                    }
                 }
-                if (expanded) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(c.summary!!.trim(), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                null
+            },
+        ) {
+            when {
+                hasSummary -> Text(c.summary!!.trim(), style = AppType.body, color = AppColors.TextPrimary)
+                processing -> Text(
+                    "Listening to this call and writing your summary…",
+                    style = AppType.meta, color = AppColors.TextSecondary,
+                )
+                else -> Column {
+                    Text(
+                        "This call has a recording. Get the key points and the next step.",
+                        style = AppType.meta, color = AppColors.TextSecondary,
+                    )
+                    Spacer(Modifier.height(Space.s))
+                    AiChip("Summarise this call", onSummarize)
                 }
             }
-            processing -> Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = CJade)
-                Spacer(Modifier.width(8.dp))
-                Text("Summarizing with AI…", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            else -> Text("✨ AI summary",
-                style = MaterialTheme.typography.labelMedium, color = CJade,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { onSummarize() })
         }
     }
+}
+
+/**
+ * Did this call reach anybody — as a tag, not as the first word of a sentence
+ * that also holds the time and the duration.
+ */
+@Composable
+private fun OutcomeTag(outcome: String?) {
+    val label = when (outcome) {
+        null, "" -> return
+        "connected" -> "Connected"
+        "no_answer" -> "No answer"
+        "missed" -> "Missed"
+        "busy" -> "Busy"
+        "failed" -> "Failed"
+        else -> outcome.replace('_', ' ').replaceFirstChar { it.uppercase() }
+    }
+    val tone = when (outcome) {
+        "connected" -> StatusTone(AppColors.Positive, AppColors.PositiveSoft)
+        "no_answer", "busy" -> StatusTone(AppColors.Warning, AppColors.WarningSoft)
+        "missed", "failed" -> StatusTone(AppColors.Danger, AppColors.DangerSoft)
+        else -> StatusTone(AppColors.TextSecondary, AppColors.SurfaceMuted)
+    }
+    StatusTag(label, tone)
 }
 
 private fun formatDuration(sec: Int): String {

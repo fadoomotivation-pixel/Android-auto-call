@@ -37,8 +37,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AppType
+import com.salesautocall.app.ui.design.SegmentedTabs
+import com.salesautocall.app.ui.design.Space
+import com.salesautocall.app.ui.design.StatusTag
+import com.salesautocall.app.ui.design.StatusTone
 
-private val CallGreen = Color(0xFF4353B8)
+private val CallGreen = AppColors.Indigo
 
 private data class Key(val digit: String, val letters: String = "")
 
@@ -61,21 +67,20 @@ fun DialerScreen(vm: MainViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(24.dp))
-        Text("Dialer", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("DIALER", style = AppType.sectionLabel, color = AppColors.TextTertiary)
 
         // ---- call method: SIM (your number) vs Cloud (uroperator) ----
         if (cloudAvailable) {
             Spacer(Modifier.height(12.dp))
-            Row(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                ModePill("📱 SIM", !useCloud, Modifier.weight(1f)) { useCloud = false }
-                ModePill("☁ Cloud", useCloud, Modifier.weight(1f)) { useCloud = true }
-            }
+            // The system's segmented control. Was a pill row with its own
+            // 50dp radius and its own selected/unselected styling, plus emoji
+            // doing the labelling — on the one control where getting the choice
+            // wrong means the call goes out on the wrong line.
+            SegmentedTabs(
+                options = listOf("SIM", "Cloud"),
+                selectedIndex = if (useCloud) 1 else 0,
+                onSelect = { useCloud = it == 1 },
+            )
             Spacer(Modifier.height(4.dp))
             Text(
                 if (useCloud) "Cloud: rings your phone, then connects the customer."
@@ -90,21 +95,20 @@ fun DialerScreen(vm: MainViewModel) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(
                 text = number.ifEmpty { "Enter a number" },
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (number.isEmpty()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
+                // The type ramp has a style for exactly this: wide tracking so
+                // a long number stays readable as digits rather than a word.
+                style = AppType.dialNumber,
+                color = if (number.isEmpty()) AppColors.TextTertiary else AppColors.TextPrimary,
                 maxLines = 1,
             )
         }
 
         if (app.company?.recordingEnabled == true) {
-            Text(
-                "🎙️ This call will be recorded",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
+            // Recording state as a tag, not a grey sentence with a microphone
+            // sticker. It is a legal disclosure and the one thing on this screen
+            // a rep may need to read aloud.
+            StatusTag("Recording on", StatusTone(AppColors.Danger, AppColors.DangerSoft))
+            Spacer(Modifier.height(Space.s))
         }
 
         // ---- keypad ----
@@ -145,25 +149,6 @@ fun DialerScreen(vm: MainViewModel) {
             }
         }
         Spacer(Modifier.height(20.dp))
-    }
-}
-
-@Composable
-private fun ModePill(label: String, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
-            .clickable { onClick() }
-            .padding(vertical = 9.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.labelLarge,
-        )
     }
 }
 

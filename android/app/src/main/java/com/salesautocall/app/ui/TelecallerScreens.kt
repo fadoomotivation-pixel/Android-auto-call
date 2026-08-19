@@ -100,6 +100,16 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import com.salesautocall.app.data.LeaderboardRow
 import kotlin.math.abs
+import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AiChip
+import com.salesautocall.app.ui.design.AiPanel
+import com.salesautocall.app.ui.design.AppType
+import com.salesautocall.app.ui.design.Radii
+import com.salesautocall.app.ui.design.Space
+import com.salesautocall.app.ui.design.AppSearchField
+import com.salesautocall.app.ui.design.InitialsAvatar
+import com.salesautocall.app.ui.design.StatusTag
+import com.salesautocall.app.ui.design.StatusTone
 
 // ════════════════════════════════════════════════════════════
 //  Design system — colours, helpers, atoms
@@ -110,14 +120,19 @@ import kotlin.math.abs
 // slate (unknown) → sea (talking) → amber (interest heating) → plum (visit)
 // → bronze (money forming) → jade (money). Every hue sits in the same muted
 // saturation band, so nothing shouts and nothing looks odd next to anything.
-private val Green = Color(0xFF4353B8)   // success = jade
-private val Amber = Color(0xFFB8860B)   // muted brass — attention / "warm"
-private val Red = Color(0xFFC0452C)     // muted terracotta — urgency / "hot"
-private val Purple = Color(0xFF75629B)  // softened plum — site visit
-private val Cyan = Color(0xFF3E7F8A)    // muted sea — conversation flowing
-private val Indigo = Color(0xFF4E7A8C)  // slate-sea — working / in progress
-private val Slate = Color(0xFF5D6862)   // warm slate — neutral / cold
-private val Bronze = Color(0xFF8A6D3B)  // muted bronze — negotiation, value
+// This file's own semantic palette, now read from the design system instead of
+// eight private hex literals. The names stay so the ~200 usages below are
+// untouched; only the values move. Green was 0xFF4353B8 — the OLD indigo — so
+// "success" on this screen was rendering in the previous theme's primary while
+// the rest of the app had moved on.
+private val Green = AppColors.Positive   // success
+private val Amber = AppColors.Warning    // attention / "warm"
+private val Red = AppColors.Danger       // urgency / "hot" / overdue
+private val Purple = AppColors.Violet    // site visit
+private val Cyan = AppColors.Teal        // conversation flowing
+private val Indigo = AppColors.Info      // working / in progress
+private val Slate = AppColors.Slate      // neutral / cold
+private val Bronze = AppColors.Warning   // negotiation, value
 private val WaGreen = Color(0xFF25D366) // WhatsApp brand — kept recognisable
 
 /**
@@ -213,17 +228,17 @@ private fun AppState.workOf(c: Contact): LeadWork? = c.id?.let { workByLead[it] 
  * that pushed the row off the edge of a phone.
  */
 private val ACTIONS = listOf(
-    ActionChip("call_now", "Call now", Color(0xFFC98A3E),
+    ActionChip("call_now", "Call now", AppColors.Warning,
         "Ring these now. Due today, brand new, or nobody picked up last time."),
-    ActionChip("overdue", "Overdue", Color(0xFFC0452C),
+    ActionChip("overdue", "Overdue", AppColors.Danger,
         "You said you would call earlier and the time has gone. Do these first."),
-    ActionChip("due_today", "Due today", Color(0xFF3E7F8A),
+    ActionChip("due_today", "Due today", AppColors.Teal,
         "Booked for later today. They come to Call now on their own, at their time."),
-    ActionChip("scheduled", "Later", Color(0xFF5A62C9),
+    ActionChip("scheduled", "Later", AppColors.Indigo,
         "Booked for another day. Nothing to do now."),
-    ActionChip("awaiting_visit", "Visit", Color(0xFF75629B),
+    ActionChip("awaiting_visit", "Visit", AppColors.Violet,
         "Site visit is booked. Waiting for them to come."),
-    ActionChip("no_next_step", "No step", Color(0xFF8A6D3B),
+    ActionChip("no_next_step", "No step", AppColors.Slate,
         "You talked to them but nothing is booked. These go cold if you leave them."),
 )
 
@@ -284,7 +299,7 @@ private val STAGE_HINTS = mapOf(
 /** "#RRGGBB" from lead_stages -> Compose Color. The stage table owns the
  *  palette so the phone and the dashboard cannot drift to different greens. */
 private fun parseHex(hex: String): Color =
-    runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { Color(0xFF6A7B85) }
+    runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { AppColors.Slate }
 
 
 /**
@@ -313,7 +328,7 @@ private fun rememberNowTick(periodMs: Long = 60_000L): Long {
     return now
 }
 
-private val Teal = Color(0xFF5A62C9)    // jade-adjacent: token money
+private val Teal = AppColors.Violet     // token money (named Teal historically)
 
 // The seven-stage STAGES list and stageOf() that used to live here are gone.
 // They were this file's private funnel, disagreeing with the eight tab buckets
@@ -496,32 +511,53 @@ private fun waTemplate(name: String?, project: String?, agent: String?, company:
         "Property ki details aur best offer share karna ${sv.want(speaksAs)} — kya abhi baat kar sakte hain?"
 }
 
+/**
+ * A number, and what it counts. Nothing else.
+ *
+ * Was an elevated Card with an emoji sticker on top of the value. Six of them
+ * stacked three rows deep gave Home a wall of 📞⏱️✨💰🧾🏆 competing with the
+ * figures underneath, and the glyphs carried no information the label did not
+ * already give in words. The tile is now a hairlined surface with the value
+ * first in the metric style and the label beneath, which is what makes a row
+ * of them scan as one set of numbers instead of six separate cards.
+ *
+ * The value takes the accent; the label stays muted. Signature unchanged so
+ * every call site is untouched — the emoji argument is deliberately ignored.
+ */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 private fun StatTile(emoji: String, value: String, label: String, accent: Color, modifier: Modifier = Modifier) {
-    // Flat, borderless tile: a quiet glyph, a bold value, a muted label. No
-    // coloured tile, no heavy shadow — consistent with the lead cards.
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    Column(
+        modifier
+            .clip(Radii.card)
+            .background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.card)
+            .padding(horizontal = Space.l, vertical = Space.m),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(emoji, fontSize = 18.sp)
-            Spacer(Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Text(value, style = AppType.metric, color = accent, maxLines = 1)
+        Spacer(Modifier.height(Space.xxs))
+        Text(label, style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
     }
 }
 
+/**
+ * Group heading. Small, uppercase, tertiary ink — the same one the whole app
+ * uses now, so a section on Home looks like a section on Lead detail.
+ *
+ * It was bold titleMedium, which at 16sp semibold competed with the lead names
+ * and metric values underneath it: the label announcing a group was heavier
+ * than the content inside it.
+ */
 @Composable
 private fun SectionHeader(title: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.TextTertiary)
         if (actionLabel != null && onAction != null) {
-            Text(actionLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { onAction() })
+            Text(
+                actionLabel, style = AppType.label, color = AppColors.Indigo,
+                modifier = Modifier.clip(Radii.tag).clickable { onAction() }
+                    .padding(horizontal = Space.s, vertical = Space.xxs),
+            )
         }
     }
 }
@@ -831,27 +867,30 @@ private fun PerfBar(label: String, value: Int, target: Int, color: Color) {
     val pct = if (target > 0) (value.toFloat() / target).coerceIn(0f, 1f) else 0f
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
-            Text("$value / $target", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = color)
+            Text(label, style = AppType.meta, color = AppColors.TextSecondary)
+            Text("$value / $target", style = AppType.metaStrong, color = color)
         }
-        Spacer(Modifier.height(4.dp))
-        Box(Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-            Box(Modifier.fillMaxWidth(pct).height(7.dp).clip(RoundedCornerShape(50)).background(color))
+        Spacer(Modifier.height(Space.xs + Space.xxs))
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(Radii.tag).background(AppColors.SurfaceMuted)) {
+            Box(Modifier.fillMaxWidth(pct).height(6.dp).clip(Radii.tag).background(color))
         }
     }
 }
 
 @Composable
 private fun PerformanceCard(app: AppState) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    // A hairlined surface rather than an elevated Card. Home stacked five
+    // elevated cards down one scroll and the shadows, not the content, were
+    // what the eye followed.
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(Radii.card)
+            .background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.card),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            SectionHeader("Today's Performance")
-            Spacer(Modifier.height(12.dp))
+        Column(Modifier.padding(Space.l)) {
+            Text("TODAY'S PERFORMANCE", style = AppType.sectionLabel, color = AppColors.TextTertiary)
+            Spacer(Modifier.height(Space.m))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     PerfBar("Calls made", app.todayCalls, app.dailyGoal, MaterialTheme.colorScheme.primary)
@@ -865,29 +904,37 @@ private fun PerformanceCard(app: AppState) {
     }
 }
 
+/**
+ * Home's AI surface — now the SAME panel the Calls screen and Lead detail use.
+ *
+ * It was a one-off: its own tinted box, its own 22dp spark, its own bold
+ * "AI Insight" title and a "View your leads →" text link. Three screens each
+ * inventing their own idea of what the assistant looks like is precisely why
+ * the AI read as a scattering of features rather than one thing working for
+ * the rep. AiPanel + AiChip give it the identity it shares everywhere else.
+ *
+ * Same sentence, same single callback, same hotUncontacted input — the CTA is
+ * now a chip instead of an underlined-looking link, so it is obviously
+ * tappable rather than obviously text.
+ */
 @Composable
 private fun AiInsightCard(onOpenLeads: () -> Unit, hotUncontacted: Int) {
-    // Subtle primary-tinted card with dark text + a text link — not a loud gradient.
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(16.dp),
+    AiPanel(
+        title = "Your assistant",
+        footer = {
+            AiChip(
+                if (hotUncontacted > 0) "Show me these $hotUncontacted leads" else "Open my leads",
+                onOpenLeads,
+            )
+        },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text("AI Insight", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    if (hotUncontacted > 0) "You have $hotUncontacted hot leads not contacted yet — call them to lift conversions."
-                    else "You're on top of your hot leads. Keep the follow-ups flowing!",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("View your leads →", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelMedium, modifier = Modifier.clickable { onOpenLeads() })
-            }
-        }
+        Text(
+            if (hotUncontacted > 0)
+                "$hotUncontacted hot leads have not been called yet. They are the quickest wins on your list today."
+            else "You're on top of your hot leads. Keep the follow-ups flowing.",
+            style = AppType.body,
+            color = AppColors.TextPrimary,
+        )
     }
 }
 
@@ -1224,13 +1271,19 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
     val done = a?.punchOutAt != null
     // White-label: the hero wears the company's brand colour + name.
     val brand = brandColorOf(app.company?.brandColor)
-    val g0 = brand ?: Color(0xFF4353B8)
-    val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF333A8F)
-    val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF333A8F)
+    // Fallback when a company has set no brandColor. Was the previous theme's
+    // indigo, so an unbranded tenant kept wearing the old primary.
+    val g0 = brand ?: AppColors.Indigo
+    val g1 = brand?.let { darken(it, 0.82f) } ?: AppColors.IndigoPressed
+    val chipInk = brand?.let { darken(it, 0.82f) } ?: AppColors.IndigoPressed
+    // Flat brand colour, not a two-stop gradient. The white-label behaviour is
+    // untouched — g0 is still the company's own brandColor and g1 is still
+    // computed for the chip ink below — but the hero is one solid field now,
+    // which is what stops it reading as a 2015 dashboard banner.
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(g0, g1)))
-            .padding(20.dp),
+        Modifier.fillMaxWidth().clip(Radii.card)
+            .background(g0)
+            .padding(Space.l),
     ) {
         Column {
             app.company?.name?.takeIf { it.isNotBlank() }?.let { company ->
@@ -1420,7 +1473,7 @@ private fun LeadsDeck(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val brand = brandColorOf(app.company?.brandColor)
-    val g0 = brand ?: Color(0xFF4353B8)
+    val g0 = brand ?: AppColors.Indigo
     val g1 = darken(g0, 0.72f)
     // A SUMMARY STRIP, NOT A HERO.
     //
@@ -1429,9 +1482,9 @@ private fun LeadsDeck(
     // one lead card on screen. It is now about 90dp — the same five facts, laid
     // out in two tight lines. Nothing was dropped; it just stopped shouting.
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(Brush.linearGradient(listOf(g0, g1)))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clip(Radii.card)
+            .background(g0)
+            .padding(horizontal = Space.l, vertical = Space.m),
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1638,6 +1691,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val base = when {
         stageFilter != null -> app.leads.filter { it.stage == stageFilter }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
+        // WHO HAVE I ALREADY CALLED TODAY.
+        //
+        // There was no way to see this. Every view in the app answers "who is
+        // left" — Call now, Overdue, Due today — and a rep part-way through a
+        // list had no way to check what they had already got through, which is
+        // the first thing anyone asks themselves at 4pm. v_lead_workstate
+        // already carries last_call_at and the Leads screen already loads it,
+        // so this is a client-side filter over data that was on screen.
+        quick == "called" -> app.leads.filter { isToday(app.workOf(it)?.lastCallAt) }
         quick == "retry" -> app.leads.filter { app.actionOf(it) == "call_now" }
         // THE HOME DECK'S TWO BUTTONS LAND HERE, and until now they landed
         // nowhere. "followup" and "new" match neither the "act:" nor the
@@ -1810,41 +1872,30 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // look like something you can type in. The old borderless
                     // pill read as decoration; this one has a real edge and a
                     // little lift under it.
-                    val searchAccent = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
-                    OutlinedTextField(
-                        query, { query = it },
-                        placeholder = { Text("Search name or phone", fontSize = 13.sp) },
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        // 46dp and inset from the edge. At 52dp full-bleed it was
-                        // the biggest thing on the screen after the header, and a
-                        // rep searches perhaps twice an hour — it should be easy
-                        // to hit, not the first thing the eye lands on.
-                        singleLine = true, shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f).height(46.dp)
-                            .shadow(1.dp, RoundedCornerShape(12.dp), clip = false),
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null,
-                                tint = searchAccent, modifier = Modifier.size(20.dp))
-                        },
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                            focusedBorderColor = searchAccent,
-                        ),
+                    // The design system's search field: a filled, hairline-free
+                    // control on SurfaceMuted. The old one was an OutlinedTextField
+                    // carrying its own 12dp shape, its own 1dp drop shadow and four
+                    // hand-set container/border colours — a fourth input style on a
+                    // screen that already had chips, the filter button and the
+                    // sheet's fields.
+                    AppSearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = "Search name or phone",
+                        modifier = Modifier.weight(1f),
                     )
                     val filtersOn = stageFilter != null || tempFilter != null || quick != null || sortBy != "default"
-                    // Same shape and height as the search field and the chips —
-                    // one visual language, not a stray circle.
+                    // Same height and radius as the search field beside it, so the
+                    // pair reads as one control group rather than a field and a
+                    // stray square.
                     Box(
-                        Modifier.height(46.dp).width(46.dp).clip(RoundedCornerShape(12.dp))
-                            .background(if (filtersOn) searchAccent else MaterialTheme.colorScheme.surface)
-                            .border(1.dp, if (filtersOn) searchAccent else MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                        Modifier.size(Space.touch).clip(Radii.control)
+                            .background(if (filtersOn) AppColors.Indigo else AppColors.SurfaceMuted)
                             .clickable { sheetOpen = true },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(Icons.Default.Sort, contentDescription = "Filters",
-                            tint = if (filtersOn) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (filtersOn) AppColors.OnIndigo else AppColors.TextSecondary,
                             modifier = Modifier.size(19.dp))
                     }
                 }
@@ -1909,7 +1960,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             run {
                 val active = buildList {
                     stageFilter?.let { sf -> add(Triple("stage", app.leadStages.firstOrNull { it.code == sf }?.label ?: sf) { stageFilter = null }) }
-                    quick?.let { q -> add(Triple("quick", if (q == "today") "Added today" else "Retry") { quick = null }) }
+                    quick?.let { q ->
+                        val ql = when (q) { "called" -> "Called today"; "today" -> "Added today"; else -> "Retry" }
+                        add(Triple("quick", ql) { quick = null })
+                    }
                     tempFilter?.let { t -> add(Triple("temp", when (t) { "hot" -> "🔥 Hot"; "warm" -> "🌤 Warm"; else -> "❄️ Cold" }) { tempFilter = null }) }
                     if (sortBy != "default") add(Triple("sort", if (sortBy == "score") "AI Score ↓" else "Newest first") { sortBy = "default" })
                 }
@@ -2123,7 +2177,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 }
                 Text("Quick views", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("today" to "Added today", "retry" to "Retry (no answer/busy)").forEach { (key, label) ->
+                    listOf(
+                        "called" to "Called today",
+                        "today" to "Added today",
+                        "retry" to "Retry (no answer/busy)",
+                    ).forEach { (key, label) ->
                         val on = quick == key
                         Box(
                             Modifier.clip(RoundedCornerShape(50))
@@ -2424,7 +2482,7 @@ private fun LeadCard(
     // one. The action label in the note strip answers that, and the stage row
     // above the list is where you go when you want to browse by stage.
     val container = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
-    val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
+    val jade = AppColors.Indigo
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
     // The one line the rep actually needs — what the customer said / promised.
@@ -3301,7 +3359,22 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                             Triple("⏳  Busy", Amber, { dispose("busy") }),
                             Triple("📴  Switched off", Slate, { dispose("no_answer") }),
                             Triple("🙅  Wrong person", Amber, { dispose("wrong_person") }),
-                            Triple("✖️  Wrong number", Red, { dispose("dnc") }),
+                            // WRONG NUMBER IS ONE TAP, AND IT IS NOT "DO NOT CALL".
+                            //
+                            // Two things were wrong. It filed the lead as `dnc`,
+                            // which means the PERSON asked not to be contacted —
+                            // a number that never belonged to them was polluting
+                            // the do-not-call list. lead_stages already has
+                            // `invalid` ("Bad number"), terminal, for exactly
+                            // this, and it is deliberately not in the retry
+                            // ladder, so a dead number stops booking retries.
+                            //
+                            // And it goes straight through with no note and no
+                            // temperature. There is nothing for a telecaller to
+                            // record about a number that is not the customer's;
+                            // asking them to is asking for data that cannot
+                            // exist.
+                            Triple("✖️  Wrong number", Red, { vm.postCallDispose("invalid", null, null) }),
                             Triple("↻  Call back later", Indigo, { scheduleFor = "callback" }),
                         )
                     }
@@ -3823,39 +3896,37 @@ private fun FollowUpCard(
     // Call solid and widest — and the two time controls demoted to small text
     // underneath, where they are still one tap away but no longer compete.
     val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= now
-    val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
+    val jade = AppColors.Indigo
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val accent = if (overdue) Red else jade
     val who = f.name?.takeIf { it.isNotBlank() } ?: prettyPhone(f.phone)
 
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clip(Radii.card)
+            .background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.card)
+            .padding(horizontal = Space.m, vertical = Space.m),
     ) {
         Row(verticalAlignment = Alignment.Top) {
-            Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
-                    .background(muted.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(initialsOf(f.name ?: f.phone), style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold, color = muted)
-            }
-            Spacer(Modifier.width(11.dp))
+            // The shared circular avatar. It was a rounded square filled with 8%
+            // grey — the only avatar shape in the app, and the only one that did
+            // not tint itself per person, so a column of them was six identical
+            // grey squares.
+            InitialsAvatar(f.name ?: f.phone)
+            Spacer(Modifier.width(Space.m))
             Column(Modifier.weight(1f)) {
-                Text(who, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                Text(who, style = AppType.rowTitle, color = AppColors.TextPrimary,
                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Text("📞 ${prettyPhone(f.phone)}", fontSize = 12.sp, color = muted,
-                    letterSpacing = 0.2.sp, maxLines = 1)
+                // The 📞 was decoration: this is a phone number, on a card whose
+                // main button is Call.
+                Text(prettyPhone(f.phone), style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Space.s))
             Column(horizontalAlignment = Alignment.End) {
-                Pill(relativeDue(f.dueAt), accent, accent.copy(alpha = 0.12f))
-                Spacer(Modifier.height(3.dp))
-                Text("${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}", fontSize = 10.5.sp,
-                    color = muted, maxLines = 1)
+                StatusTag(relativeDue(f.dueAt), StatusTone(accent, accent.copy(alpha = 0.12f)))
+                Spacer(Modifier.height(Space.xxs))
+                Text("${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}", style = AppType.tag,
+                    color = AppColors.TextTertiary, maxLines = 1)
             }
         }
         // WHY this callback is sitting here, in one line, on every card.
@@ -3867,12 +3938,11 @@ private fun FollowUpCard(
         // attempt ladder booked it because nobody picked up.
         Spacer(Modifier.height(8.dp))
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            Modifier.fillMaxWidth().clip(Radii.control)
                 .background(accent.copy(alpha = 0.09f))
-                .padding(horizontal = 9.dp, vertical = 7.dp),
+                .padding(horizontal = Space.m, vertical = Space.s),
         ) {
-            Text(whyThisCallback(f), fontSize = 12.sp, color = accent,
-                fontWeight = FontWeight.Medium, lineHeight = 16.sp, maxLines = 3,
+            Text(whyThisCallback(f), style = AppType.metaStrong, color = accent, maxLines = 3,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         Spacer(Modifier.height(9.dp))

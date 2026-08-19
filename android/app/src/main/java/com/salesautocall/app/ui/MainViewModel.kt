@@ -2103,7 +2103,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             set {
                 it.copy(
                     coachAnswerLoading = false,
-                    coachAnswer = ans ?: "Abhi jawab nahi mila — thodi der me phir try kijiye.",
+                    coachAnswer = ans ?: "No answer yet — try again in a moment.",
                 )
             }
         }
@@ -2557,14 +2557,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 set { st ->
                     st.copy(
                         leads = st.leads.map { if (it.id == contactId) it.copy(temperature = "cold") else it },
-                        message = "3 attempts, koi jawab nahi — lead cold. Auto-retry band.",
+                        message = "3 tries, no answer — marked cold. Auto-retry off.",
                     )
                 }
             } else {
                 scheduleFollowUp(
                     contactId, phone, name,
                     dueAtMillis = nextAttemptMillis(tries),
-                    note = "Attempt ${tries + 1} — pichhli baar nahi uthaya",
+                    note = "Attempt ${tries + 1} — no answer last time",
                     mirrorStatus = false,
                 )
             }
@@ -3218,7 +3218,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun assistantVisitUnknown() {
         val ask = _state.value.assistantAsk ?: return
-        set { it.copy(assistantAsk = null, message = "Theek hai — kal phir poochenge.") }
+        set { it.copy(assistantAsk = null, message = "Okay — we'll ask again tomorrow.") }
         logPrompt(ask, answer = "not_yet")
     }
 
@@ -3786,7 +3786,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         // recorded from the post-call sheet must not surface under
                         // whatever lead happens to be open.
                         voiceNotes = if (st.leadDetailId == contactId) listOf(note) + st.voiceNotes else st.voiceNotes,
-                        message = "🎤 Voice note saved — AI summary ban raha hai…",
+                        message = "Voice note saved — writing the summary…",
                     )
                 }
                 // Poll every 5s (up to ~60s) until the AI finishes, then refresh

@@ -16,7 +16,6 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,7 +59,6 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -121,6 +119,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.salesautocall.app.data.AppPrefs
 import kotlinx.coroutines.launch
+import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AppType
+import androidx.compose.ui.graphics.Brush
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -560,25 +561,24 @@ private fun MainShell(vm: MainViewModel) {
                     !rel.forced -> vm.dismissUpdate()
                 }
             },
-            title = { Text(if (rel.forced) "🔒 Update required" else "🚀 Update available") },
+            title = { Text(if (rel.forced) "Update required" else "Update available") },
             text = {
                 Column {
-                    Text("Version ${rel.versionName} is ready to install.")
-                    Spacer(Modifier.height(8.dp))
-                    // Always a generic, customer-safe line — never raw release
-                    // notes, which could carry repo/branch/PR internals.
+                    // Short on purpose. This dialog interrupts a calling shift,
+                    // so it says the version, one line of why, and gets out of
+                    // the way. Always a generic, customer-safe line — never raw
+                    // release notes, which could carry repo/branch/PR internals.
                     Text(
-                        if (rel.forced) "This is an important update — please install it to keep using the app."
-                        else "Includes the latest features, speed improvements and fixes.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (rel.forced) "Version ${rel.versionName}. Please install to keep using the app."
+                        else "Version ${rel.versionName}. Speed improvements and fixes.",
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     if (downloading) {
                         Spacer(Modifier.height(14.dp))
                         val pct = (state.updateProgress * 100).toInt().coerceIn(0, 100)
                         LinearProgressIndicator(progress = state.updateProgress, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(6.dp))
-                        Text("Downloading… $pct% — the installer opens automatically.",
+                        Text("Downloading $pct% — the installer opens on its own.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -587,7 +587,10 @@ private fun MainShell(vm: MainViewModel) {
             confirmButton = {
                 if (downloading) {
                     // The one thing a rep on a shift actually needs here.
-                    TextButton(onClick = { vm.minimizeUpdate() }) { Text("Chhota karo — kaam karne do") }
+                    // The one thing a rep mid-shift actually needs: get this
+                    // box off the screen and let the download finish in the
+                    // background. Was "Chhota karo — kaam karne do".
+                    TextButton(onClick = { vm.minimizeUpdate() }) { Text("Keep working") }
                 } else {
                     TextButton(onClick = { vm.installUpdate() }) { Text("Update now") }
                 }
@@ -825,7 +828,12 @@ private fun MainShell(vm: MainViewModel) {
 }
 
 // ---- The app's one jade accent, theme-aware. ----
-internal fun jadeAccent(dark: Boolean) = if (dark) Color(0xFF8189E6) else Color(0xFF4353B8)
+// The app is light-only since Theme.kt dropped the dark scheme, so the dark
+// branch here could only ever return a colour tuned for a dark background —
+// bright indigo on a white card. Parameter kept so the ~5 call sites stay
+// compiling untouched; it is deliberately ignored.
+@Suppress("UNUSED_PARAMETER")
+internal fun jadeAccent(dark: Boolean) = AppColors.Indigo
 
 // CoachBubble is deleted. A floating layer over a scrolling list lands on
 // somebody's content eventually — it hit the pipeline buttons, then the lead
@@ -928,7 +936,7 @@ private fun CoachSheet(
                     CircularProgressIndicator()
                 }
                 panel == null -> Text(
-                    "Coach abhi data nahi laa paya — thodi der baad try kariye.",
+                    "Coach could not load right now. Try again in a bit.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1014,8 +1022,8 @@ private fun CoachSheet(
                     }
                     if (panel.brief == null && panel.coaching == null) {
                         Text(
-                            "Abhi coaching ke liye koi real call nahi mili (30 sec+ ki call chahiye). " +
-                                "Ek achhi lambi call kijiye — coach yahin milega! 💪",
+                            "No call long enough to coach on yet — 30 seconds or more. " +
+                                "Make one good call and the coaching shows up here.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1033,7 +1041,7 @@ private fun CoachSheet(
                     CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                 }
                 picks.isEmpty() -> Text(
-                    "AI abhi aapke leads padh raha hai — thodi der me yahan aaj ke best 5 calls milengi.",
+                    "Reading your leads — your best 5 calls for today will show up here shortly.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1137,7 +1145,7 @@ private fun CoachSheet(
             Spacer(Modifier.height(16.dp))
             Text("🛡️ Objection Buster", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Customer ne mana kiya? Tap karo ya likho — turant sahi jawab milega.",
+                "Customer said no? Tap or type it and get the reply to use.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1210,13 +1218,15 @@ internal fun FloatingCallBar(
     onDial: () -> Unit,
     onMore: () -> Unit,
 ) {
-    val dark = isSystemInDarkTheme()
-    val jade = jadeAccent(dark)
-    val pill = if (dark) Color(0xFF16181C) else Color.White
-    val hair = if (dark) Color(0xFF24272C) else Color(0xFFE7E9E4)
-    // Darkened from #6C737C: the inactive labels were washing out in sunlight,
-    // which is where a telecaller actually uses this.
-    val unsel = if (dark) Color(0xFF9AA1AA) else Color(0xFF525A63)
+    // Light-only now — the dark arms of these three were dead the moment the
+    // dark colour scheme went, and worse than dead: they would have painted a
+    // dark pill onto a light app for anyone whose phone is set to dark.
+    val jade = AppColors.Indigo
+    val pill = AppColors.Surface
+    val hair = AppColors.Border
+    // Kept deliberately darker than a normal secondary: inactive labels were
+    // washing out in sunlight, which is where a telecaller actually works.
+    val unsel = AppColors.TextSecondary
     val ring = MaterialTheme.colorScheme.background
     Box(Modifier.fillMaxWidth().height(84.dp).padding(horizontal = 14.dp), contentAlignment = Alignment.BottomCenter) {
         Row(
@@ -1282,6 +1292,13 @@ private data class NavRow(val label: String, val desc: String, val icon: ImageVe
 private data class QuickAction(val label: String, val icon: ImageVector, val route: String?)
 
 // Premium dark menu palette — one accent, everything else neutral.
+// THE MORE DRAWER STAYS DARK — kept at the founder's request.
+//
+// It was relit to match the new near-white app and then put back: the drawer is
+// the app's identity surface, it is entered deliberately rather than lived in,
+// and the dark sheet with the gold Premium mark is what the team recognises as
+// Call Pro AI. The light rest of the app is unaffected; this is the one
+// intentional dark surface besides the in-call screens.
 private val MenuBg = Color(0xFF0C1426)
 private val MenuCard = Color(0xFF13203A)
 private val MenuText = Color(0xFFE8EDF7)

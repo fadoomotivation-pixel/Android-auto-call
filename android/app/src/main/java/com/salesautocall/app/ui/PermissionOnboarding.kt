@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.salesautocall.app.ui.design.AppColors
 
 // ════════════════════════════════════════════════════════════════════════════
 //  THE APP DOES NOT OPEN UNTIL IT CAN DO ITS JOB.
@@ -555,4 +556,4 @@ private fun SetupRow(
     Spacer(Modifier.height(10.dp))
 }
 
-private val OkGreen = Color(0xFF4353B8)
+private val OkGreen = AppColors.Positive
