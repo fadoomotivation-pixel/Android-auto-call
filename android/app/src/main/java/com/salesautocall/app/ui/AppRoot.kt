@@ -121,7 +121,7 @@ import com.salesautocall.app.data.AppPrefs
 import kotlinx.coroutines.launch
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
-import com.salesautocall.app.ui.design.InitialsAvatar
+import androidx.compose.ui.graphics.Brush
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -561,25 +561,24 @@ private fun MainShell(vm: MainViewModel) {
                     !rel.forced -> vm.dismissUpdate()
                 }
             },
-            title = { Text(if (rel.forced) "🔒 Update required" else "🚀 Update available") },
+            title = { Text(if (rel.forced) "Update required" else "Update available") },
             text = {
                 Column {
-                    Text("Version ${rel.versionName} is ready to install.")
-                    Spacer(Modifier.height(8.dp))
-                    // Always a generic, customer-safe line — never raw release
-                    // notes, which could carry repo/branch/PR internals.
+                    // Short on purpose. This dialog interrupts a calling shift,
+                    // so it says the version, one line of why, and gets out of
+                    // the way. Always a generic, customer-safe line — never raw
+                    // release notes, which could carry repo/branch/PR internals.
                     Text(
-                        if (rel.forced) "This is an important update — please install it to keep using the app."
-                        else "Includes the latest features, speed improvements and fixes.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (rel.forced) "Version ${rel.versionName}. Please install to keep using the app."
+                        else "Version ${rel.versionName}. Speed improvements and fixes.",
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     if (downloading) {
                         Spacer(Modifier.height(14.dp))
                         val pct = (state.updateProgress * 100).toInt().coerceIn(0, 100)
                         LinearProgressIndicator(progress = state.updateProgress, modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(6.dp))
-                        Text("Downloading… $pct% — the installer opens automatically.",
+                        Text("Downloading $pct% — the installer opens on its own.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -588,7 +587,10 @@ private fun MainShell(vm: MainViewModel) {
             confirmButton = {
                 if (downloading) {
                     // The one thing a rep on a shift actually needs here.
-                    TextButton(onClick = { vm.minimizeUpdate() }) { Text("Chhota karo — kaam karne do") }
+                    // The one thing a rep mid-shift actually needs: get this
+                    // box off the screen and let the download finish in the
+                    // background. Was "Chhota karo — kaam karne do".
+                    TextButton(onClick = { vm.minimizeUpdate() }) { Text("Keep working") }
                 } else {
                     TextButton(onClick = { vm.installUpdate() }) { Text("Update now") }
                 }
@@ -934,7 +936,7 @@ private fun CoachSheet(
                     CircularProgressIndicator()
                 }
                 panel == null -> Text(
-                    "Coach abhi data nahi laa paya — thodi der baad try kariye.",
+                    "Coach could not load right now. Try again in a bit.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1020,8 +1022,8 @@ private fun CoachSheet(
                     }
                     if (panel.brief == null && panel.coaching == null) {
                         Text(
-                            "Abhi coaching ke liye koi real call nahi mili (30 sec+ ki call chahiye). " +
-                                "Ek achhi lambi call kijiye — coach yahin milega! 💪",
+                            "No call long enough to coach on yet — 30 seconds or more. " +
+                                "Make one good call and the coaching shows up here.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1039,7 +1041,7 @@ private fun CoachSheet(
                     CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                 }
                 picks.isEmpty() -> Text(
-                    "AI abhi aapke leads padh raha hai — thodi der me yahan aaj ke best 5 calls milengi.",
+                    "Reading your leads — your best 5 calls for today will show up here shortly.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1143,7 +1145,7 @@ private fun CoachSheet(
             Spacer(Modifier.height(16.dp))
             Text("🛡️ Objection Buster", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Customer ne mana kiya? Tap karo ya likho — turant sahi jawab milega.",
+                "Customer said no? Tap or type it and get the reply to use.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1290,19 +1292,20 @@ private data class NavRow(val label: String, val desc: String, val icon: ImageVe
 private data class QuickAction(val label: String, val icon: ImageVector, val route: String?)
 
 // Premium dark menu palette — one accent, everything else neutral.
-// The More drawer was the last dark surface in the app, with a gold "Premium"
-// badge — the two things the design direction rules out outright. Flipped to
-// the same near-white canvas as every other screen by repointing the constants,
-// so all 29 call sites below move together and none of the drawer's structure
-// or behaviour changes.
-private val MenuBg = AppColors.Canvas
-private val MenuCard = AppColors.Surface
-private val MenuText = AppColors.TextPrimary
-private val MenuMuted = AppColors.TextSecondary
-private val MenuDivider = AppColors.Border
-private val MenuAccent = AppColors.Indigo
-// Was gold. Violet reads as "premium" in this palette without the casino tint.
-private val Gold = AppColors.Violet
+// THE MORE DRAWER STAYS DARK — kept at the founder's request.
+//
+// It was relit to match the new near-white app and then put back: the drawer is
+// the app's identity surface, it is entered deliberately rather than lived in,
+// and the dark sheet with the gold Premium mark is what the team recognises as
+// Call Pro AI. The light rest of the app is unaffected; this is the one
+// intentional dark surface besides the in-call screens.
+private val MenuBg = Color(0xFF0C1426)
+private val MenuCard = Color(0xFF13203A)
+private val MenuText = Color(0xFFE8EDF7)
+private val MenuMuted = Color(0xFF8A97AE)
+private val MenuDivider = Color(0xFF1B2740)
+private val MenuAccent = Color(0xFF3B82F6)
+private val Gold = Color(0xFFF5B23E)
 
 /** Rough INR value of the open pipeline (excludes won/dead), for the menu card. */
 private fun pipelineValue(leads: List<Contact>, stages: List<LeadStage>): String {
@@ -1382,27 +1385,23 @@ private fun AppDrawer(
     ) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             // Brand header.
-            // Half-converted until now: relighting the drawer left this header a
-            // dark navy gradient with white type sitting on a white sheet — the
-            // only part of the app that still looked like the old theme, and the
-            // first thing the drawer shows.
             Row(
                 Modifier.fillMaxWidth()
-                    .background(AppColors.SurfaceMuted)
+                    .background(Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF0C1426))))
                     .padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(MenuAccent),
                     contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = AppColors.OnIndigo, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = Color.White, modifier = Modifier.size(24.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Call Pro AI", style = AppType.title, color = AppColors.TextPrimary)
-                    Text("Real Estate Sales Simplified", style = AppType.meta, color = AppColors.TextSecondary)
+                    Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
                 }
-                Box(Modifier.clip(RoundedCornerShape(50)).background(AppColors.VioletSoft).padding(horizontal = 9.dp, vertical = 3.dp)) {
-                    Text("Premium", style = AppType.tag, color = Gold)
+                Box(Modifier.clip(RoundedCornerShape(50)).background(Gold.copy(alpha = 0.2f)).padding(horizontal = 9.dp, vertical = 3.dp)) {
+                    Text("Premium", style = MaterialTheme.typography.labelSmall, color = Gold, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -1445,9 +1444,9 @@ private fun AppDrawer(
                 Modifier.fillMaxWidth().clickable { onSignOut() }.padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // The shared avatar, so the rep's own face in the drawer matches
-                // the one beside every lead. Was a blue-to-purple gradient disc.
-                InitialsAvatar(userName.ifBlank { "?" }, size = 42)
+                Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)))), contentAlignment = Alignment.Center) {
+                    Text(userName.trim().take(1).uppercase().ifBlank { "?" }, color = Color.White, fontWeight = FontWeight.Bold)
+                }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(userName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MenuText)
@@ -1477,7 +1476,7 @@ private fun AppDrawer(
 @Composable
 private fun OppStat(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(value, style = AppType.metric, color = AppColors.TextPrimary, maxLines = 1)
+        Text(value, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MenuMuted)
     }
 }
@@ -1508,7 +1507,7 @@ private fun DrawerNavRow(item: NavRow, selected: Boolean, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(item.label, style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold, color = if (selected) MenuAccent else MenuText)
+                    fontWeight = FontWeight.SemiBold, color = if (selected) Color.White else MenuText)
                 item.badge?.let {
                     Spacer(Modifier.width(8.dp))
                     Box(Modifier.clip(RoundedCornerShape(50)).background(MenuAccent.copy(alpha = 0.22f)).padding(horizontal = 7.dp, vertical = 1.dp)) {
@@ -1534,7 +1533,7 @@ private fun DrawerMoreRow(icon: ImageVector, label: String, selected: Boolean, o
     ) {
         Icon(icon, contentDescription = label, tint = if (selected) MenuAccent else MenuMuted, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(14.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (selected) MenuAccent else MenuText)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (selected) Color.White else MenuText)
     }
 }
 

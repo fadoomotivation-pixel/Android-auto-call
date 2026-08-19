@@ -1691,6 +1691,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     val base = when {
         stageFilter != null -> app.leads.filter { it.stage == stageFilter }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
+        // WHO HAVE I ALREADY CALLED TODAY.
+        //
+        // There was no way to see this. Every view in the app answers "who is
+        // left" — Call now, Overdue, Due today — and a rep part-way through a
+        // list had no way to check what they had already got through, which is
+        // the first thing anyone asks themselves at 4pm. v_lead_workstate
+        // already carries last_call_at and the Leads screen already loads it,
+        // so this is a client-side filter over data that was on screen.
+        quick == "called" -> app.leads.filter { isToday(app.workOf(it)?.lastCallAt) }
         quick == "retry" -> app.leads.filter { app.actionOf(it) == "call_now" }
         // THE HOME DECK'S TWO BUTTONS LAND HERE, and until now they landed
         // nowhere. "followup" and "new" match neither the "act:" nor the
@@ -1951,7 +1960,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             run {
                 val active = buildList {
                     stageFilter?.let { sf -> add(Triple("stage", app.leadStages.firstOrNull { it.code == sf }?.label ?: sf) { stageFilter = null }) }
-                    quick?.let { q -> add(Triple("quick", if (q == "today") "Added today" else "Retry") { quick = null }) }
+                    quick?.let { q ->
+                        val ql = when (q) { "called" -> "Called today"; "today" -> "Added today"; else -> "Retry" }
+                        add(Triple("quick", ql) { quick = null })
+                    }
                     tempFilter?.let { t -> add(Triple("temp", when (t) { "hot" -> "🔥 Hot"; "warm" -> "🌤 Warm"; else -> "❄️ Cold" }) { tempFilter = null }) }
                     if (sortBy != "default") add(Triple("sort", if (sortBy == "score") "AI Score ↓" else "Newest first") { sortBy = "default" })
                 }
@@ -2165,7 +2177,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 }
                 Text("Quick views", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("today" to "Added today", "retry" to "Retry (no answer/busy)").forEach { (key, label) ->
+                    listOf(
+                        "called" to "Called today",
+                        "today" to "Added today",
+                        "retry" to "Retry (no answer/busy)",
+                    ).forEach { (key, label) ->
                         val on = quick == key
                         Box(
                             Modifier.clip(RoundedCornerShape(50))
@@ -3343,7 +3359,22 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                             Triple("⏳  Busy", Amber, { dispose("busy") }),
                             Triple("📴  Switched off", Slate, { dispose("no_answer") }),
                             Triple("🙅  Wrong person", Amber, { dispose("wrong_person") }),
-                            Triple("✖️  Wrong number", Red, { dispose("dnc") }),
+                            // WRONG NUMBER IS ONE TAP, AND IT IS NOT "DO NOT CALL".
+                            //
+                            // Two things were wrong. It filed the lead as `dnc`,
+                            // which means the PERSON asked not to be contacted —
+                            // a number that never belonged to them was polluting
+                            // the do-not-call list. lead_stages already has
+                            // `invalid` ("Bad number"), terminal, for exactly
+                            // this, and it is deliberately not in the retry
+                            // ladder, so a dead number stops booking retries.
+                            //
+                            // And it goes straight through with no note and no
+                            // temperature. There is nothing for a telecaller to
+                            // record about a number that is not the customer's;
+                            // asking them to is asking for data that cannot
+                            // exist.
+                            Triple("✖️  Wrong number", Red, { vm.postCallDispose("invalid", null, null) }),
                             Triple("↻  Call back later", Indigo, { scheduleFor = "callback" }),
                         )
                     }

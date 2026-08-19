@@ -357,7 +357,7 @@ private fun MessagingCard(vm: MainViewModel, app: AppState) {
 
     PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            SettingHeader(Icons.Default.Chat, "Messages", "Kis WhatsApp se, aur aap apne aap ko kaise likhein")
+            SettingHeader(Icons.Default.Chat, "Messages", "Which WhatsApp to send from, and how you refer to yourself")
 
             // ---- which WhatsApp ----
             if (installed.size > 1) {
@@ -392,14 +392,14 @@ private fun MessagingCard(vm: MainViewModel, app: AppState) {
                 }
             } else if (installed.size == 1) {
                 Spacer(Modifier.height(10.dp))
-                Text("Messages ${installed.first().label} se jaayenge.",
+                Text("Messages will go from ${installed.first().label}.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             // ---- how the rep speaks about themselves ----
             Spacer(Modifier.height(18.dp))
-            Text("Message me aap apne aap ko kaise likhein", style = MaterialTheme.typography.labelLarge)
+            Text("How you refer to yourself in messages", style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -425,7 +425,7 @@ private fun MessagingCard(vm: MainViewModel, app: AppState) {
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "Ready templates aur AI ke likhe message isi hisaab se banenge.",
+                "Ready templates and AI-written messages follow this.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

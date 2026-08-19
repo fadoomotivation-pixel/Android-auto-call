@@ -379,7 +379,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                     Spacer(Modifier.width(10.dp))
-                                    Text("Aakhri call ki recording analyse ho rahi hai…",
+                                    Text("Listening to your last call…",
                                         style = MaterialTheme.typography.bodySmall, color = SubInk)
                                 }
                             } else {
@@ -1772,7 +1772,7 @@ private fun VoiceNoteRow(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onRefreshAi() }) {
                     CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp, color = IndigoL)
                     Spacer(Modifier.width(6.dp))
-                    Text("AI summary ban raha hai… (tap to refresh)", style = MaterialTheme.typography.labelSmall, color = SubInk)
+                    Text("Writing the summary… tap to refresh", style = MaterialTheme.typography.labelSmall, color = SubInk)
                 }
             }
         }
