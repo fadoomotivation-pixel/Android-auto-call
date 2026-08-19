@@ -1506,6 +1506,38 @@ object Repository {
             limit(limit.toLong())
         }.decodeList<LeadActivity>()
 
+    /**
+     * Everything logged against MY leads since midnight — the answer to "I
+     * updated that lead, where did it go".
+     *
+     * A rep records an outcome and the lead leaves the bucket they were looking
+     * at: it moves stage, or its callback is rebooked for next week, or it drops
+     * out of Call now. That is correct behaviour and it looks exactly like
+     * nothing happened, so reps stopped trusting that their work saved.
+     *
+     * Every one of those writes already logs a row here. `actor_id` is the rep
+     * on all of them, including the ones the AI and the call-log importer write
+     * on the rep's behalf — `actor_name` is what separates those — so one
+     * filter returns the rep's whole day, and RLS already permits exactly this
+     * read (`actor_id = auth.uid()`).
+     *
+     * Midnight is IST because the rep's day is: a call at 11 PM belongs to the
+     * day it happened on, not to tomorrow's list.
+     */
+    suspend fun fetchMyActivitiesToday(limit: Int = 150): List<LeadActivity> {
+        val uid = currentUserId() ?: return emptyList()
+        val ist = java.time.ZoneId.of("Asia/Kolkata")
+        val midnight = java.time.LocalDate.now(ist).atStartOfDay(ist).toInstant().toString()
+        return client.from("lead_activities").select {
+            filter {
+                eq("actor_id", uid)
+                gte("created_at", midnight)
+            }
+            order("created_at", Order.DESCENDING)
+            limit(limit.toLong())
+        }.decodeList<LeadActivity>()
+    }
+
     // ---------- lead voice notes ----------
 
     /**

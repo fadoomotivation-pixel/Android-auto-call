@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
@@ -83,6 +84,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
@@ -610,7 +612,11 @@ private fun WorkGrid(
                         else -> MaterialTheme.colorScheme.outline
                     }
                     Column(
-                        Modifier.weight(1f).height(56.dp)
+                        // heightIn, not height. The tile holds a 19sp number
+                        // over an 11sp word; at a large system font scale those
+                        // two lines need more than 56dp and a fixed box clipped
+                        // the label away, leaving six bare numbers.
+                        Modifier.weight(1f).heightIn(min = 56.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (on) a.color.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surface)
                             .border(1.dp, border, RoundedCornerShape(10.dp))
@@ -752,9 +758,57 @@ private fun prettyPhone(raw: String): String {
 //  DASHBOARD
 // ════════════════════════════════════════════════════════════
 // ── premium dashboard helpers ──
+/**
+ * The buyer's own form answer, in the English a telecaller reads.
+ *
+ * The Facebook lead forms are written in Hindi, so 1,546 leads in this database
+ * carry a budget like "₹3_–_5_लाख" or "₹12_लाख_से_ऊपर" and that is what the
+ * lead card printed. Devanagari on an otherwise English screen is the one place
+ * left where the app made a rep switch scripts mid-glance.
+ *
+ * "Lakh" and "Crore" are Indian English, not a translation — they are the words
+ * a telecaller says out loud. This is a closed vocabulary of money units and
+ * comparators, checked against every distinct value in the table; it is not a
+ * general translator and must not grow into one.
+ *
+ * NAMES ARE NEVER PUT THROUGH THIS. A customer wrote "श्याम लाडला" and that is
+ * their name, not a string to be processed. The only callers are the budget
+ * label and the form-answer chips, and leadAnswers drops every name field
+ * before it gets here.
+ */
+private val HINDI_UNITS: List<Pair<Regex, String>> = listOf(
+    // Longest first: "से ऊपर" has to go before anything inside it.
+    Regex("अभी\\s*जानकारी\\s*चाहिए") to "Wants details now",
+    Regex("से\\s*(ऊपर|अधिक|ज़्यादा|ज्यादा)") to "+",
+    Regex("करोड़?") to "Crore",
+    Regex("लाख") to "Lakh",
+    Regex("ह(ज़|ज)ार") to "Thousand",
+    // No \b here on purpose. Java's \b is ASCII-only unless the pattern asks
+    // for UNICODE_CHARACTER_CLASS, so "\\bतक\\b" matches nothing at all on a
+    // phone — it only looks right when tested in a regex engine whose \b is
+    // Unicode-aware. Anchored to the end instead, which is where it appears.
+    Regex("\\s*तक\\s*$") to " or less",
+    Regex("^ह(ाँ|ां)$") to "Yes",
+    Regex("^नहीं$") to "No",
+)
+
+internal fun indianEnglish(s: String): String {
+    // Nothing Devanagari in it — hand back the exact string, untouched.
+    if (s.none { it in 'ऀ'..'ॿ' }) return s
+    var t = s
+    for ((hindi, english) in HINDI_UNITS) t = t.replace(hindi, english)
+    // "12 Lakh +" is not how anyone writes it.
+    return t.replace(Regex("\\s+\\+"), "+").replace(Regex("\\s+"), " ").trim()
+}
+
 private fun parseBudgetRupees(s: String?): Double {
     if (s.isNullOrBlank()) return 0.0
-    val t = s.lowercase().replace(",", "").trim()
+    // Normalised FIRST so the units are readable. "₹1 करोड़" used to fall past
+    // every unit test below and land on the "<1000 means lakhs" fallback — one
+    // crore counted into the pipeline total as one lakh, a hundredfold miss.
+    // The lakh values only ever came out right by accident, through that same
+    // fallback; now they match on the word.
+    val t = indianEnglish(s).lowercase().replace(",", "").trim()
     val num = Regex("[0-9]+(\\.[0-9]+)?").find(t)?.value?.toDoubleOrNull() ?: return 0.0
     return when {
         "cr" in t || "crore" in t -> num * 10_000_000
@@ -776,12 +830,13 @@ private fun formatRupees(v: Double): String = when {
 }
 
 /** Tidy a raw, human-entered budget for display: drop any leading ₹ (the row
- *  prints its own), turn underscores into spaces and collapse whitespace so an
- *  imported "₹5–10_लाख" reads as a clean "5–10 लाख". Ranges and native units
- *  ("लाख"/"Cr") stay intact. Null/blank in → null out. */
+ *  prints its own), turn underscores into spaces, collapse whitespace and put
+ *  the units into Indian English, so an imported "₹5–10_लाख" reads as a clean
+ *  "5–10 Lakh". Ranges stay intact. Null/blank in → null out. */
 internal fun budgetLabel(s: String?): String? =
     s?.replace('_', ' ')?.replace(Regex("\\s+"), " ")?.trim()
-        ?.trimStart('₹', ' ')?.trim()?.takeIf { it.isNotBlank() }
+        ?.trimStart('₹', ' ')?.trim()
+        ?.let { indianEnglish(it) }?.takeIf { it.isNotBlank() }
 
 /**
  * "GaneshChauhan" → "Ganesh Chauhan".
@@ -821,8 +876,13 @@ internal fun leadAnswers(c: Contact): List<Pair<String?, String>> {
     for ((key, v) in raw) {
         val k = key.lowercase()
         if (k.contains("name") || k.contains("phone") || k.contains("email")) continue
+        // Same Indian-English pass the budget gets, and it has to be the same
+        // one: the duplicate check below compares this against budgetLabel, so
+        // if only one side were normalised the budget would print twice — once
+        // as the money line and again as a chip.
         val value = (v as? JsonPrimitive)?.contentOrNull
             ?.replace('_', ' ')?.replace(Regex("\\s+"), " ")?.trim()
+            ?.let { indianEnglish(it) }
             ?.takeIf { it.isNotBlank() } ?: continue
         if (budget != null && value.trimStart('₹', ' ').trim().lowercase() == budget) continue
         // An ASCII key is a usable label ("site_visit?" → "Site visit"). A
@@ -1467,6 +1527,7 @@ private fun LeadsDeck(
     onRefresh: () -> Unit,
     onScore: () -> Unit,
     onSelect: () -> Unit,
+    onToday: () -> Unit,
     onDueNow: () -> Unit,
     onHot: () -> Unit,
     onNew: () -> Unit,
@@ -1531,6 +1592,14 @@ private fun LeadsDeck(
                             leadingIcon = { Icon(Icons.Default.Checklist, contentDescription = null) },
                             onClick = { menuOpen = false; onSelect() },
                         )
+                        // The rep's own day, on the screen where they spend it.
+                        // In the menu rather than on the deck because it is a
+                        // thing you go and check, not a number you work from.
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("What I did today") },
+                            leadingIcon = { Icon(Icons.Default.History, contentDescription = null) },
+                            onClick = { menuOpen = false; onToday() },
+                        )
                     }
                 }
             }
@@ -1538,10 +1607,10 @@ private fun LeadsDeck(
             // The four counters, still one tap each, now one line instead of a
             // row of 60dp tiles.
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                DeckStat("⏰", dueNow, "Due", dueNow > 0, Modifier.weight(1f), onDueNow)
-                DeckStat("🔥", hotCount, "Hot", false, Modifier.weight(1f), onHot)
-                DeckStat("✨", newCount, "New", false, Modifier.weight(1f), onNew)
-                if (reviveCount > 0) DeckStat("💎", reviveCount, "Revive", false, Modifier.weight(1f), onRevive)
+                DeckStat(dueNow, "Due", dueNow > 0, Modifier.weight(1f), onDueNow)
+                DeckStat(hotCount, "Hot", false, Modifier.weight(1f), onHot)
+                DeckStat(newCount, "New", false, Modifier.weight(1f), onNew)
+                if (reviveCount > 0) DeckStat(reviveCount, "Revive", false, Modifier.weight(1f), onRevive)
             }
         }
     }
@@ -1549,21 +1618,30 @@ private fun LeadsDeck(
 
 /** One glass counter on the deck — a number that is also a one-tap filter. */
 @Composable
-private fun DeckStat(emoji: String, value: Int, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun DeckStat(value: Int, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     // One line, 26dp. Two-line tiles cost 60dp each and said nothing extra.
+    //
+    // The emoji is gone because it was eating the label. Four chips share the
+    // width; each held a glyph, a number and a word. With a three-digit count
+    // that is too much, and the last chip rendered "195 Revi" — clipped
+    // mid-word, because maxLines=1 with no overflow set just cuts. Dropping the
+    // glyph gives back the width the word needed, and the word was always the
+    // part carrying the meaning. Ellipsis is the floor under that: a five-digit
+    // count degrades to "Revi…" instead of a word sliced at a random letter.
     Row(
         modifier.height(26.dp).clip(RoundedCornerShape(8.dp))
             .background(Color.White.copy(alpha = if (highlight) 0.26f else 0.12f))
             .clickable { onClick() }
-            .padding(horizontal = 7.dp),
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        Text(emoji, fontSize = 10.sp)
-        Spacer(Modifier.width(4.dp))
         Text("$value", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
         Spacer(Modifier.width(4.dp))
-        Text(label, fontSize = 9.5.sp, color = Color.White.copy(alpha = 0.8f), maxLines = 1)
+        Text(
+            label, fontSize = 9.5.sp, color = Color.White.copy(alpha = 0.8f),
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -1594,6 +1672,123 @@ private fun FollowUpAllClear(laterCount: Int) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
+    }
+}
+
+/**
+ * "What you did today" — the rep's own day, in one sheet.
+ *
+ * THE COMPLAINT THIS ANSWERS: "jo telecaller update kara vo kaha gya."
+ *
+ * Recording an outcome is the one thing this app asks a rep to do all day, and
+ * it is the one thing that leaves no trace on screen. The update is correct and
+ * its effect is to make the lead LEAVE: it moves stage, so it drops out of the
+ * bucket being looked at; or the next callback books itself for Friday, so it
+ * disappears from Call now. From the rep's chair a saved update and a lost
+ * update look identical — which is how a rep who had worked all afternoon came
+ * to believe the app was eating their work.
+ *
+ * Nothing here is new data. Every one of those writes already logs a row to
+ * lead_activities and the lead page already draws them one lead at a time. This
+ * is the same rows, for one day, across all of the rep's leads, with the lead's
+ * name on them and a tap to go back.
+ *
+ * The AI and the call-log importer write under the rep's own actor_id, so their
+ * entries arrive too — and they should: "the AI moved this to Interested from
+ * your voice note" is exactly the kind of thing a rep suspects did not happen.
+ * They are labelled so it is never mistaken for something the rep typed.
+ */
+@Composable
+private fun TodayWorkSheet(app: AppState, onOpenLead: (String) -> Unit) {
+    // Named per lead, from the list the screen already has in memory. A lead
+    // the rep worked today is a lead assigned to them, so it is loaded.
+    val nameById = remember(app.leads) {
+        app.leads.mapNotNull { l -> l.id?.let { it to (prettyName(l.name) ?: prettyPhone(l.phone)) } }.toMap()
+    }
+    // Grouped by lead, most recently touched first. A rep who called the same
+    // person three times wants one entry with three lines, not three entries
+    // scattered down a list.
+    val groups = remember(app.todayActivities, nameById) {
+        app.todayActivities
+            .groupBy { it.contactId }
+            .entries
+            .sortedByDescending { e -> e.value.firstOrNull()?.createdAt ?: "" }
+    }
+    val me = app.profile?.fullName?.trim()
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = Space.l).padding(bottom = Space.xl)) {
+        Text("What you did today", style = AppType.title, color = AppColors.TextPrimary)
+        Spacer(Modifier.height(Space.xxs))
+        Text(
+            when {
+                app.todayActivitiesLoading && app.todayActivities.isEmpty() -> "Loading your day…"
+                groups.isEmpty() -> "Nothing recorded yet today."
+                else -> "${app.todayActivities.size} updates on ${groups.size} leads"
+            },
+            style = AppType.meta, color = AppColors.TextSecondary,
+        )
+        Spacer(Modifier.height(Space.m))
+
+        if (groups.isEmpty() && !app.todayActivitiesLoading) {
+            Text(
+                "Every update you make gets saved here with the time — the stage you set, the note you wrote, the callback you booked. Update a lead and come back to see it.",
+                style = AppType.body, color = AppColors.TextSecondary,
+            )
+            return@Column
+        }
+
+        // Capped against the SCREEN, not a fixed dp. A busy rep logs a few dozen
+        // updates a day, and a flat 460dp cap is taller than the whole usable
+        // area of a 4-inch phone — the header above would have been pushed out
+        // of the sheet on exactly the handsets this app has to work on.
+        val maxList = (LocalConfiguration.current.screenHeightDp * 0.55f).dp
+        LazyColumn(
+            Modifier.fillMaxWidth().heightIn(max = maxList),
+            verticalArrangement = Arrangement.spacedBy(Space.s),
+        ) {
+            items(groups, key = { it.key }) { (cid, acts) ->
+                Column(
+                    Modifier.fillMaxWidth().clip(Radii.card)
+                        .background(AppColors.SurfaceMuted)
+                        .clickable { onOpenLead(cid) }
+                        .padding(horizontal = Space.m, vertical = Space.s),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            // A lead the rep worked today is assigned to them, so
+                            // it is in the loaded list — but a hand-over between
+                            // the update and now would take it out, and a blank
+                            // row is worse than a plain word.
+                            nameById[cid] ?: "Lead",
+                            style = AppType.rowTitle, color = AppColors.TextPrimary,
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(Space.s))
+                        Text(timeOnly(acts.firstOrNull()?.createdAt), style = AppType.tag,
+                            color = AppColors.TextTertiary, maxLines = 1)
+                    }
+                    // Four lines is a whole conversation's worth of updates on
+                    // one lead. Past that the lead's own page is the right place
+                    // to read it, and the row says so.
+                    acts.take(4).forEach { a ->
+                        val byOther = me.isNullOrBlank() || a.actorName?.trim() != me
+                        Spacer(Modifier.height(Space.xxs))
+                        Text(
+                            if (byOther && !a.actorName.isNullOrBlank()) "${a.detail}  ·  ${a.actorName}"
+                            else a.detail,
+                            style = AppType.meta, color = AppColors.TextSecondary,
+                            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (acts.size > 4) {
+                        Spacer(Modifier.height(Space.xxs))
+                        Text("+${acts.size - 4} more — open the lead to read them all",
+                            style = AppType.tag, color = AppColors.TextTertiary)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1633,6 +1828,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
     var sortBy by remember { mutableStateOf("default") }          // "default" | "score" | "recent"
     var sheetOpen by remember { mutableStateOf(false) }
+    var todayOpen by remember { mutableStateOf(false) }  // "What I did today"
     var reviveOpen by remember { mutableStateOf(false) } // RAG v13 — Second Chance sheet
     var actionFor by remember { mutableStateOf<Contact?>(null) }
     var scheduleFor by remember { mutableStateOf<Contact?>(null) }
@@ -1847,6 +2043,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
                         onScore = { vm.scoreLeads() },
                         onSelect = { selectMode = true },
+                        onToday = { todayOpen = true; vm.loadTodayActivities() },
                         // "Due now" lands on Follow-up, which opens on Call now
                         // — the list this number counts. It used to drop the rep
                         // into New, where none of these leads live any more.
@@ -2140,6 +2337,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             text = { Text("Call ${dialList.size}", fontWeight = FontWeight.Bold) },
         )
     }
+    }
+
+    if (todayOpen) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { todayOpen = false }) {
+            TodayWorkSheet(
+                app = app,
+                onOpenLead = { id -> todayOpen = false; vm.openLeadDetail(id) },
+            )
+        }
     }
 
     // FILTERS — all the fine-grained power, one sheet away.
@@ -2713,8 +2919,14 @@ private fun LeadCard(
                 // seconds. A rep about to dial needs to know which kind this
                 // was before they open with "as I was saying".
                 lastCallLine(work)?.let { (text, tint) ->
+                    // Ellipsis because this line is the longest one on the card
+                    // and the only one built from three variable parts: "📞 No
+                    // talk (1h 05m) · 3 days ago · 12 calls" is wider than the
+                    // text column on a 4-inch phone, and maxLines=1 with no
+                    // overflow set cuts it mid-word rather than saying so.
                     Text(text, fontSize = 11.5.sp, color = tint,
-                        fontWeight = FontWeight.Medium, maxLines = 1)
+                        fontWeight = FontWeight.Medium, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
                 // Project and area. Two lines, because real project names are
                 // long and "Kunj Vihari, Bridge Vat…" tells a rep less than
@@ -3602,6 +3814,7 @@ private fun QuickScheduleChips(
 // ════════════════════════════════════════════════════════════
 //  FOLLOW-UPS
 // ════════════════════════════════════════════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val app by vm.state.collectAsState()
@@ -3609,6 +3822,12 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     LaunchedEffect(Unit) { vm.loadFollowUps(); vm.loadLeads() }
 
     var rescheduleFor by remember { mutableStateOf<FollowUp?>(null) }
+    // The same "What I did today" sheet the Leads screen shows. This screen
+    // needs it more, not less: finishing a callback books the next one, so the
+    // card the rep just worked on either vanishes or comes back looking
+    // untouched, and there was nothing anywhere saying the update landed.
+    var todayOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
     // Ticks once a minute, so a callback whose time arrives while the rep is
     // looking at this screen walks into Call now by itself. It used to need the
     // rep to leave and come back — which is how a callback booked for 3 PM got
@@ -3691,14 +3910,35 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     // inside a branch that appears and disappears as the rep switches tabs
     // changes the call order between recompositions.
     val allSorted = remember(parsed) { parsed.sortedBy { it.ms }.map { it.f } }
-    val shown = when (filter) {
+    val inTab = when (filter) {
         "tocall" -> toCall
         "later" -> laterToday
         "tomorrow" -> tomorrow
         "week" -> weekList
         else -> allSorted
     }
-    val blurb = when (filter) {
+    // SEARCH. The Leads page has had it all along; this one never did, and it is
+    // the page with a hundred and forty rows on it. A rep who remembers a name
+    // — "that Sharma I promised to call back" — had no way to reach that
+    // callback except scrolling every tab.
+    //
+    // It searches the WHOLE list, not the open tab: the whole point is that the
+    // rep does not know which tab their callback fell into. Typing therefore
+    // shows results across every bucket, and clearing the box puts the tab back.
+    val shown = remember(inTab, allSorted, query) {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) inTab
+        else allSorted.filter {
+            (it.name?.lowercase()?.contains(q) == true) || it.phone.filter { c -> c.isDigit() }.contains(q)
+        }
+    }
+    // Searching overrides the tab, so the line under the chips has to say so —
+    // otherwise the chips look selected while showing something else, which is
+    // exactly the kind of "this screen is lying to me" moment this page has
+    // already been fixed for once.
+    val blurb = if (query.isNotBlank()) {
+        "${shown.size} found across every list — clear the search to go back to the tabs."
+    } else when (filter) {
         "tocall" -> "Their time has come — oldest first. Call these now."
         "later" -> "Booked for later today. Nothing to do yet."
         "tomorrow" -> "Booked for tomorrow. These move into Call now on their own, at their time."
@@ -3720,6 +3960,13 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Follow Ups", style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { todayOpen = true; vm.loadTodayActivities() },
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Icon(Icons.Default.History, contentDescription = "What I did today",
+                        modifier = Modifier.size(19.dp))
+                }
                 IconButton(onClick = { vm.loadFollowUps(force = true) }, modifier = Modifier.size(34.dp)) {
                     Icon(Icons.Default.Refresh, contentDescription = "Refresh", modifier = Modifier.size(19.dp))
                 }
@@ -3728,6 +3975,15 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
                 ) { Text("Back", fontSize = 13.sp) }
             }
+        }
+        // Above the chips, because it overrides them.
+        item {
+            AppSearchField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = "Search name or phone",
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
         // The chips ARE the counts. Same row, same look, same behaviour as the
         // Leads screen — one line of "Call now 24 · Later today 3 · Tomorrow 6"
@@ -3755,7 +4011,12 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // defeat, in that order. "Auto queue mode" was a full card with an icon
         // circle, a title and a subtitle wrapped around a button — three lines
         // of explanation for a thing whose whole meaning fits on the button.
-        if (dueContacts.isNotEmpty() || overdueStrict.isNotEmpty()) {
+        //
+        // Both hide while searching. They act on the whole due pile, not on
+        // what is on screen, and "Call all 24 due" sitting above two search
+        // results is a button that does something other than what the rep is
+        // looking at.
+        if (query.isBlank() && (dueContacts.isNotEmpty() || overdueStrict.isNotEmpty())) {
             item {
                 Column {
                     if (dueContacts.isNotEmpty()) {
@@ -3799,6 +4060,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 // count of 24 is what taught reps to distrust this screen.
                 Text(
                     when {
+                        query.isNotBlank() -> "No callback matches \"${query.trim()}\". This searches your callbacks only — the lead may still be on the Leads page."
                         all.isEmpty() -> "No callbacks scheduled. Book one from any lead."
                         toCall.isNotEmpty() -> "Nothing in this list — but ${toCall.size} are waiting in Call now."
                         filter == "tocall" -> "All caught up. Nothing to call right now. 👍"
@@ -3822,6 +4084,15 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     needsUpdate = cid != null && app.pendingUpdates.any { it.contactId == cid },
                 )
             }
+        }
+    }
+
+    if (todayOpen) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { todayOpen = false }) {
+            TodayWorkSheet(
+                app = app,
+                onOpenLead = { id -> todayOpen = false; vm.openLeadDetail(id) },
+            )
         }
     }
 
@@ -3860,10 +4131,21 @@ private fun whyThisCallback(f: FollowUp): String {
             "🎤 ${note.removePrefix("AI:").removePrefix("ai:").trim()}"
         // The no-answer ladder books these, and the note already counts the try.
         note.contains("Attempt", ignoreCase = true) -> "🔁 Nobody picked up — $note"
+        // The database booked this one, not the rep.
+        //
+        // book_callback_if_missing writes exactly this sentence whenever a lead
+        // is set to Callback with no time chosen. Without this branch it fell
+        // through to "You said:", which told a rep they had typed something
+        // they never typed — on the most common note in the table.
+        note == AUTO_CALLBACK_NOTE -> "⏰ $note"
         note.isNotEmpty() -> "📝 You said: $note"
         else -> "↻ You booked a call back"
     }
 }
+
+/** The note `book_callback_if_missing` stamps on a callback nobody timed —
+ *  migration 0166. Matched, never written, by the app. */
+private const val AUTO_CALLBACK_NOTE = "No call time was set, so we booked one for 11 AM"
 
 /**
  * [onUpdate] is null when the callback isn't linked to a lead — there is no
