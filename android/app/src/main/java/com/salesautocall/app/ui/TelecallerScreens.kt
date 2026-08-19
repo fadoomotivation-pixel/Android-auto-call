@@ -107,6 +107,9 @@ import com.salesautocall.app.ui.design.AppType
 import com.salesautocall.app.ui.design.Radii
 import com.salesautocall.app.ui.design.Space
 import com.salesautocall.app.ui.design.AppSearchField
+import com.salesautocall.app.ui.design.InitialsAvatar
+import com.salesautocall.app.ui.design.StatusTag
+import com.salesautocall.app.ui.design.StatusTone
 
 // ════════════════════════════════════════════════════════════
 //  Design system — colours, helpers, atoms
@@ -3857,33 +3860,31 @@ private fun FollowUpCard(
     val who = f.name?.takeIf { it.isNotBlank() } ?: prettyPhone(f.phone)
 
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clip(Radii.card)
+            .background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.card)
+            .padding(horizontal = Space.m, vertical = Space.m),
     ) {
         Row(verticalAlignment = Alignment.Top) {
-            Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
-                    .background(muted.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(initialsOf(f.name ?: f.phone), style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold, color = muted)
-            }
-            Spacer(Modifier.width(11.dp))
+            // The shared circular avatar. It was a rounded square filled with 8%
+            // grey — the only avatar shape in the app, and the only one that did
+            // not tint itself per person, so a column of them was six identical
+            // grey squares.
+            InitialsAvatar(f.name ?: f.phone)
+            Spacer(Modifier.width(Space.m))
             Column(Modifier.weight(1f)) {
-                Text(who, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                Text(who, style = AppType.rowTitle, color = AppColors.TextPrimary,
                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Text("📞 ${prettyPhone(f.phone)}", fontSize = 12.sp, color = muted,
-                    letterSpacing = 0.2.sp, maxLines = 1)
+                // The 📞 was decoration: this is a phone number, on a card whose
+                // main button is Call.
+                Text(prettyPhone(f.phone), style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Space.s))
             Column(horizontalAlignment = Alignment.End) {
-                Pill(relativeDue(f.dueAt), accent, accent.copy(alpha = 0.12f))
-                Spacer(Modifier.height(3.dp))
-                Text("${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}", fontSize = 10.5.sp,
-                    color = muted, maxLines = 1)
+                StatusTag(relativeDue(f.dueAt), StatusTone(accent, accent.copy(alpha = 0.12f)))
+                Spacer(Modifier.height(Space.xxs))
+                Text("${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}", style = AppType.tag,
+                    color = AppColors.TextTertiary, maxLines = 1)
             }
         }
         // WHY this callback is sitting here, in one line, on every card.
@@ -3895,12 +3896,11 @@ private fun FollowUpCard(
         // attempt ladder booked it because nobody picked up.
         Spacer(Modifier.height(8.dp))
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            Modifier.fillMaxWidth().clip(Radii.control)
                 .background(accent.copy(alpha = 0.09f))
-                .padding(horizontal = 9.dp, vertical = 7.dp),
+                .padding(horizontal = Space.m, vertical = Space.s),
         ) {
-            Text(whyThisCallback(f), fontSize = 12.sp, color = accent,
-                fontWeight = FontWeight.Medium, lineHeight = 16.sp, maxLines = 3,
+            Text(whyThisCallback(f), style = AppType.metaStrong, color = accent, maxLines = 3,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         Spacer(Modifier.height(9.dp))
