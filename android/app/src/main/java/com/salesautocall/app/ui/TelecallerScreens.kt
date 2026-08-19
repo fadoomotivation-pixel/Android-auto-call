@@ -758,9 +758,57 @@ private fun prettyPhone(raw: String): String {
 //  DASHBOARD
 // ════════════════════════════════════════════════════════════
 // ── premium dashboard helpers ──
+/**
+ * The buyer's own form answer, in the English a telecaller reads.
+ *
+ * The Facebook lead forms are written in Hindi, so 1,546 leads in this database
+ * carry a budget like "₹3_–_5_लाख" or "₹12_लाख_से_ऊपर" and that is what the
+ * lead card printed. Devanagari on an otherwise English screen is the one place
+ * left where the app made a rep switch scripts mid-glance.
+ *
+ * "Lakh" and "Crore" are Indian English, not a translation — they are the words
+ * a telecaller says out loud. This is a closed vocabulary of money units and
+ * comparators, checked against every distinct value in the table; it is not a
+ * general translator and must not grow into one.
+ *
+ * NAMES ARE NEVER PUT THROUGH THIS. A customer wrote "श्याम लाडला" and that is
+ * their name, not a string to be processed. The only callers are the budget
+ * label and the form-answer chips, and leadAnswers drops every name field
+ * before it gets here.
+ */
+private val HINDI_UNITS: List<Pair<Regex, String>> = listOf(
+    // Longest first: "से ऊपर" has to go before anything inside it.
+    Regex("अभी\\s*जानकारी\\s*चाहिए") to "Wants details now",
+    Regex("से\\s*(ऊपर|अधिक|ज़्यादा|ज्यादा)") to "+",
+    Regex("करोड़?") to "Crore",
+    Regex("लाख") to "Lakh",
+    Regex("ह(ज़|ज)ार") to "Thousand",
+    // No \b here on purpose. Java's \b is ASCII-only unless the pattern asks
+    // for UNICODE_CHARACTER_CLASS, so "\\bतक\\b" matches nothing at all on a
+    // phone — it only looks right when tested in a regex engine whose \b is
+    // Unicode-aware. Anchored to the end instead, which is where it appears.
+    Regex("\\s*तक\\s*$") to " or less",
+    Regex("^ह(ाँ|ां)$") to "Yes",
+    Regex("^नहीं$") to "No",
+)
+
+internal fun indianEnglish(s: String): String {
+    // Nothing Devanagari in it — hand back the exact string, untouched.
+    if (s.none { it in 'ऀ'..'ॿ' }) return s
+    var t = s
+    for ((hindi, english) in HINDI_UNITS) t = t.replace(hindi, english)
+    // "12 Lakh +" is not how anyone writes it.
+    return t.replace(Regex("\\s+\\+"), "+").replace(Regex("\\s+"), " ").trim()
+}
+
 private fun parseBudgetRupees(s: String?): Double {
     if (s.isNullOrBlank()) return 0.0
-    val t = s.lowercase().replace(",", "").trim()
+    // Normalised FIRST so the units are readable. "₹1 करोड़" used to fall past
+    // every unit test below and land on the "<1000 means lakhs" fallback — one
+    // crore counted into the pipeline total as one lakh, a hundredfold miss.
+    // The lakh values only ever came out right by accident, through that same
+    // fallback; now they match on the word.
+    val t = indianEnglish(s).lowercase().replace(",", "").trim()
     val num = Regex("[0-9]+(\\.[0-9]+)?").find(t)?.value?.toDoubleOrNull() ?: return 0.0
     return when {
         "cr" in t || "crore" in t -> num * 10_000_000
@@ -782,12 +830,13 @@ private fun formatRupees(v: Double): String = when {
 }
 
 /** Tidy a raw, human-entered budget for display: drop any leading ₹ (the row
- *  prints its own), turn underscores into spaces and collapse whitespace so an
- *  imported "₹5–10_लाख" reads as a clean "5–10 लाख". Ranges and native units
- *  ("लाख"/"Cr") stay intact. Null/blank in → null out. */
+ *  prints its own), turn underscores into spaces, collapse whitespace and put
+ *  the units into Indian English, so an imported "₹5–10_लाख" reads as a clean
+ *  "5–10 Lakh". Ranges stay intact. Null/blank in → null out. */
 internal fun budgetLabel(s: String?): String? =
     s?.replace('_', ' ')?.replace(Regex("\\s+"), " ")?.trim()
-        ?.trimStart('₹', ' ')?.trim()?.takeIf { it.isNotBlank() }
+        ?.trimStart('₹', ' ')?.trim()
+        ?.let { indianEnglish(it) }?.takeIf { it.isNotBlank() }
 
 /**
  * "GaneshChauhan" → "Ganesh Chauhan".
@@ -827,8 +876,13 @@ internal fun leadAnswers(c: Contact): List<Pair<String?, String>> {
     for ((key, v) in raw) {
         val k = key.lowercase()
         if (k.contains("name") || k.contains("phone") || k.contains("email")) continue
+        // Same Indian-English pass the budget gets, and it has to be the same
+        // one: the duplicate check below compares this against budgetLabel, so
+        // if only one side were normalised the budget would print twice — once
+        // as the money line and again as a chip.
         val value = (v as? JsonPrimitive)?.contentOrNull
             ?.replace('_', ' ')?.replace(Regex("\\s+"), " ")?.trim()
+            ?.let { indianEnglish(it) }
             ?.takeIf { it.isNotBlank() } ?: continue
         if (budget != null && value.trimStart('₹', ' ').trim().lowercase() == budget) continue
         // An ASCII key is a usable label ("site_visit?" → "Site visit"). A
