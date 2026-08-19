@@ -35,7 +35,7 @@ function buildSystem(sources: Src[]): string {
     + "• Be concise and concrete. After each fact you use, cite it as [source: <title>].\n"
     + "• If the facts don't fully cover the question, say exactly what's missing — never fill gaps with guesses.\n"
     + "• No prices, numbers, or promises that aren't in the facts.\n"
-    + "• You may reply in the same language / Hinglish the user asked in.\n\n"
+    + "• Always reply in simple Indian English, whatever language the question was asked in.\n\n"
     + "COMPANY KNOWLEDGE:\n"
     + sources.map((s, i) => `${i + 1}. ${s.title ? `[${s.title}] ` : ""}${s.content}`).join("\n");
 }

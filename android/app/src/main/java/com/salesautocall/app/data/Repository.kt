@@ -933,26 +933,29 @@ object Repository {
      * shot, not part of the coach chat history. Returns the rebuttal, or null.
      */
     /**
-     * Hindi inflects the first person, so anything the AI writes for the rep to
-     * say or send has to know who is speaking. Without this every draft came out
-     * masculine ("kar raha hoon", "bataunga") — wrong for most of the team. When
-     * the rep hasn't said, we ask for the neutral plural rather than guess.
+     * The register everything the AI writes for the rep has to land in.
+     *
+     * This used to be a GENDER rule, and it had to be: Hindi inflects the first
+     * person, so every draft came out masculine ("kar raha hoon", "bataunga") —
+     * wrong for most of the team. Now that the messages are simple Indian
+     * English, the first person does not inflect at all and that whole class of
+     * error disappears, so the rule is about plainness instead.
+     *
+     * speaksAs is still accepted so the three call sites are unchanged; it no
+     * longer changes the output, because English gives it nothing to change.
      */
-    private fun voiceRule(speaksAs: String?): String = when (speaksAs) {
-        SelfVoice.FEMALE ->
-            "The speaker is a WOMAN — use feminine first-person Hindi forms (kar rahi hoon, bataungi, chahti hoon). "
-        SelfVoice.MALE ->
-            "The speaker is a MAN — use masculine first-person Hindi forms (kar raha hoon, bataunga, chahta hoon). "
-        else ->
-            "Do NOT use gendered first-person Hindi verbs — use the neutral plural (kar rahe hain, batayenge, chahte hain). "
-    }
+    @Suppress("UNUSED_PARAMETER")
+    private fun voiceRule(speaksAs: String?): String =
+        "Write in simple Indian English — the plain, polite register an Indian property " +
+            "advisor actually uses on WhatsApp. Short everyday words, one idea per line. " +
+            "Do NOT write in Hindi, Hinglish or romanised Hindi. "
 
     suspend fun objectionRebuttal(contact: Contact, objection: String, speaksAs: String? = null): String? {
         val prompt = buildString {
             append("On the call, the customer just objected: \"")
             append(objection.trim().take(300))
             append("\".\n")
-            append("Give me the EXACT words to say back — a warm, confident counter in Hinglish ")
+            append("Give me the EXACT words to say back — a warm, confident counter in simple Indian English ")
             append("(Roman script, how an Indian telecaller actually speaks). 2-3 short lines, ready to say out loud. ")
             append("Address the customer respectfully with 'aap' — never tu/tum. ")
             append("Ground it in our company's real facts (a price, an offer, a project USP, or a line from a call that closed) — ")
@@ -974,7 +977,7 @@ object Repository {
             append("On a live sales call, the customer just objected: \"")
             append(objection.trim().take(300))
             append("\".\n")
-            append("Give me the EXACT words to say back — a warm, confident counter in Hinglish ")
+            append("Give me the EXACT words to say back — a warm, confident counter in simple Indian English ")
             append("(Roman script, how an Indian telecaller actually speaks). 2-3 short lines, ready to say out loud. ")
             append("Address the customer respectfully with 'aap' — never tu/tum. ")
             append("Ground it in our company's real facts (a price, an offer, a project USP, or a line from a call that closed) — ")
@@ -1005,7 +1008,7 @@ object Repository {
         }
         val prompt = buildString {
             append("Write a short, ready-to-send WhatsApp message to this lead. Purpose: ").append(goal).append(".\n")
-            append("Warm and professional Hinglish (Roman script, the way an Indian property advisor actually writes on WhatsApp). ")
+            append("Warm and professional simple Indian English, the way an Indian property advisor actually writes on WhatsApp. ")
             append("Address the customer respectfully with 'aap' — never tu/tum. Keep it to 2-4 short lines, WhatsApp-friendly (one or two emojis are fine). ")
             append(voiceRule(speaksAs))
             append("Ground it in our company's real facts (a price, an offer, a project USP, or the next step) — ")

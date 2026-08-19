@@ -350,10 +350,8 @@ private fun JoinCompanyCard(vm: MainViewModel, app: AppState) {
 private fun MessagingCard(vm: MainViewModel, app: AppState) {
     val context = LocalContext.current
     val launcher = com.salesautocall.app.data.WhatsAppLauncher
-    val sv = com.salesautocall.app.data.SelfVoice
     val installed = remember { launcher.installed(context) }
     var pkg by remember { mutableStateOf(com.salesautocall.app.data.AppPrefs.getWhatsAppPkg(context)) }
-    val speaks = app.profile?.speaksAs
 
     PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -366,7 +364,7 @@ private fun MessagingCard(vm: MainViewModel, app: AppState) {
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (installed + com.salesautocall.app.data.WhatsAppLauncher.Option("", "Har baar poochho"))
+                    (installed + com.salesautocall.app.data.WhatsAppLauncher.Option("", "Ask every time"))
                         .forEach { opt ->
                             val on = pkg == opt.pkg
                             Box(
@@ -397,38 +395,20 @@ private fun MessagingCard(vm: MainViewModel, app: AppState) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
-            // ---- how the rep speaks about themselves ----
-            Spacer(Modifier.height(18.dp))
-            Text("How you refer to yourself in messages", style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(sv.FEMALE, sv.MALE, sv.NEUTRAL).forEach { key ->
-                    val on = (speaks ?: sv.NEUTRAL) == key
-                    Box(
-                        Modifier.clip(RoundedCornerShape(50))
-                            .background(
-                                if (on) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceVariant,
-                            )
-                            .clickable { vm.setSpeaksAs(key) }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                    ) {
-                        Text(
-                            sv.label(key),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (on) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Ready templates and AI-written messages follow this.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // The "how you refer to yourself" picker is gone.
+            //
+            // It existed because Hindi inflects the first person: a fixed
+            // "kar raha hoon" was wrong for every woman on the team, so the rep
+            // chose their own form and every template and AI draft followed it.
+            // Now that messages are simple Indian English, the first person does
+            // not inflect and there is nothing left for the setting to change —
+            // it would have been three buttons offering Hindi verb forms that no
+            // longer appear anywhere. A control that changes nothing is worse
+            // than no control.
+            //
+            // The stored profile value and setSpeaksAs() are left alone, so
+            // nothing breaks and the choice is still there if Hindi templates
+            // ever come back.
         }
     }
 }

@@ -1974,7 +1974,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             set {
                 it.copy(
                     assistantMessages = listOf(
-                        ChatMsg("assistant", reply ?: "Haan ji boliye… waise rate thoda zyada nahi lag raha?"),
+                        ChatMsg("assistant", reply ?: "Yes, tell me… but isn't the rate a little on the higher side?"),
                     ),
                     assistantThinking = false,
                 )

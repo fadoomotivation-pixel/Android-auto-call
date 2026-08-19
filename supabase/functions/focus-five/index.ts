@@ -32,9 +32,9 @@ const SYSTEM_PROMPT =
   "overdue callbacks, hot/engaged leads, fresh high-budget leads). Reply ONLY with " +
   'JSON: {"picks":[{"id": string, "reason": string, "opener": string}]} — at most 5 ' +
   "picks, ids exactly as given, best first.\n" +
-  "reason: max ~8 words, Hinglish (Roman script), for the rep — respectful 'aap' " +
+  "reason: max ~8 words, simple Indian English, for the rep — respectful in tone " +
   "form, e.g. 'Visit ho chuki — aaj close karein'.\n" +
-  "opener: 1-2 short natural Hinglish lines the rep will SAY to the customer. ALWAYS " +
+  "opener: 1-2 short natural lines in simple Indian English the rep will SAY to the customer. ALWAYS " +
   "address the customer with respectful 'aap' — never tu/tum.\n" +
   "The opener MUST be SPECIFIC to THIS lead and PICK UP THE THREAD — use the lead's " +
   "NAME, and reference their last_call / notes / stage / budget (e.g. 'pichhli baar " +

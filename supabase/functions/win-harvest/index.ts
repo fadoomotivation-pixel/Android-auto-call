@@ -88,7 +88,7 @@ function lessonSystem(won: boolean, stageLabel: string): string {
   "notes, extract the concrete moves that ACTUALLY worked — the lines said, the objection handled, the offer " +
   "used, the timing. " +
   'Reply ONLY as JSON {"lesson": string}. lesson = a short reusable playbook note (max ~80 words) in easy Roman ' +
-  "Hinglish (aap-form) that ANOTHER telecaller could copy on a similar lead. Be specific (quote the actual line " +
+  "simple Indian English that ANOTHER telecaller could copy on a similar lead. Be specific (quote the actual line " +
   'or offer that worked). If nothing clearly worked, reply {"lesson": ""}. NEVER invent details that are not in ' +
   "the material, and never state an outcome that did not happen.";
 }

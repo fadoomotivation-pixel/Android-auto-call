@@ -27,7 +27,7 @@ const SYSTEM_PROMPT =
   "'kal shaam ko baat karte hain'), resolve it RELATIVE TO THE CALL TIME you are " +
   "given, into an ISO 8601 datetime with +05:30 offset; null if no specific time " +
   "was agreed. If a day is mentioned without a time, use 11:00. promise_note = " +
-  "5-10 words on what was promised, in Hinglish. budget = customer's stated " +
+  "5-10 words on what was promised, in simple Indian English. budget = customer's stated " +
   "budget verbatim-ish (e.g. \"45-50 lakh\"), null if not mentioned. preferences " +
   "= one short line (e.g. \"2BHK, ready-to-move, Noida Ext\"), null if none. " +
   "objections = 0-3 items, each 2-6 words (e.g. \"loan approval pending\"). " +

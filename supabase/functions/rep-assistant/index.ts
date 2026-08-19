@@ -4,7 +4,7 @@
 //                                     leads. Tap opens the Leads page (open_tab).
 //   task=guard   (12:00 IST daily)  — bhoola-lead guard: interested leads
 //                                     untouched for 3+ days → nudge.
-//   task=quote   (11:00 & 16:00 IST)— ek fresh AI-generated Hinglish sales
+//   task=quote   (11:00 & 16:00 IST)— a fresh AI-generated sales
 //                                     funda for a random telecaller per company
 //                                     — har baar alag (random theme + high temp).
 // Auth: service role only (cron). Secrets: GROQ_API_KEY (for quotes).
@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
             {
               role: "system",
               content: "You write ONE short, punchy motivational tip for an Indian real-estate " +
-                "telecaller. Hinglish (Roman Hindi + English mix), max 22 words, practical and " +
+                "telecaller. Simple Indian English, max 22 words, practical and " +
                 "energetic — something they can USE on the very next call. No hashtags, no " +
                 "surrounding quote marks, no emojis, no preamble. Never repeat standard clichés.",
             },
