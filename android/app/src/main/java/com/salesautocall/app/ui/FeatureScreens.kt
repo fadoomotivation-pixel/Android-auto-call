@@ -81,6 +81,11 @@ import com.salesautocall.app.dialer.AutoDialerService
 import com.salesautocall.app.dialer.DialerController
 import com.salesautocall.app.dialer.DialerUiState
 import kotlinx.coroutines.delay
+import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AppType
+import com.salesautocall.app.ui.design.Space
+import com.salesautocall.app.ui.design.StatusTag
+import com.salesautocall.app.ui.design.StatusTone
 
 private fun fmt(seconds: Int): String {
     val m = seconds / 60
@@ -1633,17 +1638,23 @@ private fun PhoneCheckCard(vm: MainViewModel) {
 
 @Composable
 private fun CheckRow(title: String, detail: String, ok: Boolean, onFix: () -> Unit) {
-    val good = androidx.compose.ui.graphics.Color(0xFF16A34A)
+    // ✅ / ❌ rendered at whatever size and hue the phone's emoji font chose,
+    // which on a self-check screen is the one place the state has to be
+    // unambiguous. A tag states it in the app's own colours instead.
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        Modifier.fillMaxWidth().padding(vertical = Space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(if (ok) "✅" else "❌", fontSize = 16.sp)
-        Spacer(Modifier.width(10.dp))
+        StatusTag(
+            if (ok) "OK" else "Fix",
+            if (ok) StatusTone(AppColors.Positive, AppColors.PositiveSoft)
+            else StatusTone(AppColors.Danger, AppColors.DangerSoft),
+        )
+        Spacer(Modifier.width(Space.m))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            Text(detail, style = MaterialTheme.typography.bodySmall,
-                color = if (ok) good else MaterialTheme.colorScheme.error)
+            Text(title, style = AppType.rowTitle, color = AppColors.TextPrimary)
+            Text(detail, style = AppType.meta,
+                color = if (ok) AppColors.TextSecondary else AppColors.Danger)
         }
         if (!ok) {
             Box(

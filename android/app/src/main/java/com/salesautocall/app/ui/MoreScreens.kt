@@ -506,25 +506,30 @@ private fun CalendarItem(f: FollowUp, state: String, onCall: () -> Unit, onDone:
         "Overdue" -> BadRed to BadRed.copy(alpha = 0.12f)
         else -> WarnAmber to WarnAmber.copy(alpha = 0.12f)
     }
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp)) {
-                Text(hhmm(f.dueAt), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Text(f.name ?: f.phone, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                f.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
-                Spacer(Modifier.height(4.dp))
-                Chip(state, fg, bg)
-            }
-            if (state != "Completed") {
-                Icon(Icons.Default.Call, contentDescription = "Call", tint = OkGreen,
-                    modifier = Modifier.size(40.dp).clip(CircleShape).background(OkGreen.copy(alpha = 0.12f)).padding(9.dp).clickable { onCall() })
-                Spacer(Modifier.width(8.dp))
-                Icon(Icons.Default.CheckCircle, contentDescription = "Mark as done", tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)).padding(9.dp).clickable { onDone() })
-            }
+    Row(
+        Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.card)
+            .padding(Space.m),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // The time is the spine of a day view — it reads first, in the
+        // monospaced style so a column of them lines up exactly.
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(60.dp)) {
+            Text(hhmm(f.dueAt), style = AppType.timer, color = AppColors.TextPrimary)
+        }
+        Spacer(Modifier.width(Space.s))
+        Column(Modifier.weight(1f)) {
+            Text(f.name ?: f.phone, style = AppType.rowTitle, color = AppColors.TextPrimary, maxLines = 1)
+            f.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1) }
+            Spacer(Modifier.height(Space.xs))
+            Chip(state, fg, bg)
+        }
+        if (state != "Completed") {
+            Icon(Icons.Default.Call, contentDescription = "Call", tint = OkGreen,
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(OkGreen.copy(alpha = 0.12f)).padding(9.dp).clickable { onCall() })
+            Spacer(Modifier.width(Space.s))
+            Icon(Icons.Default.CheckCircle, contentDescription = "Mark as done", tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)).padding(9.dp).clickable { onDone() })
         }
     }
 }
