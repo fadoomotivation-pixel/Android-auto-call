@@ -101,6 +101,12 @@ import kotlinx.serialization.json.contentOrNull
 import com.salesautocall.app.data.LeaderboardRow
 import kotlin.math.abs
 import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AiChip
+import com.salesautocall.app.ui.design.AiPanel
+import com.salesautocall.app.ui.design.AppType
+import com.salesautocall.app.ui.design.Radii
+import com.salesautocall.app.ui.design.Space
+import com.salesautocall.app.ui.design.AppSearchField
 
 // ════════════════════════════════════════════════════════════
 //  Design system — colours, helpers, atoms
@@ -497,32 +503,53 @@ private fun waTemplate(name: String?, project: String?, agent: String?, company:
         "Property ki details aur best offer share karna ${sv.want(speaksAs)} — kya abhi baat kar sakte hain?"
 }
 
+/**
+ * A number, and what it counts. Nothing else.
+ *
+ * Was an elevated Card with an emoji sticker on top of the value. Six of them
+ * stacked three rows deep gave Home a wall of 📞⏱️✨💰🧾🏆 competing with the
+ * figures underneath, and the glyphs carried no information the label did not
+ * already give in words. The tile is now a hairlined surface with the value
+ * first in the metric style and the label beneath, which is what makes a row
+ * of them scan as one set of numbers instead of six separate cards.
+ *
+ * The value takes the accent; the label stays muted. Signature unchanged so
+ * every call site is untouched — the emoji argument is deliberately ignored.
+ */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 private fun StatTile(emoji: String, value: String, label: String, accent: Color, modifier: Modifier = Modifier) {
-    // Flat, borderless tile: a quiet glyph, a bold value, a muted label. No
-    // coloured tile, no heavy shadow — consistent with the lead cards.
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    Column(
+        modifier
+            .clip(Radii.card)
+            .background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.card)
+            .padding(horizontal = Space.l, vertical = Space.m),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(emoji, fontSize = 18.sp)
-            Spacer(Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Text(value, style = AppType.metric, color = accent, maxLines = 1)
+        Spacer(Modifier.height(Space.xxs))
+        Text(label, style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
     }
 }
 
+/**
+ * Group heading. Small, uppercase, tertiary ink — the same one the whole app
+ * uses now, so a section on Home looks like a section on Lead detail.
+ *
+ * It was bold titleMedium, which at 16sp semibold competed with the lead names
+ * and metric values underneath it: the label announcing a group was heavier
+ * than the content inside it.
+ */
 @Composable
 private fun SectionHeader(title: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.TextTertiary)
         if (actionLabel != null && onAction != null) {
-            Text(actionLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { onAction() })
+            Text(
+                actionLabel, style = AppType.label, color = AppColors.Indigo,
+                modifier = Modifier.clip(Radii.tag).clickable { onAction() }
+                    .padding(horizontal = Space.s, vertical = Space.xxs),
+            )
         }
     }
 }
@@ -832,27 +859,30 @@ private fun PerfBar(label: String, value: Int, target: Int, color: Color) {
     val pct = if (target > 0) (value.toFloat() / target).coerceIn(0f, 1f) else 0f
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
-            Text("$value / $target", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = color)
+            Text(label, style = AppType.meta, color = AppColors.TextSecondary)
+            Text("$value / $target", style = AppType.metaStrong, color = color)
         }
-        Spacer(Modifier.height(4.dp))
-        Box(Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-            Box(Modifier.fillMaxWidth(pct).height(7.dp).clip(RoundedCornerShape(50)).background(color))
+        Spacer(Modifier.height(Space.xs + Space.xxs))
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(Radii.tag).background(AppColors.SurfaceMuted)) {
+            Box(Modifier.fillMaxWidth(pct).height(6.dp).clip(Radii.tag).background(color))
         }
     }
 }
 
 @Composable
 private fun PerformanceCard(app: AppState) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    // A hairlined surface rather than an elevated Card. Home stacked five
+    // elevated cards down one scroll and the shadows, not the content, were
+    // what the eye followed.
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(Radii.card)
+            .background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.card),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            SectionHeader("Today's Performance")
-            Spacer(Modifier.height(12.dp))
+        Column(Modifier.padding(Space.l)) {
+            Text("TODAY'S PERFORMANCE", style = AppType.sectionLabel, color = AppColors.TextTertiary)
+            Spacer(Modifier.height(Space.m))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     PerfBar("Calls made", app.todayCalls, app.dailyGoal, MaterialTheme.colorScheme.primary)
@@ -866,29 +896,37 @@ private fun PerformanceCard(app: AppState) {
     }
 }
 
+/**
+ * Home's AI surface — now the SAME panel the Calls screen and Lead detail use.
+ *
+ * It was a one-off: its own tinted box, its own 22dp spark, its own bold
+ * "AI Insight" title and a "View your leads →" text link. Three screens each
+ * inventing their own idea of what the assistant looks like is precisely why
+ * the AI read as a scattering of features rather than one thing working for
+ * the rep. AiPanel + AiChip give it the identity it shares everywhere else.
+ *
+ * Same sentence, same single callback, same hotUncontacted input — the CTA is
+ * now a chip instead of an underlined-looking link, so it is obviously
+ * tappable rather than obviously text.
+ */
 @Composable
 private fun AiInsightCard(onOpenLeads: () -> Unit, hotUncontacted: Int) {
-    // Subtle primary-tinted card with dark text + a text link — not a loud gradient.
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)).padding(16.dp),
+    AiPanel(
+        title = "Your assistant",
+        footer = {
+            AiChip(
+                if (hotUncontacted > 0) "Show me these $hotUncontacted leads" else "Open my leads",
+                onOpenLeads,
+            )
+        },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text("AI Insight", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    if (hotUncontacted > 0) "You have $hotUncontacted hot leads not contacted yet — call them to lift conversions."
-                    else "You're on top of your hot leads. Keep the follow-ups flowing!",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("View your leads →", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.labelMedium, modifier = Modifier.clickable { onOpenLeads() })
-            }
-        }
+        Text(
+            if (hotUncontacted > 0)
+                "$hotUncontacted hot leads have not been called yet. They are the quickest wins on your list today."
+            else "You're on top of your hot leads. Keep the follow-ups flowing.",
+            style = AppType.body,
+            color = AppColors.TextPrimary,
+        )
     }
 }
 
@@ -1811,41 +1849,30 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // look like something you can type in. The old borderless
                     // pill read as decoration; this one has a real edge and a
                     // little lift under it.
-                    val searchAccent = AppColors.Indigo
-                    OutlinedTextField(
-                        query, { query = it },
-                        placeholder = { Text("Search name or phone", fontSize = 13.sp) },
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        // 46dp and inset from the edge. At 52dp full-bleed it was
-                        // the biggest thing on the screen after the header, and a
-                        // rep searches perhaps twice an hour — it should be easy
-                        // to hit, not the first thing the eye lands on.
-                        singleLine = true, shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f).height(46.dp)
-                            .shadow(1.dp, RoundedCornerShape(12.dp), clip = false),
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null,
-                                tint = searchAccent, modifier = Modifier.size(20.dp))
-                        },
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                            focusedBorderColor = searchAccent,
-                        ),
+                    // The design system's search field: a filled, hairline-free
+                    // control on SurfaceMuted. The old one was an OutlinedTextField
+                    // carrying its own 12dp shape, its own 1dp drop shadow and four
+                    // hand-set container/border colours — a fourth input style on a
+                    // screen that already had chips, the filter button and the
+                    // sheet's fields.
+                    AppSearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = "Search name or phone",
+                        modifier = Modifier.weight(1f),
                     )
                     val filtersOn = stageFilter != null || tempFilter != null || quick != null || sortBy != "default"
-                    // Same shape and height as the search field and the chips —
-                    // one visual language, not a stray circle.
+                    // Same height and radius as the search field beside it, so the
+                    // pair reads as one control group rather than a field and a
+                    // stray square.
                     Box(
-                        Modifier.height(46.dp).width(46.dp).clip(RoundedCornerShape(12.dp))
-                            .background(if (filtersOn) searchAccent else MaterialTheme.colorScheme.surface)
-                            .border(1.dp, if (filtersOn) searchAccent else MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+                        Modifier.size(Space.touch).clip(Radii.control)
+                            .background(if (filtersOn) AppColors.Indigo else AppColors.SurfaceMuted)
                             .clickable { sheetOpen = true },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(Icons.Default.Sort, contentDescription = "Filters",
-                            tint = if (filtersOn) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (filtersOn) AppColors.OnIndigo else AppColors.TextSecondary,
                             modifier = Modifier.size(19.dp))
                     }
                 }
