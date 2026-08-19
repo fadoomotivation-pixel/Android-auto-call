@@ -120,14 +120,19 @@ import com.salesautocall.app.ui.design.StatusTone
 // slate (unknown) → sea (talking) → amber (interest heating) → plum (visit)
 // → bronze (money forming) → jade (money). Every hue sits in the same muted
 // saturation band, so nothing shouts and nothing looks odd next to anything.
-private val Green = Color(0xFF4353B8)   // success = jade
-private val Amber = Color(0xFFB8860B)   // muted brass — attention / "warm"
-private val Red = Color(0xFFC0452C)     // muted terracotta — urgency / "hot"
-private val Purple = Color(0xFF75629B)  // softened plum — site visit
-private val Cyan = Color(0xFF3E7F8A)    // muted sea — conversation flowing
-private val Indigo = Color(0xFF4E7A8C)  // slate-sea — working / in progress
-private val Slate = Color(0xFF5D6862)   // warm slate — neutral / cold
-private val Bronze = Color(0xFF8A6D3B)  // muted bronze — negotiation, value
+// This file's own semantic palette, now read from the design system instead of
+// eight private hex literals. The names stay so the ~200 usages below are
+// untouched; only the values move. Green was 0xFF4353B8 — the OLD indigo — so
+// "success" on this screen was rendering in the previous theme's primary while
+// the rest of the app had moved on.
+private val Green = AppColors.Positive   // success
+private val Amber = AppColors.Warning    // attention / "warm"
+private val Red = AppColors.Danger       // urgency / "hot" / overdue
+private val Purple = AppColors.Violet    // site visit
+private val Cyan = AppColors.Teal        // conversation flowing
+private val Indigo = AppColors.Info      // working / in progress
+private val Slate = AppColors.Slate      // neutral / cold
+private val Bronze = AppColors.Warning   // negotiation, value
 private val WaGreen = Color(0xFF25D366) // WhatsApp brand — kept recognisable
 
 /**
@@ -223,17 +228,17 @@ private fun AppState.workOf(c: Contact): LeadWork? = c.id?.let { workByLead[it] 
  * that pushed the row off the edge of a phone.
  */
 private val ACTIONS = listOf(
-    ActionChip("call_now", "Call now", Color(0xFFC98A3E),
+    ActionChip("call_now", "Call now", AppColors.Warning,
         "Ring these now. Due today, brand new, or nobody picked up last time."),
-    ActionChip("overdue", "Overdue", Color(0xFFC0452C),
+    ActionChip("overdue", "Overdue", AppColors.Danger,
         "You said you would call earlier and the time has gone. Do these first."),
-    ActionChip("due_today", "Due today", Color(0xFF3E7F8A),
+    ActionChip("due_today", "Due today", AppColors.Teal,
         "Booked for later today. They come to Call now on their own, at their time."),
-    ActionChip("scheduled", "Later", Color(0xFF5A62C9),
+    ActionChip("scheduled", "Later", AppColors.Indigo,
         "Booked for another day. Nothing to do now."),
-    ActionChip("awaiting_visit", "Visit", Color(0xFF75629B),
+    ActionChip("awaiting_visit", "Visit", AppColors.Violet,
         "Site visit is booked. Waiting for them to come."),
-    ActionChip("no_next_step", "No step", Color(0xFF8A6D3B),
+    ActionChip("no_next_step", "No step", AppColors.Slate,
         "You talked to them but nothing is booked. These go cold if you leave them."),
 )
 
@@ -294,7 +299,7 @@ private val STAGE_HINTS = mapOf(
 /** "#RRGGBB" from lead_stages -> Compose Color. The stage table owns the
  *  palette so the phone and the dashboard cannot drift to different greens. */
 private fun parseHex(hex: String): Color =
-    runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { Color(0xFF6A7B85) }
+    runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrElse { AppColors.Slate }
 
 
 /**
@@ -323,7 +328,7 @@ private fun rememberNowTick(periodMs: Long = 60_000L): Long {
     return now
 }
 
-private val Teal = Color(0xFF5A62C9)    // jade-adjacent: token money
+private val Teal = AppColors.Violet     // token money (named Teal historically)
 
 // The seven-stage STAGES list and stageOf() that used to live here are gone.
 // They were this file's private funnel, disagreeing with the eight tab buckets
@@ -1266,9 +1271,11 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
     val done = a?.punchOutAt != null
     // White-label: the hero wears the company's brand colour + name.
     val brand = brandColorOf(app.company?.brandColor)
-    val g0 = brand ?: Color(0xFF4353B8)
-    val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF333A8F)
-    val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF333A8F)
+    // Fallback when a company has set no brandColor. Was the previous theme's
+    // indigo, so an unbranded tenant kept wearing the old primary.
+    val g0 = brand ?: AppColors.Indigo
+    val g1 = brand?.let { darken(it, 0.82f) } ?: AppColors.IndigoPressed
+    val chipInk = brand?.let { darken(it, 0.82f) } ?: AppColors.IndigoPressed
     // Flat brand colour, not a two-stop gradient. The white-label behaviour is
     // untouched — g0 is still the company's own brandColor and g1 is still
     // computed for the chip ink below — but the hero is one solid field now,
@@ -1466,7 +1473,7 @@ private fun LeadsDeck(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val brand = brandColorOf(app.company?.brandColor)
-    val g0 = brand ?: Color(0xFF4353B8)
+    val g0 = brand ?: AppColors.Indigo
     val g1 = darken(g0, 0.72f)
     // A SUMMARY STRIP, NOT A HERO.
     //
