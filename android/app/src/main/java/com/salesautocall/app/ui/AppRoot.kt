@@ -59,7 +59,6 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -121,6 +120,8 @@ import androidx.navigation.compose.rememberNavController
 import com.salesautocall.app.data.AppPrefs
 import kotlinx.coroutines.launch
 import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AppType
+import com.salesautocall.app.ui.design.InitialsAvatar
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -1381,23 +1382,27 @@ private fun AppDrawer(
     ) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             // Brand header.
+            // Half-converted until now: relighting the drawer left this header a
+            // dark navy gradient with white type sitting on a white sheet — the
+            // only part of the app that still looked like the old theme, and the
+            // first thing the drawer shows.
             Row(
                 Modifier.fillMaxWidth()
-                    .background(Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF0C1426))))
+                    .background(AppColors.SurfaceMuted)
                     .padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(MenuAccent),
                     contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = Color.White, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = AppColors.OnIndigo, modifier = Modifier.size(24.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
-                    Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
+                    Text("Call Pro AI", style = AppType.title, color = AppColors.TextPrimary)
+                    Text("Real Estate Sales Simplified", style = AppType.meta, color = AppColors.TextSecondary)
                 }
-                Box(Modifier.clip(RoundedCornerShape(50)).background(Gold.copy(alpha = 0.2f)).padding(horizontal = 9.dp, vertical = 3.dp)) {
-                    Text("Premium", style = MaterialTheme.typography.labelSmall, color = Gold, fontWeight = FontWeight.Bold)
+                Box(Modifier.clip(RoundedCornerShape(50)).background(AppColors.VioletSoft).padding(horizontal = 9.dp, vertical = 3.dp)) {
+                    Text("Premium", style = AppType.tag, color = Gold)
                 }
             }
 
@@ -1440,9 +1445,9 @@ private fun AppDrawer(
                 Modifier.fillMaxWidth().clickable { onSignOut() }.padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)))), contentAlignment = Alignment.Center) {
-                    Text(userName.trim().take(1).uppercase().ifBlank { "?" }, color = Color.White, fontWeight = FontWeight.Bold)
-                }
+                // The shared avatar, so the rep's own face in the drawer matches
+                // the one beside every lead. Was a blue-to-purple gradient disc.
+                InitialsAvatar(userName.ifBlank { "?" }, size = 42)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(userName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MenuText)
@@ -1472,7 +1477,7 @@ private fun AppDrawer(
 @Composable
 private fun OppStat(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(value, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(value, style = AppType.metric, color = AppColors.TextPrimary, maxLines = 1)
         Text(label, style = MaterialTheme.typography.labelSmall, color = MenuMuted)
     }
 }
@@ -1503,7 +1508,7 @@ private fun DrawerNavRow(item: NavRow, selected: Boolean, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(item.label, style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold, color = if (selected) Color.White else MenuText)
+                    fontWeight = FontWeight.SemiBold, color = if (selected) MenuAccent else MenuText)
                 item.badge?.let {
                     Spacer(Modifier.width(8.dp))
                     Box(Modifier.clip(RoundedCornerShape(50)).background(MenuAccent.copy(alpha = 0.22f)).padding(horizontal = 7.dp, vertical = 1.dp)) {
@@ -1529,7 +1534,7 @@ private fun DrawerMoreRow(icon: ImageVector, label: String, selected: Boolean, o
     ) {
         Icon(icon, contentDescription = label, tint = if (selected) MenuAccent else MenuMuted, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(14.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (selected) Color.White else MenuText)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (selected) MenuAccent else MenuText)
     }
 }
 

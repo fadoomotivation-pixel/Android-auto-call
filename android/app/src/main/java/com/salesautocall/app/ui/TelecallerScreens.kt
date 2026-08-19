@@ -1269,10 +1269,14 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
     val g0 = brand ?: Color(0xFF4353B8)
     val g1 = brand?.let { darken(it, 0.82f) } ?: Color(0xFF333A8F)
     val chipInk = brand?.let { darken(it, 0.82f) } ?: Color(0xFF333A8F)
+    // Flat brand colour, not a two-stop gradient. The white-label behaviour is
+    // untouched — g0 is still the company's own brandColor and g1 is still
+    // computed for the chip ink below — but the hero is one solid field now,
+    // which is what stops it reading as a 2015 dashboard banner.
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(g0, g1)))
-            .padding(20.dp),
+        Modifier.fillMaxWidth().clip(Radii.card)
+            .background(g0)
+            .padding(Space.l),
     ) {
         Column {
             app.company?.name?.takeIf { it.isNotBlank() }?.let { company ->
@@ -1471,9 +1475,9 @@ private fun LeadsDeck(
     // one lead card on screen. It is now about 90dp — the same five facts, laid
     // out in two tight lines. Nothing was dropped; it just stopped shouting.
     Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(Brush.linearGradient(listOf(g0, g1)))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clip(Radii.card)
+            .background(g0)
+            .padding(horizontal = Space.l, vertical = Space.m),
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
