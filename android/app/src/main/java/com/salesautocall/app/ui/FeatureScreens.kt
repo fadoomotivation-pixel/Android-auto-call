@@ -86,6 +86,8 @@ import com.salesautocall.app.ui.design.AppType
 import com.salesautocall.app.ui.design.Space
 import com.salesautocall.app.ui.design.StatusTag
 import com.salesautocall.app.ui.design.StatusTone
+import com.salesautocall.app.ui.design.EmptyState
+import com.salesautocall.app.ui.design.Radii
 
 private fun fmt(seconds: Int): String {
     val m = seconds / 60
@@ -281,21 +283,31 @@ private fun CloudDialCard(vm: MainViewModel, app: AppState) {
 private fun TodayCard(app: AppState) {
     PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Today", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(10.dp))
+            Text("TODAY", style = AppType.sectionLabel, color = AppColors.TextTertiary)
+            Spacer(Modifier.height(Space.m))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Stat("Calls", app.todayCalls.toString())
                 Stat("Connected", app.todayConnected.toString())
                 Stat("Talk", fmt(app.todayTalk))
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(Space.l))
             val p = if (app.dailyGoal > 0) (app.todayCalls.toFloat() / app.dailyGoal).coerceIn(0f, 1f) else 0f
-            LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(4.dp))
+            val hitGoal = app.todayCalls >= app.dailyGoal
+            // Same 6dp pill track as Home's PerfBar, so a rep sees one progress
+            // language across the app rather than Material's default line here
+            // and a custom bar there. Green once the goal is met.
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(Radii.tag).background(AppColors.SurfaceMuted)) {
+                Box(
+                    Modifier.fillMaxWidth(p).height(6.dp).clip(Radii.tag)
+                        .background(if (hitGoal) AppColors.Positive else AppColors.Indigo),
+                )
+            }
+            Spacer(Modifier.height(Space.s))
             Text(
-                if (app.todayCalls >= app.dailyGoal) "🎉 Daily goal reached — ${app.todayCalls}/${app.dailyGoal}"
+                if (hitGoal) "Daily goal reached — ${app.todayCalls}/${app.dailyGoal}"
                 else "${app.todayCalls} / ${app.dailyGoal} daily goal",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = AppType.meta,
+                color = if (hitGoal) AppColors.Positive else AppColors.TextSecondary,
             )
         }
     }
@@ -799,15 +811,21 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
 
 @Composable
 private fun StepCard(number: String, title: String, content: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors()) {
-        Column(Modifier.padding(16.dp)) {
+    // Flat like every other container, and the step number becomes an actual
+    // numbered token instead of a loose 18sp digit floating beside the title.
+    PaperCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(Space.l)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(number, fontWeight = FontWeight.Bold, fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
-                Text(title, style = MaterialTheme.typography.titleMedium)
+                Box(
+                    Modifier.size(24.dp).clip(CircleShape).background(AppColors.IndigoSoft),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(number, style = AppType.tag, color = AppColors.Indigo)
+                }
+                Spacer(Modifier.width(Space.m))
+                Text(title, style = AppType.rowTitle, color = AppColors.TextPrimary)
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(Space.m))
             content()
         }
     }
@@ -823,11 +841,10 @@ private fun RunningView(vm: MainViewModel) {
 private fun Avatar(name: String) {
     val initials = name.trim().split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString("")
     Box(
-        Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+        Modifier.size(96.dp).clip(CircleShape).background(AppColors.IndigoSoft),
         contentAlignment = Alignment.Center,
     ) {
-        Text(initials.ifBlank { "?" }, style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+        Text(initials.ifBlank { "?" }, style = AppType.display, color = AppColors.Indigo)
     }
 }
 
@@ -982,12 +999,12 @@ private fun SessionSummaryView(vm: MainViewModel, onNew: () -> Unit) {
     LaunchedEffect(Unit) { vm.createFollowUp() }
 
     Column(Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())) {
-        Text("Session Complete!", style = MaterialTheme.typography.headlineSmall)
+        Text("Session complete", style = AppType.display, color = AppColors.TextPrimary)
         Spacer(Modifier.height(20.dp))
 
         PaperCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Text("Call Statistics", style = MaterialTheme.typography.titleMedium)
+                Text("CALL STATISTICS", style = AppType.sectionLabel, color = AppColors.TextTertiary)
                 Spacer(Modifier.height(10.dp))
                 StatRow("Total Calls", dial.completed.toString())
                 StatRow("Successfully Dialed", dial.dialedCount.toString())
@@ -996,7 +1013,7 @@ private fun SessionSummaryView(vm: MainViewModel, onNew: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         PaperCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Text("Time Statistics", style = MaterialTheme.typography.titleMedium)
+                Text("TIME STATISTICS", style = AppType.sectionLabel, color = AppColors.TextTertiary)
                 Spacer(Modifier.height(10.dp))
                 StatRow("Total Session Time", fmt(sessionSec))
                 StatRow("Total Talk Time", fmt(dial.talkSeconds))
@@ -1006,7 +1023,7 @@ private fun SessionSummaryView(vm: MainViewModel, onNew: () -> Unit) {
         app.followUpInfo?.let {
             Spacer(Modifier.height(16.dp))
             PaperCard(Modifier.fillMaxWidth()) {
-                Text("📅 $it", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.primary)
+                Text(it, modifier = Modifier.padding(Space.l), style = AppType.body, color = AppColors.Indigo)
             }
         }
 
@@ -1017,9 +1034,9 @@ private fun SessionSummaryView(vm: MainViewModel, onNew: () -> Unit) {
 
 @Composable
 private fun StatRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontWeight = FontWeight.SemiBold)
+    Row(Modifier.fillMaxWidth().padding(vertical = Space.xs), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = AppType.body, color = AppColors.TextSecondary)
+        Text(value, style = AppType.bodyStrong, color = AppColors.TextPrimary)
     }
 }
 
@@ -1032,53 +1049,77 @@ fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
     LaunchedEffect(Unit) { vm.loadCampaigns() }
 
     Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Text("Analytics", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(12.dp))
+        Text("Analytics", style = AppType.display, color = AppColors.TextPrimary)
+        Spacer(Modifier.height(Space.m))
         if (app.campaigns.isEmpty()) {
-            Text("No campaigns yet. Start one from the Campaign tab.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Was a single grey sentence hanging under the title. The shared
+            // empty state gives it a heading and room, so an empty Analytics
+            // reads as "nothing here yet" rather than as a screen that failed
+            // to load.
+            EmptyState(
+                title = "No campaigns yet",
+                message = "Start one from the Campaign tab and its progress will show up here.",
+            )
         } else {
             var confirmDeleteId by remember { mutableStateOf<String?>(null) }
             var confirmDeleteName by remember { mutableStateOf("") }
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(app.campaigns, key = { it.campaignId }) { c ->
-                    Card(
-                        Modifier.fillMaxWidth().clickable { onOpen(c.campaignId, c.name) },
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
+                    val pct = if (c.total > 0) (c.completed * 100 / c.total) else 0
+                    // WHERE THIS CAMPAIGN STANDS, WITHOUT DOING THE ARITHMETIC.
+                    //
+                    // The row gave three numbers and a bar and left the rep to
+                    // work out whether the campaign was finished, running or
+                    // never started. Done / In progress / Not started is the
+                    // question they actually open Analytics to answer, so it is
+                    // now a tag on the row.
+                    val tone = when {
+                        c.total > 0 && c.completed >= c.total -> StatusTone(AppColors.Positive, AppColors.PositiveSoft)
+                        c.completed > 0 -> StatusTone(AppColors.Indigo, AppColors.IndigoSoft)
+                        else -> StatusTone(AppColors.TextSecondary, AppColors.SurfaceMuted)
+                    }
+                    val stateLabel = when {
+                        c.total > 0 && c.completed >= c.total -> "Done"
+                        c.completed > 0 -> "In progress"
+                        else -> "Not started"
+                    }
+                    PaperCard(Modifier.clickable { onOpen(c.campaignId, c.name) }) {
+                        Column(Modifier.padding(Space.l)) {
                             Row(
                                 Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Column {
-                                    Text(c.name, style = MaterialTheme.typography.titleMedium)
+                                Column(Modifier.weight(1f)) {
+                                    Text(c.name, style = AppType.rowTitle, color = AppColors.TextPrimary, maxLines = 1)
                                     c.createdAt?.let {
-                                        Text(it.take(10), style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(it.take(10), style = AppType.meta, color = AppColors.TextSecondary)
                                     }
                                 }
+                                StatusTag(stateLabel, tone)
+                                Spacer(Modifier.width(Space.s))
                                 IconButton(onClick = {
                                     confirmDeleteId = c.campaignId
                                     confirmDeleteName = c.name
                                 }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete",
-                                        tint = MaterialTheme.colorScheme.error)
+                                        tint = AppColors.TextTertiary)
                                 }
                             }
-                            Spacer(Modifier.height(12.dp))
-                            val pct = if (c.total > 0) (c.completed * 100 / c.total) else 0
+                            Spacer(Modifier.height(Space.m))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Stat("Total", c.total.toString())
                                 Stat("Completed", c.completed.toString())
                                 Stat("Progress", "$pct%")
                             }
-                            Spacer(Modifier.height(10.dp))
-                            LinearProgressIndicator(
-                                progress = { if (c.total > 0) c.completed.toFloat() / c.total else 0f },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+                            Spacer(Modifier.height(Space.m))
+                            Box(Modifier.fillMaxWidth().height(6.dp).clip(Radii.tag).background(AppColors.SurfaceMuted)) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth(if (c.total > 0) c.completed.toFloat() / c.total else 0f)
+                                        .height(6.dp).clip(Radii.tag).background(tone.fg),
+                                )
+                            }
                         }
                     }
                 }
@@ -1094,7 +1135,7 @@ fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
                         TextButton(onClick = {
                             confirmDeleteId?.let { vm.deleteCampaign(it) }
                             confirmDeleteId = null
-                        }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                        }) { Text("Delete", color = AppColors.Danger) }
                     },
                     dismissButton = {
                         TextButton(onClick = { confirmDeleteId = null }) { Text("Cancel") }
@@ -1108,8 +1149,8 @@ fun AnalyticsScreen(vm: MainViewModel, onOpen: (String, String) -> Unit) {
 @Composable
 private fun Stat(label: String, value: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = AppType.metric, color = AppColors.TextPrimary, maxLines = 1)
+        Text(label, style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
     }
 }
 
@@ -1126,10 +1167,11 @@ private fun PaperCard(
 ) {
     Card(
         modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        // 18dp was this file's own radius. Radii.card is the app's.
+        shape = Radii.card,
+        colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(1.dp, AppColors.Border),
         content = content,
     )
 }
@@ -1138,7 +1180,9 @@ private fun PaperCard(
  *  Jade is the app's ONLY accent — every icon wears the same colour. */
 @Composable
 private fun SettingHeader(icon: ImageVector, title: String, subtitle: String? = null) {
-    val jade = jadeAccent(androidx.compose.foundation.isSystemInDarkTheme())
+    // jadeAccent ignores its argument since the app went light-only; read the
+    // token directly rather than querying a dark mode that cannot happen.
+    val jade = AppColors.Indigo
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier.size(36.dp).clip(CircleShape).background(jade.copy(alpha = 0.12f)),

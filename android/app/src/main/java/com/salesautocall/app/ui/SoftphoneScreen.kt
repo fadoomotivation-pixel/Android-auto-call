@@ -185,13 +185,13 @@ private fun CallerdeskCallCard(
 
 // ---- shared "native dialer" call-UI pieces (also used by IncomingCallActivity) ----
 
-@Composable
 /**
  * Kept as a Brush so the ~4 call sites are untouched, but it is a FLAT
  * graphite now, not a navy-to-blue vertical gradient. That gradient is the
  * "old dark gradient" the design direction rules out, and it also meant the
  * incoming-call screen and the in-call screen were two different blues.
  */
+@Composable
 fun callGradient(): Brush = SolidColor(AppColors.Call.Bg)
 
 /** Big circular avatar showing the contact's first letter (or a dialled-number glyph). */
