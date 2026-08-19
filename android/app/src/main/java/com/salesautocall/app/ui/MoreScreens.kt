@@ -117,7 +117,6 @@ private fun dur(seconds: Long): String {
 private fun localDateOf(iso: String?): LocalDate? =
     ms(iso)?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate() }
 
-@Composable
 /**
  * Same treatment as Home's StatTile: the value leads, in the accent; the label
  * explains it underneath. The 32dp tinted square holding an emoji is gone —
