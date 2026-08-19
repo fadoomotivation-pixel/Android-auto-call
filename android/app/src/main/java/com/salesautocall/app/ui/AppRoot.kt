@@ -121,6 +121,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.salesautocall.app.data.AppPrefs
 import kotlinx.coroutines.launch
+import com.salesautocall.app.ui.design.AppColors
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -1282,13 +1283,19 @@ private data class NavRow(val label: String, val desc: String, val icon: ImageVe
 private data class QuickAction(val label: String, val icon: ImageVector, val route: String?)
 
 // Premium dark menu palette — one accent, everything else neutral.
-private val MenuBg = Color(0xFF0C1426)
-private val MenuCard = Color(0xFF13203A)
-private val MenuText = Color(0xFFE8EDF7)
-private val MenuMuted = Color(0xFF8A97AE)
-private val MenuDivider = Color(0xFF1B2740)
-private val MenuAccent = Color(0xFF3B82F6)
-private val Gold = Color(0xFFF5B23E)
+// The More drawer was the last dark surface in the app, with a gold "Premium"
+// badge — the two things the design direction rules out outright. Flipped to
+// the same near-white canvas as every other screen by repointing the constants,
+// so all 29 call sites below move together and none of the drawer's structure
+// or behaviour changes.
+private val MenuBg = AppColors.Canvas
+private val MenuCard = AppColors.Surface
+private val MenuText = AppColors.TextPrimary
+private val MenuMuted = AppColors.TextSecondary
+private val MenuDivider = AppColors.Border
+private val MenuAccent = AppColors.Indigo
+// Was gold. Violet reads as "premium" in this palette without the casino tint.
+private val Gold = AppColors.Violet
 
 /** Rough INR value of the open pipeline (excludes won/dead), for the menu card. */
 private fun pipelineValue(leads: List<Contact>, stages: List<LeadStage>): String {

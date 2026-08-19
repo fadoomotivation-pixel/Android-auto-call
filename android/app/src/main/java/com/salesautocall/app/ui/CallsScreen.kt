@@ -61,13 +61,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.DeviceCall
+import com.salesautocall.app.ui.design.AppColors
 
 // Paper & ink: jade is the only accent; heat/warnings stay muted, never neon.
 private val WhatsAppGreen = Color(0xFF25D366) // brand — kept recognisable
-private val CJade = Color(0xFF4353B8)
-private val CTerra = Color(0xFFC0452C)   // missed / failed
-private val CAmberM = Color(0xFFB8860B)  // no answer
-private val CSlate = Color(0xFF5D6862)   // outgoing / neutral
+private val CJade = AppColors.Indigo
+private val CTerra = AppColors.Danger    // missed / failed
+private val CAmberM = AppColors.Warning  // no answer
+private val CSlate = AppColors.Slate     // outgoing / neutral
 
 /**
  * Calls — rebuilt to feel like the phone's own dialer, and to scroll like it:

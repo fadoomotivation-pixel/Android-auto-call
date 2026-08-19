@@ -75,24 +75,25 @@ import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.Wada
+import com.salesautocall.app.ui.design.AppColors
 
 // ---- Palette: paper & ink, ONE jade accent — same language as the Leads page.
 // The old rainbow constants keep their names but now resolve to ink/jade (with
 // muted terracotta/amber reserved for genuine heat & warnings), so every
 // call-site collapses to the calm palette without structural edits.
-private val ScreenBg = Color(0xFFFAFBFB)
+private val ScreenBg = AppColors.Canvas
 private val CardBg = Color.White
-private val Ink = Color(0xFF0E1113)
-private val SubInk = Color(0xFF616B66)
-private val Hair = Color(0xFFEBEFED)
-private val JadeL = Color(0xFF4353B8)
+private val Ink = AppColors.TextPrimary
+private val SubInk = AppColors.TextSecondary
+private val Hair = AppColors.Border
+private val JadeL = AppColors.Indigo
 private val GreenL = JadeL          // success = jade
 private val IndigoL = JadeL         // primary accent = jade
 private val PurpleL = JadeL         // "current step" = jade
 private val BlueL = JadeL           // call actions = jade
-private val AmberL = Color(0xFFB8860B)   // muted amber: warnings + "warm"
-private val RedL = Color(0xFFC0452C)     // muted terracotta: overdue, "hot", destructive
-private val ColdL = Color(0xFF71817B)    // quiet warm slate: "cold" temperature
+private val AmberL = AppColors.Warning   // muted amber: warnings + "warm"
+private val RedL = AppColors.Danger     // muted terracotta: overdue, "hot", destructive
+private val ColdL = AppColors.Slate    // quiet warm slate: "cold" temperature
 private val WhatsGreen = Color(0xFF25D366) // brand — recognisable, kept
 
 private val SETTABLE = listOf(

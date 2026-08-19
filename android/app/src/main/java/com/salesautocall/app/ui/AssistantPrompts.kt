@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+import com.salesautocall.app.ui.design.AppColors
 
 // ════════════════════════════════════════════════════════════
 //  THE ASSISTANT'S OWN QUESTIONS
@@ -73,13 +74,13 @@ import kotlin.math.roundToInt
 // because a real call was made, and none of these follow a call.
 
 // This file keeps its own copy of the palette, as every screen file here does.
-private val Jade = Color(0xFF4353B8)
-private val Brass = Color(0xFFB8860B)
-private val Terracotta = Color(0xFFC0452C)
-private val Plum = Color(0xFF75629B)
-private val Sea = Color(0xFF4E7A8C)
-private val WarmSlate = Color(0xFF5D6862)
-private val Token = Color(0xFF5A62C9)
+private val Jade = AppColors.Indigo
+private val Brass = AppColors.Warning
+private val Terracotta = AppColors.Danger
+private val Plum = AppColors.Violet
+private val Sea = AppColors.Teal
+private val WarmSlate = AppColors.Slate
+private val Token = AppColors.Violet
 
 /**
  * ONE colour for every site-visit outcome button.
@@ -90,7 +91,7 @@ private val Token = Color(0xFF5A62C9)
  * project decisions from, so neutrality here is not styling — it is what makes
  * the data worth reading.
  */
-private val VisitNeutral = Color(0xFF4E5A66)
+private val VisitNeutral = AppColors.Slate
 
 /**
  * A short wiggle, then a long pause. Repeat.

@@ -78,11 +78,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import com.salesautocall.app.ui.design.AppColors
 
 // ── shared helpers (file-private copies; intentionally self-contained) ──
-private val OkGreen = Color(0xFF4353B8)
-private val WarnAmber = Color(0xFFB8860B)
-private val BadRed = Color(0xFFC0452C)
+private val OkGreen = AppColors.Positive
+private val WarnAmber = AppColors.Warning
+private val BadRed = AppColors.Danger
 
 // OffsetDateTime first: the API sends "+00:00", which Instant.parse rejects.
 // Instant-only meant this returned null for real timestamps, and threw an

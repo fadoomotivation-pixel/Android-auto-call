@@ -1,142 +1,81 @@
 package com.salesautocall.app.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
-import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.salesautocall.app.R
+import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AppMaterialShapes
+import com.salesautocall.app.ui.design.AppMaterialTypography
 
 // ══════════════════════════════════════════════════════════════
-//  DESIGN SYSTEM — one palette, one voice
+//  THE THEME IS NOW A THIN WIRE INTO ui/design
 //
-//  Anchor: INDIGO. Deep, calm blue-indigo — the universal colour of
-//  trust and professional software (finance, enterprise CRMs). It is
-//  community-neutral, low-saturation so it never tires the eye over an
-//  8-hour shift, and premium. Plus exactly TWO semantic accents:
-//    · Amber (muted brass)     = attention — "warm", pending, retry
-//    · Terracotta (muted red)  = urgency  — "hot", overdue, destructive
-//  Colour appears only when it MEANS something; the rest stays quiet
-//  near-white paper. (WhatsApp's own green stays only on WhatsApp
-//  buttons — that's its global brand, not ours.)
+//  Every value used to be declared here, so the palette lived in one
+//  place and a hundred screens quietly invented their own variants
+//  around it. The tokens now live in ui/design/AppColors.kt,
+//  AppType.kt and AppSpacing.kt, and this file only mounts them.
+//
+//  Why that matters more than it looks: the hundreds of existing
+//  `MaterialTheme.colorScheme.*` and `MaterialTheme.typography.*` call
+//  sites across TelecallerScreens, LeadDetailScreen, CallsScreen and
+//  the rest inherit the new system WITHOUT being rewritten. The design
+//  migration therefore does not require touching the screens that hold
+//  the business logic — which is the whole point.
 // ══════════════════════════════════════════════════════════════
-private val Jade = Color(0xFF4353B8)          // primary — action, success, money (indigo)
-private val JadeDeep = Color(0xFF2A2E6B)      // pressed / on-container ink
-private val JadeBright = Color(0xFF8189E6)    // dark-theme primary (holds contrast)
-private val JadeMist = Color(0xFFE4E6F6)      // light container
-private val Sage = Color(0xFF565C7A)          // secondary — quiet indigo-grey
 
-private val LightColors = lightColorScheme(
-    primary = Jade,
-    onPrimary = Color.White,
-    primaryContainer = JadeMist,
-    onPrimaryContainer = JadeDeep,
-    secondary = Sage,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEAECF5),
-    onSecondaryContainer = Color(0xFF2A2E52),
-    tertiary = Color(0xFF8A6D3B),             // muted bronze — value/pipeline
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFF0E6D2),
-    onTertiaryContainer = Color(0xFF4A3A1D),
-    // Premium pass: a near-white cool canvas (not clinical #FFFFFF — that glares
-    // over an 8-hour shift on cheap screens) with pure-white surfaces that lift
-    // off it, and graphite ink. Green is the ONLY action colour.
-    background = Color(0xFFFAFBFB),
-    onBackground = Color(0xFF0E1113),         // graphite, near-black
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF0E1113),
-    surfaceVariant = Color(0xFFF2F4F3),
-    onSurfaceVariant = Color(0xFF616B66),     // muted ink for secondary text
-    outline = Color(0xFFDCE1DE),
-    outlineVariant = Color(0xFFEBEFED),        // barely-there hairline
-    error = Color(0xFFC0452C),                // terracotta — urgent, not alarming
-    onError = Color.White,
+/**
+ * Light-first, Apple-inspired scheme.
+ *
+ * SINGLE SCHEME, ON PURPOSE. The app previously shipped a dark variant that
+ * followed the system setting. It is gone: telecallers work long shifts in
+ * mixed lighting, and a stable near-white canvas is what keeps dense lead lists
+ * readable and — more importantly — keeps status colour MEANINGFUL. A stage
+ * chip has to read the same on every rep's phone as it does on the founder's
+ * dashboard, and it cannot do that while half the palette inverts itself
+ * depending on a setting nobody in the team knows they toggled.
+ *
+ * This is a deliberate, visible behaviour change for anyone whose phone is set
+ * to dark mode: the app will now stay light.
+ */
+private val AppColorScheme = lightColorScheme(
+    primary = AppColors.Indigo,
+    onPrimary = AppColors.OnIndigo,
+    primaryContainer = AppColors.IndigoSoft,
+    onPrimaryContainer = AppColors.Indigo,
+    secondary = AppColors.TextPrimary,
+    onSecondary = AppColors.Surface,
+    secondaryContainer = AppColors.SurfaceMuted,
+    onSecondaryContainer = AppColors.TextPrimary,
+    tertiary = AppColors.Teal,
+    onTertiary = AppColors.Surface,
+    tertiaryContainer = AppColors.TealSoft,
+    onTertiaryContainer = AppColors.Teal,
+    background = AppColors.Canvas,
+    onBackground = AppColors.TextPrimary,
+    surface = AppColors.Surface,
+    onSurface = AppColors.TextPrimary,
+    surfaceVariant = AppColors.SurfaceMuted,
+    onSurfaceVariant = AppColors.TextSecondary,
+    // Flat, not tinted. Material's default elevation tint is what gives stock
+    // Compose apps that faintly purple, generic look on raised surfaces.
+    surfaceTint = AppColors.Surface,
+    inverseSurface = AppColors.TextPrimary,
+    inverseOnSurface = AppColors.Surface,
+    outline = AppColors.BorderStrong,
+    outlineVariant = AppColors.Border,
+    error = AppColors.Danger,
+    onError = AppColors.Surface,
+    errorContainer = AppColors.DangerSoft,
+    onErrorContainer = AppColors.Danger,
+    scrim = AppColors.TextPrimary,
 )
-
-private val DarkColors = darkColorScheme(
-    primary = JadeBright,
-    onPrimary = Color(0xFF1A1E52),
-    primaryContainer = JadeDeep,
-    onPrimaryContainer = Color(0xFFD9DCF7),
-    secondary = Color(0xFFAEB2CE),
-    onSecondary = Color(0xFF1B1F3A),
-    secondaryContainer = Color(0xFF2E3352),
-    onSecondaryContainer = Color(0xFFDCDFF2),
-    tertiary = Color(0xFFC9A96A),
-    onTertiary = Color(0xFF2E2413),
-    tertiaryContainer = Color(0xFF4A3A1D),
-    onTertiaryContainer = Color(0xFFEBDDBF),
-    background = Color(0xFF0E1016),           // deep cool graphite (neutral, not green)
-    onBackground = Color(0xFFECEDF2),
-    surface = Color(0xFF171A22),
-    onSurface = Color(0xFFECEDF2),
-    surfaceVariant = Color(0xFF232734),
-    onSurfaceVariant = Color(0xFF9AA0B4),
-    outline = Color(0xFF3A4050),
-    outlineVariant = Color(0xFF272B37),
-    error = Color(0xFFE0705A),
-    onError = Color(0xFF330E06),
-)
-
-// Softer, more rounded geometry reads as modern/premium.
-private val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp),
-)
-
-// ── Typography — Inter, bundled ──────────────────────────────
-// The workhorse of premium product UI (Linear, Notion, Figma):
-// tall x-height and open counters stay crisp at 12–14sp, which is
-// exactly what keeps eyes fresh through an 8-hour calling shift.
-private val Inter = FontFamily(
-    Font(R.font.inter_regular, FontWeight.Normal),
-    Font(R.font.inter_medium, FontWeight.Medium),
-    Font(R.font.inter_semibold, FontWeight.SemiBold),
-    Font(R.font.inter_bold, FontWeight.Bold),
-)
-
-// Headings: tight tracking, confident weight. Body: relaxed line
-// height for effortless scanning. Labels: a touch of tracking so
-// small caps-ish chips stay legible.
-private val AppTypography = Typography().run {
-    copy(
-        displayLarge = displayLarge.copy(fontFamily = Inter),
-        displayMedium = displayMedium.copy(fontFamily = Inter),
-        displaySmall = displaySmall.copy(fontFamily = Inter),
-        headlineLarge = headlineLarge.copy(fontFamily = Inter, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
-        headlineMedium = headlineMedium.copy(fontFamily = Inter, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
-        headlineSmall = headlineSmall.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp),
-        titleLarge = titleLarge.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
-        titleMedium = titleMedium.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
-        titleSmall = titleSmall.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold),
-        bodyLarge = bodyLarge.copy(fontFamily = Inter, lineHeight = 25.sp),
-        bodyMedium = bodyMedium.copy(fontFamily = Inter, lineHeight = 21.sp),
-        bodySmall = bodySmall.copy(fontFamily = Inter, lineHeight = 17.sp),
-        labelLarge = labelLarge.copy(fontFamily = Inter, fontWeight = FontWeight.SemiBold, letterSpacing = 0.2.sp),
-        labelMedium = labelMedium.copy(fontFamily = Inter, fontWeight = FontWeight.Medium, letterSpacing = 0.2.sp),
-        labelSmall = labelSmall.copy(fontFamily = Inter, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp),
-    )
-}
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
-        shapes = AppShapes,
-        typography = AppTypography,
+        colorScheme = AppColorScheme,
+        shapes = AppMaterialShapes,
+        typography = AppMaterialTypography,
         content = content,
     )
 }
