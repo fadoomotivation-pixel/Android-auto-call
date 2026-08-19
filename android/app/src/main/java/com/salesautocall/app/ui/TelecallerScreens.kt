@@ -100,6 +100,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import com.salesautocall.app.data.LeaderboardRow
 import kotlin.math.abs
+import com.salesautocall.app.ui.design.AppColors
 
 // ════════════════════════════════════════════════════════════
 //  Design system — colours, helpers, atoms
@@ -1810,7 +1811,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // look like something you can type in. The old borderless
                     // pill read as decoration; this one has a real edge and a
                     // little lift under it.
-                    val searchAccent = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
+                    val searchAccent = AppColors.Indigo
                     OutlinedTextField(
                         query, { query = it },
                         placeholder = { Text("Search name or phone", fontSize = 13.sp) },
@@ -2424,7 +2425,7 @@ private fun LeadCard(
     // one. The action label in the note strip answers that, and the stage row
     // above the list is where you go when you want to browse by stage.
     val container = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f) else MaterialTheme.colorScheme.surface
-    val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
+    val jade = AppColors.Indigo
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
     // The one line the rep actually needs — what the customer said / promised.
@@ -3823,7 +3824,7 @@ private fun FollowUpCard(
     // Call solid and widest — and the two time controls demoted to small text
     // underneath, where they are still one tap away but no longer compete.
     val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= now
-    val jade = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF8189E6) else Color(0xFF4353B8)
+    val jade = AppColors.Indigo
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val accent = if (overdue) Red else jade
     val who = f.name?.takeIf { it.isNotBlank() } ?: prettyPhone(f.phone)

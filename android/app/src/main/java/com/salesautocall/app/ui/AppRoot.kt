@@ -16,7 +16,6 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -826,7 +825,12 @@ private fun MainShell(vm: MainViewModel) {
 }
 
 // ---- The app's one jade accent, theme-aware. ----
-internal fun jadeAccent(dark: Boolean) = if (dark) Color(0xFF8189E6) else Color(0xFF4353B8)
+// The app is light-only since Theme.kt dropped the dark scheme, so the dark
+// branch here could only ever return a colour tuned for a dark background —
+// bright indigo on a white card. Parameter kept so the ~5 call sites stay
+// compiling untouched; it is deliberately ignored.
+@Suppress("UNUSED_PARAMETER")
+internal fun jadeAccent(dark: Boolean) = AppColors.Indigo
 
 // CoachBubble is deleted. A floating layer over a scrolling list lands on
 // somebody's content eventually — it hit the pipeline buttons, then the lead
@@ -1211,13 +1215,15 @@ internal fun FloatingCallBar(
     onDial: () -> Unit,
     onMore: () -> Unit,
 ) {
-    val dark = isSystemInDarkTheme()
-    val jade = jadeAccent(dark)
-    val pill = if (dark) Color(0xFF16181C) else Color.White
-    val hair = if (dark) Color(0xFF24272C) else Color(0xFFE7E9E4)
-    // Darkened from #6C737C: the inactive labels were washing out in sunlight,
-    // which is where a telecaller actually uses this.
-    val unsel = if (dark) Color(0xFF9AA1AA) else Color(0xFF525A63)
+    // Light-only now — the dark arms of these three were dead the moment the
+    // dark colour scheme went, and worse than dead: they would have painted a
+    // dark pill onto a light app for anyone whose phone is set to dark.
+    val jade = AppColors.Indigo
+    val pill = AppColors.Surface
+    val hair = AppColors.Border
+    // Kept deliberately darker than a normal secondary: inactive labels were
+    // washing out in sunlight, which is where a telecaller actually works.
+    val unsel = AppColors.TextSecondary
     val ring = MaterialTheme.colorScheme.background
     Box(Modifier.fillMaxWidth().height(84.dp).padding(horizontal = 14.dp), contentAlignment = Alignment.BottomCenter) {
         Row(
