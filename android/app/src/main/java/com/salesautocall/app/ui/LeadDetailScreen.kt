@@ -76,13 +76,16 @@ import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.Wada
 import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AppType
+import com.salesautocall.app.ui.design.Radii
+import com.salesautocall.app.ui.design.Space
 
 // ---- Palette: paper & ink, ONE jade accent — same language as the Leads page.
 // The old rainbow constants keep their names but now resolve to ink/jade (with
 // muted terracotta/amber reserved for genuine heat & warnings), so every
 // call-site collapses to the calm palette without structural edits.
 private val ScreenBg = AppColors.Canvas
-private val CardBg = Color.White
+private val CardBg = AppColors.Surface
 private val Ink = AppColors.TextPrimary
 private val SubInk = AppColors.TextSecondary
 private val Hair = AppColors.Border
@@ -756,8 +759,8 @@ private val SoftShadow = Color(0x14101820)
 private fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-            .shadow(6.dp, RoundedCornerShape(20.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
-            .clip(RoundedCornerShape(20.dp)).background(CardBg).padding(18.dp),
+            .shadow(3.dp, Radii.card, ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(Radii.card).background(CardBg).padding(Space.l),
         content = content,
     )
 }
@@ -765,12 +768,11 @@ private fun SectionCard(content: @Composable androidx.compose.foundation.layout.
 @Composable
 private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
-        modifier.shadow(5.dp, RoundedCornerShape(18.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
-            .clip(RoundedCornerShape(18.dp)).background(CardBg)
-            .heightIn(min = 96.dp).padding(12.dp),
+        modifier.shadow(3.dp, Radii.card, ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(Radii.card).background(CardBg)
+            .heightIn(min = 96.dp).padding(Space.m),
     ) {
-        Text(title, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SubInk,
-            letterSpacing = 0.5.sp, maxLines = 1)
+        Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.TextTertiary, maxLines = 1)
         Spacer(Modifier.height(10.dp))
         content()
     }
@@ -779,8 +781,8 @@ private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Com
 @Composable
 private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) {
     Box(
-        Modifier.size(42.dp).shadow(4.dp, RoundedCornerShape(12.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
-            .clip(RoundedCornerShape(12.dp)).background(CardBg).clickable { onClick() },
+        Modifier.size(42.dp).shadow(2.dp, Radii.control, ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(Radii.control).background(CardBg).clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp)) }
 }
@@ -788,9 +790,9 @@ private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
 @Composable
 private fun ActionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
     Column(
-        modifier.shadow(5.dp, RoundedCornerShape(16.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
-            .clip(RoundedCornerShape(16.dp)).background(CardBg)
-            .clickable { onClick() }.padding(vertical = 12.dp),
+        modifier.shadow(3.dp, Radii.card, ambientColor = SoftShadow, spotColor = SoftShadow)
+            .clip(Radii.card).background(CardBg)
+            .clickable { onClick() }.padding(vertical = Space.m),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // Icon in a soft tinted circle; the label stays neutral ink — the tint
