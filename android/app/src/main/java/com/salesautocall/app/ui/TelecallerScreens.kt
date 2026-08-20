@@ -628,10 +628,24 @@ private fun WorkGrid(
                             .padding(horizontal = 8.dp, vertical = 7.dp),
                         verticalArrangement = Arrangement.Center,
                     ) {
+                        // SIX NUMBERS IN SIX COLOURS IS A CHART, NOT A CHOICE.
+                        //
+                        // Orange, red, teal, indigo, violet and slate, all at
+                        // once, above the lead list — so the eye had nowhere to
+                        // land and "Overdue" shouted no louder than "No step".
+                        // Only the two that mean DO SOMETHING NOW keep a colour;
+                        // the rest are graphite. The chip's own colour still
+                        // rings the tile when it is the selected filter, so
+                        // nothing loses its identity.
+                        val urgent = a.code == "call_now" || a.code == "overdue"
                         Text(
                             n.toString(),
                             fontSize = 19.sp, lineHeight = 21.sp, fontWeight = FontWeight.Bold,
-                            color = if (empty) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f) else a.color,
+                            color = when {
+                                empty -> AppColors.TextTertiary
+                                urgent -> a.color
+                                else -> AppColors.TextPrimary
+                            },
                             maxLines = 1,
                         )
                         Text(
@@ -2878,7 +2892,14 @@ private fun LeadCard(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         money?.let {
-                            Text("₹ $it", style = MaterialTheme.typography.bodyMedium, color = jade,
+                            // Graphite, not indigo. Indigo in this app means
+                            // "you can act on this" — it is the Call button's
+                            // colour. A budget is the loudest FACT on the card,
+                            // not a control, and printing it in the action
+                            // colour on every row taught the eye to ignore
+                            // indigo. Weight carries it instead.
+                            Text("₹ $it", style = MaterialTheme.typography.bodyMedium,
+                                color = AppColors.TextPrimary,
                                 fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                         answers.take(3).forEach { (label, value) ->
@@ -2997,17 +3018,22 @@ private fun LeadCard(
             // has just ended with nothing written down — that wobble is the
             // whole replacement for the post-call popup on SIM calls.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val updateTint = if (needsUpdate) Amber else MaterialTheme.colorScheme.primary
+                // Hairline on white, matching the Follow Ups card and the Update
+                // sheet's tiles. It was a lavender slab, which on a list of
+                // three hundred rows put a soft purple block beside every
+                // indigo Call — two filled shapes per row, competing.
+                val needsInk = if (needsUpdate) Amber else AppColors.TextPrimary
                 Row(
                     Modifier.nudgeShake(needsUpdate).weight(1f).height(38.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(updateTint.copy(alpha = if (needsUpdate) 0.20f else 0.10f))
+                        .background(if (needsUpdate) Amber.copy(alpha = 0.14f) else AppColors.Surface)
+                        .border(1.dp, if (needsUpdate) Amber.copy(alpha = 0.14f) else AppColors.Border, RoundedCornerShape(10.dp))
                         .clickable { onUpdate() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
                     Text(if (needsUpdate) "✎ Update call" else "✎ Update", fontSize = 12.5.sp,
-                        color = updateTint, fontWeight = FontWeight.Bold, maxLines = 1)
+                        color = needsInk, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
                 Spacer(Modifier.width(7.dp))
                 // ONE FILLED BUTTON PER CARD.
@@ -3022,7 +3048,8 @@ private fun LeadCard(
                 // it was only ever reachable by a swipe before this.
                 Box(
                     Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
-                        .background(muted.copy(alpha = 0.08f))
+                        .background(AppColors.Surface)
+                        .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
                         .clickable { onWhatsApp() },
                     contentAlignment = Alignment.Center,
                 ) {
