@@ -1361,6 +1361,26 @@ object Repository {
         }.decodeList<Contact>()
     }
 
+    /**
+     * Puts a lead back where it was before an outcome — the Undo behind a
+     * mis-tapped "Wrong number".
+     *
+     * STAGE IS WRITTEN EXPLICITLY, AND IT HAS TO BE. `contacts_stage_sync`
+     * derives the stage from the status, but only ever forwards: a candidate
+     * whose sort_order is below the current one is ignored unless it is
+     * terminal. "Bad number" is sort 99 and terminal, so it always lands — and
+     * nothing short of an explicit write ever comes back out of it. Setting the
+     * status alone would leave the lead reading "Bad number" for ever.
+     *
+     * The trigger's first branch returns untouched when `stage` is part of the
+     * update, so passing both is what makes the walk-back stick.
+     */
+    suspend fun restoreLead(contactId: String, status: String, stage: String) {
+        client.from("contacts").update(
+            mapOf("status" to status, "stage" to stage),
+        ) { filter { eq("id", contactId) } }
+    }
+
     /** Records a salesperson's call outcome (disposition) + optional note. */
     suspend fun setDisposition(contactId: String, status: String, note: String?) {
         val patch = buildMap {

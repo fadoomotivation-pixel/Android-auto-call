@@ -3605,16 +3605,26 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     // changes — the app still asks only the one that applies.
                     if (manual) {
                         SheetSectionLabel("CALL DIDN'T CONNECT")
+                        // Two across, then Wrong number on its own line.
+                        //
+                        // Three across clipped it to "Wrong num…" on a real
+                        // phone — the label the founder needed to read was the
+                        // one that did not fit. Its own row also puts distance
+                        // between the two harmless answers and the one that
+                        // files the lead as a dead number, which is the tap
+                        // being mis-hit. The undo bar catches it either way;
+                        // this makes it less likely to happen at all.
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutcomeTile("No answer", AppColors.Warning, Modifier.weight(1f)) { dispose("no_answer") }
                             OutcomeTile("Busy", AppColors.Warning, Modifier.weight(1f)) { dispose("busy") }
-                            // Straight through, no note and no temperature: there
-                            // is nothing to record about a number that was never
-                            // the customer's. `invalid`, not `dnc` — the person
-                            // never asked us to stop calling THEM.
-                            OutcomeTile("Wrong number", AppColors.Danger, Modifier.weight(1f)) {
-                                vm.postCallDispose("invalid", null, null)
-                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        // Straight through, no note and no temperature: there is
+                        // nothing to record about a number that was never the
+                        // customer's. `invalid`, not `dnc` — the person never
+                        // asked us to stop calling THEM.
+                        OutcomeTile("Wrong number", AppColors.Danger, Modifier.fillMaxWidth()) {
+                            vm.postCallDispose("invalid", null, null)
                         }
                         Spacer(Modifier.height(16.dp))
                     }

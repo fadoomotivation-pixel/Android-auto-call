@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.AppType
 
 // ════════════════════════════════════════════════════════════
 //  THE ASSISTANT'S OWN QUESTIONS
@@ -869,6 +871,72 @@ fun PendingUpdateBar(vm: MainViewModel) {
             ) {
                 Text("Update", style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        }
+    }
+}
+
+/**
+ * "Put that back" — the way out of a mis-tapped outcome.
+ *
+ * The founder's question was exact: "update pr koi galti se wrong number daba
+ * de to vo back kaise hoga?" It could not be. Wrong number files the lead as
+ * `invalid` — terminal, sort 99, `rep_visible = false` — so one wrong tap made
+ * a real lead disappear from the rep's list with no route back from anywhere in
+ * the app. The same is true, less brutally, of Not interested and Do not call.
+ *
+ * A confirm dialog on every tap was the wrong fix. Reps answer this two hundred
+ * times a day and the answer is usually right; making all of them pay for the
+ * rare mistake is how a fast screen becomes a slow one. This costs nothing when
+ * the tap was right and one tap when it was not.
+ *
+ * It lives above the bottom bar, beside PendingUpdateBar, so it follows the rep
+ * to whatever screen the outcome sent them to — which is the whole problem with
+ * an undo that lives on the sheet: the sheet has already closed.
+ *
+ * Twelve seconds. Long enough to read what just happened and react, short
+ * enough that it is gone before it becomes furniture.
+ */
+@Composable
+fun UndoOutcomeBar(vm: MainViewModel) {
+    val app by vm.state.collectAsState()
+    val undo = app.undo ?: return
+
+    // Keyed on the record itself: a second outcome inside the window restarts
+    // the clock on the new one rather than inheriting the old one's remaining
+    // time and vanishing early.
+    LaunchedEffect(undo.contactId, undo.at) {
+        kotlinx.coroutines.delay(12_000)
+        if (vm.state.value.undo?.at == undo.at) vm.clearUndo()
+    }
+
+    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                .background(AppColors.TextPrimary)
+                .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Marked ${undo.label}",
+                    style = AppType.metaStrong, color = Color.White, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                undo.name?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        it, style = AppType.tag, color = Color.White.copy(alpha = 0.7f),
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier.clip(RoundedCornerShape(9.dp))
+                    .clickable { vm.undoLastOutcome() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Text("Undo", style = AppType.label, color = AppColors.Canvas, maxLines = 1)
             }
         }
     }
