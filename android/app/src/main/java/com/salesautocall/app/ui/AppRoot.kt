@@ -1217,6 +1217,13 @@ internal fun FloatingCallBar(
     onTab: (String) -> Unit,
     onDial: () -> Unit,
     onMore: () -> Unit,
+    /**
+     * The raised Dial. Off on the lead page, which has its own Call button for
+     * the lead it is showing — two indigo phone buttons forty pixels apart, one
+     * ringing this customer and one opening a keypad, was the founder's "do call
+     * ke button ho gae h". The four tabs stay; only the duplicate goes.
+     */
+    showDial: Boolean = true,
 ) {
     // Light-only now — the dark arms of these three were dead the moment the
     // dark colour scheme went, and worse than dead: they would have painted a
@@ -1245,20 +1252,23 @@ internal fun FloatingCallBar(
             // under More → Calls & Recordings.
             NavSlot("Home", Icons.Default.Home, current == "home", jade, unsel, Modifier.weight(1f)) { onTab("home") }
             NavSlot("Leads", Icons.Default.People, current == "leads", jade, unsel, Modifier.weight(1f)) { onTab("leads") }
-            Spacer(Modifier.width(66.dp)) // room for the raised dial
+            // The gap goes with the dial, or the bar keeps a hole in its middle.
+            if (showDial) Spacer(Modifier.width(66.dp)) // room for the raised dial
             NavSlot("Follow Ups", Icons.Default.AccessTime, current == "followups", jade, unsel, Modifier.weight(1f)) { onTab("followups") }
             NavSlot("More", Icons.Default.Menu, false, jade, unsel, Modifier.weight(1f)) { onMore() }
         }
         // Raised centre Dial — the primary job, straddling the bar's top edge. A
         // ring in the surrounding colour "cuts" it out of the bar.
-        Box(
-            Modifier.align(Alignment.TopCenter).size(66.dp).clip(CircleShape).background(ring),
-            contentAlignment = Alignment.Center,
-        ) {
+        if (showDial) {
             Box(
-                Modifier.size(56.dp).clip(RoundedCornerShape(19.dp)).background(jade).clickable { onDial() },
+                Modifier.align(Alignment.TopCenter).size(66.dp).clip(CircleShape).background(ring),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Default.Call, contentDescription = "Dial", tint = Color.White, modifier = Modifier.size(24.dp)) }
+            ) {
+                Box(
+                    Modifier.size(56.dp).clip(RoundedCornerShape(19.dp)).background(jade).clickable { onDial() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Default.Call, contentDescription = "Dial", tint = Color.White, modifier = Modifier.size(24.dp)) }
+            }
         }
     }
 }

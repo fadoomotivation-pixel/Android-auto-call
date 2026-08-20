@@ -794,6 +794,12 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 onTab = { vm.goToTab(it) },
                 onDial = { vm.goToTab("dialer") },
                 onMore = { vm.openDrawerFromOverlay() },
+                // No raised Dial here. The action bar directly above it already
+                // has a Call, for the lead this page is about; the raised one
+                // opens a keypad to type some other number. Two indigo phone
+                // buttons forty pixels apart, and the top one was the wrong
+                // guess nine times out of ten.
+                showDial = false,
             )
         }
     }
