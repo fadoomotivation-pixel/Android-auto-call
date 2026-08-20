@@ -4135,19 +4135,35 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                         }
                     }
                     if (overdueStrict.isNotEmpty()) {
-                        Spacer(Modifier.height(7.dp))
-                        Text(
-                            "${overdueStrict.size} left over from before today — tap to move them all to tomorrow 10 AM",
-                            fontSize = 11.5.sp, color = Red, fontWeight = FontWeight.Medium,
-                            lineHeight = 15.sp,
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        Spacer(Modifier.height(8.dp))
+                        // A BUTTON THAT LOOKS LIKE A BUTTON.
+                        //
+                        // This was loose red prose with a tap target hidden on
+                        // it — nothing said it was pressable except the sentence
+                        // telling you to press it, and it moves 26 callbacks in
+                        // one tap. It also added a third red to a screen that
+                        // already had the overdue pills and the Call now chip.
+                        // Bordered row, graphite text: it reads as the quiet
+                        // secondary action it is, next to the filled Call all.
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(AppColors.Surface)
+                                .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
                                 .clickable {
                                     val tomorrow10 = java.time.ZonedDateTime.now().plusDays(1)
                                         .withHour(10).withMinute(0).withSecond(0).toInstant().toEpochMilli()
                                     vm.rescheduleFollowUps(overdueStrict, tomorrow10)
                                 }
-                                .padding(vertical = 4.dp),
-                        )
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Move ${overdueStrict.size} left over from before today to tomorrow 10 AM",
+                                fontSize = 11.5.sp, color = AppColors.TextPrimary,
+                                fontWeight = FontWeight.Medium, lineHeight = 15.sp,
+                            )
+                        }
                     }
                 }
             }
@@ -4319,12 +4335,20 @@ private fun FollowUpCard(
         // booked it themselves, or the AI booked it from a voice note, or the
         // attempt ladder booked it because nobody picked up.
         Spacer(Modifier.height(8.dp))
+        // GREY, NOT A PINK ALARM.
+        //
+        // This panel took the card's accent, so on an overdue callback it was a
+        // full-width pink box of red text. The "Overdue 12d" pill three
+        // centimetres above already says the same thing, and saying it twice in
+        // the same red is how a card ends up with four different reds on it and
+        // none of them meaning anything. The note is context, not an alarm —
+        // urgency is the pill's job on this card and nothing else's.
         Row(
             Modifier.fillMaxWidth().clip(Radii.control)
-                .background(accent.copy(alpha = 0.09f))
+                .background(AppColors.SurfaceMuted)
                 .padding(horizontal = Space.m, vertical = Space.s),
         ) {
-            Text(whyThisCallback(f), style = AppType.metaStrong, color = accent, maxLines = 3,
+            Text(whyThisCallback(f), style = AppType.meta, color = AppColors.TextSecondary, maxLines = 3,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         Spacer(Modifier.height(9.dp))
@@ -4340,43 +4364,57 @@ private fun FollowUpCard(
                 // A just-finished call turns it amber and sets it wobbling —
                 // the same reminder the Leads list gives, in the place a rep
                 // ringing their callbacks is actually looking.
-                val updateTint = if (needsUpdate) Amber else MaterialTheme.colorScheme.primary
+                // ONE FILLED BUTTON PER CARD, AND IT IS CALL.
+                //
+                // These three were a lavender tint, a green tint and a solid
+                // blue — three weights competing for the same glance, on top of
+                // a pink note and a red pill. The secondary two are hairlines on
+                // white now, the way the Update sheet's tiles are, and Call
+                // keeps the only fill. Amber still wins on Update while a call
+                // is waiting to be written up: that is a state, and states are
+                // the one thing allowed to colour this card.
+                val needsInk = if (needsUpdate) Amber else AppColors.TextPrimary
                 Row(
                     Modifier.nudgeShake(needsUpdate).weight(1f).height(38.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(updateTint.copy(alpha = if (needsUpdate) 0.20f else 0.10f))
+                        .background(if (needsUpdate) Amber.copy(alpha = 0.14f) else AppColors.Surface)
+                        .border(1.dp, if (needsUpdate) Amber.copy(alpha = 0.14f) else AppColors.Border, RoundedCornerShape(10.dp))
                         .clickable { onUpdate() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
                     Text(if (needsUpdate) "✎ Update call" else "✎ Update", fontSize = 12.5.sp,
-                        color = updateTint, fontWeight = FontWeight.Bold, maxLines = 1)
+                        color = needsInk, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             } else {
                 // Not linked to a lead, so there is no funnel to move — ticking
                 // the callback off is genuinely all this can do.
                 Row(
                     Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+                        .background(AppColors.Surface)
+                        .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
                         .clickable { onDone() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    Text("✓ Done", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.primary,
+                    Text("✓ Done", fontSize = 12.5.sp, color = AppColors.TextPrimary,
                         fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
             Spacer(Modifier.width(7.dp))
             Row(
                 Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(10.dp))
-                    .background(WaGreen.copy(alpha = 0.12f))
+                    .background(AppColors.Surface)
+                    .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
                     .clickable { onWhatsApp() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
+                // WhatsApp's green survives as the icon only — it is a brand
+                // mark, which is worth keeping, not a reason to tint the button.
                 Icon(Icons.Default.Chat, contentDescription = null, tint = WaGreen, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(5.dp))
-                Text("WhatsApp", fontSize = 12.5.sp, color = WaGreen, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text("WhatsApp", fontSize = 12.5.sp, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1)
             }
             Spacer(Modifier.width(7.dp))
             Row(
