@@ -223,6 +223,8 @@ data class AppState(
      *  "What I did today" sheet on Leads and Follow Ups. */
     val todayActivities: List<com.salesautocall.app.data.LeadActivity> = emptyList(),
     val todayActivitiesLoading: Boolean = false,
+    /** The last outcome recorded, for as long as it can still be taken back. */
+    val undo: UndoOutcome? = null,
     // Per-lead call coach: honest rating + guidance from THIS lead's last real
     // call recording. Shown on the lead's own page.
     val leadCoach: com.salesautocall.app.data.CoachCallFeedback? = null,
@@ -269,6 +271,31 @@ data class AppState(
     val voiceUploading: Boolean = false,
     /** Voice note currently playing (null = none). */
     val playingNoteId: String? = null,
+)
+
+/**
+ * The last outcome a rep recorded, kept just long enough to take it back.
+ *
+ * "Update pr koi galti se wrong number daba de to vo back kaise hoga?" It could
+ * not be. Wrong number files the lead as `invalid` — terminal, sort 99, and
+ * `rep_visible = false` — so one mis-tap made a real lead vanish from the rep's
+ * list with no route back from anywhere in the app.
+ *
+ * A confirmation dialog on every tap was the wrong answer: most of the time it
+ * really is a wrong number, and reps are doing this two hundred times a day.
+ * Free when right, one tap when wrong.
+ *
+ * [prevStage] is captured as well as [prevStatus] because the stage cannot be
+ * derived on the way back — see Repository.restoreLead.
+ */
+data class UndoOutcome(
+    val contactId: String,
+    val name: String?,
+    /** What was just recorded, for the bar: "Marked Bad number". */
+    val label: String,
+    val prevStatus: String?,
+    val prevStage: String?,
+    val at: Long = System.currentTimeMillis(),
 )
 
 /**
@@ -2045,6 +2072,49 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         set { it.copy(message = "▶ Calling ${callable.size} selected leads…") }
     }
 
+    /** Dismisses the undo offer without acting on it. */
+    fun clearUndo() = set { it.copy(undo = null) }
+
+    /**
+     * Puts the lead back where it was before the last outcome.
+     *
+     * Restores the status AND the stage in one write — the stage cannot be
+     * re-derived on the way back out of a terminal one, see
+     * Repository.restoreLead. Logged like any other change, so the walk-back
+     * shows up in the lead's history and in "What I did today" rather than the
+     * record quietly disagreeing with itself.
+     *
+     * The callback the outcome closed is NOT resurrected. Reviving a follow-up
+     * row risks a second pending one on the same lead, which migration 0153
+     * exists to prevent; the lead comes back with no next step and the page's
+     * own "No next step planned" card asks for one.
+     */
+    fun undoLastOutcome() {
+        val u = _state.value.undo ?: return
+        val status = u.prevStatus ?: "new"
+        val stage = u.prevStage ?: "new"
+        set { it.copy(undo = null) }
+        viewModelScope.launch {
+            runCatching { Repository.restoreLead(u.contactId, status, stage) }
+                .onSuccess {
+                    launchActivityLog(u.contactId) {
+                        add("status" to "Undone — back to ${stageDisplay(status)}")
+                    }
+                    set { st ->
+                        st.copy(
+                            leads = st.leads.map { c ->
+                                if (c.id == u.contactId) c.copy(status = status, stage = stage) else c
+                            },
+                            message = "Put back",
+                        )
+                    }
+                    loadLeads(force = true)
+                    refreshWorkStates()
+                }
+                .onFailure { e -> set { it.copy(error = e.message) } }
+        }
+    }
+
     /** Optimistically updates the in-memory lead so the chip reflects instantly. */
     fun setLeadDisposition(contactId: String, status: String) {
         viewModelScope.launch {
@@ -2512,10 +2582,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // can then never take the new callback down with the old.
         val fromFollowUp = _state.value.postCallFollowUpId
         val cleanNote = note?.trim()?.ifBlank { null }
+        // Where this lead stood a moment ago, so the outcome can be taken back.
+        // Read BEFORE anything below touches it. A lead the app has never loaded
+        // (a call log with no matching row) has nothing to restore, so it simply
+        // gets no undo rather than a broken one.
+        val before = _state.value.leads.find { it.id == contactId }
         // The question has been answered, so the Update button stops shaking —
         // whether it was asked by a popup, by the nudge bar, or by the rep
         // opening the lead themselves.
         clearPendingUpdate(contactId)
+        // Offer the way back. Only when there is a previous position to return
+        // to, and never for the two answers that are their own undo — picking
+        // "Interested" again after picking it once costs nothing.
+        if (before != null) {
+            set {
+                it.copy(
+                    undo = UndoOutcome(
+                        contactId = contactId,
+                        name = name ?: before.name,
+                        label = stageDisplay(status),
+                        prevStatus = before.status,
+                        prevStage = before.stage,
+                    ),
+                )
+            }
+        }
         // ...and the lead leaves the calling queue on the same tap. This is the
         // one the rep actually complained about: "isko maine call kar liya, isko
         // maine update bhi kar diya, but phir bhi Pravesh show ho raha hai."
@@ -2535,6 +2626,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { Repository.setDisposition(contactId, status, cleanNote) }
                 .onSuccess {
+                    // THE DAY'S WORK WAS NOT BEING WRITTEN DOWN.
+                    //
+                    // "Mene aaj kya kia vo nahi h." This is the most-used way a
+                    // telecaller records anything — the Update sheet and the
+                    // lead page's outcome bar both land here — and it was the
+                    // one path that wrote contacts.status and nothing else.
+                    // setLeadDisposition and applyLead have always logged; this
+                    // never did, so "What I did today" read a rep's busiest
+                    // hours as an empty day. Same helper, same wording as the
+                    // other two.
+                    launchActivityLog(contactId) {
+                        add(outcomeDetail(status))
+                        if (temperature != null) add("temperature" to "Marked $temperature")
+                        if (cleanNote != null) add("note" to cleanNote)
+                    }
                     if (temperature != null) runCatching { Repository.setTemperature(contactId, temperature) }
                     set { st ->
                         st.copy(
@@ -3993,7 +4099,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         "not_interested" -> "Not interested"
         "lost" -> "Lost"
         "dnc" -> "Do Not Call"
+        // Matches lead_stages.label. Without it this fell to the else and read
+        // "Invalid", a word no telecaller uses and the dashboard never shows.
+        "invalid" -> "Bad number"
         else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
+    }
+
+    /**
+     * What the REP chose, for the history feed — not the stage it derives to.
+     *
+     * "No answer" and "Busy" both land on the Contacted stage, so logging them
+     * through stageDisplay wrote "Stage → Contacted" for a call nobody picked
+     * up. In "What I did today" that reads as a conversation that never
+     * happened. These four say what was actually tapped; everything else still
+     * reports the stage it moved the lead to, because that IS what it did.
+     */
+    private fun outcomeDetail(status: String): Pair<String, String> = when (status) {
+        "no_answer" -> "call" to "No answer"
+        "busy" -> "call" to "Busy"
+        "wrong_person" -> "call" to "Wrong person answered"
+        "invalid" -> "status" to "Bad number — wrong number"
+        else -> "status" to "Stage → ${stageDisplay(status)}"
     }
 
     /**

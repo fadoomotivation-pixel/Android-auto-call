@@ -702,6 +702,11 @@ private fun MainShell(vm: MainViewModel) {
                     // whole point: the old popup caught them because it blocked
                     // the screen, and this has to catch them without doing that.
                     PendingUpdateBar(vm)
+                    // The way back out of a mis-tap. Here, next to the nudge
+                    // bar, because the sheet that recorded the outcome has
+                    // already closed by the time the rep realises — an undo
+                    // living on that sheet would never be seen.
+                    UndoOutcomeBar(vm)
                     FloatingCallBar(
                         current = route,
                         onTab = { go(it) },

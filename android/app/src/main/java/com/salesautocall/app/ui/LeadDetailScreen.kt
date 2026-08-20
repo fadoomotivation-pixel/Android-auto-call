@@ -769,6 +769,10 @@ fun LeadDetailScreen(vm: MainViewModel) {
             Modifier.align(Alignment.BottomCenter)
                 .onSizeChanged { bottomBarsPx = it.height },
         ) {
+            // The lead page draws its own bottom stack, so it needs its own
+            // copy — an outcome recorded here usually leaves the rep sitting on
+            // this very page, which is where the undo has to be.
+            UndoOutcomeBar(vm)
             LeadActionBar(
                 contact = contact,
                 pending = app.pendingUpdates.firstOrNull { it.contactId == contact.id },
