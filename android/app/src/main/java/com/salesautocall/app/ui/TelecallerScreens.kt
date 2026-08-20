@@ -3435,12 +3435,20 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
         // / back are ignored; one outcome tap is the only way out. A missed call
         // stays freely dismissable (its "new" status is correct).
         onDismissRequest = { if (!connected || manual) vm.dismissPostCall() },
+        // WHITE, NOT LAVENDER. An M3 AlertDialog defaults its container to
+        // surfaceContainerHigh, which the scheme tints with the primary — so
+        // this one sheet came out pale purple while every card behind it was
+        // white on near-white. It was the loudest surface in the app and the
+        // only one that had never been moved onto the design system.
+        containerColor = AppColors.Surface,
+        titleContentColor = AppColors.TextPrimary,
+        textContentColor = AppColors.TextPrimary,
         title = {
             Column {
                 Text(if (manual) "Update lead" else "Call ended",
-                    style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text(who, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    style = AppType.title, color = AppColors.TextPrimary)
+                Spacer(Modifier.height(2.dp))
+                Text(who, style = AppType.meta, color = AppColors.TextSecondary)
             }
         },
         text = {
@@ -3474,14 +3482,19 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         TEMPERATURES.forEach { (key, label) ->
                             val on = temp == key
+                            // Unselected is a hairline on white, not a filled
+                            // grey slab. Three filled slabs above three more
+                            // filled slabs is what made this sheet read as a
+                            // pile of buttons rather than a question.
                             Box(
                                 Modifier.weight(1f).clip(RoundedCornerShape(50))
-                                    .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                                    .clickable { temp = if (on) null else key }.padding(vertical = 7.dp),
+                                    .background(if (on) AppColors.Indigo else AppColors.Surface)
+                                    .border(1.dp, if (on) AppColors.Indigo else AppColors.Border, RoundedCornerShape(50))
+                                    .clickable { temp = if (on) null else key }.padding(vertical = 9.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(label, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                                    style = MaterialTheme.typography.labelMedium)
+                                Text(label, color = if (on) AppColors.OnIndigo else AppColors.TextPrimary,
+                                    style = AppType.label, maxLines = 1)
                             }
                         }
                     }
@@ -3528,50 +3541,89 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                             color = Red,
                         )
                     } else {
-                        DispoButton("🎤  Record voice note", Indigo.copy(alpha = 0.12f), Indigo, Modifier.fillMaxWidth()) {
-                            vm.startVoiceNote()
+                        // An outline, not a filled indigo slab. This is the
+                        // optional third way to answer; it was the biggest,
+                        // loudest control on the sheet and sat above the
+                        // question it was optional for.
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 46.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AppColors.Surface)
+                                .border(1.dp, AppColors.Border, RoundedCornerShape(12.dp))
+                                .clickable { vm.startVoiceNote() }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            Text("🎤", fontSize = 13.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Record voice note", style = AppType.label, color = AppColors.Indigo, maxLines = 1)
                         }
                     }
 
                     Spacer(Modifier.height(14.dp))
-                    // Two different questions, never both at once. A call that never
-                    // connected has no funnel stage to pick — offering "Booked" there
-                    // is what made this screen a wall of buttons nobody read. The app
-                    // already knows whether the call connected, so it asks the one
-                    // question that applies and shows only those answers.
-                    Text(
-                        if (connected) "Where is this lead now?" else "Why didn't it connect?",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
+                    // THE THREE ANSWERS THAT WERE UNREACHABLE FROM HERE.
+                    //
+                    // After a real call the app knows whether it connected, so it
+                    // asks the one question that applies — that part was right.
+                    // But openFollowUpUpdate hardcodes connected = true, so a rep
+                    // who opened Update by hand from a lead or a callback card was
+                    // only ever shown the funnel stages. There was no way to say
+                    // "nobody picked up" or "wrong number" at all, on the button
+                    // reps press most. Wrong number in particular: the founder
+                    // went looking for it here and it did not exist.
+                    //
+                    // Opened by hand the rep is telling us what happened, so both
+                    // questions are theirs to answer. After a real call nothing
+                    // changes — the app still asks only the one that applies.
+                    if (manual) {
+                        SheetSectionLabel("CALL DIDN'T CONNECT")
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutcomeTile("No answer", AppColors.Warning, Modifier.weight(1f)) { dispose("no_answer") }
+                            OutcomeTile("Busy", AppColors.Warning, Modifier.weight(1f)) { dispose("busy") }
+                            // Straight through, no note and no temperature: there
+                            // is nothing to record about a number that was never
+                            // the customer's. `invalid`, not `dnc` — the person
+                            // never asked us to stop calling THEM.
+                            OutcomeTile("Wrong number", AppColors.Danger, Modifier.weight(1f)) {
+                                vm.postCallDispose("invalid", null, null)
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+                    SheetSectionLabel(
+                        if (connected) "WHERE IS THIS LEAD NOW?" else "WHY DIDN'T IT CONNECT?",
                         if (connected) "Pick the stage — this moves the lead in your funnel."
                         else "Pick a reason — the lead stays in your calling list.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(10.dp))
 
-                    // Every button the same size, two to a row: nothing wraps, nothing
+                    // Every tile the same size, two to a row: nothing wraps, nothing
                     // looks bigger than anything else.
+                    //
+                    // THE COLOUR IS A DOT NOW, NOT THE WHOLE BUTTON. Eight tiles
+                    // in eight different pastels read as a toy — green, blue,
+                    // two purples, two teals, grey, red, all shouting equally,
+                    // which is the same as none of them saying anything. The
+                    // tiles are one quiet surface with a hairline; a 6dp dot
+                    // carries the meaning. Only Do not call keeps a filled tint,
+                    // because it is the one answer here that cannot be undone.
                     val choices: List<Triple<String, Color, () -> Unit>> = if (connected) {
                         listOf(
-                            Triple("⭐  Interested", Green, { scheduleFor = "interested" }),
-                            Triple("↻  Call back later", Indigo, { scheduleFor = "callback" }),
-                            Triple("🏠  Site visit", Purple, { dispose("site_visit") }),
-                            Triple("🤝  Negotiating", Purple, { dispose("negotiation") }),
-                            Triple("💰  Token paid", Teal, { dispose("token_paid") }),
-                            Triple("✅  Booked", Teal, { dispose("booked") }),
-                            Triple("❌  Not interested", Slate, { dispose("not_interested") }),
-                            Triple("🚫  Do not call", Red, { dispose("dnc") }),
+                            Triple("Interested", AppColors.Positive, { scheduleFor = "interested" }),
+                            Triple("Call back later", AppColors.Indigo, { scheduleFor = "callback" }),
+                            Triple("Site visit", AppColors.Violet, { dispose("site_visit") }),
+                            Triple("Negotiating", AppColors.Violet, { dispose("negotiation") }),
+                            Triple("Token paid", AppColors.Teal, { dispose("token_paid") }),
+                            Triple("Booked", AppColors.Positive, { dispose("booked") }),
+                            Triple("Not interested", AppColors.Slate, { dispose("not_interested") }),
+                            Triple("Do not call", AppColors.Danger, { dispose("dnc") }),
                         )
                     } else {
                         listOf(
-                            Triple("📵  No answer", Red, { dispose("no_answer") }),
-                            Triple("⏳  Busy", Amber, { dispose("busy") }),
-                            Triple("📴  Switched off", Slate, { dispose("no_answer") }),
-                            Triple("🙅  Wrong person", Amber, { dispose("wrong_person") }),
+                            Triple("No answer", AppColors.Warning, { dispose("no_answer") }),
+                            Triple("Busy", AppColors.Warning, { dispose("busy") }),
+                            Triple("Switched off", AppColors.Slate, { dispose("no_answer") }),
+                            Triple("Wrong person", AppColors.Warning, { dispose("wrong_person") }),
                             // WRONG NUMBER IS ONE TAP, AND IT IS NOT "DO NOT CALL".
                             //
                             // Two things were wrong. It filed the lead as `dnc`,
@@ -3587,16 +3639,16 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                             // record about a number that is not the customer's;
                             // asking them to is asking for data that cannot
                             // exist.
-                            Triple("✖️  Wrong number", Red, { vm.postCallDispose("invalid", null, null) }),
-                            Triple("↻  Call back later", Indigo, { scheduleFor = "callback" }),
+                            Triple("Wrong number", AppColors.Danger, { vm.postCallDispose("invalid", null, null) }),
+                            Triple("Call back later", AppColors.Indigo, { scheduleFor = "callback" }),
                         )
                     }
                     choices.chunked(2).forEach { pair ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             pair.forEach { (label, color, onTap) ->
-                                DispoButton(label, color.copy(alpha = 0.12f), color, Modifier.weight(1f), onTap)
+                                OutcomeTile(label, color, Modifier.weight(1f), onTap)
                             }
-                            // Keeps the last row's single button the same width as the rest.
+                            // Keeps the last row's single tile the same width as the rest.
                             if (pair.size == 1) Spacer(Modifier.weight(1f))
                         }
                         Spacer(Modifier.height(8.dp))
@@ -3647,6 +3699,53 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
             }
         },
     )
+}
+
+/**
+ * One answer in the Update sheet.
+ *
+ * Quiet surface, hairline border, graphite label, and a 6dp dot in the colour
+ * that carries the meaning. This replaced a tile whose whole background was the
+ * semantic colour at 12% — eight of those side by side is a bag of sweets, and
+ * the founder's word for it was "second-year student".
+ *
+ * The one exception is destructive answers: Do not call and Wrong number keep a
+ * tinted face, because they are the answers that cannot be taken back and they
+ * should not look like the other six.
+ */
+@Composable
+private fun OutcomeTile(label: String, tone: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val destructive = tone == AppColors.Danger
+    Row(
+        modifier
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (destructive) AppColors.DangerSoft else AppColors.Surface)
+            .border(1.dp, if (destructive) AppColors.DangerSoft else AppColors.Border, RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(6.dp).clip(CircleShape).background(tone))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            label,
+            style = AppType.bodyStrong,
+            color = if (destructive) AppColors.Danger else AppColors.TextPrimary,
+            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** A section heading inside the Update sheet, with the one line that says what
+ *  the section is for — this app's rule is that no screen makes a rep guess. */
+@Composable
+private fun SheetSectionLabel(title: String, hint: String? = null) {
+    Text(title, style = AppType.sectionLabel, color = AppColors.TextSecondary)
+    hint?.let {
+        Text(it, style = AppType.meta, color = AppColors.TextTertiary)
+    }
+    Spacer(Modifier.height(10.dp))
 }
 
 @Composable
@@ -4036,19 +4135,35 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                         }
                     }
                     if (overdueStrict.isNotEmpty()) {
-                        Spacer(Modifier.height(7.dp))
-                        Text(
-                            "${overdueStrict.size} left over from before today — tap to move them all to tomorrow 10 AM",
-                            fontSize = 11.5.sp, color = Red, fontWeight = FontWeight.Medium,
-                            lineHeight = 15.sp,
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        Spacer(Modifier.height(8.dp))
+                        // A BUTTON THAT LOOKS LIKE A BUTTON.
+                        //
+                        // This was loose red prose with a tap target hidden on
+                        // it — nothing said it was pressable except the sentence
+                        // telling you to press it, and it moves 26 callbacks in
+                        // one tap. It also added a third red to a screen that
+                        // already had the overdue pills and the Call now chip.
+                        // Bordered row, graphite text: it reads as the quiet
+                        // secondary action it is, next to the filled Call all.
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(AppColors.Surface)
+                                .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
                                 .clickable {
                                     val tomorrow10 = java.time.ZonedDateTime.now().plusDays(1)
                                         .withHour(10).withMinute(0).withSecond(0).toInstant().toEpochMilli()
                                     vm.rescheduleFollowUps(overdueStrict, tomorrow10)
                                 }
-                                .padding(vertical = 4.dp),
-                        )
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Move ${overdueStrict.size} left over from before today to tomorrow 10 AM",
+                                fontSize = 11.5.sp, color = AppColors.TextPrimary,
+                                fontWeight = FontWeight.Medium, lineHeight = 15.sp,
+                            )
+                        }
                     }
                 }
             }
@@ -4220,12 +4335,20 @@ private fun FollowUpCard(
         // booked it themselves, or the AI booked it from a voice note, or the
         // attempt ladder booked it because nobody picked up.
         Spacer(Modifier.height(8.dp))
+        // GREY, NOT A PINK ALARM.
+        //
+        // This panel took the card's accent, so on an overdue callback it was a
+        // full-width pink box of red text. The "Overdue 12d" pill three
+        // centimetres above already says the same thing, and saying it twice in
+        // the same red is how a card ends up with four different reds on it and
+        // none of them meaning anything. The note is context, not an alarm —
+        // urgency is the pill's job on this card and nothing else's.
         Row(
             Modifier.fillMaxWidth().clip(Radii.control)
-                .background(accent.copy(alpha = 0.09f))
+                .background(AppColors.SurfaceMuted)
                 .padding(horizontal = Space.m, vertical = Space.s),
         ) {
-            Text(whyThisCallback(f), style = AppType.metaStrong, color = accent, maxLines = 3,
+            Text(whyThisCallback(f), style = AppType.meta, color = AppColors.TextSecondary, maxLines = 3,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         Spacer(Modifier.height(9.dp))
@@ -4241,43 +4364,57 @@ private fun FollowUpCard(
                 // A just-finished call turns it amber and sets it wobbling —
                 // the same reminder the Leads list gives, in the place a rep
                 // ringing their callbacks is actually looking.
-                val updateTint = if (needsUpdate) Amber else MaterialTheme.colorScheme.primary
+                // ONE FILLED BUTTON PER CARD, AND IT IS CALL.
+                //
+                // These three were a lavender tint, a green tint and a solid
+                // blue — three weights competing for the same glance, on top of
+                // a pink note and a red pill. The secondary two are hairlines on
+                // white now, the way the Update sheet's tiles are, and Call
+                // keeps the only fill. Amber still wins on Update while a call
+                // is waiting to be written up: that is a state, and states are
+                // the one thing allowed to colour this card.
+                val needsInk = if (needsUpdate) Amber else AppColors.TextPrimary
                 Row(
                     Modifier.nudgeShake(needsUpdate).weight(1f).height(38.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(updateTint.copy(alpha = if (needsUpdate) 0.20f else 0.10f))
+                        .background(if (needsUpdate) Amber.copy(alpha = 0.14f) else AppColors.Surface)
+                        .border(1.dp, if (needsUpdate) Amber.copy(alpha = 0.14f) else AppColors.Border, RoundedCornerShape(10.dp))
                         .clickable { onUpdate() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
                     Text(if (needsUpdate) "✎ Update call" else "✎ Update", fontSize = 12.5.sp,
-                        color = updateTint, fontWeight = FontWeight.Bold, maxLines = 1)
+                        color = needsInk, fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             } else {
                 // Not linked to a lead, so there is no funnel to move — ticking
                 // the callback off is genuinely all this can do.
                 Row(
                     Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
+                        .background(AppColors.Surface)
+                        .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
                         .clickable { onDone() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    Text("✓ Done", fontSize = 12.5.sp, color = MaterialTheme.colorScheme.primary,
+                    Text("✓ Done", fontSize = 12.5.sp, color = AppColors.TextPrimary,
                         fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
             Spacer(Modifier.width(7.dp))
             Row(
                 Modifier.weight(1f).height(38.dp).clip(RoundedCornerShape(10.dp))
-                    .background(WaGreen.copy(alpha = 0.12f))
+                    .background(AppColors.Surface)
+                    .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
                     .clickable { onWhatsApp() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
+                // WhatsApp's green survives as the icon only — it is a brand
+                // mark, which is worth keeping, not a reason to tint the button.
                 Icon(Icons.Default.Chat, contentDescription = null, tint = WaGreen, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(5.dp))
-                Text("WhatsApp", fontSize = 12.5.sp, color = WaGreen, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text("WhatsApp", fontSize = 12.5.sp, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, maxLines = 1)
             }
             Spacer(Modifier.width(7.dp))
             Row(
