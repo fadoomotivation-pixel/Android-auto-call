@@ -370,15 +370,22 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     )
                 }
 
-                // ---- Primary actions first (guided flow: Call → WhatsApp → …) ----
-                item {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ActionTile(Icons.Default.Call, "Call Now", BlueL, Modifier.weight(1f)) { doCall() }
-                        ActionTile(Icons.Default.Chat, "WhatsApp", WhatsGreen, Modifier.weight(1f)) { doWhats() }
-                        ActionTile(Icons.Default.CalendarMonth, "Set Reminder", PurpleL, Modifier.weight(1f)) { scheduleOpen = true }
-                        ActionTile(Icons.Default.MoreHoriz, "More", SubInk, Modifier.weight(1f)) { moreOpen = true }
-                    }
-                }
+                // THE QUAD OF ACTION TILES IS GONE, BECAUSE ALL FOUR NOW EXIST
+                // TWICE ELSEWHERE.
+                //
+                // "Bohot jada chije faili hui h — smjh nahi aata kaha kya h."
+                // This row was the clearest case of it. Call Now, WhatsApp and
+                // More were already the three icons in the title bar directly
+                // above, and Call and WhatsApp are also the two buttons in the
+                // action bar pinned at the bottom — three routes to the same
+                // dial on one screen. Set Reminder is the button on the "No
+                // next step planned" card a few hundred pixels down, and a menu
+                // item in More.
+                //
+                // Nothing is lost: `scheduleOpen` and `moreOpen` are still
+                // driven from the title bar and that card. What goes is ~100dp
+                // at the top of the page and the impression that four different
+                // things are on offer when there are two.
 
                 // ══ THE ASSISTANT, IN ONE BREATH ═════════════════════════════
                 //
@@ -886,24 +893,9 @@ private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
     ) { Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp)) }
 }
 
-@Composable
-private fun ActionTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color, modifier: Modifier, onClick: () -> Unit) {
-    Column(
-        modifier.shadow(3.dp, Radii.card, ambientColor = SoftShadow, spotColor = SoftShadow)
-            .clip(Radii.card).background(CardBg)
-            .clickable { onClick() }.padding(vertical = Space.m),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        // Icon in a soft tinted circle; the label stays neutral ink — the tint
-        // draws the eye without turning the row into a rainbow.
-        Box(Modifier.size(36.dp).clip(CircleShape).background(tint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(19.dp))
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = Ink,
-            maxLines = 1, textAlign = TextAlign.Center)
-    }
-}
+// ActionTile went with the quad row it drew. Its last caller was that row, and
+// every one of those four actions now lives in the title bar or the pinned
+// action bar instead.
 
 /** Groups an Indian 10-digit number as "92680 96331" for calm reading. */
 private fun prettyNum(raw: String): String {
@@ -1716,103 +1708,112 @@ private fun LeadActionBar(
     var dismissed by remember(contact.id, pending?.at) { mutableStateOf(false) }
     val stripOpen = !dismissed && (pending != null || askNext)
 
-    Column(
-        Modifier.fillMaxWidth()
-            // A fade rather than a hard edge, so a card scrolling under the bar
-            // dissolves into it instead of being sliced off.
-            .background(Brush.verticalGradient(listOf(Color.Transparent, ScreenBg, ScreenBg)))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    ) {
-        if (stripOpen) {
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                    .background(AppColors.Surface)
-                    .border(1.dp, AppColors.Border, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
-            ) {
-                Text(
-                    when {
-                        askNext -> "Saved. When is the next call?"
-                        pending?.connected == false -> "Nobody picked up — what now?"
-                        else -> "What happened on the call?"
-                    },
-                    style = AppType.metaStrong, color = Ink, maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                )
-                // The call itself, so the rep is not answering from memory.
-                callLine?.let {
-                    Text(it, style = AppType.tag, color = SubInk, maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                }
-                Spacer(Modifier.height(7.dp))
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+    Column(Modifier.fillMaxWidth()) {
+        // The fade is its own fixed 20dp band, not a gradient across the whole
+        // bar. Spread over the bar it was too short to see when the bar was
+        // 44dp — a card scrolling under it looked sliced clean off, which is
+        // what it looked like in the founder's screenshot — and it would have
+        // become a 60dp smear once the outcome strip doubled the bar's height.
+        // A fixed band behaves the same in both states.
+        Box(
+            Modifier.fillMaxWidth().height(20.dp)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, ScreenBg))),
+        )
+        Column(
+            Modifier.fillMaxWidth().background(ScreenBg)
+                .padding(horizontal = 12.dp).padding(bottom = 8.dp),
+        ) {
+            if (stripOpen) {
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                        .background(AppColors.Surface)
+                        .border(1.dp, AppColors.Border, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
                 ) {
-                    if (askNext) {
-                        BarChip("Tomorrow 11 AM", IndigoL) {
-                            dismissed = true; askNext = false
-                            onQuickCallback(
-                                java.time.ZonedDateTime.now().plusDays(1)
-                                    .withHour(11).withMinute(0).withSecond(0)
-                                    .toInstant().toEpochMilli(),
-                            )
+                    Text(
+                        when {
+                            askNext -> "Saved. When is the next call?"
+                            pending?.connected == false -> "Nobody picked up — what now?"
+                            else -> "What happened on the call?"
+                        },
+                        style = AppType.metaStrong, color = Ink, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    // The call itself, so the rep is not answering from memory.
+                    callLine?.let {
+                        Text(it, style = AppType.tag, color = SubInk, maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
+                    Spacer(Modifier.height(7.dp))
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (askNext) {
+                            BarChip("Tomorrow 11 AM", IndigoL) {
+                                dismissed = true; askNext = false
+                                onQuickCallback(
+                                    java.time.ZonedDateTime.now().plusDays(1)
+                                        .withHour(11).withMinute(0).withSecond(0)
+                                        .toInstant().toEpochMilli(),
+                                )
+                            }
+                            BarChip("Pick a time", IndigoL) { dismissed = true; askNext = false; onBookCallback() }
+                            BarChip("🏠 Book visit", PurpleL) { dismissed = true; askNext = false; onBookVisit() }
+                            BarChip("No next step", SubInk) { dismissed = true; askNext = false }
+                        } else if (pending?.connected == false) {
+                            // A call that never connected has no funnel stage to
+                            // pick, so it is not offered one — the same rule the
+                            // post-call popup follows. These two book their own
+                            // retry, which is why neither leads to the next step.
+                            BarChip("📵 No answer", RedL) { onOutcome("no_answer") }
+                            BarChip("⏳ Busy", AmberL) { onOutcome("busy") }
+                            BarChip("✖️ Wrong number", RedL) { onOutcome("invalid") }
+                            BarChip("↻ Call back", IndigoL) { dismissed = true; onBookCallback() }
+                        } else {
+                            BarChip("✓ Connected", GreenL) { onOutcome("called"); askNext = true }
+                            BarChip("⭐ Interested", GreenL) { onOutcome("interested"); askNext = true }
+                            BarChip("🏠 Site visit", PurpleL) { dismissed = true; onBookVisit() }
+                            BarChip("❌ Not interested", SubInk) { onOutcome("not_interested") }
+                            BarChip("✖️ Wrong number", RedL) { onOutcome("invalid") }
                         }
-                        BarChip("Pick a time", IndigoL) { dismissed = true; askNext = false; onBookCallback() }
-                        BarChip("🏠 Book visit", PurpleL) { dismissed = true; askNext = false; onBookVisit() }
-                        BarChip("No next step", SubInk) { dismissed = true; askNext = false }
-                    } else if (pending?.connected == false) {
-                        // A call that never connected has no funnel stage to
-                        // pick, so it is not offered one — the same rule the
-                        // post-call popup follows. These two book their own
-                        // retry, which is why neither leads to the next step.
-                        BarChip("📵 No answer", RedL) { onOutcome("no_answer") }
-                        BarChip("⏳ Busy", AmberL) { onOutcome("busy") }
-                        BarChip("✖️ Wrong number", RedL) { onOutcome("invalid") }
-                        BarChip("↻ Call back", IndigoL) { dismissed = true; onBookCallback() }
-                    } else {
-                        BarChip("✓ Connected", GreenL) { onOutcome("called"); askNext = true }
-                        BarChip("⭐ Interested", GreenL) { onOutcome("interested"); askNext = true }
-                        BarChip("🏠 Site visit", PurpleL) { dismissed = true; onBookVisit() }
-                        BarChip("❌ Not interested", SubInk) { onOutcome("not_interested") }
-                        BarChip("✖️ Wrong number", RedL) { onOutcome("invalid") }
                     }
                 }
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
-        }
-        // Call and WhatsApp stay the primary actions, in reach at the bottom of
-        // a long page instead of only at the top of it.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                Modifier.weight(1.3f).height(44.dp).clip(RoundedCornerShape(12.dp))
-                    .background(IndigoL).clickable { onCall() },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Call", color = Color.White, style = AppType.label, maxLines = 1)
-            }
-            Spacer(Modifier.width(7.dp))
-            Box(
-                Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
-                    .background(WhatsGreen.copy(alpha = 0.13f)).clickable { onWhatsApp() },
-                contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsGreen, modifier = Modifier.size(18.dp)) }
-            Spacer(Modifier.width(7.dp))
-            // Everything the strip does not cover — temperature, a typed note, a
-            // voice note — is behind this, in the sheet that already does it.
-            val tint = if (pending != null && !stripOpen) AmberL else IndigoL
-            Row(
-                Modifier.nudgeShake(pending != null && !stripOpen)
-                    .weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
-                    .background(tint.copy(alpha = 0.12f))
-                    .clickable { onOpenUpdate() },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Text("✎ Update", color = tint, style = AppType.label, maxLines = 1)
+            // Call and WhatsApp stay the primary actions, in reach at the bottom of
+            // a long page instead of only at the top of it.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.weight(1.3f).height(44.dp).clip(RoundedCornerShape(12.dp))
+                        .background(IndigoL).clickable { onCall() },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Call", color = Color.White, style = AppType.label, maxLines = 1)
+                }
+                Spacer(Modifier.width(7.dp))
+                Box(
+                    Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
+                        .background(WhatsGreen.copy(alpha = 0.13f)).clickable { onWhatsApp() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsGreen, modifier = Modifier.size(18.dp)) }
+                Spacer(Modifier.width(7.dp))
+                // Everything the strip does not cover — temperature, a typed note, a
+                // voice note — is behind this, in the sheet that already does it.
+                val tint = if (pending != null && !stripOpen) AmberL else IndigoL
+                Row(
+                    Modifier.nudgeShake(pending != null && !stripOpen)
+                        .weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
+                        .background(tint.copy(alpha = 0.12f))
+                        .clickable { onOpenUpdate() },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text("✎ Update", color = tint, style = AppType.label, maxLines = 1)
+                }
             }
         }
     }
