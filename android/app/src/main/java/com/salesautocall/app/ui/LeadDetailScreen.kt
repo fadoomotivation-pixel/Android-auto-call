@@ -1900,7 +1900,7 @@ private fun FunnelStepper(contact: Contact, stages: List<LeadStage>, onSet: (Str
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PickWhenDialog(title: String, visitMode: Boolean = false, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+internal fun PickWhenDialog(title: String, visitMode: Boolean = false, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
     val now = java.time.ZonedDateTime.now()
     fun at(days: Long, hour: Int) = now.plusDays(days).withHour(hour).withMinute(0).withSecond(0).toInstant().toEpochMilli()
     val options = if (visitMode) buildList {

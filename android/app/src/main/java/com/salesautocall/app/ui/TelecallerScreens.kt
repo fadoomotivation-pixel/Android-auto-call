@@ -3592,6 +3592,8 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
     // Which flow the schedule chips are serving: plain callback vs. an
     // Interested lead whose next touch we refuse to leave unscheduled.
     var scheduleFor by remember { mutableStateOf<String?>(null) }
+    // "Site visit" opens the date picker rather than moving the lead silently.
+    var visitPickOpen by remember { mutableStateOf(false) }
     // Optional temperature + note captured in the SAME step as the outcome, so a
     // good call ("Interested, hot, wants corner plot") is one screen, not five.
     var temp by remember { mutableStateOf<String?>(null) }
@@ -3792,7 +3794,14 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                         listOf(
                             Triple("Interested", AppColors.Positive, { scheduleFor = "interested" }),
                             Triple("Call back later", AppColors.Indigo, { scheduleFor = "callback" }),
-                            Triple("Site visit", AppColors.Violet, { dispose("site_visit") }),
+                            // ASKS WHEN. A site visit with no date is not a site
+                            // visit: it stamps the stage, tells nobody when, and
+                            // reminds no one, so the visit the customer actually
+                            // agreed to is quietly forgotten. The lead page has
+                            // always asked; this sheet just moved the lead and
+                            // said nothing. Same picker, same visitMode options
+                            // ("Tomorrow 4 PM", "Sunday 11 AM").
+                            Triple("Site visit", AppColors.Violet, { visitPickOpen = true }),
                             Triple("Negotiating", AppColors.Violet, { dispose("negotiation") }),
                             Triple("Token paid", AppColors.Teal, { dispose("token_paid") }),
                             Triple("Booked", AppColors.Positive, { dispose("booked") }),
@@ -3880,6 +3889,23 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
             }
         },
     )
+
+    // Booking the visit: the SAME picker the lead page uses, in visitMode, so a
+    // rep sees the same "Tomorrow 4 PM / Sunday 11 AM" options wherever they
+    // book from. The date rides along in the outcome's own write — one call,
+    // one status stamp, one history entry. See Repository.setDisposition.
+    if (visitPickOpen) {
+        PickWhenDialog(
+            title = "Site visit · $who",
+            visitMode = true,
+            onDismiss = { visitPickOpen = false },
+            onPick = { millis ->
+                visitPickOpen = false
+                vm.postCallDispose("site_visit", temp, note.ifBlank { null }, millis)
+            },
+        )
+    }
+
 }
 
 /**
@@ -4377,6 +4403,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     onReschedule = { rescheduleFor = f },
                     onUpdate = if (cid == null) null else fun() { vm.openFollowUpUpdate(cid, f.phone, f.name, f.id) },
                     onDone = { f.id?.let { vm.completeFollowUp(it) } },
+                    onOpen = if (cid == null) null else fun() { vm.openLeadDetail(cid) },
                     needsUpdate = cid != null && app.pendingUpdates.any { it.contactId == cid },
                 )
             }
@@ -4461,6 +4488,8 @@ private fun FollowUpCard(
     onReschedule: () -> Unit,
     onUpdate: (() -> Unit)?,
     onDone: () -> Unit,
+    /** Opens this callback's lead. Null when the row isn't linked to one. */
+    onOpen: (() -> Unit)? = null,
     needsUpdate: Boolean = false,
 ) {
     // FIVE BUTTONS WAS THE PROBLEM.
@@ -4484,6 +4513,15 @@ private fun FollowUpCard(
         Modifier.fillMaxWidth().clip(Radii.card)
             .background(AppColors.Surface)
             .border(1.dp, AppColors.Border, Radii.card)
+            // TAP THE CARD, OPEN THE LEAD.
+            //
+            // It did nothing before. Everything a rep might want before ringing
+            // — the last call, what the AI heard, the notes, the funnel — is on
+            // the lead's page, and from here the only way in was to leave for
+            // the Leads tab and find the name again. The buttons below still
+            // win their own taps; Compose gives the press to the innermost
+            // clickable, so Call, WhatsApp and Update are unaffected.
+            .then(if (onOpen == null) Modifier else Modifier.clickable { onOpen() })
             .padding(horizontal = Space.m, vertical = Space.m),
     ) {
         Row(verticalAlignment = Alignment.Top) {
