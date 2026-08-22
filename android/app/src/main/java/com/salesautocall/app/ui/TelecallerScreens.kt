@@ -1630,6 +1630,100 @@ private fun LeadsDeck(
     }
 }
 
+/**
+ * NEXT CALL — the one answer a telecaller needs on a screen with 439 leads.
+ *
+ * "Telecaller bohot confuse hote h jab lead 400, 500 hoti h."
+ *
+ * They should be. Until now this screen opened with a pipeline figure, four
+ * counters, six tiles and four hundred cards, and every one of those asks the
+ * rep a question instead of answering one. A telecaller does not want to browse
+ * a database; they want to know who to ring, ring them, say what happened, and
+ * be handed the next one. Choosing, four hundred times a day, IS the confusion.
+ *
+ * So the screen now opens by naming one person and why they are first. The
+ * queue behind it is EXACTLY the deck's "Due" rule — overdue plus call_now,
+ * soonest first — so the number on this card and the number on the counter
+ * above it can never disagree. No new taxonomy, no second opinion about what is
+ * urgent; this only renders what v_lead_workstate already decided.
+ *
+ * Two ways out, in the order a rep wants them: ring this one, or hand the whole
+ * queue to the auto-dialler. The second is the same callList the Follow Ups
+ * screen has used all along, worded the same way, because a rep who has learnt
+ * "call all 26 due, one after another" there should not have to learn a second
+ * phrase here.
+ */
+@Composable
+private fun UpNextCard(
+    lead: Contact,
+    reason: String,
+    queueSize: Int,
+    onCall: () -> Unit,
+    onOpen: () -> Unit,
+    onCallAll: () -> Unit,
+) {
+    val who = prettyName(lead.name) ?: prettyPhone(lead.phone)
+    // "Call Rahul", not "Call" — a named button is a decision already made.
+    val firstName = who.trim().substringBefore(' ').take(14)
+    Column(
+        Modifier.fillMaxWidth().clip(Radii.card)
+            .background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.card)
+            .clickable { onOpen() }
+            .padding(horizontal = Space.m, vertical = Space.m),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("NEXT CALL", style = AppType.sectionLabel, color = AppColors.TextSecondary,
+                modifier = Modifier.weight(1f), maxLines = 1)
+            if (queueSize > 1) {
+                Text("$queueSize waiting", style = AppType.tag, color = AppColors.TextTertiary, maxLines = 1)
+            }
+        }
+        Spacer(Modifier.height(Space.s))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            InitialsAvatar(lead.name ?: lead.phone)
+            Spacer(Modifier.width(Space.m))
+            Column(Modifier.weight(1f)) {
+                Text(who, style = AppType.rowTitle, color = AppColors.TextPrimary,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                // Why this one and not another. A queue that will not explain
+                // itself is a queue a rep second-guesses, and then ignores.
+                Text(reason, style = AppType.meta, color = AppColors.TextSecondary,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            budgetLabel(lead.budget)?.let {
+                Spacer(Modifier.width(Space.s))
+                Text("₹ $it", style = AppType.metaStrong, color = AppColors.TextPrimary, maxLines = 1)
+            }
+        }
+        Spacer(Modifier.height(Space.m))
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 46.dp).clip(RoundedCornerShape(12.dp))
+                .background(AppColors.Indigo)
+                .clickable { onCall() },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(Icons.Default.Call, contentDescription = null, tint = AppColors.OnIndigo,
+                modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(7.dp))
+            Text("Call $firstName", style = AppType.label, color = AppColors.OnIndigo, maxLines = 1)
+        }
+        if (queueSize > 1) {
+            Spacer(Modifier.height(Space.s))
+            Text(
+                "Or call all $queueSize, one after another",
+                style = AppType.meta, color = AppColors.Indigo,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                    .clickable { onCallAll() }
+                    .padding(vertical = 5.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+    }
+}
+
 /** One glass counter on the deck — a number that is also a one-tap filter. */
 @Composable
 private fun DeckStat(value: Int, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
@@ -1899,6 +1993,25 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     LaunchedEffect(nowMs) { if (settled) vm.refreshWorkStates() else settled = true }
     fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
 
+    // The call queue behind the Next call card. Hoisted here, not built inside
+    // the LazyColumn: that content block is a LazyListScope, not a composable
+    // one, so remember() cannot live there — and without remember this would
+    // re-sort four hundred leads on every scroll frame.
+    //
+    // The rule is dueNowCount()'s, exactly: overdue or call_now. Ordered by the
+    // callback that was promised soonest, then by arrival for the ones nobody
+    // ever booked — the same order Follow Ups rings them in.
+    val queue = remember(app.leads, app.workByLead, app.followUpList) {
+        app.leads
+            .filter { val a = app.actionOf(it); a == "overdue" || a == "call_now" }
+            .sortedWith(
+                compareBy(
+                    { c: Contact -> fuOf(c)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE },
+                    { c: Contact -> instantMillis(c.createdAt) ?: Long.MAX_VALUE },
+                ),
+            )
+    }
+
     val base = when {
         stageFilter != null -> app.leads.filter { it.stage == stageFilter }
         quick == "today" -> app.leads.filter { isToday(it.createdAt) }
@@ -2074,6 +2187,37 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         }
                         Text("Cancel", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.clickable { exitSelect() }.padding(8.dp))
+                    }
+                }
+            }
+            // WHO TO RING, NAMED, ABOVE THE FOUR HUNDRED CARDS.
+            //
+            // Same rule as the deck's Due counter — dueNowCount() is literally
+            // `overdue || call_now` — so the two numbers are the same number by
+            // construction. Sorted by when the callback was promised, oldest
+            // first, then by arrival for the ones nobody ever booked; that is
+            // the order the Follow Ups screen already calls in.
+            //
+            // Hidden while searching or selecting: both mean the rep is doing
+            // something deliberate and does not want to be handed a queue.
+            if (!selectMode && query.isBlank()) {
+                queue.firstOrNull()?.let { next ->
+                    item(key = "up_next") {
+                        val fu = fuOf(next)
+                        val due = fu?.let { instantMillis(it.dueAt) }
+                        UpNextCard(
+                            lead = next,
+                            reason = when {
+                                due != null && due <= nowMs -> "Callback was due ${agoLabel(fu.dueAt)}"
+                                due != null -> "Callback due ${relativeDue(fu.dueAt)}"
+                                next.createdAt != null -> "New lead · ${arrivedLabel(next.createdAt!!)}"
+                                else -> "Nobody has called them yet"
+                            },
+                            queueSize = queue.size,
+                            onCall = { vm.dialManual(next.phone) },
+                            onOpen = { next.id?.let { vm.openLeadDetail(it) } },
+                            onCallAll = { vm.callList(queue, "Due now") },
+                        )
                     }
                 }
             }
