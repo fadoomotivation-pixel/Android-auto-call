@@ -1381,11 +1381,24 @@ object Repository {
         ) { filter { eq("id", contactId) } }
     }
 
-    /** Records a salesperson's call outcome (disposition) + optional note. */
-    suspend fun setDisposition(contactId: String, status: String, note: String?) {
+    /**
+     * Records a salesperson's call outcome (disposition) + optional note.
+     *
+     * [siteVisitAtIso] rides along in the SAME patch rather than going through
+     * applyLead afterwards. "Site visit" from the Update sheet is one outcome,
+     * so it has to be one write: two calls would stamp the status twice, log
+     * the day's history twice, and race each other to decide the stage.
+     */
+    suspend fun setDisposition(
+        contactId: String,
+        status: String,
+        note: String?,
+        siteVisitAtIso: String? = null,
+    ) {
         val patch = buildMap {
             put("status", status)
             if (note != null) put("notes", note)
+            if (siteVisitAtIso != null) put("site_visit_at", siteVisitAtIso)
         }
         client.from("contacts").update(patch) { filter { eq("id", contactId) } }
     }

@@ -2572,7 +2572,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** 1-tap disposition from the post-call popup. Optionally stamps the lead's
      *  temperature and a quick note in the same step, and auto-schedules a retry
      *  when the call didn't connect — so "No answer"/"Busy" never gets forgotten. */
-    fun postCallDispose(status: String, temperature: String? = null, note: String? = null) {
+    /**
+     * [siteVisitAtMillis] — when the buyer agreed to come.
+     *
+     * A site visit with no date is not a site visit. It stamps the stage, tells
+     * nobody when, and reminds no one — so the visit the customer actually
+     * agreed to is forgotten, which is the most expensive thing this app can
+     * lose. It travels in the same write as the status for that reason; see
+     * Repository.setDisposition.
+     */
+    fun postCallDispose(
+        status: String,
+        temperature: String? = null,
+        note: String? = null,
+        siteVisitAtMillis: Long? = null,
+    ) {
         val contactId = _state.value.postCallContactId ?: return
         val phone = _state.value.postCallPhone
         val name = _state.value.postCallName
@@ -2624,7 +2638,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             !phone.isNullOrBlank() &&
             ((_state.value.leads.find { it.id == contactId }?.attempts ?: 0) + 1) < 3
         viewModelScope.launch {
-            runCatching { Repository.setDisposition(contactId, status, cleanNote) }
+            val visitIso = siteVisitAtMillis?.let { java.time.Instant.ofEpochMilli(it).toString() }
+            runCatching { Repository.setDisposition(contactId, status, cleanNote, visitIso) }
                 .onSuccess {
                     // THE DAY'S WORK WAS NOT BEING WRITTEN DOWN.
                     //
@@ -2638,6 +2653,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     // other two.
                     launchActivityLog(contactId) {
                         add(outcomeDetail(status))
+                        // The date is the whole point of a visit — put it in the
+                        // history, not just the stage word.
+                        if (visitIso != null) {
+                            add("site_visit" to "Site visit booked for ${shortWhen(siteVisitAtMillis!!)}")
+                        }
                         if (temperature != null) add("temperature" to "Marked $temperature")
                         if (cleanNote != null) add("note" to cleanNote)
                     }
@@ -2648,7 +2668,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 // handledAt locally too, so the lead leaves New the
                                 // instant the rep answers the prompt rather than on
                                 // the next server refresh.
-                                if (c.id == contactId) c.copy(status = status, temperature = temperature ?: c.temperature, notes = cleanNote ?: c.notes, handledAt = java.time.Instant.now().toString()) else c
+                                if (c.id == contactId) c.copy(status = status, temperature = temperature ?: c.temperature, notes = cleanNote ?: c.notes, siteVisitAt = visitIso ?: c.siteVisitAt, handledAt = java.time.Instant.now().toString()) else c
                             },
                         )
                     }
