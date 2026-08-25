@@ -8,7 +8,8 @@
 //   Authorization: Bearer <BAILEYS_INGEST_SECRET>
 //   { "salesperson_id": "...", "wa_number": "9198...", "messages": [
 //       { "id": "3EB0...", "peer": "919876543210", "direction": "out",
-//         "text": "...", "has_media": false, "sent_at": "2026-08-20T09:12:00Z" } ] }
+//         "text": "...", "media_kind": "document",
+//         "sent_at": "2026-08-20T09:12:00Z" } ] }
 //
 // THREE RULES, ENFORCED HERE RATHER THAN TRUSTED TO THE CALLER
 //
@@ -51,15 +52,34 @@ function secretMatches(given: string): boolean {
   return diff === 0;
 }
 
+/** What WhatsApp attached, as the schema's check constraint spells it. */
+const MEDIA_KINDS = ["document", "image", "video", "audio", "sticker", "other"] as const;
+type MediaKind = (typeof MEDIA_KINDS)[number];
+
+function normaliseKind(raw: unknown): MediaKind | null {
+  const k = typeof raw === "string" ? raw : "";
+  return (MEDIA_KINDS as readonly string[]).includes(k) ? (k as MediaKind) : null;
+}
+
 /**
  * Did this message carry the project details a buyer asked for?
  *
- * Evidence only — a link or an attachment. Not a guess from the wording: an
- * admin is going to judge a telecaller's day on this number, so it has to mean
- * something specific rather than "the message mentioned a project".
+ * The founder's rule: a PDF, an image or a video is details.
+ *
+ * A VOICE NOTE IS NOT, and that exclusion is the point. Indian real estate runs
+ * on voice notes; counting them would mean a rep who sends forty in a morning
+ * outscores one who actually sent the plot layout, and the single number an
+ * admin judges a telecaller by would reward the easiest thing they can do.
+ * Recorded, shown on the lead, not counted here.
+ *
+ * A link still counts — that is how a tracked brochure from content_shares
+ * goes out, and a tracked link additionally proves the buyer opened it.
+ *
+ * Evidence only, never the wording: "bhai plot ki details bhej raha hu" with
+ * nothing attached is not details.
  */
-function looksLikeDetails(text: string, hasMedia: boolean): boolean {
-  if (hasMedia) return true;
+function isDetails(text: string, kind: MediaKind | null): boolean {
+  if (kind === "document" || kind === "image" || kind === "video") return true;
   return /https?:\/\/\S+/i.test(text ?? "");
 }
 
@@ -119,7 +139,9 @@ Deno.serve(async (req) => {
     if (!contactId) { skipped++; continue; }
 
     const text = typeof m.text === "string" ? m.text : "";
-    const hasMedia = m.has_media === true;
+    // Older workers sent a bare boolean; keep reading it so a half-updated
+    // fleet reports something sane rather than nothing.
+    const kind = normaliseKind(m.media_kind) ?? (m.has_media === true ? "other" : null);
 
     rows.push({
       company_id: companyId,
@@ -128,8 +150,9 @@ Deno.serve(async (req) => {
       wa_message_id: waId,
       direction,
       body_preview: text.slice(0, 300) || null,
-      has_media: hasMedia,
-      shared_details: direction === "out" && looksLikeDetails(text, hasMedia),
+      has_media: kind !== null,
+      media_kind: kind,
+      shared_details: direction === "out" && isDetails(text, kind),
       sent_at: sentAt,
     });
   }

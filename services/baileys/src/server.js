@@ -191,9 +191,25 @@ function textOf(msg) {
   );
 }
 
-function hasMediaOf(msg) {
+/**
+ * What was attached, by name rather than a yes/no.
+ *
+ * The CRM decides what counts as project details, and it needs the kind to do
+ * it: a PDF, a photo and a video are details; a voice note is not. Reporting
+ * one boolean is what let a rep's forty morning voice notes read as forty
+ * shared brochures.
+ *
+ * pttMessage is WhatsApp's press-and-hold voice note; audioMessage is an
+ * attached audio file. Both are audio and neither is a plot layout.
+ */
+function mediaKindOf(msg) {
   const m = msg?.message ?? {};
-  return Boolean(m.imageMessage || m.videoMessage || m.documentMessage || m.audioMessage);
+  if (m.documentMessage || m.documentWithCaptionMessage) return "document";
+  if (m.imageMessage) return "image";
+  if (m.videoMessage) return "video";
+  if (m.audioMessage || m.pttMessage) return "audio";
+  if (m.stickerMessage) return "sticker";
+  return null;
 }
 
 function queueObserved(msg) {
@@ -208,7 +224,7 @@ function queueObserved(msg) {
     peer: jid.split("@")[0],
     direction: msg?.key?.fromMe ? "out" : "in",
     text: String(textOf(msg) || "").slice(0, 300),
-    has_media: hasMediaOf(msg),
+    media_kind: mediaKindOf(msg),
     sent_at: new Date(Number(msg?.messageTimestamp ?? Date.now() / 1000) * 1000).toISOString(),
   });
 
