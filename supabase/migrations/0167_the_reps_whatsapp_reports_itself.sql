@@ -18,6 +18,16 @@
 -- only writes down what happened, so the admin's Daily Pulse stops pretending
 -- that WhatsApp work does not exist.
 --
+-- WHY A NEW TABLE INSTEAD OF EXTENDING whatsapp_baileys
+--
+-- whatsapp_baileys is PRIMARY KEY (company_id) — one row per company — and
+-- every reader fetches it with .eq('company_id', x).maybeSingle():
+-- notify-provider, _shared/wa-provider.ts and the admin ProviderPicker. Adding
+-- a second row for the same company makes maybeSingle() error, which would stop
+-- the founder's daily pulse and break the WhatsApp settings page. A company's
+-- notification sender and a rep's read-only watcher are different things with
+-- different rules; they get different tables. whatsapp_baileys is untouched.
+--
 -- WHAT IS DELIBERATELY NOT STORED
 --
 -- A rep's WhatsApp carries their life: family, friends, salary talk. The rule
@@ -26,34 +36,55 @@
 -- COMPANY. Everything else is dropped at the door and never reaches a row. The
 -- body is a 300-character preview, not the message, for the same reason.
 
--- ── 1. a Baileys session can now belong to a rep ─────────────────────────────
---
--- Existing rows are the founder/company notification numbers. They stay exactly
--- as they are: salesperson_id null, observe_only false, still allowed to send
--- the daily pulse. A rep row is the opposite of that in both columns.
+-- ── 1. one read-only watcher per rep ─────────────────────────────────────────
 
-alter table public.whatsapp_baileys
-  add column if not exists salesperson_id uuid references public.profiles(id) on delete cascade;
+create table if not exists public.wa_rep_sessions (
+  company_id     uuid not null references public.companies(id) on delete cascade,
+  salesperson_id uuid not null references public.profiles(id) on delete cascade,
+  -- Where that rep's worker process lives. One process per rep, one session
+  -- directory per process: a ban on one number cannot take the floor down.
+  base_url       text,
+  -- Vault id for the worker's bearer, never the bearer itself.
+  secret_id      uuid,
+  status         text not null default 'disconnected',
+  wa_number      text,
+  last_seen_at   timestamptz,
+  last_error     text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  primary key (salesperson_id)
+);
 
-alter table public.whatsapp_baileys
-  add column if not exists observe_only boolean not null default false;
+create index if not exists idx_wa_rep_sessions_company
+  on public.wa_rep_sessions(company_id);
 
--- One live session per rep, and one company-level session as before.
-create unique index if not exists uq_wa_baileys_rep
-  on public.whatsapp_baileys(company_id, salesperson_id)
-  where salesperson_id is not null;
+comment on table public.wa_rep_sessions is
+  'Read-only Baileys watchers on telecallers own numbers. This table has no '
+  'send path anywhere in the codebase and must never grow one — the company '
+  'notification sender is whatsapp_baileys, which is a different thing.';
 
-comment on column public.whatsapp_baileys.observe_only is
-  'true = this session may only listen. Rep numbers are always true; the '
-  'founder notification number is false so it can still send the daily pulse.';
+alter table public.wa_rep_sessions enable row level security;
 
--- A rep session that is not observe_only is the one mistake this feature must
--- never make, so the database refuses it rather than trusting every caller.
-alter table public.whatsapp_baileys
-  drop constraint if exists chk_wa_baileys_rep_observe_only;
-alter table public.whatsapp_baileys
-  add constraint chk_wa_baileys_rep_observe_only
-  check (salesperson_id is null or observe_only);
+-- A rep may see their own connection state (so the app can tell them to
+-- rescan); an admin sees their company's; the super admin sees all.
+drop policy if exists wa_rep_sessions_select on public.wa_rep_sessions;
+create policy wa_rep_sessions_select on public.wa_rep_sessions
+  for select using (
+    public.is_super_admin()
+    or (company_id = public.current_company_id()
+        and (public.is_admin() or salesperson_id = auth.uid()))
+  );
+
+-- Only an admin sets one up.
+drop policy if exists wa_rep_sessions_write on public.wa_rep_sessions;
+create policy wa_rep_sessions_write on public.wa_rep_sessions
+  for all using (
+    public.is_super_admin()
+    or (company_id = public.current_company_id() and public.is_admin())
+  ) with check (
+    public.is_super_admin()
+    or (company_id = public.current_company_id() and public.is_admin())
+  );
 
 -- ── 2. what was observed ─────────────────────────────────────────────────────
 
@@ -113,9 +144,9 @@ as $$
   select c.id
   from public.contacts c
   where c.company_id = p_company
+    and length(regexp_replace(p_phone, '\D', '', 'g')) >= 10
     and right(regexp_replace(c.phone, '\D', '', 'g'), 10)
       = right(regexp_replace(p_phone, '\D', '', 'g'), 10)
-    and length(regexp_replace(p_phone, '\D', '', 'g')) >= 10
   order by c.created_at desc
   limit 1;
 $$;
@@ -123,7 +154,9 @@ $$;
 comment on function public.match_wa_contact(uuid, text) is
   'The privacy gate. Returns null for any number that is not a lead in this '
   'company, and the ingest function drops those messages unread. This is what '
-  'keeps a rep''s personal chats out of the CRM.';
+  'keeps a reps personal chats out of the CRM.';
+
+revoke execute on function public.match_wa_contact(uuid, text) from public, anon;
 
 -- ── 4. it shows up where the rep and the admin already look ──────────────────
 --
@@ -146,13 +179,13 @@ begin
     return null;
   end if;
 
-  select coalesce(p.full_name, 'WhatsApp') into v_actor
+  select p.full_name into v_actor
   from public.profiles p where p.id = new.salesperson_id;
 
   insert into public.lead_activities (company_id, contact_id, actor_id, actor_name, type, detail)
   values (
     new.company_id, new.contact_id, new.salesperson_id,
-    coalesce(v_actor, 'WhatsApp') || ' 💬',
+    coalesce(nullif(btrim(v_actor), ''), 'Rep') || ' 💬',
     'whatsapp',
     case
       when new.shared_details then 'Sent project details on WhatsApp'
@@ -197,9 +230,8 @@ comment on view public.v_rep_whatsapp_daily is
 -- visible instead of just looking like a rep who stopped working.
 create or replace view public.v_rep_whatsapp_health
 with (security_invoker = true) as
-select b.company_id, b.salesperson_id, p.full_name as rep,
-       b.status, b.wa_number, b.last_seen_at, b.last_error,
-       b.last_seen_at < now() - interval '2 hours' as stale
-from public.whatsapp_baileys b
-join public.profiles p on p.id = b.salesperson_id
-where b.salesperson_id is not null;
+select s.company_id, s.salesperson_id, p.full_name as rep,
+       s.status, s.wa_number, s.last_seen_at, s.last_error,
+       (s.last_seen_at is null or s.last_seen_at < now() - interval '2 hours') as stale
+from public.wa_rep_sessions s
+join public.profiles p on p.id = s.salesperson_id;

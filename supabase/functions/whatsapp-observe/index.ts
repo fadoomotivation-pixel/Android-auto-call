@@ -83,15 +83,20 @@ Deno.serve(async (req) => {
 
   // The session decides the company — never the caller. A worker that could
   // name its own company_id could write into any tenant on the platform.
+  // wa_rep_sessions, NOT whatsapp_baileys. That table is PRIMARY KEY
+  // (company_id) — one row per company — and notify-provider, wa-provider.ts
+  // and the admin ProviderPicker all read it with .maybeSingle(). A second row
+  // per company would make all three error, stopping the founder's daily pulse.
+  // A company's notification sender and a rep's read-only watcher are different
+  // things; they get different tables, and only one of them can send.
   const { data: session, error: sErr } = await admin
-    .from("whatsapp_baileys")
-    .select("company_id, observe_only, salesperson_id")
+    .from("wa_rep_sessions")
+    .select("company_id, salesperson_id")
     .eq("salesperson_id", salespersonId)
     .maybeSingle();
 
   if (sErr) return json({ error: sErr.message }, 500);
   if (!session) return json({ error: "no observed session for this rep" }, 404);
-  if (!session.observe_only) return json({ error: "session is not observe-only" }, 409);
 
   const companyId = session.company_id as string;
   let stored = 0;
@@ -142,8 +147,8 @@ Deno.serve(async (req) => {
   // Liveness, so a session that logged out days ago shows up as stale in
   // v_rep_whatsapp_health instead of looking like a rep who stopped working.
   await admin
-    .from("whatsapp_baileys")
-    .update({ last_seen_at: new Date().toISOString() })
+    .from("wa_rep_sessions")
+    .update({ last_seen_at: new Date().toISOString(), status: "connected" })
     .eq("salesperson_id", salespersonId);
 
   return json({ ok: true, stored, skipped });
