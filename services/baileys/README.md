@@ -1,4 +1,4 @@
-# Baileys worker — founder notifications only
+# Baileys worker — founder notifications, and read-only rep observation
 
 A small always-on service that holds one logged-in WhatsApp account open so
 Call Pro AI can push a founder's Daily Pulse to their phone.
@@ -13,13 +13,50 @@ running — Railway, Render, Fly, or a $5 VPS.
 
 ## What it is for
 
-**For:** the founder's own daily report, to the founder's own phone.
+This worker runs in one of two modes, and the mode decides what it may do.
 
-**Not for:** anything a customer sees. Baileys is an unofficial client; WhatsApp's
-terms do not permit it and accounts get banned. Losing an internal reporting
-number is an annoyance — losing the number your leads reply to is losing the
-business. The CRM's customer-facing senders deliberately ignore the provider
-setting so this can never happen by accident.
+### notify (default)
+
+**For:** the founder's own daily report, to the founder's own phone. One
+internal number, one recipient, one message a day.
+
+**Never sends to a customer.** The CRM's customer-facing senders deliberately
+ignore the provider setting so this cannot happen by accident.
+
+### observe (`OBSERVE_SALESPERSON_ID` set)
+
+A telecaller's own WhatsApp, watched as a linked device. It **never sends** —
+`/send` returns 403 in this mode — and the rep goes on messaging buyers by hand
+from their own phone exactly as before. All this does is write down what
+happened, so the admin's Daily Pulse stops pretending WhatsApp work does not
+exist and "how many leads got the plot details" has an answer.
+
+**The risk, stated plainly.** Baileys is an unofficial client and WhatsApp bans
+accounts for it. In observe mode that risk now sits on numbers your buyers reply
+to, not just an internal one. This was a deliberate call by the founder, made
+with the trade-off understood. Two things make it the smaller half of the bet:
+there is no automated sending — the pattern WhatsApp bans fastest — and each rep
+is a separate process with a separate session, so one ban cannot take the floor
+down.
+
+**What is never stored.** The CRM drops any message whose other party is not a
+lead in that rep's own company — see `match_wa_contact` in migration 0167. A
+rep's family, friends and salary conversations never reach the database. Only
+300 characters of body are kept, because an admin needs to see that details went
+out, not to read a rep's chats. That filter lives server-side on purpose: it
+must not be something a worker can be reconfigured to skip.
+
+### Observer environment
+
+| Variable | Meaning |
+| --- | --- |
+| `OBSERVE_SALESPERSON_ID` | the rep's `profiles.id`. Setting it turns on observe mode. |
+| `INGEST_URL` | `https://<project>.supabase.co/functions/v1/whatsapp-observe` |
+| `BAILEYS_INGEST_SECRET` | shared bearer, same value as the edge function's |
+| `FLUSH_MS` | batch interval, default 15000 |
+
+One process per rep, each with its own `AUTH_DIR`. The worker refuses to start
+in observe mode without an ingest URL and secret.
 
 ## Deploy on Hostinger (what we actually use)
 
