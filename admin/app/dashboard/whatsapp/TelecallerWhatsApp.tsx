@@ -100,26 +100,61 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
   const [adding, setAdding] = useState(false);
   const [repId, setRepId] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  // The founder's own worker address, read so this card can refuse to reuse it.
+  const [founderUrl, setFounderUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: s }, { data: t }] = await Promise.all([
+    const [{ data: s }, { data: t }, { data: f }] = await Promise.all([
       supabase.from("wa_rep_sessions")
         .select("salesperson_id, base_url, status, wa_number, last_seen_at, last_error")
         .eq("company_id", companyId).returns<Session[]>(),
       supabase.from("v_rep_whatsapp_daily")
         .select("salesperson_id, messages_sent, leads_messaged, leads_given_details, leads_who_replied")
         .eq("company_id", companyId).eq("day_ist", istToday()).returns<Today[]>(),
+      supabase.from("whatsapp_baileys").select("base_url")
+        .eq("company_id", companyId).maybeSingle<{ base_url: string | null }>(),
     ]);
     setSessions(s ?? []);
     setToday(t ?? []);
+    setFounderUrl(f?.base_url ?? null);
     setLoading(false);
   }, [supabase, companyId]);
 
   useEffect(() => { void load(); }, [load]);
 
+  const norm = (u: string) => u.trim().replace(/\/+$/, "").toLowerCase();
+
   const add = async () => {
     if (!repId) { setMsg("Pick a telecaller first."); return; }
+    // ONE WORKER HOLDS ONE WHATSAPP LOGIN.
+    //
+    // The founder's worker is already signed in as the founder's own number and
+    // is in notify mode, which is what sends the Daily Pulse. Pointing a
+    // telecaller at the same address does one of three wrong things: it watches
+    // the FOUNDER's WhatsApp and files it under the rep, or it does nothing
+    // because that process is not observing, or — if someone sets
+    // OBSERVE_SALESPERSON_ID on it to "fix" that — /send starts returning 403
+    // and the Daily Pulse stops going out that evening.
+    //
+    // None of those fail loudly on their own, so this refuses the save.
+    if (founderUrl && norm(baseUrl) === norm(founderUrl)) {
+      setMsg(
+        "That is the founder's worker address — it is already logged in as the founder's WhatsApp. "
+        + "One worker holds one WhatsApp login, so a telecaller needs their own worker at a different "
+        + "address. Reusing this one would either watch the founder's number under the rep's name, or "
+        + "stop the Daily Pulse.",
+      );
+      return;
+    }
+    const clash = sessions.find((x) => x.base_url && norm(x.base_url) === norm(baseUrl));
+    if (clash) {
+      setMsg(
+        `That address is already ${repName.get(clash.salesperson_id) ?? "another telecaller"}'s worker. `
+        + "Each telecaller needs their own worker, with its own login and its own session folder.",
+      );
+      return;
+    }
     setBusy("add");
     setMsg(null);
     const { error } = await supabase.from("wa_rep_sessions").upsert({
