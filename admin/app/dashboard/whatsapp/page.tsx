@@ -5,6 +5,7 @@ import { WhatsAppHealth } from "./WhatsAppHealth";
 import { WhatsAppInbox } from "./WhatsAppInbox";
 import { PlatformSender } from "./PlatformSender";
 import { ProviderPicker } from "./ProviderPicker";
+import { TelecallerWhatsApp } from "./TelecallerWhatsApp";
 
 const WEBHOOK_URL = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/whatsapp-webhook";
 
@@ -94,6 +95,12 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
           API setup on purpose: the setup above is how CUSTOMERS are messaged,
           and an experimental provider must never read as a swap for that. */}
       {companyId && <ProviderPicker companyId={companyId} companyName={companies.find((c) => c.id === companyId)?.name ?? null} />}
+
+      {/* Directly under the founder's sender, because the pair is easiest to
+          understand together: that number SENDS the pulse, these numbers are
+          only WATCHED. Different tables, different rules, and only the one
+          above can send anything. */}
+      {companyId && <TelecallerWhatsApp companyId={companyId} reps={members ?? []} />}
 
       <h3 style={{ marginTop: 28, marginBottom: 16 }}>Team Inbox</h3>
       {rows.length === 0 ? (

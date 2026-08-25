@@ -1999,6 +1999,10 @@ private fun JourneyRow(atIso: String?, type: String, text: String, last: Boolean
         "site_visit" -> "📍" to PurpleL
         "follow_up" -> "⏰" to JadeL
         "call" -> "📞" to GreenL
+        // Observed from the rep's own WhatsApp — migration 0168. Without this
+        // it fell through to the generic pencil, which reads as "someone edited
+        // something" for the one activity a buyer actually received.
+        "whatsapp" -> "💬" to GreenL
         else -> "✏️" to SubInk
     }
     Row(Modifier.fillMaxWidth()) {

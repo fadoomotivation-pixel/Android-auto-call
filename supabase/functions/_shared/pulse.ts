@@ -74,6 +74,18 @@ export type RepPulse = {
   visitsArrived: string[];
   followUps: number;
   hotLeads: number;
+  /** WhatsApp the rep sent by hand, observed from their own number — see
+   *  v_rep_whatsapp_daily. Zero for a rep with no observer connected, which is
+   *  indistinguishable from a rep who sent nothing; the report never claims
+   *  otherwise, it just does not mention WhatsApp for them. */
+  waMessages: number;
+  /** Distinct leads messaged. One rep sending six files to one buyer is one. */
+  waLeads: number;
+  /** Leads who were sent a PDF, image, video or link. A voice note is not
+   *  details — see migration 0168. */
+  waDetails: number;
+  /** Leads who wrote BACK. The one number here a rep cannot inflate. */
+  waReplies: number;
   /** Leads they got real talk time with today, longest first. */
   topLeads: string[];
   /** Dialled today, never connected — the ones still owed a call. */
@@ -189,6 +201,7 @@ export async function buildCompany(
     hot,
     steps,
     health,
+    whatsapp,
   ] = await Promise.all([
     admin.from("profiles")
       .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson"),
@@ -250,6 +263,16 @@ export async function buildCompany(
     // Zero was what the CRM RECEIVED. The report printed it as what she did.
     admin.from("v_device_sync_health").select("salesperson_id, last_ok_at, trustworthy")
       .eq("company_id", companyId),
+    // WHATSAPP THE REP SENT BY HAND. Migration 0167/0168: a read-only observer
+    // on the rep's own number, filtered server-side to leads of this company
+    // only. Until now the pulse could not see WhatsApp at all, so a rep who
+    // spent the afternoon sending plot layouts read as a rep who did nothing.
+    //
+    // day_ist is already the IST calendar day, so this matches on the date
+    // string rather than the timestamp bounds the other queries use.
+    admin.from("v_rep_whatsapp_daily")
+      .select("salesperson_id, messages_sent, leads_messaged, leads_given_details, leads_who_replied")
+      .eq("company_id", companyId).eq("day_ist", date),
   ]);
 
   const repList = reps ?? [];
@@ -266,12 +289,27 @@ export async function buildCompany(
         id, name: nameById.get(id)!, calls: 0, connected: 0, talkSeconds: 0,
         offCrmCalls: 0, offCrmTalkSeconds: 0,
         voiceNotes: [], moves: [], siteVisits: [], visitsArrived: [], followUps: 0, hotLeads: 0,
+        waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0,
         topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, bookings: 0,
         revenue: 0, aiUpdates: [], callsTrusted: true, syncedAt: null,
       });
     }
     return map.get(id)!;
   };
+
+  // WhatsApp, straight onto the rep. Nothing to reconcile: the view is already
+  // one row per rep per IST day.
+  // whatsapp.data, not whatsapp: the entries in this Promise.all that are not
+  // destructured as { data } are the full PostgrestResponse, the way health,
+  // hot and steps are read below.
+  for (const w of (whatsapp.data ?? []) as Record<string, unknown>[]) {
+    const r = rep(String(w.salesperson_id ?? ""));
+    if (!r) continue;
+    r.waMessages = Number(w.messages_sent ?? 0);
+    r.waLeads = Number(w.leads_messaged ?? 0);
+    r.waDetails = Number(w.leads_given_details ?? 0);
+    r.waReplies = Number(w.leads_who_replied ?? 0);
+  }
 
   // Per rep, per lead: how long they actually talked, and whether they ever
   // got through. One lead dialled six times is ONE name on the list, not six.
@@ -660,6 +698,23 @@ function rupees(n: number): string {
  * "Visit rate" names its own denominator. An unlabelled conversion % is a
  * number two people read as two different things in the same meeting.
  */
+/**
+ * The WhatsApp line, for a rep and for the company total.
+ *
+ * Ordered by how hard each number is to fake. Messages is the softest — a rep
+ * can send fifty in a minute. Leads is harder. Details is harder still, because
+ * it needs an actual PDF, image, video or link and a voice note does not count.
+ * Replies is the only one that requires the BUYER to do something, which makes
+ * it the number worth reading first and the reason it is printed last, where
+ * the eye lands.
+ */
+function waLine(k: { waMessages: number; waLeads: number; waDetails: number; waReplies: number }): string[] {
+  const bits = [`${k.waMessages} msg`, `${k.waLeads} lead${k.waLeads === 1 ? "" : "s"}`];
+  if (k.waDetails) bits.push(`${k.waDetails} got details`);
+  if (k.waReplies) bits.push(`${k.waReplies} replied`);
+  return [`• 💬 WhatsApp: ${bits.join(" · ")}`];
+}
+
 function kpiBlock(k: {
   bookings: number; revenue: number; visitsFixed: number; hotLeads: number;
   calls: number; connected: number; talkSeconds: number;
@@ -874,7 +929,7 @@ export function repText(
   // offCrmCalls counts as activity for this test. "No calls, no notes, no lead
   // moves today" about someone who spent 45 minutes on the phone is false, and
   // it is the sentence a founder acts on.
-  const idle = !r.calls && !r.offCrmCalls && !r.voiceNotes.length && !r.moves.length && !r.siteVisits.length;
+  const idle = !r.calls && !r.offCrmCalls && !r.voiceNotes.length && !r.moves.length && !r.siteVisits.length && !r.waMessages;
   if (idle) {
     // "No activity today" about a phone that cannot report is an accusation
     // dressed as a fact. Say which one this is.
@@ -886,6 +941,9 @@ export function repText(
 
   if (warn) L.push("", warn);
   L.push("", "🟢 Today", ...kpiBlock(r, showOffCrm));
+  // Only when there is something to say. A flat "WhatsApp: 0" on every rep who
+  // has no observer connected would teach the founder to skip the line.
+  if (r.waMessages) L.push(...waLine(r));
   const stale = staleNote(r);
   if (stale) L.push(stale);
   const offCrm = showOffCrm ? offCrmLine(r) : null;
@@ -932,6 +990,15 @@ export function pulseText(
   const blind = p.reps.filter((r) => !r.callsTrusted);
   const anyReporting = p.reps.some((r) => r.callsTrusted);
   L.push("", "🟢 Today", ...kpiBlock({ ...p.totals, callsTrusted: anyReporting || p.reps.length === 0 }, showOffCrm));
+  // Summed across reps rather than carried on p.totals: WhatsApp arrives per
+  // rep from its own view and the totals object is built from call data.
+  const waTeam = p.reps.reduce((a, r) => ({
+    waMessages: a.waMessages + r.waMessages,
+    waLeads: a.waLeads + r.waLeads,
+    waDetails: a.waDetails + r.waDetails,
+    waReplies: a.waReplies + r.waReplies,
+  }), { waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0 });
+  if (waTeam.waMessages) L.push(...waLine(waTeam));
   if (blind.length) {
     L.push(`• ⚠️ Call totals are INCOMPLETE — ${blind.length} phone${blind.length > 1 ? "s" : ""} not reporting (${
       blind.map((r) => r.name).join(", ")})`);
