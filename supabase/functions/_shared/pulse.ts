@@ -86,6 +86,11 @@ export type RepPulse = {
   waDetails: number;
   /** Leads who wrote BACK. The one number here a rep cannot inflate. */
   waReplies: number;
+  /** "none" = no observer set up for this rep, so WhatsApp is simply not part
+   *  of their report. "ok" = watching. "stale" = a session exists and has said
+   *  nothing for two hours, which means 0 is UNKNOWN, not zero — the same
+   *  distinction callsTrusted draws for the phone's call log. */
+  waWatch: "none" | "ok" | "stale";
   /** Leads they got real talk time with today, longest first. */
   topLeads: string[];
   /** Dialled today, never connected — the ones still owed a call. */
@@ -202,6 +207,7 @@ export async function buildCompany(
     steps,
     health,
     whatsapp,
+    waSessions,
   ] = await Promise.all([
     admin.from("profiles")
       .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson"),
@@ -273,6 +279,12 @@ export async function buildCompany(
     admin.from("v_rep_whatsapp_daily")
       .select("salesperson_id, messages_sent, leads_messaged, leads_given_details, leads_who_replied")
       .eq("company_id", companyId).eq("day_ist", date),
+    // IS ANYONE STILL LISTENING? Without this, a watcher that died at 11am is
+    // indistinguishable from a rep who sent nothing — and the report would
+    // print the second story. Exactly the mistake callsTrusted exists to stop
+    // the call numbers making.
+    admin.from("wa_rep_sessions").select("salesperson_id, last_seen_at")
+      .eq("company_id", companyId),
   ]);
 
   const repList = reps ?? [];
@@ -289,7 +301,7 @@ export async function buildCompany(
         id, name: nameById.get(id)!, calls: 0, connected: 0, talkSeconds: 0,
         offCrmCalls: 0, offCrmTalkSeconds: 0,
         voiceNotes: [], moves: [], siteVisits: [], visitsArrived: [], followUps: 0, hotLeads: 0,
-        waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0,
+        waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0, waWatch: "none",
         topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, bookings: 0,
         revenue: 0, aiUpdates: [], callsTrusted: true, syncedAt: null,
       });
@@ -302,6 +314,16 @@ export async function buildCompany(
   // whatsapp.data, not whatsapp: the entries in this Promise.all that are not
   // destructured as { data } are the full PostgrestResponse, the way health,
   // hot and steps are read below.
+  // Two hours, the same threshold v_rep_whatsapp_health uses and the admin
+  // dashboard shows. Set BEFORE the counts, so a rep with a session but no
+  // messages still gets "stale" rather than silence.
+  for (const sn of (waSessions.data ?? []) as Record<string, unknown>[]) {
+    const r = rep(String(sn.salesperson_id ?? ""));
+    if (!r) continue;
+    const seen = sn.last_seen_at ? new Date(String(sn.last_seen_at)).getTime() : 0;
+    r.waWatch = seen && Date.now() - seen < 2 * 3600_000 ? "ok" : "stale";
+  }
+
   for (const w of (whatsapp.data ?? []) as Record<string, unknown>[]) {
     const r = rep(String(w.salesperson_id ?? ""));
     if (!r) continue;
@@ -715,6 +737,23 @@ function waLine(k: { waMessages: number; waLeads: number; waDetails: number; waR
   return [`• 💬 WhatsApp: ${bits.join(" · ")}`];
 }
 
+/**
+ * ZERO IS NOT ZERO WHEN NOBODY IS LISTENING.
+ *
+ * A watcher that logged out at 11am produces exactly the same numbers as a rep
+ * who sent nothing all day, and only one of those is the rep's fault. This is
+ * the same distinction syncWarning draws for the phone's call log, in the same
+ * words, because the founder should not have to learn two vocabularies for one
+ * idea: the count is UNKNOWN, not zero.
+ *
+ * A rep with no observer at all gets nothing — WhatsApp simply is not part of
+ * their report, and a warning about a feature they were never on would be noise.
+ */
+function waWarning(r: { waWatch: "none" | "ok" | "stale" }): string | null {
+  if (r.waWatch !== "stale") return null;
+  return "⚠️ WhatsApp watcher not reporting. WhatsApp count UNKNOWN, not zero.";
+}
+
 function kpiBlock(k: {
   bookings: number; revenue: number; visitsFixed: number; hotLeads: number;
   calls: number; connected: number; talkSeconds: number;
@@ -933,7 +972,11 @@ export function repText(
   if (idle) {
     // "No activity today" about a phone that cannot report is an accusation
     // dressed as a fact. Say which one this is.
-    L.push("", warn ?? "No calls, no notes, no lead moves today.");
+    // A dead WhatsApp watcher makes "did nothing" unsafe to say, the same way
+    // a phone that is not syncing does. Lead with whichever is broken.
+    const waIdleWarn = waWarning(r);
+    L.push("", warn ?? waIdleWarn ?? "No calls, no notes, no lead moves today.");
+    if (!warn && waIdleWarn) L.push("No calls or lead moves either — but WhatsApp cannot be checked while the watcher is down.");
     if (warn) L.push("Nothing came through from this phone at all — check it before reading anything into today.");
     L.push("", PULSE_FOOTER);
     return L.join("\n");
@@ -942,8 +985,12 @@ export function repText(
   if (warn) L.push("", warn);
   L.push("", "🟢 Today", ...kpiBlock(r, showOffCrm));
   // Only when there is something to say. A flat "WhatsApp: 0" on every rep who
-  // has no observer connected would teach the founder to skip the line.
-  if (r.waMessages) L.push(...waLine(r));
+  // has no observer connected would teach the founder to skip the line — and a
+  // silent 0 from a DEAD watcher would be a lie, so that case gets the warning
+  // instead of the numbers.
+  const waWarn = waWarning(r);
+  if (waWarn) L.push(`• ${waWarn}`);
+  else if (r.waMessages) L.push(...waLine(r));
   const stale = staleNote(r);
   if (stale) L.push(stale);
   const offCrm = showOffCrm ? offCrmLine(r) : null;
@@ -999,6 +1046,13 @@ export function pulseText(
     waReplies: a.waReplies + r.waReplies,
   }), { waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0 });
   if (waTeam.waMessages) L.push(...waLine(waTeam));
+  // Named, not summarised. "2 watchers down" makes a founder go looking; the
+  // names make them act, and it is the same treatment the blind phones get.
+  const waBlind = p.reps.filter((r) => r.waWatch === "stale");
+  if (waBlind.length) {
+    L.push(`• ⚠️ WhatsApp UNKNOWN for ${waBlind.length} rep${waBlind.length > 1 ? "s" : ""} — watcher not reporting (${
+      waBlind.map((r) => r.name).join(", ")})`);
+  }
   if (blind.length) {
     L.push(`• ⚠️ Call totals are INCOMPLETE — ${blind.length} phone${blind.length > 1 ? "s" : ""} not reporting (${
       blind.map((r) => r.name).join(", ")})`);

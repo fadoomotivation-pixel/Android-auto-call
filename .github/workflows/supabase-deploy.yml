@@ -148,7 +148,7 @@ jobs:
         if: success()
         run: |
           fail=0
-          for fn in pulse-broadcast founder-alerts team-pulse notify-provider notify-rep whatsapp-send; do
+          for fn in pulse-broadcast founder-alerts team-pulse notify-provider notify-rep whatsapp-send whatsapp-observe; do
             code=$(curl -s -o /tmp/out -w '%{http_code}' -X OPTIONS \
               "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/$fn" --max-time 30 || echo 000)
             if [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; then
