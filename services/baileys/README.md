@@ -13,9 +13,23 @@ running — Railway, Render, Fly, or a $5 VPS.
 
 ## What it is for
 
-This worker runs in one of two modes, and the mode decides what it may do.
+**One worker, many logins.** It holds a map of sessions: the founder's, and one
+per telecaller. There is no "mode" env var any more — what a session may do is
+decided by **which path started it**, so it cannot be misconfigured.
 
-### notify (default)
+| Path | Whose session | May send? |
+| --- | --- | --- |
+| `/status` `/qr` `/reconnect` `/send` | the founder's | yes |
+| `/s/<salesperson_id>/status` `/qr` `/reconnect` | one telecaller | **no — `/s/…/send` returns 403** |
+| `/sessions` | every login at a glance | — |
+
+Each session has its own auth directory: the founder keeps `$AUTH_DIR` itself —
+deliberately, so an already-scanned founder login survives this change without a
+rescan — and each telecaller gets `$AUTH_DIR/rep-<salesperson_id>`. One number
+being logged out or banned cannot touch another. Telecaller sessions start
+lazily, on the first request for that path.
+
+### notify (the founder's session)
 
 **For:** the founder's own daily report, to the founder's own phone. One
 internal number, one recipient, one message a day.
@@ -23,10 +37,10 @@ internal number, one recipient, one message a day.
 **Never sends to a customer.** The CRM's customer-facing senders deliberately
 ignore the provider setting so this cannot happen by accident.
 
-### observe (`OBSERVE_SALESPERSON_ID` set)
+### observe (any `/s/<salesperson_id>` session)
 
 A telecaller's own WhatsApp, watched as a linked device. It **never sends** —
-`/send` returns 403 in this mode — and the rep goes on messaging buyers by hand
+`/s/…/send` returns 403 — and the rep goes on messaging buyers by hand
 from their own phone exactly as before. All this does is write down what
 happened, so the admin's Daily Pulse stops pretending WhatsApp work does not
 exist and "how many leads got the plot details" has an answer.
@@ -35,9 +49,9 @@ exist and "how many leads got the plot details" has an answer.
 accounts for it. In observe mode that risk now sits on numbers your buyers reply
 to, not just an internal one. This was a deliberate call by the founder, made
 with the trade-off understood. Two things make it the smaller half of the bet:
-there is no automated sending — the pattern WhatsApp bans fastest — and each rep
-is a separate process with a separate session, so one ban cannot take the floor
-down.
+there is no automated sending from a rep's number — the pattern WhatsApp bans
+fastest — and each rep has a separate session with a separate auth directory, so
+one ban cannot take the floor down.
 
 **What is never stored.** The CRM drops any message whose other party is not a
 lead in that rep's own company — see `match_wa_contact` in migration 0167. A
@@ -50,13 +64,18 @@ must not be something a worker can be reconfigured to skip.
 
 | Variable | Meaning |
 | --- | --- |
-| `OBSERVE_SALESPERSON_ID` | the rep's `profiles.id`. Setting it turns on observe mode. |
 | `INGEST_URL` | `https://<project>.supabase.co/functions/v1/whatsapp-observe` |
 | `BAILEYS_INGEST_SECRET` | shared bearer, same value as the edge function's |
 | `FLUSH_MS` | batch interval, default 15000 |
 
-One process per rep, each with its own `AUTH_DIR`. The worker refuses to start
-in observe mode without an ingest URL and secret.
+Set once, for the whole worker. Without them a telecaller session still connects
+but has nowhere to report; it queues and warns rather than dropping messages on
+the floor.
+
+`OBSERVE_SALESPERSON_ID` is **gone.** It was the old one-process-one-rep switch,
+and while it existed the only worker address an admin could type into the CRM
+was the founder's — which is how a founder's WhatsApp ends up being watched
+under a rep's name.
 
 ## Deploy on Hostinger (what we actually use)
 
@@ -116,10 +135,19 @@ Everything except `/health` needs `Authorization: Bearer $BAILEYS_SECRET`.
 | Route | Method | Purpose |
 |---|---|---|
 | `/health` | GET | Liveness for the platform. Unauthenticated, reveals nothing. |
-| `/status` | GET | `{ status, number, last_seen, error }` — `disconnected` \| `connecting` \| `qr` \| `connected`. |
-| `/qr` | GET | Current QR as a data URL, or `null` when there isn't one to show. |
-| `/send` | POST | `{ to, text }`. `to` is digits with country code, no `+`. Returns **503** when not connected, so the CRM queues and retries instead of claiming a success. |
-| `/reconnect` | POST | Force a fresh connection attempt. |
+| `/status` | GET | Founder session: `{ status, number, last_seen, error }` — `disconnected` \| `connecting` \| `qr` \| `connected`. |
+| `/qr` | GET | Founder QR as a data URL, or `null` when there isn't one to show. |
+| `/send` | POST | Founder only. `{ to, text }`; `to` is digits with country code, no `+`. Returns **503** when not connected, so the CRM queues and retries instead of claiming a success. |
+| `/reconnect` | POST | Force a fresh connection attempt on the founder session. |
+| `/sessions` | GET | Status of every live session. |
+| `/s/<id>/status` | GET | One telecaller's session, same shape as `/status`. |
+| `/s/<id>/qr` | GET | A scannable **HTML page** by default, so a rep can just open the link; `?format=json` for the dashboard. Starts the session if it isn't running. |
+| `/s/<id>/reconnect` | POST | Start or restart that telecaller's session. |
+| `/s/<id>/send` | any | Always **403**. A telecaller's number sends by hand, from their own phone. |
+
+The bearer normally goes in `Authorization`. For the HTML QR page only, it may
+arrive as `?k=<secret>` — a rep opening a link on a phone cannot set a header.
+That query form unlocks nothing else, and never `/send`.
 
 ## Operating notes
 

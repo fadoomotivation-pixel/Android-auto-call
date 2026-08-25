@@ -132,6 +132,65 @@ export class BaileysProvider implements WhatsAppProvider {
     await fetch(this.url("/reconnect"), { method: "POST", headers: this.headers() }).catch(() => {});
   }
 
+  // ── one telecaller's watch-only session on the same worker ────────────────
+  //
+  // Since the worker holds many logins, a rep is a PATH on the founder's
+  // worker, not a second host. Same base_url, same secret — which is the point:
+  // the secret stays in the vault and never reaches the admin's browser, the
+  // same way the founder's QR already works.
+  //
+  // There is deliberately no repSend(). The worker answers 403 on that route
+  // and nothing here should imply otherwise.
+  private repUrl(salespersonId: string, path: string): string {
+    return this.url(`/s/${encodeURIComponent(salespersonId)}${path}`);
+  }
+
+  async repConnect(salespersonId: string): Promise<void> {
+    await fetch(this.repUrl(salespersonId, "/reconnect"), {
+      method: "POST", headers: this.headers(),
+    }).catch(() => {});
+  }
+
+  async repStatus(salespersonId: string): Promise<{
+    status: string; number: string | null; last_seen: string | null; error: string | null;
+    /** Messages the worker has seen but the CRM has not accepted yet. */
+    queued: number;
+  }> {
+    try {
+      const r = await fetch(this.repUrl(salespersonId, "/status"), { headers: this.headers() });
+      if (!r.ok) {
+        return {
+          status: "disconnected", number: null, last_seen: null, queued: 0,
+          error: `Worker answered ${r.status}.`,
+        };
+      }
+      const d = await r.json();
+      return {
+        status: d?.status ?? "disconnected",
+        number: d?.number ?? null,
+        last_seen: d?.last_seen ?? null,
+        error: d?.error ?? null,
+        queued: Number(d?.queued ?? 0),
+      };
+    } catch {
+      return {
+        status: "disconnected", number: null, last_seen: null, queued: 0,
+        error: "Could not reach the worker. Check the URL and that the service is running.",
+      };
+    }
+  }
+
+  async repQr(salespersonId: string): Promise<{ status: string; qr: string | null }> {
+    try {
+      const r = await fetch(this.repUrl(salespersonId, "/qr?format=json"), { headers: this.headers() });
+      if (!r.ok) return { status: "disconnected", qr: null };
+      const d = await r.json();
+      return { status: d?.status ?? "disconnected", qr: d?.qr ?? null };
+    } catch {
+      return { status: "disconnected", qr: null };
+    }
+  }
+
   async isConnected(): Promise<boolean> {
     try {
       const r = await fetch(this.url("/status"), { headers: this.headers() });

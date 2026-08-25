@@ -65,3 +65,18 @@ verify_jwt = false
 verify_jwt = false
 [functions.sales-xray]
 verify_jwt = false
+
+# ── The rep WhatsApp observer. The caller is a Node worker on a VPS holding a
+#    shared bearer, not a signed-in user, so a JWT is not a thing it can have.
+#
+#    THIS ENTRY IS LOAD-BEARING. whatsapp-observe was deployed by hand with
+#    verify_jwt off; the very next `supabase functions deploy` reads this file,
+#    finds no entry, applies the safe default of TRUE, and the worker starts
+#    getting 401 on every batch. Nothing would error — the ingest would simply
+#    go quiet, the dashboard would keep showing "Stale", and the cause would be
+#    a deploy nobody connected to WhatsApp at all.
+#
+#    Safe because the function authenticates itself: it refuses to start without
+#    BAILEYS_INGEST_SECRET and compares the bearer in constant time.
+[functions.whatsapp-observe]
+verify_jwt = false

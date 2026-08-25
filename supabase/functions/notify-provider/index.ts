@@ -135,6 +135,59 @@ Deno.serve(async (req) => {
     return json({ ok: true, provider });
   }
 
+  // ── one telecaller's watch-only session ───────────────────────────────────
+  //
+  // Same worker, same secret, a different path — the worker holds many logins
+  // now. Proxied through here for the same reason the founder's QR is: the
+  // worker's bearer lives in the vault and must never reach a browser, where it
+  // would sit in history and in every screenshot of the page.
+  if (action === "rep_status" || action === "rep_qr" || action === "rep_reconnect") {
+    const salespersonId = String(body?.salesperson_id ?? "");
+    if (!salespersonId) return json({ ok: false, error: "salesperson_id required" }, 400);
+
+    // The rep must belong to the company being administered. Without this a
+    // company admin could read another tenant's session by guessing an id.
+    const { data: who } = await admin.from("profiles")
+      .select("company_id").eq("id", salespersonId).maybeSingle();
+    if (!who || who.company_id !== companyId) {
+      return json({ ok: false, error: "That telecaller is not in this company." }, 403);
+    }
+
+    const w = await workerFor(admin, companyId);
+    if ("error" in w) return json({ ok: false, error: w.error }, 400);
+
+    if (action === "rep_reconnect") {
+      await w.repConnect(salespersonId);
+      return json({ ok: true, status: "connecting" });
+    }
+    if (action === "rep_qr") {
+      return json({ ok: true, ...(await w.repQr(salespersonId)) });
+    }
+    const rs = await w.repStatus(salespersonId);
+    // A BACKLOG IS A FAILURE, AND IT IS THE SILENT ONE.
+    //
+    // The worker holds what it could not deliver and retries. So the state that
+    // looks most like health — WhatsApp connected, no error from the worker — is
+    // exactly what a missing BAILEYS_INGEST_SECRET produces: whatsapp-observe
+    // answers 503 on every batch, the queue grows, and the dashboard shows a
+    // scanned rep with zero messages. Zero, again, meaning unknown.
+    const stuck = rs.queued > 0
+      ? `${rs.queued} message${rs.queued === 1 ? "" : "s"} waiting — the CRM is not accepting this ` +
+        "worker's reports. Check BAILEYS_INGEST_SECRET matches on both sides."
+      : null;
+    // Mirror what the worker says into wa_rep_sessions, so the dashboard table
+    // and the Daily Pulse agree without either of them polling the worker.
+    await admin.from("wa_rep_sessions").update({
+      status: rs.status,
+      wa_number: rs.number,
+      last_error: rs.error ?? stuck,
+      // last_seen_at is the INGEST's to set. A status poll proves the worker is
+      // up; it does not prove messages are flowing, and conflating the two is
+      // how "Connected" would start lying.
+    }).eq("salesperson_id", salespersonId);
+    return json({ ok: true, ...rs, stuck });
+  }
+
   if (action === "status" || action === "qr" || action === "reconnect") {
     const w = await workerFor(admin, companyId);
     if ("error" in w) return json({ ok: false, error: w.error }, 400);

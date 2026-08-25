@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Rep = { id: string; full_name: string | null };
@@ -99,9 +99,16 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
   // browser's history.
   const [adding, setAdding] = useState(false);
   const [repId, setRepId] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  // The founder's own worker address, read so this card can refuse to reuse it.
+  // The founder's worker address. Not typed by the admin any more: the worker
+  // holds many logins and a telecaller is a PATH on it, so asking for an address
+  // could only ever be answered with the founder's own — which is exactly the
+  // mistake that used to watch the founder's WhatsApp under a rep's name.
   const [founderUrl, setFounderUrl] = useState<string | null>(null);
+  // QR for the rep currently being connected, fetched through the CRM so the
+  // worker's secret never reaches this browser.
+  const [qrFor, setQrFor] = useState<string | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
+  const [qrNote, setQrNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,40 +126,95 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
     setToday(t ?? []);
     setFounderUrl(f?.base_url ?? null);
     setLoading(false);
+    return (s ?? []).map((x) => x.salesperson_id);
   }, [supabase, companyId]);
 
-  useEffect(() => { void load(); }, [load]);
+  // Probe once when the card opens, not on a timer. An admin looking at this
+  // page wants the truth now; nobody needs it refreshed every ten seconds while
+  // the tab sits in the background poking a WhatsApp worker.
+  //
+  // Keyed on the company, so the super admin switching tenants gets a fresh
+  // probe rather than the previous company's answer.
+  const probed = useRef<string | null>(null);
+  useEffect(() => {
+    void load().then((ids) => {
+      if (probed.current === companyId) return;
+      probed.current = companyId;
+      void probe(ids);
+    });
+    // probe is stable per company and would only re-fire this. Intentional.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, companyId]);
 
-  const norm = (u: string) => u.trim().replace(/\/+$/, "").toLowerCase();
+  /** notify-provider does the talking; the worker's bearer stays server-side. */
+  const call = useCallback(async (action: string, salespersonId: string) => {
+    const { data, error } = await supabase.functions.invoke<Record<string, unknown>>(
+      "notify-provider", { body: { action, company_id: companyId, salesperson_id: salespersonId } },
+    );
+    if (error) return { ok: false, error: error.message } as Record<string, unknown> & { ok: boolean };
+    return (data ?? { ok: false, error: "no answer" }) as Record<string, unknown> & { ok: boolean };
+  }, [supabase, companyId]);
+
+  /**
+   * Ask the worker how each session is really doing, once per open.
+   *
+   * The table alone reads the mirrored row, and a mirror is only as fresh as the
+   * last thing that wrote it. This is also the only thing that catches a
+   * BACKLOG: WhatsApp connected, worker happy, and every batch bouncing off the
+   * ingest — which is what a missing BAILEYS_INGEST_SECRET looks like from here.
+   * notify-provider writes that into last_error, so the row explains itself.
+   */
+  const probe = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    await Promise.all(ids.map((id) => call("rep_status", id)));
+    const { data: s } = await supabase.from("wa_rep_sessions")
+      .select("salesperson_id, base_url, status, wa_number, last_seen_at, last_error")
+      .eq("company_id", companyId).returns<Session[]>();
+    if (s) setSessions(s);
+  }, [call, supabase, companyId]);
+
+  /**
+   * Open the QR for one rep and keep it fresh.
+   *
+   * WhatsApp's QR expires in about twenty seconds, so a square fetched once is a
+   * square that silently stops working while the rep is still finding Linked
+   * devices. This asks the worker to start the session, then re-polls until the
+   * rep has scanned it.
+   */
+  const openQr = useCallback(async (id: string) => {
+    setQrFor(id); setQr(null); setQrNote("Starting the session…"); setMsg(null);
+    const r = await call("rep_reconnect", id);
+    if (!r.ok) { setQrNote(null); setQrFor(null); setMsg(String(r.error ?? "Could not reach the worker.")); return; }
+    setQrNote("Waiting for WhatsApp to offer a QR…");
+  }, [call]);
+
+  // One poller, driven by which rep's QR is on screen. Stops itself the moment
+  // the panel closes or the scan lands, so a forgotten card cannot sit there
+  // hammering the worker all afternoon.
+  useEffect(() => {
+    if (!qrFor) return;
+    let alive = true;
+    const tick = async () => {
+      const r = await call("rep_qr", qrFor);
+      if (!alive) return;
+      if (!r.ok) { setQrNote(String(r.error ?? "Could not reach the worker.")); return; }
+      if (r.status === "connected") {
+        setQr(null); setQrNote("Connected. This rep's WhatsApp is now being watched.");
+        void load();
+        return;
+      }
+      setQr((r.qr as string) ?? null);
+      setQrNote((r.qr ? null : "Waiting for WhatsApp to offer a QR…"));
+    };
+    void tick();
+    const h = setInterval(() => void tick(), 6000);
+    return () => { alive = false; clearInterval(h); };
+  }, [qrFor, call, load]);
 
   const add = async () => {
     if (!repId) { setMsg("Pick a telecaller first."); return; }
-    // ONE WORKER HOLDS ONE WHATSAPP LOGIN.
-    //
-    // The founder's worker is already signed in as the founder's own number and
-    // is in notify mode, which is what sends the Daily Pulse. Pointing a
-    // telecaller at the same address does one of three wrong things: it watches
-    // the FOUNDER's WhatsApp and files it under the rep, or it does nothing
-    // because that process is not observing, or — if someone sets
-    // OBSERVE_SALESPERSON_ID on it to "fix" that — /send starts returning 403
-    // and the Daily Pulse stops going out that evening.
-    //
-    // None of those fail loudly on their own, so this refuses the save.
-    if (founderUrl && norm(baseUrl) === norm(founderUrl)) {
-      setMsg(
-        "That is the founder's worker address — it is already logged in as the founder's WhatsApp. "
-        + "One worker holds one WhatsApp login, so a telecaller needs their own worker at a different "
-        + "address. Reusing this one would either watch the founder's number under the rep's name, or "
-        + "stop the Daily Pulse.",
-      );
-      return;
-    }
-    const clash = sessions.find((x) => x.base_url && norm(x.base_url) === norm(baseUrl));
-    if (clash) {
-      setMsg(
-        `That address is already ${repName.get(clash.salesperson_id) ?? "another telecaller"}'s worker. `
-        + "Each telecaller needs their own worker, with its own login and its own session folder.",
-      );
+    if (!founderUrl) {
+      setMsg("Set the Baileys worker address in Founder notifications above first — telecallers share that worker.");
       return;
     }
     setBusy("add");
@@ -160,17 +222,24 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
     const { error } = await supabase.from("wa_rep_sessions").upsert({
       company_id: companyId,
       salesperson_id: repId,
-      base_url: baseUrl.trim().replace(/\/+$/, "") || null,
+      // Recorded so the table can show where this session lives, but it is the
+      // founder's worker: one process, one login per rep, addressed by path.
+      base_url: founderUrl,
       status: "disconnected",
     }, { onConflict: "salesperson_id" });
     setBusy(null);
     if (error) { setMsg(error.message); return; }
-    setAdding(false); setRepId(""); setBaseUrl("");
+    const connected = repId;
+    setAdding(false); setRepId("");
     await load();
+    // Straight into the QR. Saving a row and then leaving an admin to work out
+    // what to do next is how a setup flow stalls at step one.
+    void openQr(connected);
   };
 
   const remove = async (id: string) => {
     setBusy(id);
+    if (qrFor === id) { setQrFor(null); setQr(null); setQrNote(null); }
     // The messages already observed stay. Removing a session stops the watching;
     // deleting a rep's recorded work with it would be a surprise, and the Daily
     // Pulse for last week should not change because someone unplugged a worker.
@@ -249,7 +318,11 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
                   {/* The two the founder reads first. */}
                   <td style={{ textAlign: "right" }}><strong>{num(t?.leads_given_details)}</strong></td>
                   <td style={{ textAlign: "right" }}><strong>{num(t?.leads_who_replied)}</strong></td>
-                  <td style={{ textAlign: "right" }}>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button className="btn-ghost"
+                      onClick={() => void openQr(s.salesperson_id)}>
+                      {health === "connected" ? "Re-scan" : "Show QR"}
+                    </button>
                     <button className="btn-ghost" disabled={busy === s.salesperson_id}
                       onClick={() => void remove(s.salesperson_id)}>
                       {busy === s.salesperson_id ? "…" : "Disconnect"}
@@ -260,6 +333,28 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
             })}
           </tbody>
         </table>
+      )}
+
+      {qrFor && (
+        <div style={{
+          marginTop: 16, padding: 16, borderRadius: 12, border: "1px solid #e5e7eb",
+          textAlign: "center", maxWidth: 380,
+        }}>
+          <strong>{repName.get(qrFor) ?? "Telecaller"}</strong>
+          <p className="subtitle" style={{ fontSize: 12, marginTop: 4 }}>
+            On the rep&apos;s phone: WhatsApp → Settings → Linked devices → Link a device.
+          </p>
+          {qr
+            /* eslint-disable-next-line @next/next/no-img-element */
+            ? <img src={qr} alt="WhatsApp QR" width={280} height={280} style={{ maxWidth: "100%", height: "auto" }} />
+            : <div className="empty">{qrNote ?? "…"}</div>}
+          {qr && qrNote && <div className="subtitle" style={{ fontSize: 12 }}>{qrNote}</div>}
+          <div style={{ marginTop: 10 }}>
+            <button className="btn-ghost" onClick={() => { setQrFor(null); setQr(null); setQrNote(null); }}>
+              Close
+            </button>
+          </div>
+        </div>
       )}
 
       {adding ? (
@@ -273,15 +368,10 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
               ))}
             </select>
           </label>
-          <label>
-            Worker address
-            <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://rep-name.yourhost.app" />
-          </label>
           <p className="subtitle" style={{ fontSize: 12, marginTop: 0 }}>
-            One worker per telecaller, each with its own login. The worker&apos;s secret is set
-            on the worker itself and never typed here. After saving, open the worker&apos;s
-            address and have the rep scan the QR from their own WhatsApp.
+            That is the only thing to fill in. The QR opens by itself once you save — have
+            the rep scan it from their own phone: <strong>WhatsApp → Settings → Linked
+            devices → Link a device</strong>.
           </p>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn" disabled={busy === "add"} onClick={() => void add()}>
