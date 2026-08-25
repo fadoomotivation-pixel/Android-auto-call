@@ -135,15 +135,31 @@ jobs:
           version: 2.111.0
 
       - name: Deploy
+        id: deploy
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase functions deploy --project-ref rqgkzamuohdvttnkluzn
 
-      # A green deploy is not a working deploy. These three all deployed
+      # A green deploy is not a working deploy. Three of these deployed
       # "successfully" while failing to boot, and nothing noticed until a
       # founder reported the Pulse was down an hour later. OPTIONS is the
       # cheapest possible liveness probe: it returns before any auth or body
-      # handling, so a non-2xx here means the module did not load at all.
+      # handling, so what comes back says whether the module loaded.
+      #
+      # WHAT COUNTS AS BOOTED, AND WHY 4xx DOES.
+      #
+      # This used to demand 2xx/3xx, which was wrong the first time a function
+      # without a CORS preflight handler joined the list: whatsapp-observe
+      # answers OPTIONS with its own 405 {"error":"POST only"} — no browser ever
+      # calls it, so it has no reason to carry preflight code. That 405 is
+      # PROOF OF LIFE. It could only have been written by the function's own
+      # handler, which means the module parsed, imported and ran.
+      #
+      # A module that did not load cannot answer 4xx at all. The platform
+      # answers for it: 503 BOOT_ERROR, 546 on a CPU/memory blowout, or curl
+      # gets nothing and this records 000. So the line is drawn at 500, not at
+      # 400 — the earlier line failed a healthy function and, worse, taught
+      # whoever hit it that the check cries wolf.
       - name: Smoke-test the functions that carry a message
         if: success()
         run: |
@@ -151,7 +167,7 @@ jobs:
           for fn in pulse-broadcast founder-alerts team-pulse notify-provider notify-rep whatsapp-send whatsapp-observe; do
             code=$(curl -s -o /tmp/out -w '%{http_code}' -X OPTIONS \
               "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/$fn" --max-time 30 || echo 000)
-            if [ "$code" -ge 200 ] && [ "$code" -lt 400 ]; then
+            if [ "$code" -ge 200 ] && [ "$code" -lt 500 ]; then
               echo "  ok   $fn ($code)"
             else
               echo "::error::$fn did not boot — OPTIONS returned $code: $(head -c 200 /tmp/out)"
@@ -169,9 +185,26 @@ jobs:
         if: success()
         run: echo "Deployed every function in supabase/functions to rqgkzamuohdvttnkluzn."
 
+      # WHICH FAILURE THIS WAS.
+      #
+      # This used to say, flatly, that the functions were unchanged. On run #28
+      # that was FALSE and dangerously so: the deploy step had succeeded and
+      # every function was live and new; it was the smoke test underneath that
+      # failed. Anyone reading the red job would have concluded the opposite of
+      # what had happened — the same class of lying log the "What went out" step
+      # above was written to stop.
+      #
+      # So it now asks the deploy step what it actually did.
       - name: What did not go out
         if: failure()
-        run: echo "::warning::Deploy failed — the functions on Supabase are UNCHANGED, still running the previous version."
+        run: |
+          if [ "${{ steps.deploy.outcome }}" = "success" ]; then
+            echo "::warning::The DEPLOY SUCCEEDED — every function on Supabase is the new version. \
+          A later step failed, so read the error above before assuming a rollback is needed. \
+          Nothing here reverts a deploy."
+          else
+            echo "::warning::Deploy failed — the functions on Supabase are UNCHANGED, still running the previous version."
+          fi
 
       # WHEN THE JOB DIES BEFORE ANY STEP RUNS.
       #
