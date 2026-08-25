@@ -18,33 +18,51 @@ So there is nothing to deploy by hand. **Merging is deploying.**
 | Migration `0168` | `media_kind`, `'whatsapp'` activity type, breakdown columns — **applied** |
 | Android | WhatsApp shows on the lead Journey with 💬 — merged, publishes from `main` |
 | Admin | **WhatsApp → 📱 Telecaller WhatsApp** card — merged, Vercel deploys from `main` |
-| `whatsapp-observe` | deployed, `verify_jwt = false`, refuses to boot without its secret |
-| `_shared/pulse.ts` | the WhatsApp counts deployed with PR #435; the **stale-watcher** half ships with this PR |
+| Edge functions | **all deployed** by run #28 after PR #437 — see the table below |
 
 Both tables are empty and nothing writes to them yet. The feature is inert until
 a real telecaller scans a QR.
 
-## 1. The deploy, and the one thing that could have broken it
+## 1. The deploy — done, and verified
 
-`whatsapp-observe` was deployed by hand and therefore did **not** have an entry
-in `supabase/config.toml`. The CLI reads that file and defaults anything missing
-to `verify_jwt = true`, so the very next merge to `main` would have switched JWT
-verification back on and the worker — which holds a shared bearer, not a JWT —
-would have started getting `401` on every batch. Nothing would have errored: the
-ingest would just have gone quiet, the dashboard would have read "Stale", and
-nobody would have connected it to a deploy.
+Every function below went out in workflow run #28. Verified two ways, not one:
+the version numbers bumped, **and** the deployed bundle for `pulse-broadcast`
+was pulled back and compared byte-for-byte against this repo — `index.ts`,
+`_shared/pulse.ts`, `_shared/chat.ts`, `_shared/notify.ts` and
+`_shared/wa-provider.ts` all identical. A version number alone would not have
+proved which code is running.
 
-The entry is added in this PR, and the workflow's smoke test now includes
-`whatsapp-observe`, so a version that cannot boot fails the deploy instead of
-going live broken.
-
-| Function | What changed | `verify_jwt` | Goes out |
+| Function | What changed | `verify_jwt` | Live |
 | --- | --- | --- | --- |
-| `whatsapp-observe` | the ingest endpoint | **false** | already live; config entry added so it stays false |
-| `notify-provider` | `rep_status` / `rep_qr` / `rep_reconnect` | false | on merge |
-| `pulse-broadcast` | the stale-watcher half of `_shared/pulse.ts` | false | on merge |
-| `founder-alerts` | same shared import | false | on merge |
-| `team-pulse` | same shared import | true (unchanged) | on merge |
+| `whatsapp-observe` | the ingest endpoint | **false** | v3 |
+| `notify-provider` | `rep_status` / `rep_qr` / `rep_reconnect`, backlog warning | false | v14 |
+| `pulse-broadcast` | the stale-watcher half of `_shared/pulse.ts` | false | v25 |
+| `founder-alerts` | same shared import | false | v21 |
+| `team-pulse` | same shared import | true (unchanged) | v31 |
+
+### The one that nearly broke it
+
+`whatsapp-observe` was deployed by hand and therefore had **no entry** in
+`supabase/config.toml`. The CLI reads that file and defaults anything missing to
+`verify_jwt = true`, so this very deploy would have switched JWT verification
+back on — and the worker, which holds a shared bearer rather than a JWT, would
+have started getting `401` on every batch. Nothing would have errored: the
+ingest goes quiet, the dashboard reads "Stale", and nobody connects it to a
+deploy. The entry went in with PR #437 and run #28 confirms it held:
+`verify_jwt` is still `false` after a full CLI deploy.
+
+### And the smoke test that cried wolf
+
+Adding `whatsapp-observe` to the post-deploy boot probe failed run #28 — on a
+function that was perfectly healthy. The probe demanded `2xx`/`3xx` from
+`OPTIONS`, and `whatsapp-observe` answers its own `405 {"error":"POST only"}`
+because no browser ever calls it and it carries no CORS preflight handler.
+
+That 405 is *proof of life*: only the function's own handler could have written
+it. A module that failed to load cannot answer `4xx` at all — the platform
+answers for it with `503 BOOT_ERROR`, `546`, or nothing. So the probe now draws
+its line at 500. A check that fails healthy functions is worse than no check,
+because the next person to see it red assumes it is wrong again.
 
 `verify_jwt` **must be false** for `whatsapp-observe`: the caller is a Node
 worker holding a shared bearer, not a signed-in user. The function compares that
