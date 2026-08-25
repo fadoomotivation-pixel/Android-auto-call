@@ -27,6 +27,32 @@ function istToday(): string {
   return new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
 }
 
+/**
+ * Connected · Stale · Disconnected — three states, never two.
+ *
+ * The founder's rule: do not present 0 as "no activity" when the observer is
+ * not healthy. A watcher that logged out at 11am reports exactly the same
+ * numbers as a rep who sent nothing, and only one of those is the rep's fault.
+ *
+ * Two hours matches v_rep_whatsapp_health and the Daily Pulse, so the dashboard
+ * and the 7pm report can never disagree about whether a rep was being watched.
+ */
+type Health = "connected" | "stale" | "disconnected";
+
+function healthOf(s: Session): Health {
+  if (!s.last_seen_at) return "disconnected";
+  return Date.now() - new Date(s.last_seen_at).getTime() < 2 * 3600_000 ? "connected" : "stale";
+}
+
+const HEALTH_LABEL: Record<Health, string> = {
+  connected: "Connected",
+  stale: "Stale",
+  disconnected: "Disconnected",
+};
+const HEALTH_TONE: Record<Health, string> = {
+  connected: "#22c55e", stale: "#f59e0b", disconnected: "#ef4444",
+};
+
 function ago(iso: string | null): string {
   if (!iso) return "never";
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -151,20 +177,20 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
               <th>Connection</th>
               <th style={{ textAlign: "right" }}>Msgs</th>
               <th style={{ textAlign: "right" }}>Leads</th>
-              <th style={{ textAlign: "right" }}>Got details</th>
-              <th style={{ textAlign: "right" }}>Replied</th>
+              <th style={{ textAlign: "right" }}>Got details ★</th>
+              <th style={{ textAlign: "right" }}>Replied ★</th>
               <th />
             </tr>
           </thead>
           <tbody>
             {sessions.map((s) => {
               const t = byRep.get(s.salesperson_id);
-              // Two hours, matching v_rep_whatsapp_health. A watcher that has
-              // said nothing all morning is the difference between "this rep
-              // sent nothing" and "we stopped listening" — and only one of
-              // those is the rep's fault.
-              const stale = !s.last_seen_at
-                || Date.now() - new Date(s.last_seen_at).getTime() > 2 * 3600_000;
+              const health = healthOf(s);
+              // The counts are only meaningful while something is listening.
+              // When it is not, the cells read "—" rather than 0: an unknown
+              // printed as a zero is the one thing this card must never do.
+              const trusted = health === "connected";
+              const num = (n: number | undefined) => (trusted ? (n ?? 0) : "—");
               return (
                 <tr key={s.salesperson_id}>
                   <td>
@@ -172,18 +198,22 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
                     {s.wa_number && <div className="subtitle" style={{ fontSize: 12 }}>{s.wa_number}</div>}
                   </td>
                   <td>
-                    <span style={{ color: stale ? "#f59e0b" : "#22c55e" }}>
-                      {stale ? "Not reporting" : "Watching"}
+                    <span style={{ color: HEALTH_TONE[health], fontWeight: 600 }}>
+                      {HEALTH_LABEL[health]}
                     </span>
                     <div className="subtitle" style={{ fontSize: 12 }}>
-                      {s.last_error ? s.last_error : `last heard ${ago(s.last_seen_at)}`}
+                      {s.last_error
+                        ? s.last_error
+                        : health === "disconnected"
+                          ? "Never connected — have the rep scan the QR"
+                          : `last heard ${ago(s.last_seen_at)}`}
                     </div>
                   </td>
-                  <td style={{ textAlign: "right" }}>{t?.messages_sent ?? 0}</td>
-                  <td style={{ textAlign: "right" }}>{t?.leads_messaged ?? 0}</td>
-                  <td style={{ textAlign: "right" }}>{t?.leads_given_details ?? 0}</td>
-                  {/* The only column a rep cannot inflate by sending more. */}
-                  <td style={{ textAlign: "right" }}><strong>{t?.leads_who_replied ?? 0}</strong></td>
+                  <td style={{ textAlign: "right" }}>{num(t?.messages_sent)}</td>
+                  <td style={{ textAlign: "right" }}>{num(t?.leads_messaged)}</td>
+                  {/* The two the founder reads first. */}
+                  <td style={{ textAlign: "right" }}><strong>{num(t?.leads_given_details)}</strong></td>
+                  <td style={{ textAlign: "right" }}><strong>{num(t?.leads_who_replied)}</strong></td>
                   <td style={{ textAlign: "right" }}>
                     <button className="btn-ghost" disabled={busy === s.salesperson_id}
                       onClick={() => void remove(s.salesperson_id)}>
