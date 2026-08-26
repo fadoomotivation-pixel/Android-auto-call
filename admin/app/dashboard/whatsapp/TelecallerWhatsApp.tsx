@@ -103,7 +103,9 @@ function ago(iso: string | null): string {
  * everything else on your phone is untouched", and a rep is owed both halves
  * of it before they link a device.
  */
-export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; reps: Rep[] }) {
+export function TelecallerWhatsApp({
+  companyId, reps, isSuper,
+}: { companyId: string; reps: Rep[]; isSuper: boolean }) {
   // ONE CLIENT, OR THE QR POLLER EATS THE EDGE FUNCTION ALIVE.
   //
   // createClient() builds a NEW object every call, and this used to run on
@@ -380,6 +382,18 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
                   <td style={{ textAlign: "right" }}><strong>{num(t?.leads_given_details)}</strong></td>
                   <td style={{ textAlign: "right" }}><strong>{num(t?.leads_who_replied)}</strong></td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    {/* THE MISSING OPTION. This card could show a rep was
+                        Connected with a real WhatsApp number attached and give
+                        no way to read a single message they sent — the only
+                        routes in were a lead's own page or a separate Platform
+                        page nobody was pointed at. One click from where the
+                        admin is already looking. */}
+                    {isSuper && (
+                      <a href={`/dashboard/platform/telecallers-activity?rep=${s.salesperson_id}`}
+                        className="btn-ghost" style={{ textDecoration: "none", display: "inline-block" }}>
+                        View chats
+                      </a>
+                    )}
                     {/* Two different things, and conflating them is what made
                         an already-linked rep unfixable: Show QR resumes, Re-scan
                         throws the saved login away so WhatsApp starts over and
