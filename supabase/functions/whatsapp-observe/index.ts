@@ -280,6 +280,17 @@ Deno.serve(async (req) => {
       "lead of this company, so nothing was saved. Add the number as a lead to see the chat."
     : null;
 
+  // The running total behind that sentence. One batch says "7 seen, none
+  // matched"; the day's total is what tells a founder whether this rep is quiet
+  // on WhatsApp or extremely busy on numbers that are not in the CRM. Counts
+  // only — see migration 0172 for why nothing identifying is kept.
+  await admin.rpc("wa_bump_activity", {
+    p_company: companyId,
+    p_salesperson: salespersonId,
+    p_matched: stored,
+    p_unmatched: skipped,
+  });
+
   await admin
     .from("wa_rep_sessions")
     .update({
