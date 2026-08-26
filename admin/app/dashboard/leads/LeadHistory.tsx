@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type VoiceNote = {
@@ -49,7 +49,13 @@ export function LeadHistory({ contactId, onClose }: { contactId: string; onClose
   const [notes, setNotes] = useState<VoiceNote[]>([]);
   const [wa, setWa] = useState<WaMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  // Memoised because this is a dependency of the effect below. Unmemoised,
+  // createClient() returns a new object per render, the effect re-runs, its
+  // setState causes another render, and the modal re-fetches forever — minting
+  // a fresh batch of signed audio URLs on every pass. It was already wrong
+  // before the WhatsApp thread was added; a third query and a longer render
+  // just made it expensive enough to notice.
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     async function load() {

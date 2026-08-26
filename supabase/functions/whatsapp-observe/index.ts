@@ -101,7 +101,18 @@ Deno.serve(async (req) => {
   // A batch is a batch. An unbounded one is a memory bug waiting for a rep who
   // reconnects after a week offline.
   if (messages.length > 200) return json({ error: "batch too large (max 200)" }, 413);
-  if (messages.length === 0) return json({ ok: true, stored: 0, skipped: 0 });
+  // A BATCH IS NOT ONLY MESSAGES ANY MORE.
+  //
+  // This used to return early on an empty messages array — which would have
+  // silently thrown away every WhatsApp call, because a rep who rang a buyer
+  // and did not type anything sends exactly that: no messages, one call. The
+  // one telecaller behaviour this was built to capture would have been the one
+  // it dropped.
+  const callsIn = Array.isArray(body?.calls) ? body.calls.length : 0;
+  const receiptsIn = Array.isArray(body?.receipts) ? body.receipts.length : 0;
+  if (messages.length === 0 && callsIn === 0 && receiptsIn === 0) {
+    return json({ ok: true, stored: 0, skipped: 0, calls: 0, receipts: 0 });
+  }
 
   const admin = createClient(SUPABASE_URL, SERVICE);
 
@@ -159,6 +170,13 @@ Deno.serve(async (req) => {
       body: text || null,
       has_media: kind !== null,
       media_kind: kind,
+      // What the attachment actually was. WhatsApp does not keep the filename
+      // anywhere reachable afterwards, so it is captured here or lost.
+      file_name: typeof m.file_name === "string" ? m.file_name : null,
+      mime_type: typeof m.mime_type === "string" ? m.mime_type : null,
+      file_size: Number.isFinite(Number(m.file_size)) ? Number(m.file_size) : null,
+      duration_seconds: Number.isFinite(Number(m.duration_seconds)) ? Number(m.duration_seconds) : null,
+      peer_name: typeof m.peer_name === "string" ? m.peer_name : null,
       shared_details: direction === "out" && isDetails(text, kind),
       sent_at: sentAt,
     });
@@ -174,6 +192,72 @@ Deno.serve(async (req) => {
     stored = count ?? rows.length;
   }
 
+  // ── WhatsApp calls ─────────────────────────────────────────────────────────
+  //
+  // The thing this feature was first asked for. Reps ring buyers on WhatsApp all
+  // day and the SIM call log cannot see any of it, so those reps read as idle.
+  //
+  // Same privacy gate, same order: a call with anyone who is not a lead of this
+  // company is dropped before it is stored, exactly like a message.
+  const callRows: Record<string, unknown>[] = [];
+  for (const raw of (Array.isArray(body?.calls) ? body.calls : []) as unknown[]) {
+    const c = raw as Record<string, unknown>;
+    const peer = String(c.peer ?? "");
+    const callId = String(c.id ?? "");
+    const at = String(c.at ?? "");
+    if (!peer || !callId || !at) { skipped++; continue; }
+    const { data: contactId } = await admin.rpc("match_wa_contact", {
+      p_company: companyId,
+      p_phone: peer,
+    });
+    if (!contactId) { skipped++; continue; }
+    callRows.push({
+      company_id: companyId,
+      salesperson_id: salespersonId,
+      contact_id: contactId,
+      wa_call_id: callId,
+      direction: c.direction === "out" ? "out" : "in",
+      status: String(c.status ?? "offer"),
+      video: c.video === true,
+      started_at: at,
+    });
+  }
+  let calls = 0;
+  if (callRows.length > 0) {
+    // WhatsApp reports one call several times as it rings, is answered, then
+    // ends. Upserting on the call id keeps the LATEST state instead of three
+    // rows for one conversation — so ignoreDuplicates is deliberately off here,
+    // unlike messages, where the first version is the true one.
+    const { error, count } = await admin
+      .from("wa_observed_calls")
+      .upsert(callRows, { onConflict: "salesperson_id,wa_call_id", count: "exact" });
+    if (error) return json({ error: error.message }, 500);
+    calls = count ?? callRows.length;
+  }
+
+  // ── read receipts ──────────────────────────────────────────────────────────
+  //
+  // Marks an inbound message as opened by the rep. "Has not replied" and "has
+  // not even read it" are different conversations to have with a telecaller,
+  // and only one of them is about priorities.
+  //
+  // No gate needed: this only ever updates a row that already passed the gate.
+  // A receipt for a message that was never stored matches nothing and is a
+  // no-op, which is the correct outcome for a non-lead.
+  let receipts = 0;
+  for (const raw of (Array.isArray(body?.receipts) ? body.receipts : []) as unknown[]) {
+    const rc = raw as Record<string, unknown>;
+    const waId = String(rc.id ?? "");
+    if (!waId) continue;
+    const { count } = await admin
+      .from("wa_observed_messages")
+      .update({ read_at: String(rc.read_at ?? new Date().toISOString()) }, { count: "exact" })
+      .eq("salesperson_id", salespersonId)
+      .eq("wa_message_id", waId)
+      .is("read_at", null);
+    receipts += count ?? 0;
+  }
+
   // Liveness, so a session that logged out days ago shows up as stale in
   // v_rep_whatsapp_health instead of looking like a rep who stopped working.
   await admin
@@ -181,5 +265,5 @@ Deno.serve(async (req) => {
     .update({ last_seen_at: new Date().toISOString(), status: "connected" })
     .eq("salesperson_id", salespersonId);
 
-  return json({ ok: true, stored, skipped });
+  return json({ ok: true, stored, skipped, calls, receipts });
 });
