@@ -91,6 +91,10 @@ export function Sidebar({
             is_super_admin() inside its RPCs). */}
         {isSuper && <Section label="Platform" />}
         {isSuper && <NavLink href="/dashboard/platform/hq" label="🛰 Platform HQ" />}
+        {/* Directly under HQ, because the pair is the point: HQ is how busy
+            today was, this is what is rotting regardless. A company can look
+            fine on HQ every day while never touching most of its book. */}
+        {isSuper && <NavLink href="/dashboard/platform/leaks" label="🩸 Where leads are dying" />}
         {isSuper && <NavLink href="/dashboard/platform" label="🏢 Companies" />}
         {isSuper && <NavLink href="/dashboard/platform/telecallers" label="👥 Telecallers · add user" />}
         {isSuper && <NavLink href="/dashboard/platform/contacts" label="📇 Contacts (all)" />}
