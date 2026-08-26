@@ -1,0 +1,329 @@
+import { createClient } from "@/lib/supabase/server";
+
+/**
+ * Every telecaller on the platform, one screen, worst first.
+ *
+ * WHY THIS IS NOT ANOTHER PER-COMPANY PAGE
+ *
+ * The super admin's question — "who is not working?" — does not stop at a
+ * company boundary. Platform HQ and the leaks page both make you pick a company
+ * first, so answering it meant opening eight pages and holding the comparison in
+ * your head. The finding that mattered (two reps at Manas property with a
+ * hundred leads each and not one call between them) was two clicks deep in one
+ * of them.
+ *
+ * PHONE AND WHATSAPP IN THE SAME ROW
+ *
+ * Neither number alone is fair, and judging on one of them produces exactly the
+ * wrong answer. Ankita's WhatsApp reads zero — and she made 578 calls in seven
+ * days, the most of anyone on this platform. A screen that had shown only
+ * WhatsApp would have accused the hardest-working rep here of doing nothing.
+ *
+ * WHAT CAN AND CANNOT BE READ
+ *
+ * Lead conversations, in full, for any rep in any company — RLS already grants
+ * the super admin that, and a complaint to a founder needs evidence, not a
+ * number. A rep's personal chats were never stored and cannot be produced here
+ * or anywhere else in this product.
+ */
+
+type Row = {
+  company_id: string;
+  company_name: string;
+  rep_id: string;
+  rep_name: string | null;
+  is_active: boolean;
+  leads_assigned: number;
+  calls: number;
+  connected_calls: number;
+  talk_seconds: number;
+  last_call_at: string | null;
+  wa_messages: number;
+  wa_leads: number;
+  wa_details: number;
+  wa_replies: number;
+  wa_calls: number;
+  wa_watch: "none" | "ok" | "stale";
+  wa_offbook: number;
+  silent: boolean;
+};
+
+type Msg = {
+  contact_id: string;
+  lead_name: string | null;
+  lead_phone: string | null;
+  stage: string | null;
+  direction: "in" | "out";
+  body: string | null;
+  media_kind: string | null;
+  file_name: string | null;
+  shared_details: boolean;
+  read_at: string | null;
+  sent_at: string;
+};
+
+const IST = { timeZone: "Asia/Kolkata" } as const;
+const RANGES = [1, 7, 30] as const;
+
+function fmtTalk(s: number) {
+  if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  if (s >= 60) return `${Math.floor(s / 60)}m`;
+  return `${s}s`;
+}
+
+function ago(iso: string | null): string {
+  if (!iso) return "never";
+  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400_000);
+  if (d >= 1) return `${d}d ago`;
+  const h = Math.floor((Date.now() - new Date(iso).getTime()) / 3600_000);
+  return h >= 1 ? `${h}h ago` : "today";
+}
+
+const WATCH_LABEL: Record<Row["wa_watch"], string> = {
+  none: "not connected",
+  ok: "watching",
+  stale: "stale",
+};
+const WATCH_TONE: Record<Row["wa_watch"], string | undefined> = {
+  none: undefined, ok: "#22c55e", stale: "#f59e0b",
+};
+
+export default async function TelecallerActivityPage({
+  searchParams,
+}: {
+  searchParams: { rep?: string; days?: string };
+}) {
+  const supabase = await createClient();
+  const days = RANGES.includes(Number(searchParams.days) as 1 | 7 | 30)
+    ? Number(searchParams.days) : 7;
+  const rep = searchParams.rep || "";
+
+  const { data, error } = await supabase.rpc("super_rep_activity", { p_days: days });
+  if (error) {
+    return (
+      <>
+        <h2>👥 Telecaller activity</h2>
+        <div className="error">Super admin only. ({error.message})</div>
+      </>
+    );
+  }
+  const rows = (data ?? []) as Row[];
+  const current = rep ? rows.find((r) => r.rep_id === rep) ?? null : null;
+
+  let msgs: Msg[] = [];
+  if (current) {
+    const { data: m } = await supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 });
+    msgs = (m ?? []) as Msg[];
+  }
+
+  const qs = (o: { rep?: string; days?: number }) => {
+    const p = new URLSearchParams();
+    if (o.rep) p.set("rep", o.rep);
+    if (o.days && o.days !== 7) p.set("days", String(o.days));
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  };
+
+  // ── one rep's conversations, as evidence ──────────────────────────────────
+  if (current) {
+    // Grouped by lead and shown newest thread first. A flat list of 300 messages
+    // is a log; grouped by who they were with, it is a conversation.
+    const byLead = new Map<string, Msg[]>();
+    for (const m of msgs) {
+      if (!byLead.has(m.contact_id)) byLead.set(m.contact_id, []);
+      byLead.get(m.contact_id)!.push(m);
+    }
+    return (
+      <>
+        <h2>👥 {current.rep_name || "Telecaller"} · {current.company_name.trim()}</h2>
+        <p className="subtitle">
+          <a href={`/dashboard/platform/telecallers-activity${qs({ days })}`}>← All telecallers</a>
+          {" · "}{current.calls} calls, {fmtTalk(current.talk_seconds)} talk, {current.wa_messages} WhatsApp
+          messages in {days} day{days === 1 ? "" : "s"}
+        </p>
+
+        {byLead.size === 0 ? (
+          <div className="empty">
+            No WhatsApp conversations with this company&apos;s leads.
+            {current.wa_watch === "none" && " Their WhatsApp is not connected — nothing is being watched."}
+            {current.wa_watch === "stale" && " Their watcher has not reported in over two hours, so this is UNKNOWN rather than zero."}
+            {current.wa_watch === "ok" && current.wa_offbook > 0 &&
+              ` The watcher is working and saw ${current.wa_offbook} messages in this period, but none were with a number in your CRM.`}
+          </div>
+        ) : (
+          [...byLead.entries()].map(([cid, thread]) => {
+            const head = thread[0];
+            // The RPC returns newest first; a conversation reads oldest first.
+            const ordered = [...thread].reverse();
+            return (
+              <div className="card" key={cid} style={{ marginBottom: 16, padding: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                  <strong>{head.lead_name || head.lead_phone || "Lead"}</strong>
+                  <span className="subtitle" style={{ fontSize: 12 }}>
+                    {head.lead_phone}{head.stage ? ` · ${head.stage}` : ""} · {ordered.length} messages
+                  </span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
+                  {ordered.map((m, i) => {
+                    const mine = m.direction === "out";
+                    return (
+                      <div key={i} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
+                        <div style={{
+                          maxWidth: "78%", padding: "8px 12px", borderRadius: 12,
+                          background: mine ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.06)",
+                          border: `1px solid ${mine ? "rgba(16,185,129,0.22)" : "rgba(255,255,255,0.08)"}`,
+                        }}>
+                          {m.media_kind && (
+                            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: m.body ? 4 : 0 }}>
+                              {m.file_name ?? m.media_kind}
+                              {m.shared_details && <span style={{ color: "#22c55e" }}> · details</span>}
+                            </div>
+                          )}
+                          {m.body && (
+                            <div style={{ fontSize: 14, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.body}</div>
+                          )}
+                          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, textAlign: "right" }}>
+                            {new Date(m.sent_at).toLocaleString("en-IN", {
+                              ...IST, day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
+                            })}
+                            {/* Unread inbound is a different failure from unanswered. */}
+                            {!mine && !m.read_at && <span style={{ color: "#f59e0b" }}> · unread</span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
+        )}
+        <p className="subtitle" style={{ fontSize: 12.5 }}>
+          Only conversations with this company&apos;s leads exist. The rep&apos;s personal chats are
+          never stored and cannot be shown here.
+        </p>
+      </>
+    );
+  }
+
+  // ── the whole floor ───────────────────────────────────────────────────────
+  const silent = rows.filter((r) => r.silent);
+  const watched = rows.filter((r) => r.wa_watch !== "none").length;
+
+  return (
+    <>
+      <h2>👥 Telecaller activity</h2>
+      <p className="subtitle">
+        Every telecaller in every company, <strong>least work first</strong>. Phone and WhatsApp
+        in the same row — judging on one of them alone is how the busiest rep on the platform
+        gets accused of doing nothing.
+      </p>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "4px 0 14px" }}>
+        {RANGES.map((d) => (
+          <a key={d} href={`/dashboard/platform/telecallers-activity${qs({ days: d })}`} className="card"
+            style={{
+              padding: "6px 14px", textDecoration: "none",
+              fontWeight: d === days ? 700 : 400,
+              color: d === days ? "#fff" : "inherit",
+              background: d === days ? "var(--accent, #4353B8)" : undefined,
+            }}>
+            {d === 1 ? "Today" : `${d} days`}
+          </a>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
+        <div className="card" style={{ flex: 1, minWidth: 160, padding: "14px 12px" }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: silent.length ? "#ef4444" : undefined }}>
+            {silent.length}/{rows.length}
+          </div>
+          <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
+            nothing recorded in {days} day{days === 1 ? "" : "s"} — no call, no WhatsApp
+          </div>
+        </div>
+        <div className="card" style={{ flex: 1, minWidth: 160, padding: "14px 12px" }}>
+          <div style={{ fontSize: 26, fontWeight: 700 }}>{watched}/{rows.length}</div>
+          <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
+            on WhatsApp watching — the rest have no WhatsApp half to measure
+          </div>
+        </div>
+      </div>
+
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Telecaller</th>
+            <th style={{ textAlign: "right" }}>Calls</th>
+            <th style={{ textAlign: "right" }}>Talk</th>
+            <th style={{ textAlign: "right" }}>WA msgs</th>
+            <th style={{ textAlign: "right" }}>Got details ★</th>
+            <th style={{ textAlign: "right" }}>Replied ★</th>
+            <th>WhatsApp</th>
+            <th>Last call</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.rep_id}>
+              <td>
+                <a href={`/dashboard/platform/telecallers-activity${qs({ rep: r.rep_id, days })}`}>
+                  <strong>{r.rep_name || "Telecaller"}</strong>
+                </a>
+                <div className="subtitle" style={{ fontSize: 12 }}>
+                  {r.company_name.trim()} · {r.leads_assigned} leads
+                  {!r.is_active && " · inactive account"}
+                </div>
+                {r.silent && (
+                  <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 600 }}>
+                    Nothing recorded in {days} day{days === 1 ? "" : "s"}
+                  </div>
+                )}
+              </td>
+              <td style={{ textAlign: "right" }}>
+                {r.calls === 0 ? <strong style={{ color: "#ef4444" }}>0</strong> : r.calls}
+                {r.connected_calls > 0 && (
+                  <div className="subtitle" style={{ fontSize: 12 }}>{r.connected_calls} got through</div>
+                )}
+              </td>
+              <td style={{ textAlign: "right" }}>{r.talk_seconds ? fmtTalk(r.talk_seconds) : <span style={{ opacity: 0.3 }}>—</span>}</td>
+              {/* Dashes, not zeros, when nobody is watching. An unknown printed
+                  as a zero is the one thing these screens must never do. */}
+              <td style={{ textAlign: "right" }}>
+                {r.wa_watch === "ok" ? r.wa_messages : <span style={{ opacity: 0.3 }}>—</span>}
+              </td>
+              <td style={{ textAlign: "right" }}>
+                {r.wa_watch === "ok" ? <strong>{r.wa_details}</strong> : <span style={{ opacity: 0.3 }}>—</span>}
+              </td>
+              <td style={{ textAlign: "right" }}>
+                {r.wa_watch === "ok" ? <strong>{r.wa_replies}</strong> : <span style={{ opacity: 0.3 }}>—</span>}
+              </td>
+              <td style={{ fontSize: 12.5 }}>
+                <span style={{ color: WATCH_TONE[r.wa_watch] }}>{WATCH_LABEL[r.wa_watch]}</span>
+                {r.wa_watch === "ok" && r.wa_messages === 0 && r.wa_offbook > 0 && (
+                  <div className="subtitle" style={{ fontSize: 12 }}>
+                    {r.wa_offbook} seen, none with your leads
+                  </div>
+                )}
+                {r.wa_calls > 0 && (
+                  <div className="subtitle" style={{ fontSize: 12 }}>{r.wa_calls} WhatsApp calls</div>
+                )}
+              </td>
+              <td className="subtitle" style={{ fontSize: 12.5 }}>{ago(r.last_call_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <p className="subtitle" style={{ marginTop: 16, fontSize: 12.5 }}>
+        Click a name to read their WhatsApp conversations with leads — the evidence behind the
+        number. <strong>Nothing recorded</strong> means no call, no WhatsApp message and no
+        WhatsApp call in the period; it is deliberately hard to earn.
+      </p>
+      <p className="subtitle" style={{ fontSize: 12.5 }}>
+        A dash means <strong>not measured</strong>, not zero: that rep&apos;s WhatsApp is not
+        connected, so their WhatsApp half is unknown and they should not be judged on it.
+      </p>
+    </>
+  );
+}

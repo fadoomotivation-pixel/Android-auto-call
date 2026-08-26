@@ -100,7 +100,7 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
           understand together: that number SENDS the pulse, these numbers are
           only WATCHED. Different tables, different rules, and only the one
           above can send anything. */}
-      {companyId && <TelecallerWhatsApp companyId={companyId} reps={members ?? []} />}
+      {companyId && <TelecallerWhatsApp companyId={companyId} reps={members ?? []} isSuper={isSuper} />}
 
       <h3 style={{ marginTop: 28, marginBottom: 16 }}>Team Inbox</h3>
       {rows.length === 0 ? (

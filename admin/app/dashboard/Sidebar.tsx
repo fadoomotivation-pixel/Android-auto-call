@@ -95,6 +95,10 @@ export function Sidebar({
             today was, this is what is rotting regardless. A company can look
             fine on HQ every day while never touching most of its book. */}
         {isSuper && <NavLink href="/dashboard/platform/leaks" label="🩸 Where leads are dying" />}
+        {/* The people half of the same question. Leaks says which company is
+            rotting; this says which person, across every company, and lets you
+            read the conversations behind the number. */}
+        {isSuper && <NavLink href="/dashboard/platform/telecallers-activity" label="👥 Telecaller activity" />}
         {isSuper && <NavLink href="/dashboard/platform" label="🏢 Companies" />}
         {isSuper && <NavLink href="/dashboard/platform/telecallers" label="👥 Telecallers · add user" />}
         {isSuper && <NavLink href="/dashboard/platform/contacts" label="📇 Contacts (all)" />}

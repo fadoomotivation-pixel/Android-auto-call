@@ -22,6 +22,17 @@ type Today = {
   leads_who_replied: number;
 };
 
+/**
+ * How much WhatsApp the watcher saw today, split by whether the other party was
+ * a lead. Counts only — never who, never what. It exists so a row of zeros can
+ * explain itself.
+ */
+type Seen = {
+  salesperson_id: string;
+  matched: number;
+  unmatched: number;
+};
+
 /** IST calendar day, which is what v_rep_whatsapp_daily.day_ist is keyed on. */
 function istToday(): string {
   return new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
@@ -92,7 +103,9 @@ function ago(iso: string | null): string {
  * everything else on your phone is untouched", and a rep is owed both halves
  * of it before they link a device.
  */
-export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; reps: Rep[] }) {
+export function TelecallerWhatsApp({
+  companyId, reps, isSuper,
+}: { companyId: string; reps: Rep[]; isSuper: boolean }) {
   // ONE CLIENT, OR THE QR POLLER EATS THE EDGE FUNCTION ALIVE.
   //
   // createClient() builds a NEW object every call, and this used to run on
@@ -108,6 +121,7 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
   const supabase = useMemo(() => createClient(), []);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [today, setToday] = useState<Today[]>([]);
+  const [seen, setSeen] = useState<Seen[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -130,7 +144,7 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: s }, { data: t }, { data: f }] = await Promise.all([
+    const [{ data: s }, { data: t }, { data: f }, { data: a }] = await Promise.all([
       supabase.from("wa_rep_sessions")
         .select("salesperson_id, base_url, status, wa_number, last_seen_at, last_error")
         .eq("company_id", companyId).returns<Session[]>(),
@@ -139,9 +153,17 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
         .eq("company_id", companyId).eq("day_ist", istToday()).returns<Today[]>(),
       supabase.from("whatsapp_baileys").select("base_url")
         .eq("company_id", companyId).maybeSingle<{ base_url: string | null }>(),
+      // What the gate dropped. Without this a zero row is unreadable: a rep who
+      // barely uses WhatsApp and a rep having four hundred conversations with
+      // numbers that are not in the CRM look identical, and only one of those
+      // is a finding.
+      supabase.from("wa_rep_activity_daily")
+        .select("salesperson_id, matched, unmatched")
+        .eq("company_id", companyId).eq("day_ist", istToday()).returns<Seen[]>(),
     ]);
     setSessions(s ?? []);
     setToday(t ?? []);
+    setSeen(a ?? []);
     setFounderUrl(f?.base_url ?? null);
     setLoading(false);
     return (s ?? []).map((x) => x.salesperson_id);
@@ -272,6 +294,7 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
   };
 
   const byRep = new Map(today.map((t) => [t.salesperson_id, t]));
+  const seenBy = new Map(seen.map((x) => [x.salesperson_id, x]));
   const repName = new Map(reps.map((r) => [r.id, r.full_name || "Telecaller"]));
   const unconnected = reps.filter((r) => !sessions.some((s) => s.salesperson_id === r.id));
 
@@ -335,6 +358,23 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
                           ? "Never connected — have the rep scan the QR"
                           : `last heard ${ago(s.last_seen_at)}`}
                     </div>
+                    {/* WHY THE ROW IS ZERO.
+                        A rep who barely opens WhatsApp and a rep having four
+                        hundred conversations with numbers that are not in the
+                        CRM produce an identical row of zeros, and only one of
+                        those is a finding. Counts only — the card never learns
+                        who those conversations were with. */}
+                    {(() => {
+                      const sn = seenBy.get(s.salesperson_id);
+                      if (!trusted || !sn || sn.unmatched === 0) return null;
+                      return (
+                        <div style={{ fontSize: 12, marginTop: 4, color: sn.matched === 0 ? "#f59e0b" : undefined }}>
+                          {sn.matched === 0
+                            ? `${sn.unmatched} messages seen today — none with a lead of this company`
+                            : `+${sn.unmatched} more with numbers not in the CRM`}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td style={{ textAlign: "right" }}>{num(t?.messages_sent)}</td>
                   <td style={{ textAlign: "right" }}>{num(t?.leads_messaged)}</td>
@@ -342,6 +382,18 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
                   <td style={{ textAlign: "right" }}><strong>{num(t?.leads_given_details)}</strong></td>
                   <td style={{ textAlign: "right" }}><strong>{num(t?.leads_who_replied)}</strong></td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    {/* THE MISSING OPTION. This card could show a rep was
+                        Connected with a real WhatsApp number attached and give
+                        no way to read a single message they sent — the only
+                        routes in were a lead's own page or a separate Platform
+                        page nobody was pointed at. One click from where the
+                        admin is already looking. */}
+                    {isSuper && (
+                      <a href={`/dashboard/platform/telecallers-activity?rep=${s.salesperson_id}`}
+                        className="btn-ghost" style={{ textDecoration: "none", display: "inline-block" }}>
+                        View chats
+                      </a>
+                    )}
                     {/* Two different things, and conflating them is what made
                         an already-linked rep unfixable: Show QR resumes, Re-scan
                         throws the saved login away so WhatsApp starts over and
