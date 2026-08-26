@@ -11,22 +11,28 @@
 //         "text": "...", "media_kind": "document",
 //         "sent_at": "2026-08-20T09:12:00Z" } ] }
 //
-// THREE RULES, ENFORCED HERE RATHER THAN TRUSTED TO THE CALLER
+// THE RULES, ENFORCED HERE RATHER THAN TRUSTED TO THE CALLER
 //
-// 1. A message is stored ONLY if the other party is a lead in this rep's own
-//    company. match_wa_contact returns null for anyone else and the message is
-//    dropped unread — never logged, never counted, never persisted. A rep's
-//    family, friends and salary conversations do not enter this database. This
-//    is the rule that makes observing a rep's personal number acceptable at all.
+// 1. COMPANY SIMS, SO EVERY CONVERSATION IS KEPT. These numbers are allotted by
+//    the company; there are no personal chats on them to protect. This function
+//    originally dropped any conversation with someone who was not already a
+//    lead, which was right for a rep's own phone and wrong for a work number —
+//    what it discarded was not noise but a BUYER NOBODY HAD WRITTEN DOWN, and
+//    the dashboard reported the loss as a reassuring zero.
 //
-// 2. The message is kept IN FULL — but only ever for a conversation with a
-//    lead, because rule 1 runs first. This was a 300-character preview until
-//    the founder decided the CRM should hold the whole thread: these are the
-//    company's own leads discussing the company's own property, and every CRM
-//    shows the thread with a customer. Rule 1 is what makes that acceptable,
-//    and rule 1 is untouched. The rep is told before they scan.
+//    match_wa_contact still runs, and still decides whether a conversation
+//    belongs to a known lead. It no longer decides whether it is allowed to
+//    exist. Unknown numbers land with contact_id null and peer_phone set, and
+//    surface in v_wa_unknown_numbers as leads waiting to be captured.
 //
-// 3. Nothing here can send. There is no outbound path in this function, and the
+// 2. THE LEAD NUMBERS STAY LEAD-ONLY. Every count a founder reads —
+//    leads_messaged, got details, replied — filters on contact_id being
+//    present, so storing unknown numbers cannot inflate any of them.
+//
+// 3. COMPANY ISOLATION IS ABSOLUTE. The session decides the company; the caller
+//    never names it. Nothing crosses a tenant boundary.
+//
+// 4. Nothing here can send. There is no outbound path in this function, and the
 //    schema has no queue for one. The worker's send route stays reserved for
 //    the founder's own notification number.
 //
@@ -135,7 +141,11 @@ Deno.serve(async (req) => {
 
   const companyId = session.company_id as string;
   let stored = 0;
+  // Malformed or unusable — genuinely nothing we can do with it.
   let skipped = 0;
+  // Stored, but the other party is not a lead of this company. On a company SIM
+  // that is a lead waiting to be written down, not a message to discard.
+  let unmatched = 0;
   const rows: Record<string, unknown>[] = [];
 
   for (const raw of messages) {
@@ -146,12 +156,22 @@ Deno.serve(async (req) => {
     const sentAt = String(m.sent_at ?? "");
     if (!peer || !waId || !sentAt) { skipped++; continue; }
 
-    // THE GATE. Not a lead in this company → this message does not exist to us.
+    // WHO IS THIS? — no longer WHETHER TO KEEP IT.
+    //
+    // These are company-allotted SIMs, so there are no private chats on them to
+    // protect and nothing here is anyone's personal life. What the old gate
+    // discarded was not noise: a buyer messaging a company number who is not yet
+    // in the CRM is a LEAD NOBODY WROTE DOWN, and dropping it unread reported
+    // the loss as a reassuring zero.
+    //
+    // So this still decides whether the conversation belongs to a known lead —
+    // and every lead-scoped count still filters on that — but it no longer
+    // decides whether the conversation is allowed to exist.
     const { data: contactId } = await admin.rpc("match_wa_contact", {
       p_company: companyId,
       p_phone: peer,
     });
-    if (!contactId) { skipped++; continue; }
+    if (!contactId) unmatched++;
 
     const text = typeof m.text === "string" ? m.text : "";
     // Older workers sent a bare boolean; keep reading it so a half-updated
@@ -161,7 +181,10 @@ Deno.serve(async (req) => {
     rows.push({
       company_id: companyId,
       salesperson_id: salespersonId,
-      contact_id: contactId,
+      contact_id: contactId ?? null,
+      // Always recorded, lead or not. This is what makes an unknown number
+      // recoverable later instead of anonymous.
+      peer_phone: peer,
       wa_message_id: waId,
       direction,
       // In full. A cap here would silently clip the one message an admin
@@ -275,9 +298,13 @@ Deno.serve(async (req) => {
   // sentence then survived four successful ingests, sent us to read edge logs,
   // and named a cause that was not true. A delivered batch now writes its own
   // outcome over the top.
-  const note = stored === 0 && skipped > 0
-    ? `Watching fine — ${skipped} message${skipped === 1 ? "" : "s"} seen, but none were with a ` +
-      "lead of this company, so nothing was saved. Add the number as a lead to see the chat."
+  // Everything is stored now, so the honest note is no longer "nothing was
+  // saved" — it is that the CRM does not know who these people are. That is a
+  // finding rather than a failure: someone messaged a company number and there
+  // is no lead record for them, which means no follow-up and no callback.
+  const note = unmatched > 0 && stored === unmatched
+    ? `${unmatched} message${unmatched === 1 ? "" : "s"} with numbers that are not leads in this ` +
+      "company. They are saved — see Unknown numbers, they may be leads nobody has captured."
     : null;
 
   // The running total behind that sentence. One batch says "7 seen, none
@@ -288,7 +315,7 @@ Deno.serve(async (req) => {
     p_company: companyId,
     p_salesperson: salespersonId,
     p_matched: stored,
-    p_unmatched: skipped,
+    p_unmatched: unmatched,
   });
 
   await admin
