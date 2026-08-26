@@ -55,10 +55,17 @@ one ban cannot take the floor down.
 
 **What is never stored.** The CRM drops any message whose other party is not a
 lead in that rep's own company — see `match_wa_contact` in migration 0167. A
-rep's family, friends and salary conversations never reach the database. Only
-300 characters of body are kept, because an admin needs to see that details went
-out, not to read a rep's chats. That filter lives server-side on purpose: it
-must not be something a worker can be reconfigured to skip.
+rep's family, friends and salary conversations never reach the database. That
+filter lives server-side on purpose: it must not be something a worker can be
+reconfigured to skip.
+
+**What IS stored, in full.** Lead conversations are kept whole, message by
+message, and shown on that lead in the CRM. This was a 300-character preview
+until migration 0170; the founder decided the company should be able to read
+the thread with its own buyers, which is what every CRM does with a customer
+email trail. Say this to the rep in plain words before they scan — they are
+entitled to know that a conversation with a lead is company property and a
+conversation with anyone else is not recorded at all.
 
 ### Observer environment
 
@@ -93,8 +100,12 @@ wiped on every deploy. Here the WhatsApp login survives a restart on its own.
    - `BAILEYS_SECRET` — a long random string. The service refuses to start
      without one, because the worker's URL is public and an unprotected `/send`
      is a "send WhatsApp as this company" button.
-   - `AUTH_DIR` — set to a path **inside the app directory**, e.g.
-     `/home/<user>/domains/<domain>/baileys-auth`. Do not use `/tmp`.
+   - `AUTH_DIR` — **only on a brand-new worker.** Set it to a path inside the
+     app directory, e.g. `/home/<user>/domains/<domain>/baileys-auth`. Never
+     `/tmp`. **On a worker that is already logged in, do not add it and do not
+     change it** — unset, it defaults to `./auth`, which is where the existing
+     session lives. Pointing it somewhere new means an empty folder and a
+     needless QR rescan, and it is not obvious that is what happened.
    - `PORT` — leave it alone; Hostinger sets it and the server reads it.
 6. Note the app's URL (e.g. `https://something.hostingersite.com`) — that is the
    worker address you paste into Call Pro AI.
@@ -119,7 +130,7 @@ Two Hostinger-specific things to watch:
    | Variable | Required | Notes |
    |---|---|---|
    | `BAILEYS_SECRET` | yes | Long random string. The service refuses to start without it — an open `/send` is a "send WhatsApp as this company" button. |
-   | `AUTH_DIR` | recommended | Defaults to `/data/auth` in the image. |
+   | `AUTH_DIR` | recommended | Defaults to `/data/auth` in the image, `./auth` outside it. Set it once, on first deploy. Changing it later abandons the logged-in session and forces a rescan. |
    | `PORT` | no | Defaults to 8080. |
 
 3. **Mount a persistent volume at `/data`.** Without one the session is wiped on

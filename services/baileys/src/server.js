@@ -49,6 +49,7 @@
 // gets a number banned by someone else's script within a day of being indexed.
 import http from "node:http";
 import path from "node:path";
+import fs from "node:fs/promises";
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
@@ -72,6 +73,10 @@ const INGEST_SECRET = process.env.BAILEYS_INGEST_SECRET || "";
 // request per keystroke-sized message.
 const FLUSH_MS = Number(process.env.FLUSH_MS || 15_000);
 const MAX_BATCH = 200;
+// Room for a history sync, which arrives as one burst rather than a trickle.
+// A year of a working telecaller's lead conversations fits comfortably; the
+// non-lead ones are dropped by the CRM, not here, so this holds the raw feed.
+const MAX_PENDING = Number(process.env.MAX_PENDING || 20_000);
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -143,6 +148,18 @@ async function start(s) {
     // would make the phone stop showing notifications for these messages,
     // because WhatsApp would think the account is already reading them here.
     markOnlineOnConnect: false,
+    // OFF BY DEFAULT, AND THAT DEFAULT COST US THE WHOLE IMPORT.
+    //
+    // With syncFullHistory false WhatsApp pushes only a token slice of recent
+    // chats on link — enough that messaging-history.set fires and looks like it
+    // worked, nowhere near enough to show a rep's actual conversations. On a
+    // watch-only session there is no reason not to ask for the lot: the CRM
+    // drops every non-lead message anyway, so the extra volume is discarded
+    // server-side and what survives is exactly the thread an admin wants.
+    //
+    // Only for observers. The founder's session sends one message a day and has
+    // no business pulling anybody's history.
+    syncFullHistory: s.observeOnly,
     logger: pino({ level: "silent" }),
     browser: ["Call Pro AI", "Chrome", "1.0.0"],
   });
@@ -152,11 +169,39 @@ async function start(s) {
   // WATCH-ONLY SESSIONS REPORT WHAT THEY SAW. The founder's session does not:
   // it exists to send one message a day and has no business recording anything.
   if (s.observeOnly) {
+    // LIVE TRAFFIC AND REPLAY, BOTH.
+    //
+    // This used to take only type "notify" and drop "append", on the reasoning
+    // that replay would re-post a rep's whole backlog on every restart. That
+    // reasoning was wrong: the CRM upserts on (salesperson_id, wa_message_id)
+    // and ignores duplicates, so a re-post costs one wasted request and changes
+    // no number anywhere. Meanwhile the rule quietly cost the thing the feature
+    // exists for — a rep scans the QR, the admin opens the lead, and the
+    // conversation is empty because it all happened five minutes before the
+    // scan.
     s.sock.ev.on("messages.upsert", (ev) => {
-      // "notify" is live traffic. "append" is history replay on reconnect, and
-      // taking it would re-post a rep's whole backlog on every restart.
-      if (ev?.type !== "notify") return;
-      for (const m of ev.messages ?? []) queueObserved(s, m);
+      for (const m of ev?.messages ?? []) queueObserved(s, m);
+    });
+
+    // THE CONVERSATIONS THAT ALREADY EXISTED.
+    //
+    // messages.upsert only ever fires for messages that arrive while we are
+    // connected. Everything the rep said to a buyer BEFORE linking the device
+    // comes through this event instead — WhatsApp pushes a chunk of history
+    // once, shortly after the QR is scanned. Without it the CRM starts from
+    // zero on a rep who has been selling on WhatsApp for a year, which is
+    // exactly how the first telecaller's lead pages came up blank.
+    //
+    // The privacy gate is unchanged and still runs server-side on every one of
+    // these: history from a non-lead is dropped the same as live traffic from a
+    // non-lead. This imports the rep's conversations WITH THIS COMPANY'S LEADS
+    // and nothing else.
+    s.sock.ev.on("messaging-history.set", (h) => {
+      const msgs = h?.messages ?? [];
+      if (msgs.length) {
+        log.info({ id: s.id, count: msgs.length, progress: h?.progress ?? null }, "history sync");
+      }
+      for (const m of msgs) queueObserved(s, m);
     });
   }
 
@@ -250,13 +295,38 @@ function queueObserved(s, msg) {
     id,
     peer: jid.split("@")[0],
     direction: msg?.key?.fromMe ? "out" : "in",
-    text: String(textOf(msg) || "").slice(0, 300),
+    // The whole message. The worker is not where privacy is decided — it cannot
+    // even tell whether this number is a lead. The CRM's match_wa_contact drops
+    // every non-lead conversation on arrival, so clipping here would only
+    // truncate the threads that DO get kept.
+    //
+    // Capped well above any real WhatsApp message purely so one pasted novel
+    // cannot blow the batch size; WhatsApp's own limit is around 65k.
+    text: String(textOf(msg) || "").slice(0, 8000),
     media_kind: mediaKindOf(msg),
     sent_at: new Date(Number(msg?.messageTimestamp ?? Date.now() / 1000) * 1000).toISOString(),
   });
 
-  // Drop the oldest rather than grow without bound if the CRM is unreachable.
-  while (s.pending.length > MAX_BATCH * 5) s.pending.shift();
+  // A bound is still needed — the CRM can be unreachable and this must not grow
+  // until the box runs out of memory. But 1,000 was sized for live traffic only,
+  // and a history sync arrives in one burst of many thousands: at that ceiling
+  // the shift() below would silently throw away the oldest conversations, which
+  // are precisely the ones being imported. Raised, and the drop is now logged
+  // rather than happening in silence.
+  if (s.pending.length > MAX_PENDING) {
+    const dropped = s.pending.length - MAX_PENDING;
+    s.pending.splice(0, dropped);
+    log.warn({ id: s.id, dropped, queued: s.pending.length },
+      "observed buffer full — oldest messages discarded, CRM not keeping up");
+  }
+  // A history burst should not wait the full flush interval before it starts
+  // draining; once there is a whole batch ready, send it now.
+  if (s.pending.length >= MAX_BATCH) {
+    clearTimeout(s.flushTimer);
+    s.flushTimer = null;
+    flushObserved(s).catch((e) => log.error(e));
+    return;
+  }
   if (!s.flushTimer) s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
 }
 
@@ -285,7 +355,15 @@ async function flushObserved(s) {
     });
     if (!r.ok) throw new Error(`ingest ${r.status}`);
     const out = await r.json().catch(() => ({}));
-    log.info({ id: s.id, stored: out.stored, skipped: out.skipped }, "observed batch sent");
+    log.info({ id: s.id, stored: out.stored, skipped: out.skipped, queued: s.pending.length },
+      "observed batch sent");
+    // A backlog drains at its own pace, not the idle heartbeat's. At one batch
+    // per FLUSH_MS a history sync would take half an hour to land, and the
+    // admin watching the lead page would conclude it had not worked.
+    if (s.pending.length > 0) {
+      s.flushTimer = setTimeout(() => flushObserved(s), 500);
+      return;
+    }
   } catch (e) {
     // Put them back at the front; the CRM de-duplicates on WhatsApp's own id,
     // so a replay after a blip cannot double-count a rep's day.
@@ -370,6 +448,47 @@ const server = http.createServer(async (req, res) => {
   if (rep) {
     const salespersonId = rep[1];
     const action = (rep[2] || "/status").slice(1);
+
+    // RESET IS THE ONLY WAY BACK TO A REAL QR, AND IT RUNS BEFORE getSession.
+    //
+    // /reconnect reuses the saved credentials, so once a rep has linked once it
+    // never shows a QR again — and WhatsApp only pushes conversation history on
+    // a FRESH link. That combination is why a rep could be "Connected" with an
+    // empty lead page and no button anywhere would fix it: the control labelled
+    // Re-scan could not re-scan.
+    //
+    // This closes the socket, deletes that rep's auth directory and forgets the
+    // session, so the next request starts from nothing: new QR, new link, and a
+    // history sync. Destructive by design — the rep must scan again — so the
+    // dashboard asks first.
+    //
+    // Deliberately before getSession(): creating the session only to tear it
+    // down would race the reconnect timer against the directory delete.
+    if (action === "reset" && req.method === "POST") {
+      const existing = sessions.get(salespersonId);
+      if (existing) {
+        clearTimeout(existing.reconnectTimer);
+        clearTimeout(existing.flushTimer);
+        // Anything it saw but never delivered dies with it; the CRM keeps what
+        // it already stored, and the fresh link re-sends the history anyway.
+        existing.pending.length = 0;
+        try { existing.sock?.end?.(); } catch { /* already gone */ }
+        sessions.delete(salespersonId);
+      }
+      const dir = path.join(AUTH_DIR, `rep-${salespersonId}`);
+      try {
+        await fs.rm(dir, { recursive: true, force: true });
+      } catch (e) {
+        log.error({ id: salespersonId, err: String(e?.message || e) }, "could not clear auth dir");
+        return send(res, 500, { ok: false, error: "could not clear the saved login" });
+      }
+      log.info({ id: salespersonId }, "session reset — next request will offer a fresh QR");
+      // Start it again so a QR is already being generated by the time the
+      // dashboard asks for one.
+      getSession(salespersonId, salespersonId);
+      return send(res, 200, { ok: true, status: "connecting" });
+    }
+
     const s = getSession(salespersonId, salespersonId);
 
     if (action === "status") return send(res, 200, statusOf(s));

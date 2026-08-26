@@ -86,6 +86,19 @@ export type RepPulse = {
   waDetails: number;
   /** Leads who wrote BACK. The one number here a rep cannot inflate. */
   waReplies: number;
+  /** Median minutes to answer a buyer today. null when no buyer wrote, or none
+   *  was ever answered. Counting messages rewards sending more; this needs the
+   *  BUYER to have spoken first, so it is the honest speed number. */
+  waReplyMins: number | null;
+  /** Buyers whose last WhatsApp message is still unanswered RIGHT NOW.
+   *
+   *  Not a day figure and deliberately so: a buyer who asked a question at 4pm
+   *  and is still waiting at 7pm is the most valuable line in this whole
+   *  report. Everything else here says what happened; this says what is still
+   *  owed. */
+  waWaiting: number;
+  /** The one who has waited longest, for the report to name. */
+  waWaitingWorst: { name: string; minutes: number } | null;
   /** "none" = no observer set up for this rep, so WhatsApp is simply not part
    *  of their report. "ok" = watching. "stale" = a session exists and has said
    *  nothing for two hours, which means 0 is UNKNOWN, not zero — the same
@@ -207,6 +220,7 @@ export async function buildCompany(
     steps,
     health,
     whatsapp,
+    waAwaiting,
     waSessions,
   ] = await Promise.all([
     admin.from("profiles")
@@ -277,8 +291,15 @@ export async function buildCompany(
     // day_ist is already the IST calendar day, so this matches on the date
     // string rather than the timestamp bounds the other queries use.
     admin.from("v_rep_whatsapp_daily")
-      .select("salesperson_id, messages_sent, leads_messaged, leads_given_details, leads_who_replied")
+      .select("salesperson_id, messages_sent, leads_messaged, leads_given_details, leads_who_replied, median_reply_minutes")
       .eq("company_id", companyId).eq("day_ist", date),
+    // WHO IS STILL WAITING FOR AN ANSWER. Live, not day-scoped, and that is the
+    // point: a buyer who asked a question this afternoon and has had no reply
+    // by 7pm is the most actionable thing the report can say. Every other line
+    // describes what happened; this one describes what is still owed.
+    admin.from("v_wa_awaiting_reply")
+      .select("salesperson_id, lead_name, waiting_minutes")
+      .eq("company_id", companyId),
     // IS ANYONE STILL LISTENING? Without this, a watcher that died at 11am is
     // indistinguishable from a rep who sent nothing — and the report would
     // print the second story. Exactly the mistake callsTrusted exists to stop
@@ -302,6 +323,7 @@ export async function buildCompany(
         offCrmCalls: 0, offCrmTalkSeconds: 0,
         voiceNotes: [], moves: [], siteVisits: [], visitsArrived: [], followUps: 0, hotLeads: 0,
         waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0, waWatch: "none",
+        waReplyMins: null, waWaiting: 0, waWaitingWorst: null,
         topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, bookings: 0,
         revenue: 0, aiUpdates: [], callsTrusted: true, syncedAt: null,
       });
@@ -331,6 +353,21 @@ export async function buildCompany(
     r.waLeads = Number(w.leads_messaged ?? 0);
     r.waDetails = Number(w.leads_given_details ?? 0);
     r.waReplies = Number(w.leads_who_replied ?? 0);
+    r.waReplyMins = w.median_reply_minutes === null || w.median_reply_minutes === undefined
+      ? null
+      : Number(w.median_reply_minutes);
+  }
+
+  // Still owed an answer. Counted per rep, and the longest wait kept so the
+  // report can name one buyer rather than print a bare number nobody acts on.
+  for (const a of (waAwaiting.data ?? []) as Record<string, unknown>[]) {
+    const r = rep(String(a.salesperson_id ?? ""));
+    if (!r) continue;
+    r.waWaiting += 1;
+    const mins = Number(a.waiting_minutes ?? 0);
+    if (!r.waWaitingWorst || mins > r.waWaitingWorst.minutes) {
+      r.waWaitingWorst = { name: String(a.lead_name ?? "a buyer"), minutes: mins };
+    }
   }
 
   // Per rep, per lead: how long they actually talked, and whether they ever
@@ -730,11 +767,51 @@ function rupees(n: number): string {
  * it the number worth reading first and the reason it is printed last, where
  * the eye lands.
  */
-function waLine(k: { waMessages: number; waLeads: number; waDetails: number; waReplies: number }): string[] {
+function waLine(k: {
+  waMessages: number; waLeads: number; waDetails: number; waReplies: number;
+  waReplyMins?: number | null;
+}): string[] {
   const bits = [`${k.waMessages} msg`, `${k.waLeads} lead${k.waLeads === 1 ? "" : "s"}`];
   if (k.waDetails) bits.push(`${k.waDetails} got details`);
   if (k.waReplies) bits.push(`${k.waReplies} replied`);
+  // Printed only when a buyer actually wrote and was answered, because
+  // "answered in 0 min" out of nothing would read as a boast about silence.
+  if (k.waReplyMins !== null && k.waReplyMins !== undefined) {
+    bits.push(`answered in ${humanMins(k.waReplyMins)}`);
+  }
   return [`• 💬 WhatsApp: ${bits.join(" · ")}`];
+}
+
+/** Minutes a person would say out loud. */
+function humanMins(m: number): string {
+  if (m < 1) return "under a min";
+  if (m < 60) return `${Math.round(m)} min`;
+  const h = m / 60;
+  if (h < 24) return `${h < 10 ? h.toFixed(1).replace(/\.0$/, "") : Math.round(h)} hr`;
+  return `${Math.round(h / 24)} day${Math.round(h / 24) === 1 ? "" : "s"}`;
+}
+
+/**
+ * THE LINE THAT IS WORTH MONEY.
+ *
+ * Every other line in this report describes what already happened. This one
+ * describes what is still owed: a buyer sent a WhatsApp message and nobody has
+ * answered it yet. That is the highest-intent signal the CRM has — the lead
+ * acted, unprompted — and until now it landed in a table nobody read.
+ *
+ * One name, not a list. "3 buyers waiting" is a statistic; "Rahul has been
+ * waiting 4 hr" is something a rep opens WhatsApp about.
+ */
+function waWaitingLine(r: {
+  waWaiting: number; waWaitingWorst: { name: string; minutes: number } | null;
+}): string[] {
+  if (!r.waWaiting || !r.waWaitingWorst) return [];
+  const w = r.waWaitingWorst;
+  const others = r.waWaiting - 1;
+  return [
+    `• 🔴 ${r.waWaiting} buyer${r.waWaiting === 1 ? "" : "s"} waiting for a WhatsApp reply` +
+    ` — ${w.name}, ${humanMins(w.minutes)}${others > 0 ? ` (+${others} more)` : ""}`,
+  ];
 }
 
 /**
@@ -978,6 +1055,14 @@ export function repText(
     L.push("", warn ?? waIdleWarn ?? "No calls, no notes, no lead moves today.");
     if (!warn && waIdleWarn) L.push("No calls or lead moves either — but WhatsApp cannot be checked while the watcher is down.");
     if (warn) L.push("Nothing came through from this phone at all — check it before reading anything into today.");
+    // THE MOST URGENT VERSION OF THIS LINE, and it nearly did not get printed:
+    // this branch returns early. A rep who did nothing all day AND is sitting on
+    // an unanswered buyer is the exact person who most needs telling, so the
+    // one case where the message matters most must not be the one that skips it.
+    if (!waIdleWarn) {
+      const waiting = waWaitingLine(r);
+      if (waiting.length) L.push("", ...waiting);
+    }
     L.push("", PULSE_FOOTER);
     return L.join("\n");
   }
@@ -991,6 +1076,10 @@ export function repText(
   const waWarn = waWarning(r);
   if (waWarn) L.push(`• ${waWarn}`);
   else if (r.waMessages) L.push(...waLine(r));
+  // Printed even when they sent nothing today: a buyer waiting since yesterday
+  // is MORE urgent, not less, and gating it on today's activity would hide
+  // exactly the rep who has stopped answering.
+  if (!waWarn) L.push(...waWaitingLine(r));
   const stale = staleNote(r);
   if (stale) L.push(stale);
   const offCrm = showOffCrm ? offCrmLine(r) : null;
@@ -1046,6 +1135,24 @@ export function pulseText(
     waReplies: a.waReplies + r.waReplies,
   }), { waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0 });
   if (waTeam.waMessages) L.push(...waLine(waTeam));
+
+  // BUYERS STILL WAITING, NAMED BY REP.
+  //
+  // The team total on its own ("5 buyers waiting") tells a founder there is a
+  // problem but not who owns it, and a founder who cannot act on a line stops
+  // reading it. Named by rep, worst wait first, it becomes tomorrow morning's
+  // first conversation.
+  const waitingReps = p.reps
+    .filter((r) => r.waWaiting > 0 && r.waWatch !== "stale")
+    .sort((a, b) => (b.waWaitingWorst?.minutes ?? 0) - (a.waWaitingWorst?.minutes ?? 0));
+  if (waitingReps.length) {
+    const total = waitingReps.reduce((n, r) => n + r.waWaiting, 0);
+    L.push(`• 🔴 ${total} buyer${total === 1 ? "" : "s"} waiting for a WhatsApp reply:`);
+    for (const r of waitingReps) {
+      L.push(`   ${r.name} — ${r.waWaiting} (longest ${humanMins(r.waWaitingWorst!.minutes)})`);
+    }
+  }
+
   // Named, not summarised. "2 watchers down" makes a founder go looking; the
   // names make them act, and it is the same treatment the blind phones get.
   const waBlind = p.reps.filter((r) => r.waWatch === "stale");

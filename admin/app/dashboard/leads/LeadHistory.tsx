@@ -16,15 +16,44 @@ type VoiceNote = {
   url?: string; // signed playback URL
 };
 
+/**
+ * One observed WhatsApp message. Only ever exists for a conversation with a
+ * lead of this company — match_wa_contact drops everything else server-side
+ * before it is stored, so nothing personal can appear here.
+ */
+type WaMessage = {
+  id: string;
+  direction: "in" | "out";
+  body: string | null;
+  media_kind: string | null;
+  shared_details: boolean;
+  sent_at: string;
+};
+
+const MEDIA_LABEL: Record<string, string> = {
+  document: "📄 PDF",
+  image: "🖼 Photo",
+  video: "🎥 Video",
+  audio: "🎤 Voice note",
+  sticker: "Sticker",
+  other: "Attachment",
+};
+
+/** Whose turn is it? The buyer spoke last and nobody has answered. */
+function waWaiting(msgs: WaMessage[]): boolean {
+  return msgs.length > 0 && msgs[msgs.length - 1].direction === "in";
+}
+
 export function LeadHistory({ contactId, onClose }: { contactId: string; onClose: () => void }) {
   const [logs, setLogs] = useState<any[]>([]);
   const [notes, setNotes] = useState<VoiceNote[]>([]);
+  const [wa, setWa] = useState<WaMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
   useEffect(() => {
     async function load() {
-      const [callsRes, notesRes] = await Promise.all([
+      const [callsRes, notesRes, waRes] = await Promise.all([
         supabase
           .from("call_logs")
           .select("id, outcome, duration_seconds, notes, summary, created_at, salesperson_id")
@@ -35,8 +64,16 @@ export function LeadHistory({ contactId, onClose }: { contactId: string; onClose
           .select("id, actor_name, audio_path, duration_seconds, transcript, summary, suggested_disposition, ai_status, created_at")
           .eq("contact_id", contactId)
           .order("created_at", { ascending: false }),
+        // Oldest first: a conversation reads downwards, unlike the call log.
+        supabase
+          .from("wa_observed_messages")
+          .select("id, direction, body, media_kind, shared_details, sent_at")
+          .eq("contact_id", contactId)
+          .order("sent_at", { ascending: true })
+          .returns<WaMessage[]>(),
       ]);
       setLogs(callsRes.data || []);
+      setWa(waRes.data || []);
 
       // Private bucket → short-lived signed URLs for the <audio> players.
       const vns: VoiceNote[] = (notesRes.data as VoiceNote[]) || [];
@@ -64,6 +101,63 @@ export function LeadHistory({ contactId, onClose }: { contactId: string; onClose
            <div style={{ color: "var(--muted)", textAlign: "center", padding: 40 }}>Loading history...</div>
          ) : (
            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+             {/* The WhatsApp thread, first — it is the only place in the CRM
+                 where the buyer speaks in their own words, and it is usually
+                 the most recent thing that happened. */}
+             {wa.length > 0 && (
+               <>
+                 <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: "var(--muted)", textTransform: "uppercase" }}>
+                   💬 WhatsApp
+                   {waWaiting(wa) && (
+                     <span style={{ marginLeft: 8, color: "#ef4444", letterSpacing: 0 }}>
+                       · buyer is waiting for a reply
+                     </span>
+                   )}
+                 </div>
+                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                   {wa.map((m) => {
+                     const mine = m.direction === "out";
+                     return (
+                       <div key={m.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
+                         <div
+                           style={{
+                             maxWidth: "78%",
+                             padding: "8px 12px",
+                             borderRadius: 12,
+                             borderBottomRightRadius: mine ? 3 : 12,
+                             borderBottomLeftRadius: mine ? 12 : 3,
+                             background: mine ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.06)",
+                             border: `1px solid ${mine ? "rgba(16,185,129,0.22)" : "rgba(255,255,255,0.08)"}`,
+                           }}
+                         >
+                           {m.media_kind && (
+                             <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: m.body ? 4 : 0 }}>
+                               {MEDIA_LABEL[m.media_kind] ?? "Attachment"}
+                               {m.shared_details && <span style={{ color: "#22c55e" }}> · details</span>}
+                             </div>
+                           )}
+                           {m.body && (
+                             <div style={{ fontSize: 14, color: "var(--text)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                               {m.body}
+                             </div>
+                           )}
+                           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, textAlign: "right" }}>
+                             {new Date(m.sent_at).toLocaleString("en-IN", {
+                               timeZone: "Asia/Kolkata", day: "numeric", month: "short",
+                               hour: "numeric", minute: "2-digit",
+                             })}
+                           </div>
+                         </div>
+                       </div>
+                     );
+                   })}
+                 </div>
+                 <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                   Only this lead&apos;s conversation is stored. The rep&apos;s other chats never reach the CRM.
+                 </div>
+               </>
+             )}
+
              {notes.length > 0 && (
                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: "var(--muted)", textTransform: "uppercase" }}>
                  🎤 Telecaller voice notes
@@ -107,7 +201,7 @@ export function LeadHistory({ contactId, onClose }: { contactId: string; onClose
                  📞 Calls
                </div>
              )}
-             {logs.length === 0 && notes.length === 0 && <div className="empty">No calls or interactions logged yet.</div>}
+             {logs.length === 0 && notes.length === 0 && wa.length === 0 && <div className="empty">No calls or interactions logged yet.</div>}
              {logs.map(l => (
                <div key={l.id} style={{ padding: 16, background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.05)" }}>
                  <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>

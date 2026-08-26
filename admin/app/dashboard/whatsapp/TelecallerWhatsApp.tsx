@@ -85,6 +85,12 @@ function ago(iso: string | null): string {
  * reaches the database, by match_wa_contact on the server. Worth saying out
  * loud to the rep before asking them to scan a QR, which is why it is printed
  * on this card rather than buried in a migration.
+ *
+ * Since migration 0170 a lead conversation is stored IN FULL and readable on
+ * that lead. That makes the disclosure above more important, not less: the
+ * honest sentence is "conversations with your leads are company property,
+ * everything else on your phone is untouched", and a rep is owed both halves
+ * of it before they link a device.
  */
 export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; reps: Rep[] }) {
   const supabase = createClient();
@@ -181,9 +187,13 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
    * devices. This asks the worker to start the session, then re-polls until the
    * rep has scanned it.
    */
-  const openQr = useCallback(async (id: string) => {
-    setQrFor(id); setQr(null); setQrNote("Starting the session…"); setMsg(null);
-    const r = await call("rep_reconnect", id);
+  const openQr = useCallback(async (id: string, fresh = false) => {
+    setQrFor(id); setQr(null); setMsg(null);
+    setQrNote(fresh ? "Forgetting the old login…" : "Starting the session…");
+    // rep_reset forgets the saved credentials so WhatsApp treats this as a
+    // first link — the only way to get a QR back, and the only way it sends the
+    // conversation history. rep_reconnect just resumes and would show nothing.
+    const r = await call(fresh ? "rep_reset" : "rep_reconnect", id);
     if (!r.ok) { setQrNote(null); setQrFor(null); setMsg(String(r.error ?? "Could not reach the worker.")); return; }
     setQrNote("Waiting for WhatsApp to offer a QR…");
   }, [call]);
@@ -262,9 +272,10 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
         messaging buyers by hand exactly as now.
       </p>
       <p className="subtitle" style={{ marginTop: 0, fontSize: 12 }}>
-        Only messages to and from <strong>your own leads</strong> are saved. Anything else on
-        the rep&apos;s phone — family, friends, personal chats — is dropped before it reaches
-        the CRM. Tell them that before they scan.
+        Only messages to and from <strong>your own leads</strong> are saved — and those are saved
+        in full, so you can read the conversation on the lead. Anything else on the rep&apos;s
+        phone — family, friends, personal chats — is dropped before it reaches the CRM.{" "}
+        <strong>Tell them both halves of that before they scan.</strong>
       </p>
 
       {msg && <div className="empty" style={{ color: "#ef4444" }}>{msg}</div>}
@@ -319,8 +330,19 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
                   <td style={{ textAlign: "right" }}><strong>{num(t?.leads_given_details)}</strong></td>
                   <td style={{ textAlign: "right" }}><strong>{num(t?.leads_who_replied)}</strong></td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    {/* Two different things, and conflating them is what made
+                        an already-linked rep unfixable: Show QR resumes, Re-scan
+                        throws the saved login away so WhatsApp starts over and
+                        sends the conversation history. */}
                     <button className="btn-ghost"
-                      onClick={() => void openQr(s.salesperson_id)}>
+                      onClick={() => {
+                        if (health === "connected" &&
+                            !confirm(`Re-link ${repName.get(s.salesperson_id) ?? "this telecaller"}'s WhatsApp?\n\n` +
+                              "They will have to scan a new QR. Do this to import conversations from " +
+                              "before they first connected — WhatsApp only sends the history on a fresh link.\n\n" +
+                              "Messages already saved are kept.")) return;
+                        void openQr(s.salesperson_id, health === "connected");
+                      }}>
                       {health === "connected" ? "Re-scan" : "Show QR"}
                     </button>
                     <button className="btn-ghost" disabled={busy === s.salesperson_id}

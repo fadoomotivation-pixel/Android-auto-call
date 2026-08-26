@@ -19,8 +19,12 @@
 //    family, friends and salary conversations do not enter this database. This
 //    is the rule that makes observing a rep's personal number acceptable at all.
 //
-// 2. Only 300 characters of body are kept. An admin needs to see that project
-//    details went out, not to read a rep's conversations over their shoulder.
+// 2. The message is kept IN FULL — but only ever for a conversation with a
+//    lead, because rule 1 runs first. This was a 300-character preview until
+//    the founder decided the CRM should hold the whole thread: these are the
+//    company's own leads discussing the company's own property, and every CRM
+//    shows the thread with a customer. Rule 1 is what makes that acceptable,
+//    and rule 1 is untouched. The rep is told before they scan.
 //
 // 3. Nothing here can send. There is no outbound path in this function, and the
 //    schema has no queue for one. The worker's send route stays reserved for
@@ -149,7 +153,10 @@ Deno.serve(async (req) => {
       contact_id: contactId,
       wa_message_id: waId,
       direction,
-      body_preview: text.slice(0, 300) || null,
+      // In full. A cap here would silently clip the one message an admin
+      // actually needed to read, and the privacy question is settled upstream
+      // by match_wa_contact, not by how many characters survive.
+      body: text || null,
       has_media: kind !== null,
       media_kind: kind,
       shared_details: direction === "out" && isDetails(text, kind),

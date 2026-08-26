@@ -61,7 +61,7 @@ from t_ctx x, (values
 
 insert into public.wa_observed_messages
   (company_id, salesperson_id, contact_id, wa_message_id, direction,
-   body_preview, has_media, media_kind, shared_details, sent_at)
+   body, has_media, media_kind, shared_details, sent_at)
 select x.company_id, x.salesperson_id, m.lead, m.mid, m.dir,
        m.txt, m.kind is not null, m.kind,
        m.dir = 'out'
@@ -74,7 +74,7 @@ from t_msg m, t_ctx x;
 -- unique index on (salesperson_id, wa_message_id) must absorb it.
 insert into public.wa_observed_messages
   (company_id, salesperson_id, contact_id, wa_message_id, direction,
-   body_preview, has_media, media_kind, shared_details, sent_at)
+   body, has_media, media_kind, shared_details, sent_at)
 select x.company_id, x.salesperson_id, m.lead, m.mid, m.dir,
        m.txt, m.kind is not null, m.kind,
        m.dir = 'out'
