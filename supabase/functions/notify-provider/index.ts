@@ -190,20 +190,41 @@ Deno.serve(async (req) => {
     // exactly what a missing BAILEYS_INGEST_SECRET produces: whatsapp-observe
     // answers 503 on every batch, the queue grows, and the dashboard shows a
     // scanned rep with zero messages. Zero, again, meaning unknown.
-    const stuck = rs.queued > 0
-      ? `${rs.queued} message${rs.queued === 1 ? "" : "s"} waiting — the CRM is not accepting this ` +
-        "worker's reports. Check BAILEYS_INGEST_SECRET matches on both sides."
+    //
+    // SAY WHAT IS OBSERVED, NOT WHAT IS SUSPECTED.
+    //
+    // This used to declare "the CRM is not accepting this worker's reports.
+    // Check BAILEYS_INGEST_SECRET" the moment the queue was non-empty. That was
+    // a guess presented as a diagnosis, and it was wrong: the ingest was
+    // answering 200 the whole time and the queue was simply mid-flush. It cost
+    // a round of debugging aimed at a secret that was never the problem.
+    //
+    // A queue is also normal for a few seconds after a history sync. Only a
+    // queue that is genuinely large is worth mentioning at all, and even then
+    // only as an observation the reader can act on.
+    const stuck = rs.queued > 50
+      ? `${rs.queued} messages queued on the worker and not yet accepted by the CRM. ` +
+        "If this number keeps climbing, check that BAILEYS_INGEST_SECRET is the same " +
+        "on the worker and in Supabase."
       : null;
     // Mirror what the worker says into wa_rep_sessions, so the dashboard table
     // and the Daily Pulse agree without either of them polling the worker.
-    await admin.from("wa_rep_sessions").update({
-      status: rs.status,
-      wa_number: rs.number,
-      last_error: rs.error ?? stuck,
-      // last_seen_at is the INGEST's to set. A status poll proves the worker is
-      // up; it does not prove messages are flowing, and conflating the two is
-      // how "Connected" would start lying.
-    }).eq("salesperson_id", salespersonId);
+    //
+    // TWO WRITERS, ONE FIELD — so neither may stamp on the other.
+    //
+    // The ingest explains why nothing is stored ("seen 7, none were leads").
+    // This poll explains whether the worker is reachable. If a healthy poll
+    // blanket-wrote last_error it would erase the ingest's explanation seconds
+    // after it appeared, and the admin would be back to an empty card with no
+    // reason given. So a poll with nothing to report leaves the field alone and
+    // lets the ingest own it.
+    const patch: Record<string, unknown> = { status: rs.status, wa_number: rs.number };
+    const problem = rs.error ?? stuck;
+    if (problem) patch.last_error = problem;
+    // last_seen_at is the INGEST's to set. A status poll proves the worker is
+    // up; it does not prove messages are flowing, and conflating the two is
+    // how "Connected" would start lying.
+    await admin.from("wa_rep_sessions").update(patch).eq("salesperson_id", salespersonId);
     return json({ ok: true, ...rs, stuck });
   }
 

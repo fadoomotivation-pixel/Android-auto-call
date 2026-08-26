@@ -260,9 +260,35 @@ Deno.serve(async (req) => {
 
   // Liveness, so a session that logged out days ago shows up as stale in
   // v_rep_whatsapp_health instead of looking like a rep who stopped working.
+  //
+  // AND THE TRUTH ABOUT WHY NOTHING IS SHOWING UP.
+  //
+  // This endpoint is the only thing that knows the difference between the two
+  // reasons a rep's lead pages are empty, and until now it kept that to itself:
+  //
+  //   nothing arrived at all           → the worker or the secret is broken
+  //   plenty arrived, none were leads  → working perfectly, nothing to show
+  //
+  // The dashboard was guessing, and guessing wrong: a poll that once saw a
+  // backlog wrote "the CRM is not accepting this worker's reports. Check
+  // BAILEYS_INGEST_SECRET" into last_error, and nothing ever cleared it. That
+  // sentence then survived four successful ingests, sent us to read edge logs,
+  // and named a cause that was not true. A delivered batch now writes its own
+  // outcome over the top.
+  const note = stored === 0 && skipped > 0
+    ? `Watching fine — ${skipped} message${skipped === 1 ? "" : "s"} seen, but none were with a ` +
+      "lead of this company, so nothing was saved. Add the number as a lead to see the chat."
+    : null;
+
   await admin
     .from("wa_rep_sessions")
-    .update({ last_seen_at: new Date().toISOString(), status: "connected" })
+    .update({
+      last_seen_at: new Date().toISOString(),
+      status: "connected",
+      // Cleared on every successful ingest. A warning that outlives its cause
+      // is worse than no warning, because it is read as current.
+      last_error: note,
+    })
     .eq("salesperson_id", salespersonId);
 
   return json({ ok: true, stored, skipped, calls, receipts });
