@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
   // now. Proxied through here for the same reason the founder's QR is: the
   // worker's bearer lives in the vault and must never reach a browser, where it
   // would sit in history and in every screenshot of the page.
-  if (action === "rep_status" || action === "rep_qr" || action === "rep_reconnect") {
+  if (action === "rep_status" || action === "rep_qr" || action === "rep_reconnect" || action === "rep_reset") {
     const salespersonId = String(body?.salesperson_id ?? "");
     if (!salespersonId) return json({ ok: false, error: "salesperson_id required" }, 400);
 
@@ -158,6 +158,25 @@ Deno.serve(async (req) => {
 
     if (action === "rep_reconnect") {
       await w.repConnect(salespersonId);
+      return json({ ok: true, status: "connecting" });
+    }
+    // Wipes the saved login so the next connection is a genuine first link —
+    // the only path to a fresh QR and to WhatsApp's history sync. The stored
+    // messages are NOT touched: this forgets a credential, not a rep's work.
+    if (action === "rep_reset") {
+      const rr = await w.repReset(salespersonId);
+      if (!rr.ok) return json({ ok: false, error: rr.error }, 502);
+      await admin.from("wa_rep_sessions").update({
+        status: "disconnected",
+        wa_number: null,
+        last_error: null,
+        // Cleared, not left stale: until the rep scans again nothing is being
+        // watched, and a leftover timestamp would keep the card saying
+        // "Connected · last heard 40m ago" about a session that no longer has
+        // credentials at all. That exact stale reading is what sent us hunting
+        // for a bug in the ingest.
+        last_seen_at: null,
+      }).eq("salesperson_id", salespersonId);
       return json({ ok: true, status: "connecting" });
     }
     if (action === "rep_qr") {

@@ -151,6 +151,30 @@ export class BaileysProvider implements WhatsAppProvider {
     }).catch(() => {});
   }
 
+  /**
+   * Forget this rep's saved login so the next connection is a REAL first link.
+   *
+   * repConnect reuses the stored credentials, which means it never produces a
+   * QR once a rep has linked — and WhatsApp only pushes conversation history on
+   * a fresh link. Without this there is no way back to either.
+   *
+   * Destructive: the rep has to scan again. The caller confirms first.
+   */
+  async repReset(salespersonId: string): Promise<{ ok: boolean; error: string | null }> {
+    try {
+      const r = await fetch(this.repUrl(salespersonId, "/reset"), {
+        method: "POST", headers: this.headers(),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        return { ok: false, error: d?.error ?? `Worker answered ${r.status}.` };
+      }
+      return { ok: true, error: null };
+    } catch {
+      return { ok: false, error: "Could not reach the worker." };
+    }
+  }
+
   async repStatus(salespersonId: string): Promise<{
     status: string; number: string | null; last_seen: string | null; error: string | null;
     /** Messages the worker has seen but the CRM has not accepted yet. */
