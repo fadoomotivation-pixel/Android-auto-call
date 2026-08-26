@@ -123,14 +123,28 @@ rather than leaving it to whoever wires the CRM up next.
 **Nothing to rescan.** Deploying this does not disturb the founder's WhatsApp:
 same address, same routes, same auth directory.
 
-Environment on that one worker:
+Two variables to **add** on that one worker:
 
 ```
 INGEST_URL            = https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/whatsapp-observe
 BAILEYS_INGEST_SECRET = <same value as step 2>
-AUTH_DIR              = /home/<user>/baileys-auth
-BAILEYS_SECRET        = <the worker's own bearer, as before>
 ```
+
+`BAILEYS_SECRET` is already there and stays as it is.
+
+### DO NOT ADD `AUTH_DIR` TO A WORKER THAT IS ALREADY LOGGED IN
+
+An earlier version of this file listed `AUTH_DIR` here as if it were part of the
+set-up, and the Hostinger instructions in `services/baileys/README.md` tell you
+to set it. Both are for a **fresh** worker.
+
+On the live one it is deliberately unset, so it defaults to `./auth` — which is
+where the founder's WhatsApp login already lives and has survived every restart
+so far. Setting it now points the worker at an empty folder, and the next thing
+that happens is the founder being asked to scan a QR again for no reason.
+
+Left alone, telecaller sessions land in `./auth/rep-<salesperson_id>` and the
+founder's session is not touched at all.
 
 `OBSERVE_SALESPERSON_ID` is **gone.** It was the old one-process-one-rep switch,
 and while it existed the only address an admin could type was the founder's —

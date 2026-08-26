@@ -93,8 +93,12 @@ wiped on every deploy. Here the WhatsApp login survives a restart on its own.
    - `BAILEYS_SECRET` — a long random string. The service refuses to start
      without one, because the worker's URL is public and an unprotected `/send`
      is a "send WhatsApp as this company" button.
-   - `AUTH_DIR` — set to a path **inside the app directory**, e.g.
-     `/home/<user>/domains/<domain>/baileys-auth`. Do not use `/tmp`.
+   - `AUTH_DIR` — **only on a brand-new worker.** Set it to a path inside the
+     app directory, e.g. `/home/<user>/domains/<domain>/baileys-auth`. Never
+     `/tmp`. **On a worker that is already logged in, do not add it and do not
+     change it** — unset, it defaults to `./auth`, which is where the existing
+     session lives. Pointing it somewhere new means an empty folder and a
+     needless QR rescan, and it is not obvious that is what happened.
    - `PORT` — leave it alone; Hostinger sets it and the server reads it.
 6. Note the app's URL (e.g. `https://something.hostingersite.com`) — that is the
    worker address you paste into Call Pro AI.
@@ -119,7 +123,7 @@ Two Hostinger-specific things to watch:
    | Variable | Required | Notes |
    |---|---|---|
    | `BAILEYS_SECRET` | yes | Long random string. The service refuses to start without it — an open `/send` is a "send WhatsApp as this company" button. |
-   | `AUTH_DIR` | recommended | Defaults to `/data/auth` in the image. |
+   | `AUTH_DIR` | recommended | Defaults to `/data/auth` in the image, `./auth` outside it. Set it once, on first deploy. Changing it later abandons the logged-in session and forces a rescan. |
    | `PORT` | no | Defaults to 8080. |
 
 3. **Mount a persistent volume at `/data`.** Without one the session is wiped on
