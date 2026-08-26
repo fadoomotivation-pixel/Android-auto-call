@@ -72,6 +72,10 @@ const INGEST_SECRET = process.env.BAILEYS_INGEST_SECRET || "";
 // request per keystroke-sized message.
 const FLUSH_MS = Number(process.env.FLUSH_MS || 15_000);
 const MAX_BATCH = 200;
+// Room for a history sync, which arrives as one burst rather than a trickle.
+// A year of a working telecaller's lead conversations fits comfortably; the
+// non-lead ones are dropped by the CRM, not here, so this holds the raw feed.
+const MAX_PENDING = Number(process.env.MAX_PENDING || 20_000);
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -152,11 +156,39 @@ async function start(s) {
   // WATCH-ONLY SESSIONS REPORT WHAT THEY SAW. The founder's session does not:
   // it exists to send one message a day and has no business recording anything.
   if (s.observeOnly) {
+    // LIVE TRAFFIC AND REPLAY, BOTH.
+    //
+    // This used to take only type "notify" and drop "append", on the reasoning
+    // that replay would re-post a rep's whole backlog on every restart. That
+    // reasoning was wrong: the CRM upserts on (salesperson_id, wa_message_id)
+    // and ignores duplicates, so a re-post costs one wasted request and changes
+    // no number anywhere. Meanwhile the rule quietly cost the thing the feature
+    // exists for — a rep scans the QR, the admin opens the lead, and the
+    // conversation is empty because it all happened five minutes before the
+    // scan.
     s.sock.ev.on("messages.upsert", (ev) => {
-      // "notify" is live traffic. "append" is history replay on reconnect, and
-      // taking it would re-post a rep's whole backlog on every restart.
-      if (ev?.type !== "notify") return;
-      for (const m of ev.messages ?? []) queueObserved(s, m);
+      for (const m of ev?.messages ?? []) queueObserved(s, m);
+    });
+
+    // THE CONVERSATIONS THAT ALREADY EXISTED.
+    //
+    // messages.upsert only ever fires for messages that arrive while we are
+    // connected. Everything the rep said to a buyer BEFORE linking the device
+    // comes through this event instead — WhatsApp pushes a chunk of history
+    // once, shortly after the QR is scanned. Without it the CRM starts from
+    // zero on a rep who has been selling on WhatsApp for a year, which is
+    // exactly how the first telecaller's lead pages came up blank.
+    //
+    // The privacy gate is unchanged and still runs server-side on every one of
+    // these: history from a non-lead is dropped the same as live traffic from a
+    // non-lead. This imports the rep's conversations WITH THIS COMPANY'S LEADS
+    // and nothing else.
+    s.sock.ev.on("messaging-history.set", (h) => {
+      const msgs = h?.messages ?? [];
+      if (msgs.length) {
+        log.info({ id: s.id, count: msgs.length, progress: h?.progress ?? null }, "history sync");
+      }
+      for (const m of msgs) queueObserved(s, m);
     });
   }
 
@@ -262,8 +294,26 @@ function queueObserved(s, msg) {
     sent_at: new Date(Number(msg?.messageTimestamp ?? Date.now() / 1000) * 1000).toISOString(),
   });
 
-  // Drop the oldest rather than grow without bound if the CRM is unreachable.
-  while (s.pending.length > MAX_BATCH * 5) s.pending.shift();
+  // A bound is still needed — the CRM can be unreachable and this must not grow
+  // until the box runs out of memory. But 1,000 was sized for live traffic only,
+  // and a history sync arrives in one burst of many thousands: at that ceiling
+  // the shift() below would silently throw away the oldest conversations, which
+  // are precisely the ones being imported. Raised, and the drop is now logged
+  // rather than happening in silence.
+  if (s.pending.length > MAX_PENDING) {
+    const dropped = s.pending.length - MAX_PENDING;
+    s.pending.splice(0, dropped);
+    log.warn({ id: s.id, dropped, queued: s.pending.length },
+      "observed buffer full — oldest messages discarded, CRM not keeping up");
+  }
+  // A history burst should not wait the full flush interval before it starts
+  // draining; once there is a whole batch ready, send it now.
+  if (s.pending.length >= MAX_BATCH) {
+    clearTimeout(s.flushTimer);
+    s.flushTimer = null;
+    flushObserved(s).catch((e) => log.error(e));
+    return;
+  }
   if (!s.flushTimer) s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
 }
 
@@ -292,7 +342,15 @@ async function flushObserved(s) {
     });
     if (!r.ok) throw new Error(`ingest ${r.status}`);
     const out = await r.json().catch(() => ({}));
-    log.info({ id: s.id, stored: out.stored, skipped: out.skipped }, "observed batch sent");
+    log.info({ id: s.id, stored: out.stored, skipped: out.skipped, queued: s.pending.length },
+      "observed batch sent");
+    // A backlog drains at its own pace, not the idle heartbeat's. At one batch
+    // per FLUSH_MS a history sync would take half an hour to land, and the
+    // admin watching the lead page would conclude it had not worked.
+    if (s.pending.length > 0) {
+      s.flushTimer = setTimeout(() => flushObserved(s), 500);
+      return;
+    }
   } catch (e) {
     // Put them back at the front; the CRM de-duplicates on WhatsApp's own id,
     // so a replay after a blip cannot double-count a rep's day.
