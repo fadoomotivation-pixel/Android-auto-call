@@ -85,6 +85,12 @@ function ago(iso: string | null): string {
  * reaches the database, by match_wa_contact on the server. Worth saying out
  * loud to the rep before asking them to scan a QR, which is why it is printed
  * on this card rather than buried in a migration.
+ *
+ * Since migration 0170 a lead conversation is stored IN FULL and readable on
+ * that lead. That makes the disclosure above more important, not less: the
+ * honest sentence is "conversations with your leads are company property,
+ * everything else on your phone is untouched", and a rep is owed both halves
+ * of it before they link a device.
  */
 export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; reps: Rep[] }) {
   const supabase = createClient();
@@ -262,9 +268,10 @@ export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; rep
         messaging buyers by hand exactly as now.
       </p>
       <p className="subtitle" style={{ marginTop: 0, fontSize: 12 }}>
-        Only messages to and from <strong>your own leads</strong> are saved. Anything else on
-        the rep&apos;s phone — family, friends, personal chats — is dropped before it reaches
-        the CRM. Tell them that before they scan.
+        Only messages to and from <strong>your own leads</strong> are saved — and those are saved
+        in full, so you can read the conversation on the lead. Anything else on the rep&apos;s
+        phone — family, friends, personal chats — is dropped before it reaches the CRM.{" "}
+        <strong>Tell them both halves of that before they scan.</strong>
       </p>
 
       {msg && <div className="empty" style={{ color: "#ef4444" }}>{msg}</div>}

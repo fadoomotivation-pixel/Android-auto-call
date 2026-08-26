@@ -250,7 +250,14 @@ function queueObserved(s, msg) {
     id,
     peer: jid.split("@")[0],
     direction: msg?.key?.fromMe ? "out" : "in",
-    text: String(textOf(msg) || "").slice(0, 300),
+    // The whole message. The worker is not where privacy is decided — it cannot
+    // even tell whether this number is a lead. The CRM's match_wa_contact drops
+    // every non-lead conversation on arrival, so clipping here would only
+    // truncate the threads that DO get kept.
+    //
+    // Capped well above any real WhatsApp message purely so one pasted novel
+    // cannot blow the batch size; WhatsApp's own limit is around 65k.
+    text: String(textOf(msg) || "").slice(0, 8000),
     media_kind: mediaKindOf(msg),
     sent_at: new Date(Number(msg?.messageTimestamp ?? Date.now() / 1000) * 1000).toISOString(),
   });

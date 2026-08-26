@@ -55,10 +55,17 @@ one ban cannot take the floor down.
 
 **What is never stored.** The CRM drops any message whose other party is not a
 lead in that rep's own company — see `match_wa_contact` in migration 0167. A
-rep's family, friends and salary conversations never reach the database. Only
-300 characters of body are kept, because an admin needs to see that details went
-out, not to read a rep's chats. That filter lives server-side on purpose: it
-must not be something a worker can be reconfigured to skip.
+rep's family, friends and salary conversations never reach the database. That
+filter lives server-side on purpose: it must not be something a worker can be
+reconfigured to skip.
+
+**What IS stored, in full.** Lead conversations are kept whole, message by
+message, and shown on that lead in the CRM. This was a 300-character preview
+until migration 0170; the founder decided the company should be able to read
+the thread with its own buyers, which is what every CRM does with a customer
+email trail. Say this to the rep in plain words before they scan — they are
+entitled to know that a conversation with a lead is company property and a
+conversation with anyone else is not recorded at all.
 
 ### Observer environment
 
