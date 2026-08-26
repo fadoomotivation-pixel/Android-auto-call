@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Rep = { id: string; full_name: string | null };
@@ -93,7 +93,19 @@ function ago(iso: string | null): string {
  * of it before they link a device.
  */
 export function TelecallerWhatsApp({ companyId, reps }: { companyId: string; reps: Rep[] }) {
-  const supabase = createClient();
+  // ONE CLIENT, OR THE QR POLLER EATS THE EDGE FUNCTION ALIVE.
+  //
+  // createClient() builds a NEW object every call, and this used to run on
+  // every render. That identity is a dependency of load() and call(), which are
+  // dependencies of the QR polling effect — so the effect tore down and re-ran
+  // on every render, fired its first tick immediately, called setQr, caused a
+  // render, and went round again. A tight loop of edge-function calls.
+  //
+  // The symptom was the QR appearing for about a second and then the card
+  // showing "Edge Function returned a non-2xx status code": the first tick
+  // worked, the flood that followed did not. It reads like a broken endpoint
+  // and is really a broken dependency array.
+  const supabase = useMemo(() => createClient(), []);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [today, setToday] = useState<Today[]>([]);
   const [loading, setLoading] = useState(true);

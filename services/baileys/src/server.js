@@ -78,6 +78,17 @@ const MAX_BATCH = 200;
 // non-lead ones are dropped by the CRM, not here, so this holds the raw feed.
 const MAX_PENDING = Number(process.env.MAX_PENDING || 20_000);
 
+/**
+ * Bump this whenever src/server.js changes.
+ *
+ * This worker is uploaded by hand, so it is the one component that can silently
+ * be a version behind everything else — and every hour lost on this feature so
+ * far has been spent proving which build was actually running. /health, /status
+ * and every ingest batch now carry it, so the answer is one request away
+ * instead of a guess from behaviour.
+ */
+const WORKER_VERSION = "2026.08.26-4";
+
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
   process.exit(1);
@@ -107,6 +118,14 @@ function newSession(id, salespersonId) {
     // exactly the pattern WhatsApp bans a number for.
     backoffMs: 2_000,
     pending: [],
+    // WhatsApp calls, queued separately from messages and flushed alongside
+    // them. A call is not a message; mixing them would corrupt every message
+    // count the CRM already reports.
+    pendingCalls: [],
+    // Read receipts: which of the BUYER's messages this rep has actually
+    // opened. "Has not replied" and "has not even read it" are different
+    // conversations to have with a telecaller.
+    pendingReceipts: [],
     flushTimer: null,
     state: {
       status: "disconnected", // disconnected | connecting | qr | connected
@@ -203,6 +222,74 @@ async function start(s) {
       }
       for (const m of msgs) queueObserved(s, m);
     });
+
+    // WHATSAPP CALLS — the gap this whole feature was originally asked about.
+    //
+    // "jo lead ko call WhatsApp call se jaa rahi hai uska Daily Pulse me log
+    // nahi aata." Reps in Indian real estate ring buyers on WhatsApp constantly
+    // and none of it reaches the CRM: the SIM call log cannot see it, and until
+    // now neither could this. A rep who spent the morning on WhatsApp calls read
+    // as a rep who made no calls at all.
+    //
+    // Sent as its own array rather than squeezed into messages, because a call
+    // is not a message and pretending otherwise would corrupt every count that
+    // already exists — messages_sent, details, reply speed, all of it.
+    s.sock.ev.on("call", (events) => {
+      for (const c of events ?? []) {
+        const from = String(c?.from ?? c?.chatId ?? "");
+        if (!from.endsWith("@s.whatsapp.net")) continue;
+        if (!c?.id) continue;
+        s.pendingCalls.push({
+          id: String(c.id),
+          peer: from.split("@")[0],
+          // isGroup is filtered above; outbound calls report differently across
+          // WhatsApp versions, so trust the flag when present and default to
+          // inbound, which is the safer thing to under-claim.
+          direction: c?.isFromMe ? "out" : "in",
+          // offer | ringing | accept | reject | timeout — the CRM decides what
+          // "connected" means rather than the worker guessing.
+          status: String(c?.status ?? "offer"),
+          video: !!c?.isVideo,
+          at: new Date(
+            c?.date ? new Date(c.date).getTime() : Date.now(),
+          ).toISOString(),
+        });
+      }
+      if (s.pendingCalls.length && !s.flushTimer) {
+        s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
+      }
+    });
+
+    // DID THE REP EVEN OPEN IT?
+    //
+    // "Buyer waiting 4 hours for a reply" is already the sharpest line in the
+    // Pulse. This splits it into the two cases that deserve different
+    // conversations: the rep read the question and has not answered, or the rep
+    // has not looked at their WhatsApp at all. The first is a priorities
+    // problem, the second is an attendance one.
+    //
+    // Only receipts on messages the rep RECEIVED are interesting here, and only
+    // the read state. Whether the buyer read the rep's message is WhatsApp's
+    // business and not something an admin needs.
+    s.sock.ev.on("messages.update", (updates) => {
+      for (const u of updates ?? []) {
+        const jid = String(u?.key?.remoteJid ?? "");
+        if (!jid.endsWith("@s.whatsapp.net")) continue;
+        if (u?.key?.fromMe) continue;
+        const st = u?.update?.status;
+        // Baileys reports status as a number or a name depending on version.
+        const readish = st === 4 || st === 5 || st === "READ" || st === "PLAYED";
+        if (!readish || !u?.key?.id) continue;
+        s.pendingReceipts.push({
+          id: String(u.key.id),
+          peer: jid.split("@")[0],
+          read_at: new Date().toISOString(),
+        });
+      }
+      if (s.pendingReceipts.length && !s.flushTimer) {
+        s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
+      }
+    });
   }
 
   s.sock.ev.on("connection.update", async (u) => {
@@ -284,6 +371,33 @@ function mediaKindOf(msg) {
   return null;
 }
 
+/**
+ * WHAT the attachment actually was, not just its category.
+ *
+ * "Sent a document" and "sent Dholera-Plot-A-Layout.pdf" are the same event and
+ * very different sentences. The CRM cannot recover the filename later — WhatsApp
+ * does not keep it anywhere the CRM can reach — so if the worker does not pass
+ * it along at the moment it arrives, it is gone.
+ *
+ * Nothing is downloaded. This is the envelope, not the contents: no media bytes
+ * ever leave the rep's phone through this worker.
+ */
+function mediaMetaOf(msg) {
+  const m = msg?.message ?? {};
+  const d = m.documentMessage ?? m.documentWithCaptionMessage?.message?.documentMessage;
+  const node = d ?? m.imageMessage ?? m.videoMessage ?? m.audioMessage ?? m.pttMessage;
+  if (!node) return {};
+  return {
+    file_name: d?.fileName ?? null,
+    mime_type: node.mimetype ?? null,
+    // Reported by WhatsApp as a string on some shapes and a Long on others.
+    file_size: node.fileLength ? Number(node.fileLength) : null,
+    // Voice notes and videos. A 3-second voice note and a 4-minute one are not
+    // the same effort, and the CRM currently cannot tell them apart.
+    duration_seconds: node.seconds ? Number(node.seconds) : null,
+  };
+}
+
 function queueObserved(s, msg) {
   const jid = msg?.key?.remoteJid ?? "";
   // Groups, broadcasts and status updates are not one-to-one lead work.
@@ -295,6 +409,11 @@ function queueObserved(s, msg) {
     id,
     peer: jid.split("@")[0],
     direction: msg?.key?.fromMe ? "out" : "in",
+    // What WhatsApp shows this contact as. Useful when the CRM's name for a
+    // lead is "Facebook Lead 4412" and the buyer's own profile says who they
+    // are. Never used for matching — that is phone-number-only, on purpose.
+    peer_name: msg?.pushName ?? null,
+    ...mediaMetaOf(msg),
     // The whole message. The worker is not where privacy is decided — it cannot
     // even tell whether this number is a lead. The CRM's match_wa_contact drops
     // every non-lead conversation on arrival, so clipping here would only
@@ -332,7 +451,11 @@ function queueObserved(s, msg) {
 
 async function flushObserved(s) {
   s.flushTimer = null;
-  if (s.pending.length === 0) return;
+  // Any of the three is worth a round trip. Calls and receipts arrive without
+  // any message alongside them — a rep who only rang a buyer produces no
+  // messages at all — so gating on s.pending alone would have made WhatsApp
+  // calls invisible for exactly the reps who make the most of them.
+  if (s.pending.length === 0 && s.pendingCalls.length === 0 && s.pendingReceipts.length === 0) return;
   if (!INGEST_URL || !INGEST_SECRET) {
     // Said once per flush rather than silently dropping: a watcher with nowhere
     // to report looks identical to a rep who sent nothing.
@@ -340,6 +463,8 @@ async function flushObserved(s) {
     return;
   }
   const batch = s.pending.splice(0, MAX_BATCH);
+  const calls = s.pendingCalls.splice(0, MAX_BATCH);
+  const receipts = s.pendingReceipts.splice(0, MAX_BATCH);
   try {
     const r = await fetch(INGEST_URL, {
       method: "POST",
@@ -351,12 +476,23 @@ async function flushObserved(s) {
         salesperson_id: s.salespersonId,
         wa_number: s.state.number,
         messages: batch,
+        // Sent whether or not the CRM understands them yet. An older ingest
+        // reads `messages` and ignores the rest, which is the ordering this
+        // deployment needs: the worker is the side that takes a manual upload,
+        // so it ships AHEAD of the CRM and waits to be caught up with.
+        calls,
+        receipts,
+        // So the dashboard can tell which worker build is live without anyone
+        // guessing from behaviour.
+        worker_version: WORKER_VERSION,
       }),
     });
     if (!r.ok) throw new Error(`ingest ${r.status}`);
     const out = await r.json().catch(() => ({}));
-    log.info({ id: s.id, stored: out.stored, skipped: out.skipped, queued: s.pending.length },
-      "observed batch sent");
+    log.info({
+      id: s.id, stored: out.stored, skipped: out.skipped,
+      calls: calls.length, receipts: receipts.length, queued: s.pending.length,
+    }, "observed batch sent");
     // A backlog drains at its own pace, not the idle heartbeat's. At one batch
     // per FLUSH_MS a history sync would take half an hour to land, and the
     // admin watching the lead page would conclude it had not worked.
@@ -368,9 +504,13 @@ async function flushObserved(s) {
     // Put them back at the front; the CRM de-duplicates on WhatsApp's own id,
     // so a replay after a blip cannot double-count a rep's day.
     s.pending.unshift(...batch);
+    s.pendingCalls.unshift(...calls);
+    s.pendingReceipts.unshift(...receipts);
     log.warn({ id: s.id, err: String(e?.message || e), queued: s.pending.length }, "ingest failed, will retry");
   }
-  if (s.pending.length > 0 && !s.flushTimer) s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
+  if ((s.pending.length > 0 || s.pendingCalls.length > 0 || s.pendingReceipts.length > 0) && !s.flushTimer) {
+    s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
+  }
 }
 
 /** WhatsApp wants 91xxxxxxxxxx@s.whatsapp.net; the CRM stores 91xxxxxxxxxx. */
@@ -408,6 +548,9 @@ function statusOf(s) {
     number: s.state.number,
     last_seen: s.state.lastSeen,
     queued: s.pending.length,
+    queued_calls: s.pendingCalls.length,
+    queued_receipts: s.pendingReceipts.length,
+    worker_version: WORKER_VERSION,
     error: s.state.lastError,
   };
 }
@@ -434,7 +577,12 @@ const server = http.createServer(async (req, res) => {
 
   // Unauthenticated, deliberately: a deploy platform needs something to poll to
   // know the container is alive, and it reveals nothing.
-  if (url.pathname === "/health") return send(res, 200, { ok: true, sessions: sessions.size });
+  // Unauthenticated on purpose, and the version belongs here rather than behind
+  // the bearer: "which build is running?" is the first question of every
+  // debugging session and it should not need a secret to answer.
+  if (url.pathname === "/health") {
+    return send(res, 200, { ok: true, sessions: sessions.size, worker_version: WORKER_VERSION });
+  }
 
   const bearer = (req.headers.authorization || "").replace(/^Bearer\s+/i, "")
     // A rep opening the QR page on their phone cannot set a header, so the
@@ -472,6 +620,8 @@ const server = http.createServer(async (req, res) => {
         // Anything it saw but never delivered dies with it; the CRM keeps what
         // it already stored, and the fresh link re-sends the history anyway.
         existing.pending.length = 0;
+        existing.pendingCalls.length = 0;
+        existing.pendingReceipts.length = 0;
         try { existing.sock?.end?.(); } catch { /* already gone */ }
         sessions.delete(salespersonId);
       }

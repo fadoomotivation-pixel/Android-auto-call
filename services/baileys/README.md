@@ -84,6 +84,37 @@ and while it existed the only worker address an admin could type into the CRM
 was the founder's — which is how a founder's WhatsApp ends up being watched
 under a rep's name.
 
+## STOP UPLOADING ZIPS — connect the app to GitHub instead
+
+The live worker is a **"Deployment from source files"**: someone uploads a zip by
+hand, and Hostinger's Redeploy button only ever re-runs *that same zip*. Every
+fix to this file has therefore needed a manual upload, and twice the symptom of
+a stale worker was mistaken for a bug in the CRM.
+
+Hostinger can deploy this directory straight from the repository. Do it once and
+the problem is gone permanently:
+
+1. **hPanel → the site → Deployments → new deployment from GitHub** (rather than
+   from source files), pointing at this repo.
+2. **Application root: `services/baileys`.** This repo is the whole product; the
+   worker is one directory in it.
+3. Node 20+, entry point `app.js` or `npm start`.
+4. Leave the environment variables exactly as they are — they belong to the app,
+   not the deployment, and survive the switch.
+5. `AUTH_DIR` stays **unset**. See the warning below: setting it now would
+   abandon the logged-in sessions.
+
+Until that switch happens, every worker change means a fresh zip. Which build is
+actually running is answerable without guessing:
+
+```
+curl https://<worker>/health
+# {"ok":true,"sessions":2,"worker_version":"2026.08.26-4"}
+```
+
+If `worker_version` is not what the repo says, the box is behind and no amount
+of debugging the CRM will explain the behaviour.
+
 ## Deploy on Hostinger (what we actually use)
 
 Hostinger's **Web Apps** run a real long-lived Node process on a real
