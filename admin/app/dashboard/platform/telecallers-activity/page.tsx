@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { captureLead } from "./actions";
 
 /**
  * Every telecaller on the platform, one screen, worst first.
@@ -112,6 +113,16 @@ type PeerMsg = {
   sent_at: string;
 };
 
+/** The same message, sent to many different people. */
+type Blast = {
+  body: string;
+  sent_to: number;
+  times_sent: number;
+  replies_from: number;
+  first_at: string;
+  last_at: string;
+};
+
 /** Is the linked WhatsApp even the number this rep talks to buyers on? */
 type Fit = {
   leads_called: number;
@@ -173,16 +184,19 @@ export default async function TelecallerActivityPage({
   let msgs: Msg[] = [];
   let unknown: UnknownRow[] = [];
   let fit: Fit | null = null;
+  let blasts: Blast[] = [];
   const mediaUrl = new Map<string, string>();
   if (current) {
-    const [{ data: m }, { data: u }, { data: f }] = await Promise.all([
+    const [{ data: m }, { data: u }, { data: f }, { data: b }] = await Promise.all([
       supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 }),
       supabase.rpc("super_rep_unknown_numbers", { p_rep: current.rep_id, p_days: days }),
       supabase.rpc("super_rep_wa_fit", { p_rep: current.rep_id }),
+      supabase.rpc("super_rep_blasts", { p_rep: current.rep_id, p_days: days }),
     ]);
     msgs = (m ?? []) as Msg[];
     unknown = (u ?? []) as UnknownRow[];
     fit = (Array.isArray(f) ? f[0] : f) as Fit ?? null;
+    blasts = (b ?? []) as Blast[];
 
     // SIGNED, NEVER PUBLIC. wa-media is a private bucket for the same reason
     // call-recordings is: a buyer's voice note is not something that should be
@@ -294,10 +308,35 @@ export default async function TelecallerActivityPage({
           </div>
         </div>
 
+        {/* THE STEP THAT WAS MISSING. Finding these was only ever half of it:
+            the list could point at thirty-four uncaptured relationships and
+            then leave you to retype a phone number into another screen, losing
+            the conversation that made it worth capturing. This creates the
+            lead, assigns it to the rep, and brings the whole history with it. */}
+        <div className="card" style={{ marginTop: 16, padding: 14 }}>
+          <strong>Is this a buyer?</strong>
+          <p className="subtitle" style={{ marginTop: 4, marginBottom: 10 }}>
+            Then capture them. The lead is created in {current.company_name.trim()}, assigned to{" "}
+            {current.rep_name || "this telecaller"}, and <strong>all {thread.length} messages above
+            move onto the lead</strong> — so it opens with its history instead of blank. If they are
+            already a lead, this adopts that one rather than making a second.
+          </p>
+          <form action={captureLead} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <input type="hidden" name="rep" value={current.rep_id} />
+            <input type="hidden" name="peer" value={peer} />
+            <input type="hidden" name="days" value={String(days)} />
+            <input name="name" placeholder="Their name (optional)" defaultValue={named ?? ""}
+              style={{
+                padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.02)", color: "var(--text)", minWidth: 220,
+              }} />
+            <button className="btn" type="submit">Add as lead</button>
+          </form>
+        </div>
+
         <p className="subtitle" style={{ marginTop: 14, fontSize: 12.5 }}>
-          If this reads like a buyer, add them as a lead — right now this relationship exists only
-          on the rep&apos;s phone. If it reads like a colleague or something personal, it is neither
-          and can be ignored.
+          If it reads like a colleague or something personal, it is neither a buyer nor a problem —
+          leave it. This list is a shortlist to judge, not a verdict.
         </p>
       </>
     );
@@ -549,6 +588,53 @@ export default async function TelecallerActivityPage({
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {/* SELLING, OR PASTING?
+            Nobody asks for this and every sales leader wants it. Message counts
+            reward volume, so the rep who pastes one line to eighty numbers
+            outranks the rep having six real conversations — on every other
+            dashboard in this product. Distinct RECIPIENTS is what separates a
+            blast from a rep legibly repeating themselves inside one thread,
+            which is normal. */}
+        {blasts.length > 0 && (
+          <>
+            <h3 style={{ marginTop: 28, marginBottom: 4 }}>📣 The same message, sent to many</h3>
+            <p className="subtitle" style={{ marginTop: 0, marginBottom: 12 }}>
+              Copy-pasted openers over the last {days} day{days === 1 ? "" : "s"}. Repeating an
+              opener is normal selling — <strong>one that nobody ever replies to is not</strong>,
+              and that is the column to read.
+            </p>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Message</th>
+                  <th style={{ textAlign: "right" }}>People</th>
+                  <th style={{ textAlign: "right" }}>Times</th>
+                  <th style={{ textAlign: "right" }}>Replied</th>
+                </tr>
+              </thead>
+              <tbody>
+                {blasts.slice(0, 10).map((b, i) => {
+                  const dead = b.replies_from === 0;
+                  return (
+                    <tr key={i}>
+                      <td style={{ fontSize: 12.5, maxWidth: 420 }}>
+                        {b.body.length > 120 ? `${b.body.slice(0, 119)}…` : b.body}
+                      </td>
+                      <td style={{ textAlign: "right" }}>{b.sent_to}</td>
+                      <td style={{ textAlign: "right" }}>{b.times_sent}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {dead
+                          ? <strong style={{ color: "#ef4444" }}>0</strong>
+                          : <strong style={{ color: "#22c55e" }}>{b.replies_from}</strong>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </>
