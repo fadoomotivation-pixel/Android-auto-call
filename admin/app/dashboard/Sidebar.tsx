@@ -99,6 +99,10 @@ export function Sidebar({
             rotting; this says which person, across every company, and lets you
             read the conversations behind the number. */}
         {isSuper && <NavLink href="/dashboard/platform/telecallers-activity" label="👥 Telecaller activity" />}
+        {/* Leaks says a company is rotting; telecaller activity says which rep;
+            this says which BUYER, by name, when a new site launches somewhere —
+            mined from what they already said on a call or WhatsApp. */}
+        {isSuper && <NavLink href="/dashboard/platform/location-interest" label="📍 Location demand" />}
         {isSuper && <NavLink href="/dashboard/platform" label="🏢 Companies" />}
         {isSuper && <NavLink href="/dashboard/platform/telecallers" label="👥 Telecallers · add user" />}
         {isSuper && <NavLink href="/dashboard/platform/contacts" label="📇 Contacts (all)" />}
