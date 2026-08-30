@@ -87,7 +87,7 @@ const MAX_PENDING = Number(process.env.MAX_PENDING || 20_000);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.08.26-4";
+const WORKER_VERSION = "2026.08.30-5";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -114,6 +114,11 @@ function newSession(id, salespersonId) {
     authDir: salespersonId ? path.join(AUTH_DIR, `rep-${salespersonId}`) : AUTH_DIR,
     sock: null,
     reconnectTimer: null,
+    // start() awaits twice before it assigns s.sock, so two overlapping calls
+    // (the reconnect timer firing while an admin presses Show QR) would both
+    // sail past any "is there a socket already" check and build two. This is
+    // the only thing that makes that impossible.
+    starting: false,
     // Backoff, because a logged-out session reconnecting in a tight loop is
     // exactly the pattern WhatsApp bans a number for.
     backoffMs: 2_000,
@@ -153,12 +158,53 @@ function getSession(id, salespersonId) {
 const MAX_BACKOFF_MS = 5 * 60_000;
 
 async function start(s) {
+  // TWO SOCKETS ON ONE LOGIN IS WHAT 440 MEANS, AND WE WERE CAUSING IT.
+  //
+  // This function used to assign a brand-new socket over s.sock and simply
+  // walk away from the old one — never ended, websocket still open, listeners
+  // still attached. WhatsApp allows a set of credentials exactly one live
+  // connection, so the moment a second appeared it killed one with statusCode
+  // 440 (connectionReplaced). The close handler then scheduled another
+  // start(), which built a third, which produced another 440… a loop the
+  // worker generated itself, one orphan socket per turn, forever.
+  //
+  // Ankita's session sat in that loop with status "connecting" and no QR ever
+  // shown, because a session with credentials on disk RESUMES rather than
+  // pairing — Baileys only emits a qr event when it has nothing to resume
+  // with. So the dashboard's "Waiting for WhatsApp to offer a QR…" was
+  // waiting for an event that could never arrive.
+  if (s.starting) {
+    log.warn({ id: s.id }, "start() already in flight — ignoring the duplicate");
+    return;
+  }
+  s.starting = true;
   clearTimeout(s.reconnectTimer);
+  // Ended BEFORE the awaits below, not after: the old socket must be gone
+  // before the new one authenticates, or the two overlap and 440 fires again.
+  if (s.sock) {
+    try { s.sock.ev.removeAllListeners(); } catch { /* nothing attached */ }
+    try { s.sock.end(); } catch { /* already gone */ }
+    s.sock = null;
+  }
   s.state.status = "connecting";
   s.state.lastError = null;
 
-  const { state: auth, saveCreds } = await useMultiFileAuthState(s.authDir);
-  const { version } = await fetchLatestBaileysVersion();
+  // The two awaits are the only part that can throw before a socket exists, so
+  // they carry the guard: a failure here has to clear `starting`, or the
+  // session is wedged for the life of the process and even Re-scan cannot
+  // revive it.
+  let auth, saveCreds, version;
+  try {
+    ({ state: auth, saveCreds } = await useMultiFileAuthState(s.authDir));
+    ({ version } = await fetchLatestBaileysVersion());
+  } catch (e) {
+    s.starting = false;
+    s.state.status = "disconnected";
+    s.state.lastError = String(e?.message || e);
+    log.error({ id: s.id, err: s.state.lastError }, "could not prepare the connection");
+    throw e;
+  }
+  s.starting = false;
 
   s.sock = makeWASocket({
     version,
@@ -317,15 +363,30 @@ async function start(s) {
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = code === DisconnectReason.loggedOut;
+      // 440. RETRYING IS WHAT CAUSES IT, SO RETRYING CANNOT BE THE ANSWER.
+      //
+      // connectionReplaced means something else took this login — either the
+      // orphan-socket bug above (now fixed), or a human linking the same
+      // WhatsApp somewhere else. In both cases the credentials on disk are
+      // contested, and every reconnect starts the fight again. Worse, a
+      // session with credentials never offers a QR — it resumes — so the loop
+      // is invisible from the dashboard except as "connecting" forever.
+      //
+      // Terminal, like loggedOut: stop, say plainly that a fresh scan is the
+      // only way out, and let a human press Re-scan (which wipes the creds).
+      const replaced = code === DisconnectReason.connectionReplaced;
       s.state.status = "disconnected";
       s.state.lastError = loggedOut
-        ? "WhatsApp logged this session out. Scan the QR again."
-        : `Connection closed (${code ?? "unknown"}). Retrying.`;
-      log.warn({ id: s.id, code, loggedOut }, "connection closed");
+        ? "WhatsApp logged this session out. Press Re-scan and scan the new QR."
+        : replaced
+          ? "This WhatsApp got linked somewhere else, so this login no longer works. " +
+            "Press Re-scan and scan the new QR from the rep's phone."
+          : `Connection closed (${code ?? "unknown"}). Retrying.`;
+      log.warn({ id: s.id, code, loggedOut, replaced }, "connection closed");
 
-      if (loggedOut) {
-        // Reconnecting with dead credentials just fails forever and looks like
-        // a flapping service. Wait for a human to scan.
+      if (loggedOut || replaced) {
+        // Reconnecting with dead or contested credentials just fails forever
+        // and looks like a flapping service. Wait for a human to scan.
         s.state.qrDataUrl = null;
         return;
       }

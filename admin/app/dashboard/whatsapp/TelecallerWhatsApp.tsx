@@ -104,8 +104,8 @@ function ago(iso: string | null): string {
  * of it before they link a device.
  */
 export function TelecallerWhatsApp({
-  companyId, reps, isSuper,
-}: { companyId: string; reps: Rep[]; isSuper: boolean }) {
+  companyId, companyName, reps, isSuper,
+}: { companyId: string; companyName: string | null; reps: Rep[]; isSuper: boolean }) {
   // ONE CLIENT, OR THE QR POLLER EATS THE EDGE FUNCTION ALIVE.
   //
   // createClient() builds a NEW object every call, and this used to run on
@@ -141,6 +141,12 @@ export function TelecallerWhatsApp({
   const [qrFor, setQrFor] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [qrNote, setQrNote] = useState<string | null>(null);
+  // "Waiting for WhatsApp to offer a QR…" could sit there forever, and for a
+  // rep whose saved login is dead it always would: a session WITH credentials
+  // resumes instead of pairing, so no qr event is ever emitted. The panel now
+  // notices it has been waiting too long and offers the one thing that
+  // actually fixes it — throwing the saved login away.
+  const [qrStuck, setQrStuck] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -222,7 +228,7 @@ export function TelecallerWhatsApp({
    * rep has scanned it.
    */
   const openQr = useCallback(async (id: string, fresh = false) => {
-    setQrFor(id); setQr(null); setMsg(null);
+    setQrFor(id); setQr(null); setMsg(null); setQrStuck(false);
     setQrNote(fresh ? "Forgetting the old login…" : "Starting the session…");
     // rep_reset forgets the saved credentials so WhatsApp treats this as a
     // first link — the only way to get a QR back, and the only way it sends the
@@ -238,17 +244,23 @@ export function TelecallerWhatsApp({
   useEffect(() => {
     if (!qrFor) return;
     let alive = true;
+    let waited = 0;
     const tick = async () => {
       const r = await call("rep_qr", qrFor);
       if (!alive) return;
       if (!r.ok) { setQrNote(String(r.error ?? "Could not reach the worker.")); return; }
       if (r.status === "connected") {
         setQr(null); setQrNote("Connected. This rep's WhatsApp is now being watched.");
+        setQrStuck(false);
         void load();
         return;
       }
       setQr((r.qr as string) ?? null);
       setQrNote((r.qr ? null : "Waiting for WhatsApp to offer a QR…"));
+      // Three empty polls — about twenty seconds — is well past the point where
+      // a healthy pairing would have produced a square. Past that it is not
+      // slowness, it is a session resuming a login that no longer works.
+      if (!r.qr) { waited += 1; if (waited >= 3) setQrStuck(true); } else { waited = 0; setQrStuck(false); }
     };
     void tick();
     const h = setInterval(() => void tick(), 6000);
@@ -300,11 +312,23 @@ export function TelecallerWhatsApp({
 
   return (
     <div className="card" style={{ marginTop: 28 }}>
-      <h3 style={{ marginBottom: 4 }}>📱 Telecaller WhatsApp</h3>
+      {/* THE COMPANY, NAMED, ON THE CARD ITSELF.
+          The picker that decides it is at the very top of a long page, so by
+          the time you reach this table you cannot see which company you are
+          looking at — and the telecaller dropdown below only ever lists this
+          company's reps. Two controls, one of them off-screen, and no way to
+          tell they were related. Naming it here is the whole fix. */}
+      <h3 style={{ marginBottom: 4 }}>
+        📱 Telecaller WhatsApp{companyName ? ` · ${companyName.trim()}` : ""}
+      </h3>
       <p className="subtitle" style={{ marginTop: 0 }}>
         Connect a telecaller&apos;s own WhatsApp so their messages to leads show up in the
         Daily Pulse. <strong>It only watches — it never sends.</strong> The rep keeps
         messaging buyers by hand exactly as now.
+        {isSuper && companyName && (
+          <> Only <strong>{companyName.trim()}</strong>&apos;s telecallers appear here — switch
+          company at the top of the page to see another team&apos;s.</>
+        )}
       </p>
       <p className="subtitle" style={{ marginTop: 0, fontSize: 12 }}>
         Only messages to and from <strong>your own leads</strong> are saved — and those are saved
@@ -395,19 +419,29 @@ export function TelecallerWhatsApp({
                       </a>
                     )}
                     {/* Two different things, and conflating them is what made
-                        an already-linked rep unfixable: Show QR resumes, Re-scan
-                        throws the saved login away so WhatsApp starts over and
-                        sends the conversation history. */}
+                        an already-linked rep unfixable: a plain reconnect
+                        RESUMES the saved login, while a reset throws it away so
+                        WhatsApp pairs from scratch and sends the history.
+                        A resume can only ever produce a QR when there is no
+                        saved login to resume — which is why a rep who has
+                        linked before and broken since (dead or taken-over
+                        credentials, and `s.wa_number` is the tell that they
+                        once linked) needs the reset, not the resume. Pressing
+                        "Show QR" for them used to guarantee a QR that never
+                        arrives. */}
                     <button className="btn-ghost"
                       onClick={() => {
+                        const name = repName.get(s.salesperson_id) ?? "this telecaller";
+                        const linkedBefore = Boolean(s.wa_number);
+                        const wipe = health === "connected" || linkedBefore;
                         if (health === "connected" &&
-                            !confirm(`Re-link ${repName.get(s.salesperson_id) ?? "this telecaller"}'s WhatsApp?\n\n` +
+                            !confirm(`Re-link ${name}'s WhatsApp?\n\n` +
                               "They will have to scan a new QR. Do this to import conversations from " +
                               "before they first connected — WhatsApp only sends the history on a fresh link.\n\n" +
                               "Messages already saved are kept.")) return;
-                        void openQr(s.salesperson_id, health === "connected");
+                        void openQr(s.salesperson_id, wipe);
                       }}>
-                      {health === "connected" ? "Re-scan" : "Show QR"}
+                      {health === "connected" ? "Re-scan" : s.wa_number ? "Fix — new QR" : "Show QR"}
                     </button>
                     <button className="btn-ghost" disabled={busy === s.salesperson_id}
                       onClick={() => void remove(s.salesperson_id)}>
@@ -428,15 +462,41 @@ export function TelecallerWhatsApp({
         }}>
           <strong>{repName.get(qrFor) ?? "Telecaller"}</strong>
           <p className="subtitle" style={{ fontSize: 12, marginTop: 4 }}>
-            On the rep&apos;s phone: WhatsApp → Settings → Linked devices → Link a device.
+            On <strong>{repName.get(qrFor) ?? "the rep"}&apos;s own phone</strong>: WhatsApp →
+            Settings → Linked devices → Link a device.
           </p>
           {qr
             /* eslint-disable-next-line @next/next/no-img-element */
             ? <img src={qr} alt="WhatsApp QR" width={280} height={280} style={{ maxWidth: "100%", height: "auto" }} />
             : <div className="empty">{qrNote ?? "…"}</div>}
           {qr && qrNote && <div className="subtitle" style={{ fontSize: 12 }}>{qrNote}</div>}
+          {/* THE WAY OUT OF THE WAIT THAT NEVER ENDS.
+              Without this the panel just sat on "Waiting for WhatsApp to offer
+              a QR…", and for the one case that matters — a saved login that
+              WhatsApp no longer honours — it would have sat there all day,
+              because a session with credentials resumes instead of pairing and
+              never emits a QR at all. */}
+          {qrStuck && !qr && (
+            <div style={{
+              marginTop: 10, padding: 10, borderRadius: 10, textAlign: "left",
+              background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)",
+            }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#f59e0b" }}>
+                No QR is coming.
+              </div>
+              <div style={{ fontSize: 12.5, marginTop: 4 }}>
+                This rep still has an old login saved, so WhatsApp is trying to resume it instead
+                of showing a new code. Throw it away and start over — the rep scans once more and
+                their history comes with it.
+              </div>
+              <button className="btn" style={{ marginTop: 8 }}
+                onClick={() => void openQr(qrFor, true)}>
+                Start fresh — get a new QR
+              </button>
+            </div>
+          )}
           <div style={{ marginTop: 10 }}>
-            <button className="btn-ghost" onClick={() => { setQrFor(null); setQr(null); setQrNote(null); }}>
+            <button className="btn-ghost" onClick={() => { setQrFor(null); setQr(null); setQrNote(null); setQrStuck(false); }}>
               Close
             </button>
           </div>
@@ -446,18 +506,18 @@ export function TelecallerWhatsApp({
       {adding ? (
         <div style={{ marginTop: 16, display: "grid", gap: 10, maxWidth: 460 }}>
           <label>
-            Telecaller
+            Which telecaller{companyName ? ` from ${companyName.trim()}` : ""}?
             <select value={repId} onChange={(e) => setRepId(e.target.value)}>
-              <option value="">Choose…</option>
+              <option value="">Choose a telecaller…</option>
               {unconnected.map((r) => (
                 <option key={r.id} value={r.id}>{r.full_name || "Telecaller"}</option>
               ))}
             </select>
           </label>
           <p className="subtitle" style={{ fontSize: 12, marginTop: 0 }}>
-            That is the only thing to fill in. The QR opens by itself once you save — have
-            the rep scan it from their own phone: <strong>WhatsApp → Settings → Linked
-            devices → Link a device</strong>.
+            That is the only thing to fill in — the company is already set{companyName ? ` to ${companyName.trim()}` : ""}.
+            The QR opens by itself once you save. Have the rep scan it from{" "}
+            <strong>their own phone</strong>: WhatsApp → Settings → Linked devices → Link a device.
           </p>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn" disabled={busy === "add"} onClick={() => void add()}>
