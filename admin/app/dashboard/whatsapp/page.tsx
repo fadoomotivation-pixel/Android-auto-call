@@ -9,6 +9,27 @@ import { TelecallerWhatsApp } from "./TelecallerWhatsApp";
 
 const WEBHOOK_URL = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/whatsapp-webhook";
 
+/**
+ * A labeled break between what a super admin checks every day and what gets
+ * set up once and left alone. Before this the page was one flat stack of six
+ * cards in setup order — Health, Setup, Provider, then the two things anyone
+ * actually opens this page for (watchers, inbox) buried at the bottom. Same
+ * components, same data; grouped so the daily half comes first.
+ */
+function Section({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div style={{ marginTop: 28, marginBottom: 10 }}>
+      <div style={{
+        fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase",
+        color: "var(--muted)", fontWeight: 700,
+      }}>
+        {label}
+      </div>
+      {hint && <p className="subtitle" style={{ margin: "4px 0 0" }}>{hint}</p>}
+    </div>
+  );
+}
+
 type Integration = {
   company_id: string;
   phone_number_id: string;
@@ -69,15 +90,38 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
         Each telecaller sees only their own leads&apos; chats; you see everyone&apos;s.
       </p>
 
+      {isSuper && <CompanyPicker companies={companies} selected={companyId} />}
+
+      {/* ── Daily half: what this page is actually opened for ── */}
+
       {isSuper && (
         <>
-          <CompanyPicker companies={companies} selected={companyId} />
-          {/* Platform-wide, so it sits outside the company picker: changing the
-              selected company must not look like it changes this. */}
+          <Section label="📡 Platform-wide" hint="Sends to founders across every company — not scoped to the company picker above." />
           <PlatformSender companies={companies} />
         </>
       )}
 
+      {companyId && (
+        <>
+          <Section label="👥 Telecaller watchers" hint="Check daily. Each rep's own WhatsApp, read-only — see who's connected and what came in." />
+          <TelecallerWhatsApp companyId={companyId} reps={members ?? []} isSuper={isSuper} />
+        </>
+      )}
+
+      <Section label="💬 Team inbox" hint="Every conversation on the company's own WhatsApp number." />
+      {rows.length === 0 ? (
+        <div className="empty">No WhatsApp messages yet. Connect the number below, then messages appear here.</div>
+      ) : (
+        <WhatsAppInbox
+          initialMessages={rows}
+          companyId={companyId!}
+          leadName={leadName}
+        />
+      )}
+
+      {/* ── Set up once, then leave alone ── */}
+
+      <Section label="⚙️ Business number — set up once" hint="How customers message the company, and whether it's actually working." />
       <WhatsAppHealth isSuper={isSuper} companyId={companyId} />
 
       {companyId ? (
@@ -91,27 +135,10 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
         <div className="empty">{isSuper ? "Create a company first, then connect its WhatsApp here." : "Your account isn't linked to a company yet."}</div>
       )}
 
-      {/* Founder notifications only, and kept in its own card below the Cloud
-          API setup on purpose: the setup above is how CUSTOMERS are messaged,
-          and an experimental provider must never read as a swap for that. */}
+      {/* Founder notifications only, kept below the Cloud API setup on purpose:
+          the setup above is how CUSTOMERS are messaged, and an experimental
+          provider must never read as a swap for that. */}
       {companyId && <ProviderPicker companyId={companyId} companyName={companies.find((c) => c.id === companyId)?.name ?? null} />}
-
-      {/* Directly under the founder's sender, because the pair is easiest to
-          understand together: that number SENDS the pulse, these numbers are
-          only WATCHED. Different tables, different rules, and only the one
-          above can send anything. */}
-      {companyId && <TelecallerWhatsApp companyId={companyId} reps={members ?? []} isSuper={isSuper} />}
-
-      <h3 style={{ marginTop: 28, marginBottom: 16 }}>Team Inbox</h3>
-      {rows.length === 0 ? (
-        <div className="empty">No WhatsApp messages yet. Connect the number above, then messages appear here.</div>
-      ) : (
-        <WhatsAppInbox 
-          initialMessages={rows} 
-          companyId={companyId!} 
-          leadName={leadName} 
-        />
-      )}
     </>
   );
 }
