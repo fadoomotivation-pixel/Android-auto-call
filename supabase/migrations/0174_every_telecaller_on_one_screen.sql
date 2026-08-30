@@ -40,7 +40,7 @@ stable security definer
 set search_path to 'public'
 as $function$
 declare since timestamptz := now() - make_interval(days => greatest(p_days, 1));
-declare since_ist date := (now() - make_interval(days => greatest(p_days, 1)) at time zone 'Asia/Kolkata')::date;
+declare since_ist date := ((now() - make_interval(days => greatest(p_days, 1))) at time zone 'Asia/Kolkata')::date;
 begin
   if not public.is_super_admin() then raise exception 'super admin only'; end if;
 

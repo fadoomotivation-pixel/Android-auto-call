@@ -86,10 +86,13 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
   const visibleReps = companyFilter ? salespeople.filter((s) => s.company_id === companyFilter) : salespeople;
   // Which company an import lands in. A super admin's own company is the
   // Platform HQ oversight tenant — importing there silently bypasses the
-  // per-company dedup for the REAL tenant. So for a super admin this only
-  // pre-fills the modal's required in-modal company picker (from the board's
-  // company filter, if set); a regular admin always imports into their own.
-  const importCompanyId = isSuper ? companyFilter : companyId;
+  // per-company dedup for the REAL tenant. So for a super admin this
+  // pre-fills the modal's required in-modal company picker: from the board's
+  // company filter if one is set, else the first real company, so the modal
+  // never opens dead — with nothing pre-picked the rep dropdown below it has
+  // nothing to show and reads as broken until the admin makes an unrelated
+  // dropdown choice first. A regular admin always imports into their own.
+  const importCompanyId = isSuper ? (companyFilter || companies[0]?.[0] || "") : companyId;
 
   const [tab, setTab] = useState<"unassigned" | "assigned">("unassigned");
   const [agentFilter, setAgentFilter] = useState<string | null>(null);

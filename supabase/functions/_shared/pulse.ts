@@ -99,6 +99,14 @@ export type RepPulse = {
   waWaiting: number;
   /** The one who has waited longest, for the report to name. */
   waWaitingWorst: { name: string; minutes: number } | null;
+  /** Buyer messages today that read as ready-to-move / about-to-walk, from a
+   *  plain keyword read of their own WhatsApp text — migration 0175. Zero for
+   *  a rep with no observer, same as every other WhatsApp field here. */
+  waHot: number;
+  waRisk: number;
+  /** The one risk message worth quoting — a bare count gets skimmed, a quote
+   *  gets a founder to actually call the rep. Only ever a buyer's own words. */
+  waRiskHit: { name: string; text: string } | null;
   /** "none" = no observer set up for this rep, so WhatsApp is simply not part
    *  of their report. "ok" = watching. "stale" = a session exists and has said
    *  nothing for two hours, which means 0 is UNKNOWN, not zero — the same
@@ -222,6 +230,8 @@ export async function buildCompany(
     whatsapp,
     waAwaiting,
     waSessions,
+    signals,
+    signalHits,
   ] = await Promise.all([
     admin.from("profiles")
       .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson"),
@@ -306,6 +316,17 @@ export async function buildCompany(
     // the call numbers making.
     admin.from("wa_rep_sessions").select("salesperson_id, last_seen_at")
       .eq("company_id", companyId),
+    // WHAT THE BUYER ACTUALLY SAID. Migration 0175: every incoming WhatsApp
+    // message is read, once, for plain keyword signals the moment it lands —
+    // "site visit", "book", "token" read as ready to move; "cancel", "other
+    // builder", "too expensive" read as about to walk. Counted per rep per
+    // IST day, same shape as v_rep_whatsapp_daily.
+    admin.from("v_wa_signals_daily").select("salesperson_id, hot_count, risk_count")
+      .eq("company_id", companyId).eq("day_ist", date),
+    // The one message worth quoting, not just counting — rn = 1 is the most
+    // recent hit per rep per signal per day (view does the ranking).
+    admin.from("v_wa_signal_hits").select("salesperson_id, signal, lead_name, body")
+      .eq("company_id", companyId).eq("day_ist", date).eq("rn", 1).eq("signal", "risk"),
   ]);
 
   const repList = reps ?? [];
@@ -324,6 +345,7 @@ export async function buildCompany(
         voiceNotes: [], moves: [], siteVisits: [], visitsArrived: [], followUps: 0, hotLeads: 0,
         waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0, waWatch: "none",
         waReplyMins: null, waWaiting: 0, waWaitingWorst: null,
+        waHot: 0, waRisk: 0, waRiskHit: null,
         topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, bookings: 0,
         revenue: 0, aiUpdates: [], callsTrusted: true, syncedAt: null,
       });
@@ -368,6 +390,21 @@ export async function buildCompany(
     if (!r.waWaitingWorst || mins > r.waWaitingWorst.minutes) {
       r.waWaitingWorst = { name: String(a.lead_name ?? "a buyer"), minutes: mins };
     }
+  }
+
+  // The buyer's own words, read once for plain signals — never a rating of
+  // the rep. A buyer going quiet after "we found another builder" is not
+  // something the rep did; it is something the rep needs to know happened.
+  for (const s of (signals.data ?? []) as Record<string, unknown>[]) {
+    const r = rep(String(s.salesperson_id ?? ""));
+    if (!r) continue;
+    r.waHot = Number(s.hot_count ?? 0);
+    r.waRisk = Number(s.risk_count ?? 0);
+  }
+  for (const h of (signalHits.data ?? []) as Record<string, unknown>[]) {
+    const r = rep(String(h.salesperson_id ?? ""));
+    if (!r) continue;
+    r.waRiskHit = { name: String(h.lead_name ?? "a buyer"), text: String(h.body ?? "") };
   }
 
   // Per rep, per lead: how long they actually talked, and whether they ever
@@ -814,6 +851,38 @@ function waWaitingLine(r: {
   ];
 }
 
+/** A quote that fits one line. Cut, not wrapped — a report line that spills
+ *  onto a second line is the one a founder's thumb skips past. */
+function quote(text: string, max = 70): string {
+  const t = text.trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+}
+
+/**
+ * WHAT THE BUYER ACTUALLY SAID.
+ *
+ * Every other WhatsApp line here counts what the REP did. This is the only
+ * one built from what the BUYER wrote, read once for plain signals — ready to
+ * move, or about to walk. Risk gets the quote because it is the one worth a
+ * founder or rep stopping to read; hot is good news and a bare count says
+ * enough. Never printed as a verdict on the rep — a buyer saying "we found
+ * another builder" is news about the BUYER, not a mark against whoever was
+ * messaging them.
+ */
+function waSignalLine(r: {
+  waHot: number; waRisk: number; waRiskHit: { name: string; text: string } | null;
+}): string[] {
+  const L: string[] = [];
+  if (r.waRisk) {
+    const hit = r.waRiskHit ? ` — ${r.waRiskHit.name}: "${quote(r.waRiskHit.text)}"` : "";
+    L.push(`• ⚠️ ${r.waRisk} buyer message${r.waRisk === 1 ? "" : "s"} sound ready to walk${hit}`);
+  }
+  if (r.waHot) {
+    L.push(`• 🔥 ${r.waHot} buyer message${r.waHot === 1 ? "" : "s"} sound ready to book`);
+  }
+  return L;
+}
+
 /**
  * ZERO IS NOT ZERO WHEN NOBODY IS LISTENING.
  *
@@ -1061,7 +1130,8 @@ export function repText(
     // one case where the message matters most must not be the one that skips it.
     if (!waIdleWarn) {
       const waiting = waWaitingLine(r);
-      if (waiting.length) L.push("", ...waiting);
+      const signal = waSignalLine(r);
+      if (waiting.length || signal.length) L.push("", ...waiting, ...signal);
     }
     L.push("", PULSE_FOOTER);
     return L.join("\n");
@@ -1079,7 +1149,7 @@ export function repText(
   // Printed even when they sent nothing today: a buyer waiting since yesterday
   // is MORE urgent, not less, and gating it on today's activity would hide
   // exactly the rep who has stopped answering.
-  if (!waWarn) L.push(...waWaitingLine(r));
+  if (!waWarn) L.push(...waWaitingLine(r), ...waSignalLine(r));
   const stale = staleNote(r);
   if (stale) L.push(stale);
   const offCrm = showOffCrm ? offCrmLine(r) : null;
@@ -1133,8 +1203,25 @@ export function pulseText(
     waLeads: a.waLeads + r.waLeads,
     waDetails: a.waDetails + r.waDetails,
     waReplies: a.waReplies + r.waReplies,
-  }), { waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0 });
+    waHot: a.waHot + r.waHot,
+  }), { waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0, waHot: 0 });
   if (waTeam.waMessages) L.push(...waLine(waTeam));
+  if (waTeam.waHot) {
+    L.push(`• 🔥 ${waTeam.waHot} buyer message${waTeam.waHot === 1 ? "" : "s"} across the team sound ready to book`);
+  }
+
+  // RISK, NAMED BY REP — the same treatment as buyers still waiting, because
+  // it is the same kind of line: a total tells the founder there is something,
+  // the names make it tonight's first conversation instead of a statistic.
+  const riskReps = p.reps.filter((r) => r.waRisk > 0).sort((a, b) => b.waRisk - a.waRisk);
+  if (riskReps.length) {
+    const total = riskReps.reduce((n, r) => n + r.waRisk, 0);
+    L.push(`• ⚠️ ${total} buyer message${total === 1 ? "" : "s"} across the team sound ready to walk:`);
+    for (const r of riskReps) {
+      const hit = r.waRiskHit ? ` — "${quote(r.waRiskHit.text, 55)}"` : "";
+      L.push(`   ${r.name} — ${r.waRisk}${hit}`);
+    }
+  }
 
   // BUYERS STILL WAITING, NAMED BY REP.
   //
