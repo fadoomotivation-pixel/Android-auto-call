@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { captureLead } from "./actions";
+import { WaThread } from "./WaThread";
 
 /**
  * Every telecaller on the platform, one screen, worst first.
@@ -132,7 +133,6 @@ type Fit = {
   wa_number: string | null;
 };
 
-const IST = { timeZone: "Asia/Kolkata" } as const;
 const RANGES = [1, 7, 30] as const;
 
 function fmtTalk(s: number) {
@@ -252,61 +252,46 @@ export default async function TelecallerActivityPage({
         </p>
         {pErr && <div className="error">{pErr.message}</div>}
 
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {ordered.map((m, i) => {
-              const mine = m.direction === "out";
-              const tone = m.signal === "risk" ? "#ef4444" : m.signal === "hot" ? "#22c55e" : null;
-              return (
-                <div key={i} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
-                  <div style={{
-                    maxWidth: "78%", padding: "8px 12px", borderRadius: 12,
-                    background: tone ? `${tone}1f` : mine ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.06)",
-                    border: `1px solid ${tone ? `${tone}55` : mine ? "rgba(16,185,129,0.22)" : "rgba(255,255,255,0.08)"}`,
-                  }}>
-                    {m.deleted_at && (
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", marginBottom: 3 }}>
-                        🗑 Deleted by the rep
-                      </div>
-                    )}
-                    {m.media_kind && (
-                      <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: m.body ? 4 : 0 }}>
-                        {m.file_name ?? m.media_kind}{m.duration_seconds ? ` · ${m.duration_seconds}s` : ""}
-                      </div>
-                    )}
-                    {m.media_path && purl.get(m.media_path) && (
-                      m.media_kind === "audio"
-                        ? <audio controls preload="none" src={purl.get(m.media_path)} style={{ width: "100%", maxWidth: 260 }} />
-                        : m.media_kind === "image"
-                          // next/image cannot take a short-lived signed URL from a
-                          // private bucket, so a plain img is the right tool here.
-                          // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={purl.get(m.media_path)} alt={m.file_name ?? "image"} style={{ maxWidth: "100%", borderRadius: 8 }} />
-                          : <a href={purl.get(m.media_path)} target="_blank" rel="noreferrer" style={{ fontSize: 12.5 }}>Open file</a>
-                    )}
-                    {m.body && (
-                      <div style={{
-                        fontSize: 14, whiteSpace: "pre-wrap", wordBreak: "break-word",
-                        textDecoration: m.deleted_at ? "line-through" : undefined,
-                      }}>{m.body}</div>
-                    )}
-                    {m.transcript && (
-                      <div style={{ fontSize: 12.5, marginTop: 4, fontStyle: "italic", color: "var(--muted)" }}>
-                        “{m.transcript}”
-                      </div>
-                    )}
-                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, textAlign: "right" }}>
-                      {new Date(m.sent_at).toLocaleString("en-IN", {
-                        ...IST, day: "numeric", month: "short", year: "2-digit",
-                        hour: "numeric", minute: "2-digit",
-                      })}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* WHAT TO TELL THE REP, WITHOUT READING SIX MONTHS FIRST.
+            A super admin opening a thread is deciding one thing: is this deal
+            alive and what should the rep do next. Reading to the bottom to find
+            out who spoke last is the slow way, so the three facts that decide it
+            sit above the conversation — who spoke last, how long ago, and what
+            the buyer's own words were flagged as. */}
+        {(() => {
+          const last = ordered[ordered.length - 1];
+          if (!last) return null;
+          const lastIn = [...ordered].reverse().find((x) => x.direction === "in");
+          const waitingMins = lastIn && last.direction === "in"
+            ? Math.floor((Date.now() - new Date(lastIn.sent_at).getTime()) / 60000)
+            : 0;
+          const hot = ordered.filter((x) => x.signal === "hot").length;
+          const risk = ordered.filter((x) => x.signal === "risk").length;
+          const owed = last.direction === "in";
+          const human = waitingMins >= 1440
+            ? `${Math.floor(waitingMins / 1440)} day${Math.floor(waitingMins / 1440) === 1 ? "" : "s"}`
+            : waitingMins >= 60 ? `${Math.floor(waitingMins / 60)} hr` : `${waitingMins} min`;
+          return (
+            <div className="card" style={{
+              marginBottom: 14, padding: 12,
+              background: owed ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${owed ? "rgba(239,68,68,0.28)" : "var(--border)"}`,
+            }}>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: 13 }}>
+                <span>
+                  {owed
+                    ? <><strong style={{ color: "#ef4444" }}>They spoke last</strong> — waiting {human}</>
+                    : <><strong>Rep spoke last</strong> — ball is with the buyer</>}
+                </span>
+                {hot > 0 && <span style={{ color: "#22c55e" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
+                {risk > 0 && <span style={{ color: "#ef4444" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
+                <span style={{ opacity: 0.7 }}>{ordered.length} messages</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        <WaThread messages={ordered} mediaUrl={purl} whoIn={named ?? peer} whoOut={current.rep_name || "Rep"} />
 
         {/* THE STEP THAT WAS MISSING. Finding these was only ever half of it:
             the list could point at thirty-four uncaptured relationships and
@@ -434,97 +419,10 @@ export default async function TelecallerActivityPage({
                     {head.lead_phone}{head.stage ? ` · ${head.stage}` : ""} · {ordered.length} messages
                   </span>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
-                  {ordered.map((m, i) => {
-                    const mine = m.direction === "out";
-                    // Only ever set on an incoming message (see the classifier
-                    // trigger) — a buyer's own words, flagged, never the rep's.
-                    const signalColor = m.signal === "risk" ? "#ef4444" : m.signal === "hot" ? "#22c55e" : null;
-                    return (
-                      <div key={i} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
-                        <div style={{
-                          maxWidth: "78%", padding: "8px 12px", borderRadius: 12,
-                          background: signalColor ? `${signalColor}1f` : mine ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.06)",
-                          border: `1px solid ${signalColor ? `${signalColor}55` : mine ? "rgba(16,185,129,0.22)" : "rgba(255,255,255,0.08)"}`,
-                        }}>
-                          {m.signal && (
-                            <div style={{ fontSize: 11, fontWeight: 700, color: signalColor ?? undefined, marginBottom: 3 }}>
-                              {m.signal === "risk" ? "⚠️ reads as about to walk" : "🔥 reads as ready to move"}
-                            </div>
-                          )}
-                          {/* DELETED, AND STILL HERE. "Delete for everyone"
-                              used to leave the CRM believing the message still
-                              stood. It is now marked and the original text is
-                              shown — a rep taking back a price or a promise is
-                              the thing this screen exists to make visible. */}
-                          {m.deleted_at && (
-                            <div style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", marginBottom: 3 }}>
-                              🗑 Deleted by the rep · {new Date(m.deleted_at).toLocaleString("en-IN", {
-                                ...IST, day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
-                              })}
-                            </div>
-                          )}
-                          {m.edited_at && !m.deleted_at && (
-                            <div style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", marginBottom: 3 }}>
-                              ✏️ Edited
-                            </div>
-                          )}
-                          {m.media_kind && (
-                            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: m.body ? 4 : 0 }}>
-                              {m.file_name ?? m.media_kind}
-                              {m.duration_seconds ? ` · ${m.duration_seconds}s` : ""}
-                              {m.shared_details && <span style={{ color: "#22c55e" }}> · details</span>}
-                            </div>
-                          )}
-                          {/* The voice note itself, playable. This is how most
-                              Indian real-estate reps actually talk to a buyer,
-                              and it used to be stored as the word "audio". */}
-                          {m.media_path && mediaUrl.get(m.media_path) && (
-                            m.media_kind === "audio" ? (
-                              <audio controls preload="none" src={mediaUrl.get(m.media_path)}
-                                style={{ width: "100%", maxWidth: 260, marginBottom: 4 }} />
-                            ) : m.media_kind === "image" ? (
-                              /* eslint-disable-next-line @next/next/no-img-element */
-                              <img src={mediaUrl.get(m.media_path)} alt={m.file_name ?? "image"}
-                                style={{ maxWidth: "100%", borderRadius: 8, marginBottom: 4 }} />
-                            ) : (
-                              <a href={mediaUrl.get(m.media_path)} target="_blank" rel="noreferrer"
-                                style={{ fontSize: 12.5, display: "inline-block", marginBottom: 4 }}>
-                                Open {m.file_name ?? m.media_kind}
-                              </a>
-                            )
-                          )}
-                          {m.body && (
-                            <div style={{
-                              fontSize: 14, whiteSpace: "pre-wrap", wordBreak: "break-word",
-                              textDecoration: m.deleted_at ? "line-through" : undefined,
-                              opacity: m.deleted_at ? 0.75 : 1,
-                            }}>{m.body}</div>
-                          )}
-                          {/* What it said before it was changed. Only shown when
-                              it actually differs — an edit that fixed a typo
-                              does not need two lines of screen. */}
-                          {m.body_original && m.body_original !== m.body && (
-                            <div style={{ fontSize: 12.5, marginTop: 4, color: "var(--muted)" }}>
-                              Originally: “{m.body_original}”
-                            </div>
-                          )}
-                          {m.transcript && (
-                            <div style={{ fontSize: 12.5, marginTop: 4, fontStyle: "italic", color: "var(--muted)" }}>
-                              “{m.transcript}”
-                            </div>
-                          )}
-                          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, textAlign: "right" }}>
-                            {new Date(m.sent_at).toLocaleString("en-IN", {
-                              ...IST, day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
-                            })}
-                            {/* Unread inbound is a different failure from unanswered. */}
-                            {!mine && !m.read_at && <span style={{ color: "#f59e0b" }}> · unread</span>}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div style={{ marginTop: 12 }}>
+                  <WaThread messages={ordered} mediaUrl={mediaUrl}
+                    whoIn={head.lead_name || head.lead_phone || "Lead"}
+                    whoOut={current.rep_name || "Rep"} />
                 </div>
               </div>
             );
