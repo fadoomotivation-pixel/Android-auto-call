@@ -189,7 +189,10 @@ export default async function TelecallerActivityPage({
   if (current) {
     const [{ data: m }, { data: u }, { data: f }, { data: b }] = await Promise.all([
       supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 }),
-      supabase.rpc("super_rep_unknown_numbers", { p_rep: current.rep_id, p_days: days }),
+      // 0 = every number ever. An uncaptured lead does not stop being
+      // uncaptured because nobody messaged them this week; one that went
+      // quiet in June is more at risk, not less.
+      supabase.rpc("super_rep_unknown_numbers", { p_rep: current.rep_id, p_days: 0 }),
       supabase.rpc("super_rep_wa_fit", { p_rep: current.rep_id }),
       supabase.rpc("super_rep_blasts", { p_rep: current.rep_id, p_days: days }),
     ]);
@@ -439,8 +442,8 @@ export default async function TelecallerActivityPage({
               📵 Numbers that are not leads ({unknown.length})
             </h3>
             <p className="subtitle" style={{ marginTop: 0, marginBottom: 12 }}>
-              This rep messaged these in the last {days} day{days === 1 ? "" : "s"} and none of
-              them is in the CRM. <strong>Sorted by whether the rep also rang them</strong> — a
+              Every number this rep has messaged that is not in the CRM — all of them, not just
+              this week. <strong>Sorted by whether the rep also rang them</strong> — a
               number they both called and messaged is a real working relationship, and its absence
               from the CRM means the company would lose it the day that rep leaves.
             </p>
