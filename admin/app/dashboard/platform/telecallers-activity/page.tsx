@@ -70,6 +70,18 @@ type Msg = {
   signal: "hot" | "risk" | null;
 };
 
+/** A number this rep talked to that is not a lead in their company. Counts and
+ *  identity only — never the message bodies, which stay on the lead pages. */
+type UnknownRow = {
+  peer_phone: string;
+  peer_name: string | null;
+  messages: number;
+  they_sent: number;
+  rep_sent: number;
+  first_seen: string;
+  last_seen: string;
+};
+
 const IST = { timeZone: "Asia/Kolkata" } as const;
 const RANGES = [1, 7, 30] as const;
 
@@ -119,9 +131,14 @@ export default async function TelecallerActivityPage({
   const current = rep ? rows.find((r) => r.rep_id === rep) ?? null : null;
 
   let msgs: Msg[] = [];
+  let unknown: UnknownRow[] = [];
   if (current) {
-    const { data: m } = await supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 });
+    const [{ data: m }, { data: u }] = await Promise.all([
+      supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 }),
+      supabase.rpc("super_rep_unknown_numbers", { p_rep: current.rep_id, p_days: days }),
+    ]);
     msgs = (m ?? []) as Msg[];
+    unknown = (u ?? []) as UnknownRow[];
   }
 
   const qs = (o: { rep?: string; days?: number }) => {
@@ -228,9 +245,59 @@ export default async function TelecallerActivityPage({
             );
           })
         )}
-        <p className="subtitle" style={{ fontSize: 12.5 }}>
-          Only conversations with this company&apos;s leads exist. The rep&apos;s personal chats are
-          never stored and cannot be shown here.
+        {/* THE NUMBERS BEHIND THE ZERO.
+            "Saw 16 messages, none with a lead" was the end of the road — true,
+            and useless. These are the numbers themselves. A buyer messaging a
+            rep on a number nobody put in the CRM is a lead this company paid
+            to generate and is now losing, and it was invisible until here. */}
+        {unknown.length > 0 && (
+          <>
+            <h3 style={{ marginTop: 28, marginBottom: 4 }}>
+              📵 Numbers that are not leads ({unknown.length})
+            </h3>
+            <p className="subtitle" style={{ marginTop: 0, marginBottom: 12 }}>
+              This rep messaged these in the last {days} day{days === 1 ? "" : "s"} and none of
+              them is in the CRM. The busy ones are worth a look — a real buyer here is a lead
+              nobody captured.
+            </p>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Number</th>
+                  <th>WhatsApp name</th>
+                  <th style={{ textAlign: "right" }}>Messages</th>
+                  <th style={{ textAlign: "right" }}>They sent</th>
+                  <th>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unknown.map((u) => (
+                  <tr key={u.peer_phone}>
+                    <td style={{ fontFamily: "monospace" }}>{u.peer_phone}</td>
+                    <td style={{ fontSize: 13 }}>
+                      {u.peer_name || <span style={{ opacity: 0.4 }}>—</span>}
+                    </td>
+                    <td style={{ textAlign: "right" }}>{u.messages}</td>
+                    {/* The half that matters. A number the rep messaged and that
+                        never replied is noise; one that wrote BACK is a person. */}
+                    <td style={{ textAlign: "right" }}>
+                      {u.they_sent > 0
+                        ? <strong style={{ color: "#22c55e" }}>{u.they_sent}</strong>
+                        : <span style={{ opacity: 0.4 }}>0</span>}
+                    </td>
+                    <td className="subtitle" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                      {ago(u.last_seen)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        <p className="subtitle" style={{ marginTop: 16, fontSize: 12.5 }}>
+          Conversations are shown for this company&apos;s leads. For any other number only the
+          count and the name above are kept — never the messages.
         </p>
       </>
     );

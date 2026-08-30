@@ -87,7 +87,7 @@ const MAX_PENDING = Number(process.env.MAX_PENDING || 20_000);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.08.30-5";
+const WORKER_VERSION = "2026.08.30-6";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -226,7 +226,27 @@ async function start(s) {
     // no business pulling anybody's history.
     syncFullHistory: s.observeOnly,
     logger: pino({ level: "silent" }),
-    browser: ["Call Pro AI", "Chrome", "1.0.0"],
+    // THE HALF OF syncFullHistory NOBODY TELLS YOU ABOUT.
+    //
+    // syncFullHistory: true is necessary and NOT sufficient. WhatsApp decides
+    // how much history to push from the client identity in this very field —
+    // it sends the full archive only to something it believes is a DESKTOP
+    // app, and a phone-or-unknown client gets a token slice of recent chats.
+    // "Call Pro AI / Chrome / 1.0.0" is not a client WhatsApp recognises, so
+    // for every rep linked so far it took the second path: the sync fired,
+    // messaging-history.set arrived, the logs said "history sync" — and it
+    // carried almost nothing. That is why re-scanning never produced Ankita's
+    // conversations no matter how many times she was asked to do it. The
+    // scanning was never the problem.
+    //
+    // ["Mac OS", "Desktop", …] is the identity that gets the archive. Written
+    // as a literal rather than Baileys' Browsers.macOS() helper so it is
+    // obvious at a glance what is being claimed and why it must not be
+    // "improved" back into a friendly product name.
+    //
+    // Senders do not need it: the founder session pushes one message a day and
+    // has no business pulling anyone's history.
+    browser: s.observeOnly ? ["Mac OS", "Desktop", "14.4.1"] : ["Call Pro AI", "Chrome", "1.0.0"],
   });
 
   s.sock.ev.on("creds.update", saveCreds);
@@ -466,9 +486,30 @@ function queueObserved(s, msg) {
   const id = msg?.key?.id;
   if (!id) return;
 
+  const peer = jid.split("@")[0];
+  const text = String(textOf(msg) || "");
+  const kind = mediaKindOf(msg);
+
+  // THE REP TALKING TO THEMSELVES IS NOT LEAD WORK.
+  //
+  // WhatsApp's "Message yourself" chat, and a run of contentless protocol
+  // messages WhatsApp addresses to your own JID during a sync, both arrive
+  // here with remoteJid set to the rep's OWN number. Ankita's entire observed
+  // history was sixteen of these — every one addressed to 919310012981, her
+  // own number, with an empty body — which the dashboard then reported as
+  // "16 messages seen, none with a lead". Technically true and completely
+  // misleading: there was nothing there to match in the first place.
+  const own = String(s.sock?.user?.id ?? "").split(":")[0].split("@")[0];
+  if (own && peer === own) return;
+
+  // An empty shell is not a message. No text, no attachment — nothing a human
+  // sent and nothing anyone could read on a lead page. Counting them makes the
+  // "seen" figure a measure of protocol chatter rather than of the rep's work.
+  if (!text.trim() && !kind) return;
+
   s.pending.push({
     id,
-    peer: jid.split("@")[0],
+    peer,
     direction: msg?.key?.fromMe ? "out" : "in",
     // What WhatsApp shows this contact as. Useful when the CRM's name for a
     // lead is "Facebook Lead 4412" and the buyer's own profile says who they
@@ -482,8 +523,8 @@ function queueObserved(s, msg) {
     //
     // Capped well above any real WhatsApp message purely so one pasted novel
     // cannot blow the batch size; WhatsApp's own limit is around 65k.
-    text: String(textOf(msg) || "").slice(0, 8000),
-    media_kind: mediaKindOf(msg),
+    text: text.slice(0, 8000),
+    media_kind: kind,
     sent_at: new Date(Number(msg?.messageTimestamp ?? Date.now() / 1000) * 1000).toISOString(),
   });
 
