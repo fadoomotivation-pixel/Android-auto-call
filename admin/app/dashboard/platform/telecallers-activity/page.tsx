@@ -46,6 +46,13 @@ type Row = {
   wa_watch: "none" | "ok" | "stale";
   wa_offbook: number;
   silent: boolean;
+  /** Buyer said something that reads as ready-to-move or about-to-walk, from
+   *  a plain keyword read of their own WhatsApp text — see migration 0175.
+   *  Not a rating of the rep; a buyer going quiet after "we found another
+   *  builder" is not the rep's doing, but it is the rep's job to know it
+   *  happened, and this is how a super admin knows too. */
+  wa_hot: number;
+  wa_risk: number;
 };
 
 type Msg = {
@@ -60,6 +67,7 @@ type Msg = {
   shared_details: boolean;
   read_at: string | null;
   sent_at: string;
+  signal: "hot" | "risk" | null;
 };
 
 const IST = { timeZone: "Asia/Kolkata" } as const;
@@ -141,6 +149,20 @@ export default async function TelecallerActivityPage({
           {" · "}{current.calls} calls, {fmtTalk(current.talk_seconds)} talk, {current.wa_messages} WhatsApp
           messages in {days} day{days === 1 ? "" : "s"}
         </p>
+        {(current.wa_hot > 0 || current.wa_risk > 0) && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            {current.wa_risk > 0 && (
+              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, background: "rgba(239,68,68,0.14)", color: "#ef4444" }}>
+                ⚠️ {current.wa_risk} buyer message{current.wa_risk === 1 ? "" : "s"} read as about to walk
+              </span>
+            )}
+            {current.wa_hot > 0 && (
+              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, background: "rgba(34,197,94,0.14)", color: "#22c55e" }}>
+                🔥 {current.wa_hot} buyer message{current.wa_hot === 1 ? "" : "s"} read as ready to move
+              </span>
+            )}
+          </div>
+        )}
 
         {byLead.size === 0 ? (
           <div className="empty">
@@ -166,13 +188,21 @@ export default async function TelecallerActivityPage({
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
                   {ordered.map((m, i) => {
                     const mine = m.direction === "out";
+                    // Only ever set on an incoming message (see the classifier
+                    // trigger) — a buyer's own words, flagged, never the rep's.
+                    const signalColor = m.signal === "risk" ? "#ef4444" : m.signal === "hot" ? "#22c55e" : null;
                     return (
                       <div key={i} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
                         <div style={{
                           maxWidth: "78%", padding: "8px 12px", borderRadius: 12,
-                          background: mine ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.06)",
-                          border: `1px solid ${mine ? "rgba(16,185,129,0.22)" : "rgba(255,255,255,0.08)"}`,
+                          background: signalColor ? `${signalColor}1f` : mine ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.06)",
+                          border: `1px solid ${signalColor ? `${signalColor}55` : mine ? "rgba(16,185,129,0.22)" : "rgba(255,255,255,0.08)"}`,
                         }}>
+                          {m.signal && (
+                            <div style={{ fontSize: 11, fontWeight: 700, color: signalColor ?? undefined, marginBottom: 3 }}>
+                              {m.signal === "risk" ? "⚠️ reads as about to walk" : "🔥 reads as ready to move"}
+                            </div>
+                          )}
                           {m.media_kind && (
                             <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: m.body ? 4 : 0 }}>
                               {m.file_name ?? m.media_kind}
@@ -259,6 +289,7 @@ export default async function TelecallerActivityPage({
             <th style={{ textAlign: "right" }}>WA msgs</th>
             <th style={{ textAlign: "right" }}>Got details ★</th>
             <th style={{ textAlign: "right" }}>Replied ★</th>
+            <th>Signals</th>
             <th>WhatsApp</th>
             <th>Last call</th>
           </tr>
@@ -298,6 +329,15 @@ export default async function TelecallerActivityPage({
               <td style={{ textAlign: "right" }}>
                 {r.wa_watch === "ok" ? <strong>{r.wa_replies}</strong> : <span style={{ opacity: 0.3 }}>—</span>}
               </td>
+              <td style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                {r.wa_risk > 0 && (
+                  <div style={{ color: "#ef4444", fontWeight: 700 }}>⚠️ {r.wa_risk} about to walk</div>
+                )}
+                {r.wa_hot > 0 && (
+                  <div style={{ color: "#22c55e", fontWeight: 700 }}>🔥 {r.wa_hot} ready to move</div>
+                )}
+                {r.wa_risk === 0 && r.wa_hot === 0 && <span style={{ opacity: 0.3 }}>—</span>}
+              </td>
               <td style={{ fontSize: 12.5 }}>
                 <span style={{ color: WATCH_TONE[r.wa_watch] }}>{WATCH_LABEL[r.wa_watch]}</span>
                 {r.wa_watch === "ok" && r.wa_messages === 0 && r.wa_offbook > 0 && (
@@ -323,6 +363,11 @@ export default async function TelecallerActivityPage({
       <p className="subtitle" style={{ fontSize: 12.5 }}>
         A dash means <strong>not measured</strong>, not zero: that rep&apos;s WhatsApp is not
         connected, so their WhatsApp half is unknown and they should not be judged on it.
+      </p>
+      <p className="subtitle" style={{ fontSize: 12.5 }}>
+        <strong>Signals</strong> read the buyer&apos;s own words for plain phrases — price/booking/site
+        visit questions read as ready to move, cancel/competitor/too-expensive read as about to
+        walk. It is a keyword read, not a verdict on the rep: open a name to see the actual message.
       </p>
     </>
   );
