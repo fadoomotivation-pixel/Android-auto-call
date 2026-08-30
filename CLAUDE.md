@@ -91,6 +91,16 @@ migrations in `supabase/migrations/`).
   foreground — so the lead's Update button shakes (`Modifier.nudgeShake`) and a
   bar sits above the bottom nav until the call has an outcome. Cloud calls keep
   the instant sheet. Don't "fix" the shake by restoring the modal.
+- **ALWAYS LEAVE AN OPEN PR. Pushing to the branch ships nothing.** Vercel
+  deploys to **production only from `main`**, and Supabase edge functions only
+  redeploy on a push to `main` — a branch push gets a Preview URL nobody uses.
+  So work is not delivered until there is a PR the founder can press Merge on.
+  After every push, check whether the branch's last PR was already merged
+  (it usually was) and **open a NEW one** if so; never assume commits pushed
+  after a merge are reachable. Migrations applied by hand to production are the
+  exception — those are already live — but the admin UI and edge functions that
+  read them are not, and shipping one without the other is what makes a
+  half-working feature look broken.
 - GitHub scheduled/dispatch workflows fire only from the repo's **default
   branch**, which is `claude/sales-app-auto-call-logging-Bb7e6` (NOT main).
   `amr-transcode.yml` must exist there; canonical copy lives on main.
