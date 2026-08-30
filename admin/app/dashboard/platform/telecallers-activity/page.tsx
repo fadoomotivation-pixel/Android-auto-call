@@ -88,8 +88,20 @@ type UnknownRow = {
   messages: number;
   they_sent: number;
   rep_sent: number;
+  /** Times this rep also DIALLED this number. The strongest predictor that an
+   *  unknown number is a real working relationship rather than a wrong dial. */
+  calls: number;
   first_seen: string;
   last_seen: string;
+};
+
+/** Is the linked WhatsApp even the number this rep talks to buyers on? */
+type Fit = {
+  leads_called: number;
+  numbers_whatsapped: number;
+  overlap: number;
+  called_and_messaged: number;
+  wa_number: string | null;
 };
 
 const IST = { timeZone: "Asia/Kolkata" } as const;
@@ -142,14 +154,17 @@ export default async function TelecallerActivityPage({
 
   let msgs: Msg[] = [];
   let unknown: UnknownRow[] = [];
+  let fit: Fit | null = null;
   const mediaUrl = new Map<string, string>();
   if (current) {
-    const [{ data: m }, { data: u }] = await Promise.all([
+    const [{ data: m }, { data: u }, { data: f }] = await Promise.all([
       supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 }),
       supabase.rpc("super_rep_unknown_numbers", { p_rep: current.rep_id, p_days: days }),
+      supabase.rpc("super_rep_wa_fit", { p_rep: current.rep_id }),
     ]);
     msgs = (m ?? []) as Msg[];
     unknown = (u ?? []) as UnknownRow[];
+    fit = (Array.isArray(f) ? f[0] : f) as Fit ?? null;
 
     // SIGNED, NEVER PUBLIC. wa-media is a private bucket for the same reason
     // call-recordings is: a buyer's voice note is not something that should be
@@ -190,6 +205,45 @@ export default async function TelecallerActivityPage({
           {" · "}{current.calls} calls, {fmtTalk(current.talk_seconds)} talk, {current.wa_messages} WhatsApp
           messages in {days} day{days === 1 ? "" : "s"}
         </p>
+        {/* IS THIS EVEN THE RIGHT WHATSAPP?
+            The question the product could not ask, and the reason a green
+            "Connected" card sat next to empty lead pages for days. A rep whose
+            linked number shares almost nothing with the leads they dial is not
+            a rep doing nothing — they are on a different number. Re-scanning a
+            QR cannot fix that, and until this line existed, re-scanning was the
+            only thing anyone knew to try. */}
+        {fit && fit.numbers_whatsapped > 0 && fit.leads_called >= 20 &&
+          fit.overlap * 20 < fit.leads_called && (
+          <div className="card" style={{
+            marginBottom: 16, padding: 14,
+            background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.35)",
+          }}>
+            <strong style={{ color: "#f59e0b" }}>
+              ⚠️ This WhatsApp is probably not the number they use for leads
+            </strong>
+            <p className="subtitle" style={{ marginTop: 6, marginBottom: 8 }}>
+              They have called <strong>{fit.leads_called}</strong> of this company&apos;s leads, and
+              talk to <strong>{fit.numbers_whatsapped}</strong> people on the linked WhatsApp
+              {fit.wa_number ? ` (${fit.wa_number})` : ""} — but only <strong>{fit.overlap}</strong>
+              {" "}of those are leads. Reps here often carry two numbers: the company SIM they dial
+              from, and a WhatsApp Business on their own handset. Ask which number they message
+              buyers on, and link that one.
+            </p>
+            <p className="subtitle" style={{ margin: 0, fontSize: 12.5 }}>
+              Nothing is broken — the matching, the sync and the number format were all checked
+              against this data. Re-scanning will not change this.
+            </p>
+            {fit.called_and_messaged > 0 && (
+              <p style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}>
+                💡 <strong>{fit.called_and_messaged}</strong> people here were both{" "}
+                <strong>called and messaged</strong> by this rep and are <strong>not in the CRM
+                at all</strong> — the likeliest uncaptured leads on the platform. They are at the
+                top of the table below.
+              </p>
+            )}
+          </div>
+        )}
+
         {(current.wa_hot > 0 || current.wa_risk > 0) && (
           <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
             {current.wa_risk > 0 && (
@@ -334,14 +388,16 @@ export default async function TelecallerActivityPage({
             </h3>
             <p className="subtitle" style={{ marginTop: 0, marginBottom: 12 }}>
               This rep messaged these in the last {days} day{days === 1 ? "" : "s"} and none of
-              them is in the CRM. The busy ones are worth a look — a real buyer here is a lead
-              nobody captured.
+              them is in the CRM. <strong>Sorted by whether the rep also rang them</strong> — a
+              number they both called and messaged is a real working relationship, and its absence
+              from the CRM means the company would lose it the day that rep leaves.
             </p>
             <table className="table">
               <thead>
                 <tr>
                   <th>Number</th>
                   <th>WhatsApp name</th>
+                  <th style={{ textAlign: "right" }}>Also called</th>
                   <th style={{ textAlign: "right" }}>Messages</th>
                   <th style={{ textAlign: "right" }}>They sent</th>
                   <th>Last seen</th>
@@ -353,6 +409,13 @@ export default async function TelecallerActivityPage({
                     <td style={{ fontFamily: "monospace" }}>{u.peer_phone}</td>
                     <td style={{ fontSize: 13 }}>
                       {u.peer_name || <span style={{ opacity: 0.4 }}>—</span>}
+                    </td>
+                    {/* Rang AND messaged, and still not in the CRM. That is a
+                        working relationship living on one person's phone. */}
+                    <td style={{ textAlign: "right" }}>
+                      {u.calls > 0
+                        ? <strong style={{ color: "#f59e0b" }}>{u.calls}×</strong>
+                        : <span style={{ opacity: 0.3 }}>—</span>}
                     </td>
                     <td style={{ textAlign: "right" }}>{u.messages}</td>
                     {/* The half that matters. A number the rep messaged and that
