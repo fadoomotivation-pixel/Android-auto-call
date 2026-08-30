@@ -68,6 +68,16 @@ type Msg = {
   read_at: string | null;
   sent_at: string;
   signal: "hot" | "risk" | null;
+  /** Set when the rep used "delete for everyone". The message is kept — that is
+   *  the point — and body_original holds what it said. */
+  deleted_at: string | null;
+  edited_at: string | null;
+  body_original: string | null;
+  /** Path in the private wa-media bucket, or null when the file was not
+   *  captured. Never rendered directly — a signed URL is minted per view. */
+  media_path: string | null;
+  transcript: string | null;
+  duration_seconds: number | null;
 };
 
 /** A number this rep talked to that is not a lead in their company. Counts and
@@ -132,6 +142,7 @@ export default async function TelecallerActivityPage({
 
   let msgs: Msg[] = [];
   let unknown: UnknownRow[] = [];
+  const mediaUrl = new Map<string, string>();
   if (current) {
     const [{ data: m }, { data: u }] = await Promise.all([
       supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 }),
@@ -139,6 +150,19 @@ export default async function TelecallerActivityPage({
     ]);
     msgs = (m ?? []) as Msg[];
     unknown = (u ?? []) as UnknownRow[];
+
+    // SIGNED, NEVER PUBLIC. wa-media is a private bucket for the same reason
+    // call-recordings is: a buyer's voice note is not something that should be
+    // reachable by anyone who guesses a path. One short-lived link per file,
+    // minted here — after the RPC above has already enforced super-admin.
+    const paths = msgs.map((x) => x.media_path).filter((p): p is string => Boolean(p));
+    if (paths.length) {
+      const { data: signed } = await supabase.storage
+        .from("wa-media").createSignedUrls(paths, 60 * 60);
+      for (const s of signed ?? []) {
+        if (s.path && s.signedUrl) mediaUrl.set(s.path, s.signedUrl);
+      }
+    }
   }
 
   const qs = (o: { rep?: string; days?: number }) => {
@@ -220,14 +244,67 @@ export default async function TelecallerActivityPage({
                               {m.signal === "risk" ? "⚠️ reads as about to walk" : "🔥 reads as ready to move"}
                             </div>
                           )}
+                          {/* DELETED, AND STILL HERE. "Delete for everyone"
+                              used to leave the CRM believing the message still
+                              stood. It is now marked and the original text is
+                              shown — a rep taking back a price or a promise is
+                              the thing this screen exists to make visible. */}
+                          {m.deleted_at && (
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", marginBottom: 3 }}>
+                              🗑 Deleted by the rep · {new Date(m.deleted_at).toLocaleString("en-IN", {
+                                ...IST, day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
+                              })}
+                            </div>
+                          )}
+                          {m.edited_at && !m.deleted_at && (
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", marginBottom: 3 }}>
+                              ✏️ Edited
+                            </div>
+                          )}
                           {m.media_kind && (
                             <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: m.body ? 4 : 0 }}>
                               {m.file_name ?? m.media_kind}
+                              {m.duration_seconds ? ` · ${m.duration_seconds}s` : ""}
                               {m.shared_details && <span style={{ color: "#22c55e" }}> · details</span>}
                             </div>
                           )}
+                          {/* The voice note itself, playable. This is how most
+                              Indian real-estate reps actually talk to a buyer,
+                              and it used to be stored as the word "audio". */}
+                          {m.media_path && mediaUrl.get(m.media_path) && (
+                            m.media_kind === "audio" ? (
+                              <audio controls preload="none" src={mediaUrl.get(m.media_path)}
+                                style={{ width: "100%", maxWidth: 260, marginBottom: 4 }} />
+                            ) : m.media_kind === "image" ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img src={mediaUrl.get(m.media_path)} alt={m.file_name ?? "image"}
+                                style={{ maxWidth: "100%", borderRadius: 8, marginBottom: 4 }} />
+                            ) : (
+                              <a href={mediaUrl.get(m.media_path)} target="_blank" rel="noreferrer"
+                                style={{ fontSize: 12.5, display: "inline-block", marginBottom: 4 }}>
+                                Open {m.file_name ?? m.media_kind}
+                              </a>
+                            )
+                          )}
                           {m.body && (
-                            <div style={{ fontSize: 14, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.body}</div>
+                            <div style={{
+                              fontSize: 14, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                              textDecoration: m.deleted_at ? "line-through" : undefined,
+                              opacity: m.deleted_at ? 0.75 : 1,
+                            }}>{m.body}</div>
+                          )}
+                          {/* What it said before it was changed. Only shown when
+                              it actually differs — an edit that fixed a typo
+                              does not need two lines of screen. */}
+                          {m.body_original && m.body_original !== m.body && (
+                            <div style={{ fontSize: 12.5, marginTop: 4, color: "var(--muted)" }}>
+                              Originally: “{m.body_original}”
+                            </div>
+                          )}
+                          {m.transcript && (
+                            <div style={{ fontSize: 12.5, marginTop: 4, fontStyle: "italic", color: "var(--muted)" }}>
+                              “{m.transcript}”
+                            </div>
                           )}
                           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, textAlign: "right" }}>
                             {new Date(m.sent_at).toLocaleString("en-IN", {

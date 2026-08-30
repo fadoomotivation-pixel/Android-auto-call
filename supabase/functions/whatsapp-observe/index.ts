@@ -88,6 +88,36 @@ function normaliseKind(raw: unknown): MediaKind | null {
  * Evidence only, never the wording: "bhai plot ki details bhej raha hu" with
  * nothing attached is not details.
  */
+/** base64 → bytes, without pulling a dependency in for four lines. */
+function decodeBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/**
+ * A sensible extension, so a downloaded file opens in the right app.
+ *
+ * WhatsApp voice notes are Opus in an Ogg container and arrive as
+ * audio/ogg; codecs=opus — the codecs parameter has to be stripped or the
+ * extension lookup misses and everything lands as .bin.
+ */
+function extensionFor(mime: string, kind: MediaKind): string {
+  const base = mime.split(";")[0].trim().toLowerCase();
+  const known: Record<string, string> = {
+    "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/amr": ".amr",
+    "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp",
+    "video/mp4": ".mp4", "video/3gpp": ".3gp",
+    "application/pdf": ".pdf",
+  };
+  if (known[base]) return known[base];
+  const byKind: Record<string, string> = {
+    audio: ".ogg", image: ".jpg", video: ".mp4", document: ".pdf", other: ".bin",
+  };
+  return byKind[kind] ?? ".bin";
+}
+
 function isDetails(text: string, kind: MediaKind | null): boolean {
   if (kind === "document" || kind === "image" || kind === "video") return true;
   return /https?:\/\/\S+/i.test(text ?? "");
@@ -116,7 +146,12 @@ Deno.serve(async (req) => {
   // it dropped.
   const callsIn = Array.isArray(body?.calls) ? body.calls.length : 0;
   const receiptsIn = Array.isArray(body?.receipts) ? body.receipts.length : 0;
-  if (messages.length === 0 && callsIn === 0 && receiptsIn === 0) {
+  // Edits, deletions, display names and presence all arrive on the same POST.
+  // Each is optional and each is ignored by an older CRM, which is the ordering
+  // this deployment needs — the worker ships ahead and waits to be caught up.
+  const editsIn = Array.isArray(body?.edits) ? body.edits.length : 0;
+  const contactsIn = Array.isArray(body?.contacts) ? body.contacts.length : 0;
+  if (messages.length === 0 && callsIn === 0 && receiptsIn === 0 && editsIn === 0 && contactsIn === 0) {
     return json({ ok: true, stored: 0, skipped: 0, calls: 0, receipts: 0 });
   }
 
@@ -178,6 +213,36 @@ Deno.serve(async (req) => {
     // fleet reports something sane rather than nothing.
     const kind = normaliseKind(m.media_kind) ?? (m.has_media === true ? "other" : null);
 
+    // THE FILE ITSELF.
+    //
+    // A voice note is how most Indian real-estate reps actually talk to a buyer,
+    // and the CRM was storing the word "audio". The worker downloads it and
+    // hands it over as base64 — it deliberately holds no Supabase key, so the
+    // upload happens here.
+    //
+    // ONLY FOR A KNOWN LEAD. An unmatched conversation keeps its counts and its
+    // number so the lead can be recovered, and nothing else; storing a stranger's
+    // voice note would go well beyond what "watch the company SIM" was agreed to
+    // mean. A failed upload never fails the message: the row is written either
+    // way and only the attachment is missing.
+    let mediaPath: string | null = null;
+    const b64 = typeof m.media_b64 === "string" ? m.media_b64 : null;
+    if (b64 && contactId && kind) {
+      try {
+        const bytes = decodeBase64(b64);
+        const ext = extensionFor(String(m.mime_type ?? ""), kind);
+        const path = `${companyId}/${salespersonId}/${waId}${ext}`;
+        const { error: upErr } = await admin.storage.from("wa-media").upload(path, bytes, {
+          contentType: typeof m.mime_type === "string" && m.mime_type ? m.mime_type : "application/octet-stream",
+          upsert: true,
+        });
+        if (upErr) console.error("wa-media upload failed", upErr.message);
+        else mediaPath = path;
+      } catch (e) {
+        console.error("wa-media decode failed", String(e));
+      }
+    }
+
     rows.push({
       company_id: companyId,
       salesperson_id: salespersonId,
@@ -201,6 +266,7 @@ Deno.serve(async (req) => {
       duration_seconds: Number.isFinite(Number(m.duration_seconds)) ? Number(m.duration_seconds) : null,
       peer_name: typeof m.peer_name === "string" ? m.peer_name : null,
       shared_details: direction === "out" && isDetails(text, kind),
+      media_path: mediaPath,
       sent_at: sentAt,
     });
   }
@@ -281,6 +347,72 @@ Deno.serve(async (req) => {
     receipts += count ?? 0;
   }
 
+  // ── deletions and edits ────────────────────────────────────────────────────
+  //
+  // WHAT THE REP TOOK BACK. "Delete for everyone" was invisible here: the row
+  // stayed as though the message still stood. A rep quietly retracting a price,
+  // a promise or an abuse is exactly what a super admin wants this feature for.
+  //
+  // THE ORIGINAL TEXT IS KEPT, and that is the entire point — body_original
+  // holds what was actually sent, and it is only ever written once so a second
+  // edit cannot overwrite the first version with the second.
+  //
+  // Same reasoning as receipts for the gate: this only ever patches a row that
+  // already exists, so a deletion in a non-lead chat matches nothing.
+  let edits = 0;
+  for (const raw of (Array.isArray(body?.edits) ? body.edits : []) as unknown[]) {
+    const e = raw as Record<string, unknown>;
+    const waId = String(e.id ?? "");
+    if (!waId) continue;
+
+    const { data: existing } = await admin
+      .from("wa_observed_messages")
+      .select("body, body_original")
+      .eq("salesperson_id", salespersonId)
+      .eq("wa_message_id", waId)
+      .maybeSingle();
+    if (!existing) continue;
+
+    const patch: Record<string, unknown> = {};
+    // Written once, never overwritten: the first version is the one worth
+    // keeping, and a later edit must not quietly replace the evidence.
+    if (existing.body_original === null) patch.body_original = existing.body;
+    if (e.deleted_at) patch.deleted_at = String(e.deleted_at);
+    if (e.edited_at) {
+      patch.edited_at = String(e.edited_at);
+      if (typeof e.text === "string" && e.text) patch.body = e.text;
+    }
+    if (Object.keys(patch).length === 0) continue;
+
+    const { count } = await admin
+      .from("wa_observed_messages")
+      .update(patch, { count: "exact" })
+      .eq("salesperson_id", salespersonId)
+      .eq("wa_message_id", waId);
+    edits += count ?? 0;
+  }
+
+  // ── who an unknown number is ───────────────────────────────────────────────
+  //
+  // The dashboard lists numbers a rep talks to that are not leads, and a bare
+  // 9199… tells a founder nothing. WhatsApp's own display name is usually the
+  // only clue. Backfilled onto rows that have no name yet; never used for
+  // matching, which stays phone-number-only on purpose.
+  let named = 0;
+  for (const raw of (Array.isArray(body?.contacts) ? body.contacts : []) as unknown[]) {
+    const c = raw as Record<string, unknown>;
+    const peer = String(c.peer ?? "");
+    const name = typeof c.name === "string" ? c.name.trim() : "";
+    if (!peer || !name) continue;
+    const { count } = await admin
+      .from("wa_observed_messages")
+      .update({ peer_name: name }, { count: "exact" })
+      .eq("salesperson_id", salespersonId)
+      .eq("peer_phone", peer)
+      .is("peer_name", null);
+    named += count ?? 0;
+  }
+
   // Liveness, so a session that logged out days ago shows up as stale in
   // v_rep_whatsapp_health instead of looking like a rep who stopped working.
   //
@@ -329,5 +461,5 @@ Deno.serve(async (req) => {
     })
     .eq("salesperson_id", salespersonId);
 
-  return json({ ok: true, stored, skipped, calls, receipts });
+  return json({ ok: true, stored, skipped, calls, receipts, edits, named });
 });
