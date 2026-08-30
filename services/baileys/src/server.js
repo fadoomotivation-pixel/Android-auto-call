@@ -54,6 +54,7 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import QRCode from "qrcode";
@@ -73,10 +74,51 @@ const INGEST_SECRET = process.env.BAILEYS_INGEST_SECRET || "";
 // request per keystroke-sized message.
 const FLUSH_MS = Number(process.env.FLUSH_MS || 15_000);
 const MAX_BATCH = 200;
+// A batch that carries downloaded files is capped far lower: 200 voice notes
+// in one POST is tens of megabytes and an edge function that times out
+// halfway through a history import.
+const MAX_MEDIA_BATCH = Number(process.env.MAX_MEDIA_BATCH || 15);
 // Room for a history sync, which arrives as one burst rather than a trickle.
 // A year of a working telecaller's lead conversations fits comfortably; the
 // non-lead ones are dropped by the CRM, not here, so this holds the raw feed.
 const MAX_PENDING = Number(process.env.MAX_PENDING || 20_000);
+
+// ── What this worker is allowed to capture ───────────────────────────────────
+//
+// EVERY ONE OF THESE IS A SWITCH, AND THAT IS DELIBERATE.
+//
+// This worker is uploaded by hand to Hostinger, so "turn that off again" would
+// otherwise mean building a new zip, re-uploading, and re-linking a rep — the
+// exact loop that has cost this feature days already. A capability that
+// misbehaves in front of a real telecaller's WhatsApp needs to be switchable in
+// the time it takes to edit an environment variable and restart.
+//
+// The defaults are chosen so the box does the least surprising thing: capture
+// what a lead conversation is actually made of (voice notes, photos, documents)
+// and watch for messages being taken back, but do not reach out to WhatsApp for
+// anything extra unless asked.
+const flag = (name, dflt) => {
+  const v = process.env[name];
+  if (v === undefined || v === "") return dflt;
+  return /^(1|true|yes|on)$/i.test(v);
+};
+
+/** Download voice notes, images and documents rather than just naming them. */
+const CAPTURE_MEDIA = flag("CAPTURE_MEDIA", true);
+/** Bytes. A voice note is ~200KB and a brochure a few MB; past this the file is
+ *  named but not fetched, so one 90MB video cannot stall a history sync. */
+const MAX_MEDIA_BYTES = Number(process.env.MAX_MEDIA_BYTES || 8 * 1024 * 1024);
+/** Notice "delete for everyone" and edits, and keep what the message said. */
+const WATCH_EDITS = flag("WATCH_EDITS", true);
+/** Learn WhatsApp's own display names, which is often the only clue who an
+ *  unknown number belongs to. */
+const SYNC_CONTACTS = flag("SYNC_CONTACTS", true);
+/** Group chats. OFF: a broker group is dozens of people who never agreed to be
+ *  recorded in someone's CRM, and the volume is large. */
+const WATCH_GROUPS = flag("WATCH_GROUPS", false);
+/** Ask WhatsApp for online/typing state of leads. OFF: it is a per-chat
+ *  subscription, it is chatty, and it is the least load-bearing of these. */
+const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
 
 /**
  * Bump this whenever src/server.js changes.
@@ -87,7 +129,7 @@ const MAX_PENDING = Number(process.env.MAX_PENDING || 20_000);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.08.30-5";
+const WORKER_VERSION = "2026.08.30-7";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -131,6 +173,15 @@ function newSession(id, salespersonId) {
     // opened. "Has not replied" and "has not even read it" are different
     // conversations to have with a telecaller.
     pendingReceipts: [],
+    // Deletions and edits, keyed by WhatsApp's message id. Separate from
+    // messages because they PATCH a row that is already stored rather than
+    // adding one — mixing them would have the ingest inserting empty shells.
+    pendingEdits: [],
+    // WhatsApp display names for numbers, so an unknown number on the dashboard
+    // has a human attached to it.
+    pendingContacts: [],
+    // Online/typing states, when WATCH_PRESENCE is on.
+    pendingPresence: [],
     flushTimer: null,
     state: {
       status: "disconnected", // disconnected | connecting | qr | connected
@@ -226,7 +277,27 @@ async function start(s) {
     // no business pulling anybody's history.
     syncFullHistory: s.observeOnly,
     logger: pino({ level: "silent" }),
-    browser: ["Call Pro AI", "Chrome", "1.0.0"],
+    // THE HALF OF syncFullHistory NOBODY TELLS YOU ABOUT.
+    //
+    // syncFullHistory: true is necessary and NOT sufficient. WhatsApp decides
+    // how much history to push from the client identity in this very field —
+    // it sends the full archive only to something it believes is a DESKTOP
+    // app, and a phone-or-unknown client gets a token slice of recent chats.
+    // "Call Pro AI / Chrome / 1.0.0" is not a client WhatsApp recognises, so
+    // for every rep linked so far it took the second path: the sync fired,
+    // messaging-history.set arrived, the logs said "history sync" — and it
+    // carried almost nothing. That is why re-scanning never produced Ankita's
+    // conversations no matter how many times she was asked to do it. The
+    // scanning was never the problem.
+    //
+    // ["Mac OS", "Desktop", …] is the identity that gets the archive. Written
+    // as a literal rather than Baileys' Browsers.macOS() helper so it is
+    // obvious at a glance what is being claimed and why it must not be
+    // "improved" back into a friendly product name.
+    //
+    // Senders do not need it: the founder session pushes one message a day and
+    // has no business pulling anyone's history.
+    browser: s.observeOnly ? ["Mac OS", "Desktop", "14.4.1"] : ["Call Pro AI", "Chrome", "1.0.0"],
   });
 
   s.sock.ev.on("creds.update", saveCreds);
@@ -245,7 +316,14 @@ async function start(s) {
     // conversation is empty because it all happened five minutes before the
     // scan.
     s.sock.ev.on("messages.upsert", (ev) => {
-      for (const m of ev?.messages ?? []) queueObserved(s, m);
+      // Not awaited: queueObserved may pause on a media download, and blocking
+      // the event loop on it would stall every other WhatsApp event behind it.
+      // Each message is independent and the CRM upserts on WhatsApp's own id,
+      // so completion order does not matter.
+      for (const m of ev?.messages ?? []) {
+        void queueObserved(s, m).catch((e) =>
+          log.warn({ id: s.id, err: String(e?.message || e) }, "could not queue a message"));
+      }
     });
 
     // THE CONVERSATIONS THAT ALREADY EXISTED.
@@ -266,8 +344,92 @@ async function start(s) {
       if (msgs.length) {
         log.info({ id: s.id, count: msgs.length, progress: h?.progress ?? null }, "history sync");
       }
-      for (const m of msgs) queueObserved(s, m);
+      for (const m of msgs) {
+        void queueObserved(s, m).catch((e) =>
+          log.warn({ id: s.id, err: String(e?.message || e) }, "could not queue history message"));
+      }
     });
+
+    // WHAT THE REP TOOK BACK.
+    //
+    // "Delete for everyone" was invisible: the row sat in the CRM as though the
+    // message still stood. A rep quietly retracting a price, a promise or an
+    // abuse is precisely what a super admin wants this feature for, and
+    // WhatsApp announces it — a protocolMessage of type REVOKE naming the
+    // message it kills. The original text is already stored and is deliberately
+    // KEPT; only a flag and a timestamp are added.
+    //
+    // Edits ride the same path. WhatsApp allows one within fifteen minutes and
+    // reports it as an editedMessage, and the CRM keeps what was first sent.
+    if (WATCH_EDITS) {
+      s.sock.ev.on("messages.upsert", (ev) => {
+        for (const m of ev?.messages ?? []) {
+          const proto = m?.message?.protocolMessage;
+          const revokedId = proto?.type === 0 || proto?.type === "REVOKE"
+            ? proto?.key?.id : null;
+          if (revokedId) {
+            s.pendingEdits.push({ id: String(revokedId), deleted_at: new Date().toISOString() });
+            continue;
+          }
+          const edited = m?.message?.editedMessage?.message?.protocolMessage
+            ?? (proto?.type === 14 || proto?.type === "MESSAGE_EDIT" ? proto : null);
+          const editedId = edited?.key?.id;
+          if (editedId) {
+            s.pendingEdits.push({
+              id: String(editedId),
+              edited_at: new Date().toISOString(),
+              text: String(textOf(edited?.editedMessage ?? {}) || "").slice(0, 8000) || null,
+            });
+          }
+        }
+        if (s.pendingEdits.length && !s.flushTimer) {
+          s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
+        }
+      });
+    }
+
+    // WHO AN UNKNOWN NUMBER ACTUALLY IS.
+    //
+    // The dashboard now lists numbers a rep talks to that are not leads, and a
+    // bare 9199… tells a founder nothing. WhatsApp's own display name is
+    // usually the only clue, and it arrives here. Names only — never used for
+    // matching, which stays phone-number-only on purpose.
+    if (SYNC_CONTACTS) {
+      const noteContact = (c) => {
+        const jid = String(c?.id ?? "");
+        if (!jid.endsWith("@s.whatsapp.net")) return;
+        const name = c?.name ?? c?.notify ?? c?.verifiedName ?? null;
+        if (!name) return;
+        s.pendingContacts.push({ peer: jid.split("@")[0], name: String(name).slice(0, 120) });
+      };
+      s.sock.ev.on("contacts.upsert", (cs) => { for (const c of cs ?? []) noteContact(c); });
+      s.sock.ev.on("contacts.update", (cs) => { for (const c of cs ?? []) noteContact(c); });
+    }
+
+    // WHEN THE BUYER IS ACTUALLY HOLDING THEIR PHONE.
+    //
+    // The best moment to ring a lead is while they are on WhatsApp, and that is
+    // knowable — WhatsApp publishes presence for chats you subscribe to. Off by
+    // default because it is the one capability here that TALKS TO WhatsApp
+    // rather than just listening: a subscription per lead, from a number that
+    // has just linked a new device, is exactly the shape of traffic that gets a
+    // number looked at. Switch it on per company once the rest is settled.
+    if (WATCH_PRESENCE) {
+      s.sock.ev.on("presence.update", (u) => {
+        const jid = String(u?.id ?? "");
+        if (!jid.endsWith("@s.whatsapp.net")) return;
+        const peer = jid.split("@")[0];
+        for (const st of Object.values(u?.presences ?? {})) {
+          const kind = st?.lastKnownPresence;
+          if (!kind) continue;
+          s.pendingPresence.push({ peer, presence: String(kind), at: new Date().toISOString() });
+          break;
+        }
+        if (s.pendingPresence.length && !s.flushTimer) {
+          s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
+        }
+      });
+    }
 
     // WHATSAPP CALLS — the gap this whole feature was originally asked about.
     //
@@ -459,22 +621,117 @@ function mediaMetaOf(msg) {
   };
 }
 
-function queueObserved(s, msg) {
+/**
+ * The file itself, not just its name.
+ *
+ * A rep's WhatsApp day in Indian real estate is voice notes and photos, and the
+ * CRM was storing the word "audio". Downloaded here and handed to the ingest as
+ * base64, because the worker deliberately holds no Supabase service key — it
+ * can talk to one CRM endpoint with one shared secret and nothing else, so the
+ * upload has to happen on the far side.
+ *
+ * Failure is never fatal. A message whose media cannot be fetched is still a
+ * message and still gets stored with its text and its kind; only the file is
+ * missing. Losing the conversation because one download 404'd would be a far
+ * worse trade than losing the attachment.
+ */
+async function fetchMedia(s, msg, kind, declaredSize) {
+  if (!CAPTURE_MEDIA || !kind) return null;
+  if (declaredSize && Number(declaredSize) > MAX_MEDIA_BYTES) {
+    log.info({ id: s.id, kind, size: Number(declaredSize) }, "media too large — naming it only");
+    return null;
+  }
+  try {
+    const buf = await downloadMediaMessage(msg, "buffer", {}, {
+      logger: pino({ level: "silent" }),
+      reuploadRequest: s.sock.updateMediaMessage,
+    });
+    if (!buf?.length) return null;
+    // Re-checked after the fact: WhatsApp's declared fileLength is absent on
+    // some message shapes, so the only trustworthy size is the one we hold.
+    if (buf.length > MAX_MEDIA_BYTES) {
+      log.info({ id: s.id, kind, size: buf.length }, "media over cap after download — dropped");
+      return null;
+    }
+    return buf.toString("base64");
+  } catch (e) {
+    log.warn({ id: s.id, kind, err: String(e?.message || e) }, "media download failed — keeping the message");
+    return null;
+  }
+}
+
+/**
+ * How many media downloads are in flight right now.
+ *
+ * A history sync arrives as one burst of thousands of messages. Awaiting a
+ * download for each would either serialise the import into something that takes
+ * an afternoon, or — if fired in parallel — open thousands of simultaneous
+ * fetches against WhatsApp's media CDN from one freshly-linked number, which is
+ * the behaviour that gets a number flagged.
+ *
+ * So capture degrades instead of queueing: while the box is already busy the
+ * message is stored with its text and its kind and no file. Live traffic, which
+ * is one message at a time, effectively always gets its media; a backlog import
+ * gets whatever it can without ever holding the import up.
+ */
+let mediaInFlight = 0;
+const MAX_MEDIA_IN_FLIGHT = Number(process.env.MAX_MEDIA_IN_FLIGHT || 3);
+
+async function queueObserved(s, msg) {
   const jid = msg?.key?.remoteJid ?? "";
-  // Groups, broadcasts and status updates are not one-to-one lead work.
-  if (!jid.endsWith("@s.whatsapp.net")) return;
+  // One-to-one lead work only, unless groups are explicitly switched on.
+  // Broadcasts and status updates are never included either way.
+  const isGroup = jid.endsWith("@g.us");
+  if (!jid.endsWith("@s.whatsapp.net") && !(WATCH_GROUPS && isGroup)) return;
   const id = msg?.key?.id;
   if (!id) return;
 
+  const peer = jid.split("@")[0];
+  const text = String(textOf(msg) || "");
+  const kind = mediaKindOf(msg);
+
+  // THE REP TALKING TO THEMSELVES IS NOT LEAD WORK.
+  //
+  // WhatsApp's "Message yourself" chat, and a run of contentless protocol
+  // messages WhatsApp addresses to your own JID during a sync, both arrive
+  // here with remoteJid set to the rep's OWN number. Ankita's entire observed
+  // history was sixteen of these — every one addressed to 919310012981, her
+  // own number, with an empty body — which the dashboard then reported as
+  // "16 messages seen, none with a lead". Technically true and completely
+  // misleading: there was nothing there to match in the first place.
+  const own = String(s.sock?.user?.id ?? "").split(":")[0].split("@")[0];
+  if (own && peer === own) return;
+
+  // An empty shell is not a message. No text, no attachment — nothing a human
+  // sent and nothing anyone could read on a lead page. Counting them makes the
+  // "seen" figure a measure of protocol chatter rather than of the rep's work.
+  if (!text.trim() && !kind) return;
+
+  const meta = mediaMetaOf(msg);
+  let mediaB64 = null;
+  if (kind && mediaInFlight < MAX_MEDIA_IN_FLIGHT) {
+    mediaInFlight += 1;
+    try {
+      mediaB64 = await fetchMedia(s, msg, kind, meta.file_size);
+    } finally {
+      mediaInFlight -= 1;
+    }
+  }
+
   s.pending.push({
     id,
-    peer: jid.split("@")[0],
+    peer,
     direction: msg?.key?.fromMe ? "out" : "in",
     // What WhatsApp shows this contact as. Useful when the CRM's name for a
     // lead is "Facebook Lead 4412" and the buyer's own profile says who they
     // are. Never used for matching — that is phone-number-only, on purpose.
     peer_name: msg?.pushName ?? null,
-    ...mediaMetaOf(msg),
+    ...meta,
+    // base64, or null when capture is off, the file was too large, the box was
+    // already busy, or the download failed. The CRM uploads it to storage —
+    // this worker holds no Supabase key and never touches the bucket itself.
+    media_b64: mediaB64,
+    is_group: isGroup,
     // The whole message. The worker is not where privacy is decided — it cannot
     // even tell whether this number is a lead. The CRM's match_wa_contact drops
     // every non-lead conversation on arrival, so clipping here would only
@@ -482,8 +739,8 @@ function queueObserved(s, msg) {
     //
     // Capped well above any real WhatsApp message purely so one pasted novel
     // cannot blow the batch size; WhatsApp's own limit is around 65k.
-    text: String(textOf(msg) || "").slice(0, 8000),
-    media_kind: mediaKindOf(msg),
+    text: text.slice(0, 8000),
+    media_kind: kind,
     sent_at: new Date(Number(msg?.messageTimestamp ?? Date.now() / 1000) * 1000).toISOString(),
   });
 
@@ -516,16 +773,25 @@ async function flushObserved(s) {
   // any message alongside them — a rep who only rang a buyer produces no
   // messages at all — so gating on s.pending alone would have made WhatsApp
   // calls invisible for exactly the reps who make the most of them.
-  if (s.pending.length === 0 && s.pendingCalls.length === 0 && s.pendingReceipts.length === 0) return;
+  if (s.pending.length === 0 && s.pendingCalls.length === 0 && s.pendingReceipts.length === 0
+      && s.pendingEdits.length === 0 && s.pendingContacts.length === 0
+      && s.pendingPresence.length === 0) return;
   if (!INGEST_URL || !INGEST_SECRET) {
     // Said once per flush rather than silently dropping: a watcher with nowhere
     // to report looks identical to a rep who sent nothing.
     log.warn({ id: s.id, queued: s.pending.length }, "no INGEST_URL/BAILEYS_INGEST_SECRET — cannot report");
     return;
   }
-  const batch = s.pending.splice(0, MAX_BATCH);
+  // Media makes a batch far heavier than it used to be — 200 voice notes in one
+  // POST is tens of megabytes and an edge function that times out mid-import.
+  // A batch carrying files is capped much lower, by payload rather than count.
+  const carriesMedia = s.pending.some((m) => m.media_b64);
+  const batch = s.pending.splice(0, carriesMedia ? MAX_MEDIA_BATCH : MAX_BATCH);
   const calls = s.pendingCalls.splice(0, MAX_BATCH);
   const receipts = s.pendingReceipts.splice(0, MAX_BATCH);
+  const edits = s.pendingEdits.splice(0, MAX_BATCH);
+  const contacts = s.pendingContacts.splice(0, MAX_BATCH);
+  const presence = s.pendingPresence.splice(0, MAX_BATCH);
   try {
     const r = await fetch(INGEST_URL, {
       method: "POST",
@@ -543,6 +809,9 @@ async function flushObserved(s) {
         // so it ships AHEAD of the CRM and waits to be caught up with.
         calls,
         receipts,
+        edits,
+        contacts,
+        presence,
         // So the dashboard can tell which worker build is live without anyone
         // guessing from behaviour.
         worker_version: WORKER_VERSION,
@@ -567,6 +836,9 @@ async function flushObserved(s) {
     s.pending.unshift(...batch);
     s.pendingCalls.unshift(...calls);
     s.pendingReceipts.unshift(...receipts);
+    s.pendingEdits.unshift(...edits);
+    s.pendingContacts.unshift(...contacts);
+    s.pendingPresence.unshift(...presence);
     log.warn({ id: s.id, err: String(e?.message || e), queued: s.pending.length }, "ingest failed, will retry");
   }
   if ((s.pending.length > 0 || s.pendingCalls.length > 0 || s.pendingReceipts.length > 0) && !s.flushTimer) {
@@ -683,6 +955,9 @@ const server = http.createServer(async (req, res) => {
         existing.pending.length = 0;
         existing.pendingCalls.length = 0;
         existing.pendingReceipts.length = 0;
+        existing.pendingEdits.length = 0;
+        existing.pendingContacts.length = 0;
+        existing.pendingPresence.length = 0;
         try { existing.sock?.end?.(); } catch { /* already gone */ }
         sessions.delete(salespersonId);
       }

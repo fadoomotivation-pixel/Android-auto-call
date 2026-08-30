@@ -68,6 +68,40 @@ type Msg = {
   read_at: string | null;
   sent_at: string;
   signal: "hot" | "risk" | null;
+  /** Set when the rep used "delete for everyone". The message is kept — that is
+   *  the point — and body_original holds what it said. */
+  deleted_at: string | null;
+  edited_at: string | null;
+  body_original: string | null;
+  /** Path in the private wa-media bucket, or null when the file was not
+   *  captured. Never rendered directly — a signed URL is minted per view. */
+  media_path: string | null;
+  transcript: string | null;
+  duration_seconds: number | null;
+};
+
+/** A number this rep talked to that is not a lead in their company. Counts and
+ *  identity only — never the message bodies, which stay on the lead pages. */
+type UnknownRow = {
+  peer_phone: string;
+  peer_name: string | null;
+  messages: number;
+  they_sent: number;
+  rep_sent: number;
+  /** Times this rep also DIALLED this number. The strongest predictor that an
+   *  unknown number is a real working relationship rather than a wrong dial. */
+  calls: number;
+  first_seen: string;
+  last_seen: string;
+};
+
+/** Is the linked WhatsApp even the number this rep talks to buyers on? */
+type Fit = {
+  leads_called: number;
+  numbers_whatsapped: number;
+  overlap: number;
+  called_and_messaged: number;
+  wa_number: string | null;
 };
 
 const IST = { timeZone: "Asia/Kolkata" } as const;
@@ -119,9 +153,31 @@ export default async function TelecallerActivityPage({
   const current = rep ? rows.find((r) => r.rep_id === rep) ?? null : null;
 
   let msgs: Msg[] = [];
+  let unknown: UnknownRow[] = [];
+  let fit: Fit | null = null;
+  const mediaUrl = new Map<string, string>();
   if (current) {
-    const { data: m } = await supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 });
+    const [{ data: m }, { data: u }, { data: f }] = await Promise.all([
+      supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 }),
+      supabase.rpc("super_rep_unknown_numbers", { p_rep: current.rep_id, p_days: days }),
+      supabase.rpc("super_rep_wa_fit", { p_rep: current.rep_id }),
+    ]);
     msgs = (m ?? []) as Msg[];
+    unknown = (u ?? []) as UnknownRow[];
+    fit = (Array.isArray(f) ? f[0] : f) as Fit ?? null;
+
+    // SIGNED, NEVER PUBLIC. wa-media is a private bucket for the same reason
+    // call-recordings is: a buyer's voice note is not something that should be
+    // reachable by anyone who guesses a path. One short-lived link per file,
+    // minted here — after the RPC above has already enforced super-admin.
+    const paths = msgs.map((x) => x.media_path).filter((p): p is string => Boolean(p));
+    if (paths.length) {
+      const { data: signed } = await supabase.storage
+        .from("wa-media").createSignedUrls(paths, 60 * 60);
+      for (const s of signed ?? []) {
+        if (s.path && s.signedUrl) mediaUrl.set(s.path, s.signedUrl);
+      }
+    }
   }
 
   const qs = (o: { rep?: string; days?: number }) => {
@@ -149,6 +205,45 @@ export default async function TelecallerActivityPage({
           {" · "}{current.calls} calls, {fmtTalk(current.talk_seconds)} talk, {current.wa_messages} WhatsApp
           messages in {days} day{days === 1 ? "" : "s"}
         </p>
+        {/* IS THIS EVEN THE RIGHT WHATSAPP?
+            The question the product could not ask, and the reason a green
+            "Connected" card sat next to empty lead pages for days. A rep whose
+            linked number shares almost nothing with the leads they dial is not
+            a rep doing nothing — they are on a different number. Re-scanning a
+            QR cannot fix that, and until this line existed, re-scanning was the
+            only thing anyone knew to try. */}
+        {fit && fit.numbers_whatsapped > 0 && fit.leads_called >= 20 &&
+          fit.overlap * 20 < fit.leads_called && (
+          <div className="card" style={{
+            marginBottom: 16, padding: 14,
+            background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.35)",
+          }}>
+            <strong style={{ color: "#f59e0b" }}>
+              ⚠️ This WhatsApp is probably not the number they use for leads
+            </strong>
+            <p className="subtitle" style={{ marginTop: 6, marginBottom: 8 }}>
+              They have called <strong>{fit.leads_called}</strong> of this company&apos;s leads, and
+              talk to <strong>{fit.numbers_whatsapped}</strong> people on the linked WhatsApp
+              {fit.wa_number ? ` (${fit.wa_number})` : ""} — but only <strong>{fit.overlap}</strong>
+              {" "}of those are leads. Reps here often carry two numbers: the company SIM they dial
+              from, and a WhatsApp Business on their own handset. Ask which number they message
+              buyers on, and link that one.
+            </p>
+            <p className="subtitle" style={{ margin: 0, fontSize: 12.5 }}>
+              Nothing is broken — the matching, the sync and the number format were all checked
+              against this data. Re-scanning will not change this.
+            </p>
+            {fit.called_and_messaged > 0 && (
+              <p style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}>
+                💡 <strong>{fit.called_and_messaged}</strong> people here were both{" "}
+                <strong>called and messaged</strong> by this rep and are <strong>not in the CRM
+                at all</strong> — the likeliest uncaptured leads on the platform. They are at the
+                top of the table below.
+              </p>
+            )}
+          </div>
+        )}
+
         {(current.wa_hot > 0 || current.wa_risk > 0) && (
           <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
             {current.wa_risk > 0 && (
@@ -203,14 +298,67 @@ export default async function TelecallerActivityPage({
                               {m.signal === "risk" ? "⚠️ reads as about to walk" : "🔥 reads as ready to move"}
                             </div>
                           )}
+                          {/* DELETED, AND STILL HERE. "Delete for everyone"
+                              used to leave the CRM believing the message still
+                              stood. It is now marked and the original text is
+                              shown — a rep taking back a price or a promise is
+                              the thing this screen exists to make visible. */}
+                          {m.deleted_at && (
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", marginBottom: 3 }}>
+                              🗑 Deleted by the rep · {new Date(m.deleted_at).toLocaleString("en-IN", {
+                                ...IST, day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
+                              })}
+                            </div>
+                          )}
+                          {m.edited_at && !m.deleted_at && (
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b", marginBottom: 3 }}>
+                              ✏️ Edited
+                            </div>
+                          )}
                           {m.media_kind && (
                             <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: m.body ? 4 : 0 }}>
                               {m.file_name ?? m.media_kind}
+                              {m.duration_seconds ? ` · ${m.duration_seconds}s` : ""}
                               {m.shared_details && <span style={{ color: "#22c55e" }}> · details</span>}
                             </div>
                           )}
+                          {/* The voice note itself, playable. This is how most
+                              Indian real-estate reps actually talk to a buyer,
+                              and it used to be stored as the word "audio". */}
+                          {m.media_path && mediaUrl.get(m.media_path) && (
+                            m.media_kind === "audio" ? (
+                              <audio controls preload="none" src={mediaUrl.get(m.media_path)}
+                                style={{ width: "100%", maxWidth: 260, marginBottom: 4 }} />
+                            ) : m.media_kind === "image" ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img src={mediaUrl.get(m.media_path)} alt={m.file_name ?? "image"}
+                                style={{ maxWidth: "100%", borderRadius: 8, marginBottom: 4 }} />
+                            ) : (
+                              <a href={mediaUrl.get(m.media_path)} target="_blank" rel="noreferrer"
+                                style={{ fontSize: 12.5, display: "inline-block", marginBottom: 4 }}>
+                                Open {m.file_name ?? m.media_kind}
+                              </a>
+                            )
+                          )}
                           {m.body && (
-                            <div style={{ fontSize: 14, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.body}</div>
+                            <div style={{
+                              fontSize: 14, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                              textDecoration: m.deleted_at ? "line-through" : undefined,
+                              opacity: m.deleted_at ? 0.75 : 1,
+                            }}>{m.body}</div>
+                          )}
+                          {/* What it said before it was changed. Only shown when
+                              it actually differs — an edit that fixed a typo
+                              does not need two lines of screen. */}
+                          {m.body_original && m.body_original !== m.body && (
+                            <div style={{ fontSize: 12.5, marginTop: 4, color: "var(--muted)" }}>
+                              Originally: “{m.body_original}”
+                            </div>
+                          )}
+                          {m.transcript && (
+                            <div style={{ fontSize: 12.5, marginTop: 4, fontStyle: "italic", color: "var(--muted)" }}>
+                              “{m.transcript}”
+                            </div>
                           )}
                           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, textAlign: "right" }}>
                             {new Date(m.sent_at).toLocaleString("en-IN", {
@@ -228,9 +376,68 @@ export default async function TelecallerActivityPage({
             );
           })
         )}
-        <p className="subtitle" style={{ fontSize: 12.5 }}>
-          Only conversations with this company&apos;s leads exist. The rep&apos;s personal chats are
-          never stored and cannot be shown here.
+        {/* THE NUMBERS BEHIND THE ZERO.
+            "Saw 16 messages, none with a lead" was the end of the road — true,
+            and useless. These are the numbers themselves. A buyer messaging a
+            rep on a number nobody put in the CRM is a lead this company paid
+            to generate and is now losing, and it was invisible until here. */}
+        {unknown.length > 0 && (
+          <>
+            <h3 style={{ marginTop: 28, marginBottom: 4 }}>
+              📵 Numbers that are not leads ({unknown.length})
+            </h3>
+            <p className="subtitle" style={{ marginTop: 0, marginBottom: 12 }}>
+              This rep messaged these in the last {days} day{days === 1 ? "" : "s"} and none of
+              them is in the CRM. <strong>Sorted by whether the rep also rang them</strong> — a
+              number they both called and messaged is a real working relationship, and its absence
+              from the CRM means the company would lose it the day that rep leaves.
+            </p>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Number</th>
+                  <th>WhatsApp name</th>
+                  <th style={{ textAlign: "right" }}>Also called</th>
+                  <th style={{ textAlign: "right" }}>Messages</th>
+                  <th style={{ textAlign: "right" }}>They sent</th>
+                  <th>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unknown.map((u) => (
+                  <tr key={u.peer_phone}>
+                    <td style={{ fontFamily: "monospace" }}>{u.peer_phone}</td>
+                    <td style={{ fontSize: 13 }}>
+                      {u.peer_name || <span style={{ opacity: 0.4 }}>—</span>}
+                    </td>
+                    {/* Rang AND messaged, and still not in the CRM. That is a
+                        working relationship living on one person's phone. */}
+                    <td style={{ textAlign: "right" }}>
+                      {u.calls > 0
+                        ? <strong style={{ color: "#f59e0b" }}>{u.calls}×</strong>
+                        : <span style={{ opacity: 0.3 }}>—</span>}
+                    </td>
+                    <td style={{ textAlign: "right" }}>{u.messages}</td>
+                    {/* The half that matters. A number the rep messaged and that
+                        never replied is noise; one that wrote BACK is a person. */}
+                    <td style={{ textAlign: "right" }}>
+                      {u.they_sent > 0
+                        ? <strong style={{ color: "#22c55e" }}>{u.they_sent}</strong>
+                        : <span style={{ opacity: 0.4 }}>0</span>}
+                    </td>
+                    <td className="subtitle" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                      {ago(u.last_seen)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        <p className="subtitle" style={{ marginTop: 16, fontSize: 12.5 }}>
+          Conversations are shown for this company&apos;s leads. For any other number only the
+          count and the name above are kept — never the messages.
         </p>
       </>
     );

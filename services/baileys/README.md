@@ -79,6 +79,28 @@ Set once, for the whole worker. Without them a telecaller session still connects
 but has nowhere to report; it queues and warns rather than dropping messages on
 the floor.
 
+### What the observer captures — every one is a switch
+
+This worker is uploaded by hand, so "turn that back off" must never mean
+building a new zip and re-linking a rep. Each capability below is an
+environment variable: set it and restart, no redeploy.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `CAPTURE_MEDIA` | **on** | Downloads voice notes, photos and documents instead of only naming them. Only ever stored for a **known lead** — an unmatched number keeps its counts and nothing else. |
+| `MAX_MEDIA_BYTES` | `8388608` | Files past this are named but not fetched, so one long video cannot stall a history import. |
+| `MAX_MEDIA_IN_FLIGHT` | `3` | Concurrent downloads. A history sync degrades to text-only rather than opening thousands of fetches at WhatsApp's CDN from a freshly-linked number. |
+| `WATCH_EDITS` | **on** | Notices "delete for everyone" and edits, and keeps what the message originally said. Cheap, and the clearest signal a super admin gets. |
+| `SYNC_CONTACTS` | **on** | Learns WhatsApp's display names, which is usually the only clue who an unknown number is. Names only — matching stays phone-number-only. |
+| `WATCH_GROUPS` | **off** | Group chats. Off because a broker group is dozens of people who never agreed to be recorded in someone's CRM, and the volume is large. |
+| `WATCH_PRESENCE` | **off** | Online/typing state of leads, for "ring them while they are holding the phone". Off because it is the only capability here that *talks to* WhatsApp rather than listening, and per-chat subscriptions from a new device are the shape of traffic that gets a number looked at. |
+
+**Media needs the CRM side too.** The worker holds no Supabase key on purpose —
+it hands files to `whatsapp-observe` as base64 and that function uploads them to
+the private `wa-media` bucket. Deploy the edge function **before or with** this
+worker; an older one ignores the new fields, so nothing breaks, media simply
+does not appear.
+
 `OBSERVE_SALESPERSON_ID` is **gone.** It was the old one-process-one-rep switch,
 and while it existed the only worker address an admin could type into the CRM
 was the founder's — which is how a founder's WhatsApp ends up being watched
