@@ -154,8 +154,9 @@ export default async function LocationInterestPage({
 
       <p className="subtitle" style={{ marginTop: 16, fontSize: 12.5 }}>
         Read from plain keywords in calls and WhatsApp text, not AI — a city name mentioned once is
-        one entry here, so a rep confirming "haan Noida hi chahiye" and a rep just repeating the
-        buyer's own words both count. Treat this as a shortlist to call, not a verdict.
+        one entry here, so a rep confirming &ldquo;haan Noida hi chahiye&rdquo; and a rep just
+        repeating the buyer&apos;s own words both count. Treat this as a shortlist to call, not a
+        verdict.
       </p>
     </>
   );
