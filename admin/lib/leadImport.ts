@@ -66,6 +66,67 @@ function findCol(headers: string[], keys: string[]): number {
   });
 }
 
+/**
+ * Drop digits the regex picked up from the text around a phone number.
+ *
+ * Only for the free-text branch, where the pattern has no way to tell a house
+ * number from the start of a mobile. A number already carrying a country code
+ * is left exactly as it is; so is anything ten digits or shorter.
+ */
+function trimStrayDigits(phone: string): string {
+  const plus = phone.startsWith("+");
+  const d = phone.replace(/\D/g, "");
+  if (plus || d.length <= 10 || d.length > 12) return phone;
+  if (d.startsWith("91")) return phone;          // 91XXXXXXXXXX, genuine
+  const tail = d.slice(-10);
+  // Indian mobiles start 6-9. If the last ten do not, this is some other kind
+  // of number and guessing would do more harm than leaving it alone.
+  return /^[6-9]/.test(tail) ? tail : phone;
+}
+
+/** Words that turn up beside a pasted number and are never the person. */
+const NOT_A_NAME = new Set([
+  "mr", "mrs", "ms", "sir", "madam", "mam", "ji", "shri", "smt", "dr",
+  "phone", "mobile", "mob", "no", "num", "number", "contact", "call", "cell",
+  "tel", "whatsapp", "wa", "name", "lead", "client", "customer", "p",
+  // Address fragments sit right beside a number constantly in this data
+  // ("Plot 35, Sector 12 98123…") and would otherwise become the lead's name.
+  "plot", "sector", "block", "flat", "house", "road", "street", "near", "opp",
+  "floor", "tower", "society", "colony", "nagar", "phase",
+]);
+
+/**
+ * The person's name from the text around a phone number.
+ *
+ * Walks outward from the number collecting word-shaped tokens — so
+ * "Narendra Singh 9175004551" yields "Narendra Singh" rather than "Singh",
+ * and "+91 98373 37656 Naresh" (a shared contact, pasted as-is) still finds
+ * "Naresh" on the other side. Stops at anything that is not a word, which is
+ * what keeps "Plot 35, Sector 12" out of the name field.
+ */
+function pickName(chunk: string, dir: "backwards" | "forwards" = "backwards"): string | null {
+  const words = chunk.split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  const ordered = dir === "backwards" ? [...words].reverse() : words;
+
+  const picked: string[] = [];
+  for (const raw of ordered) {
+    const w = raw.replace(/^[^\p{L}]+|[^\p{L}\p{M}.'-]+$/gu, "");
+    if (!w) break;
+    // Letters (any script — Hindi names are pasted in Devanagari too), with
+    // the punctuation a name legitimately carries.
+    if (!/^[\p{L}][\p{L}\p{M}.'-]*$/u.test(w)) break;
+    if (NOT_A_NAME.has(w.toLowerCase().replace(/[.'-]/g, ""))) break;
+    picked.push(w);
+    // Four words is already "Ram Prasad Singh Yadav"; past that it is a
+    // sentence and taking it would put an address in the name column.
+    if (picked.length === 4) break;
+  }
+  if (!picked.length) return null;
+  const name = (dir === "backwards" ? picked.reverse() : picked).join(" ").trim();
+  return name.length >= 2 ? name : null;
+}
+
 export function parseRows(rows: string[][]): ParseResult {
   const clean = rows
     .map((r) => r.map((c) => (c ?? "").toString()))
@@ -103,16 +164,37 @@ export function parseRows(rows: string[][]): ParseResult {
       let skipped = 0;
       const seen = new Set<string>();
       
+      // A NAME ON ITS OWN LINE ABOVE THE NUMBER.
+      //
+      // Copying a contact out of a phone gives three lines — "Anand Pratap
+      // Singh", "Phone", "+91 8826223530" — and every one of those first two
+      // lines was counted as "skipped (no phone)" and thrown away, so the lead
+      // imported with a blank name from a paste that plainly contained one.
+      // A line with no number is now held as a candidate for the next line
+      // that has one, and cleared as soon as it is used or superseded.
+      let carriedName: string | null = null;
+
       for (const r of dataRows) {
         const text = r.join(" ");
         // Find a plausible phone number: optional + code, followed by 9-14 digits
         const phoneMatch = text.match(/(?:\+\d{1,3}[\s\-]?)?(?:\d[\s\-]?){9,14}/);
         if (!phoneMatch) {
+          // Not a lead by itself, but it may be the name of the next one.
+          const maybe = pickName(text, "forwards");
+          if (maybe) carriedName = maybe;
           skipped++;
           continue;
         }
         
-        const extractedPhone = cleanPhone(phoneMatch[0]);
+        // THE NUMBER SWALLOWING THE DIGITS NEXT TO IT.
+        //
+        // "Plot 35, Sector 12 9812345671" matched as "12 9812345671" — the
+        // pattern cannot tell a house number from the start of a phone number,
+        // so a real lead imported under a phone that does not exist. An Indian
+        // mobile is ten digits, optionally behind 91 or a 0; anything longer
+        // that is NOT behind a country code has picked something up on the way
+        // in, and the last ten are the ones that matter.
+        const extractedPhone = trimStrayDigits(cleanPhone(phoneMatch[0]));
         if (digitsLen(extractedPhone) < 7 || seen.has(extractedPhone)) {
           skipped++;
           continue;
@@ -120,23 +202,30 @@ export function parseRows(rows: string[][]): ParseResult {
         
         seen.add(extractedPhone);
         
-        // Guess name as the word right before the phone match, if it exists
-        const beforePhone = text.substring(0, phoneMatch.index).trim();
-        const words = beforePhone.split(/\s+/);
-        let extractedName = null;
-        if (words.length > 0) {
-          const lastWord = words[words.length - 1];
-          // If the last word is letters only, assume it's a name
-          if (/^[a-zA-Z]+$/.test(lastWord) && lastWord.toLowerCase() !== "p") {
-            extractedName = lastWord;
-          } else if (words.length > 1 && /^[a-zA-Z]+$/.test(words[words.length - 2])) {
-             extractedName = words[words.length - 2];
-          }
-        }
-        
-        // If we still didn't get a good name, and text is long, let's just leave it null
-        // rather than using the entire raw dump.
-        
+        // THE WHOLE NAME, NOT THE LAST WORD OF IT.
+        //
+        // This used to take the single word before the number, so
+        // "Narendra Singh 9175004551" imported as "Singh" — a lead the rep
+        // then greets by surname, and one nobody can find by searching the
+        // name they were given. Indian names are routinely two or three
+        // words; taking one is wrong far more often than it is right.
+        const before = text.substring(0, phoneMatch.index).trim();
+        const after = text.substring(phoneMatch.index! + phoneMatch[0].length).trim();
+        // The line's own text wins; a name carried down from the line above is
+        // only used when this line has none of its own.
+        const extractedName = pickName(before) ?? pickName(after, "forwards") ?? carriedName;
+        carriedName = null;
+
+        // Notes are what is LEFT once the name and the number are accounted
+        // for. Keeping the raw line meant every lead carried a note that just
+        // repeated its own name and phone back — noise in the one field a rep
+        // actually reads before dialling.
+        const leftover = text
+          .replace(phoneMatch[0], " ")
+          .replace(extractedName ?? "", " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
         newLeads.push({
           phone: extractedPhone,
           name: extractedName,
@@ -144,7 +233,7 @@ export function parseRows(rows: string[][]): ParseResult {
           project: null,
           budget: null,
           territory: null,
-          notes: text.length > extractedPhone.length + 10 ? text : null,
+          notes: leftover.length >= 3 ? leftover : null,
         });
       }
       return { leads: newLeads, skipped, total: dataRows.length, mappedFields: mappedFieldsOf(newLeads) };

@@ -430,8 +430,21 @@ export function ImportLeads({
             )}
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", paddingBottom: 12 }}>
               <span style={{ fontSize: 13, color: "var(--muted)", minWidth: 132 }}>Which rep? (optional)</span>
-              <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input} disabled={!targetCompany}>
-                <option value="">Leave unassigned</option>
+              {/* A DISABLED CONTROL HAS TO SAY WHY IT IS DISABLED.
+                  This greys out until a company is chosen, because only that
+                  company's reps may receive its leads. When there is no company
+                  to choose either — the telecaller list failed to load — the
+                  dropdown simply would not open and nothing on screen explained
+                  it, which read as a broken page rather than missing data. */}
+              <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)} style={input}
+                disabled={!targetCompany || scopedReps.length === 0}>
+                <option value="">
+                  {!targetCompany
+                    ? "Pick a company first"
+                    : scopedReps.length === 0
+                      ? "No telecallers in this company"
+                      : "Leave unassigned"}
+                </option>
                 {scopedReps.map((sp) => (
                   <option key={sp.id} value={sp.id}>{sp.full_name || sp.id.slice(0, 8)}</option>
                 ))}
