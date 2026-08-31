@@ -54,7 +54,17 @@ function chunk<T>(arr: T[], n: number): T[][] {
   return out;
 }
 
-export function LeadManager({ companyId, salespeople, isSuper = false }: { companyId: string; salespeople: Sp[]; isSuper?: boolean }) {
+export function LeadManager({
+  companyId, salespeople, isSuper = false, allCompanies = [],
+}: {
+  companyId: string;
+  salespeople: Sp[];
+  isSuper?: boolean;
+  /** Super admin only: every company on the platform, straight from the
+   *  companies table. See the note on `companies` below for why this stopped
+   *  being inferred from the telecaller list. */
+  allCompanies?: [string, string][];
+}) {
   const supabase = createClient();
   const nameOf = (id: string | null) => salespeople.find((s) => s.id === id)?.full_name || (id ? "—" : "Unassigned");
   // For the super admin, a telecaller may belong to another company. That rep's
@@ -72,14 +82,28 @@ export function LeadManager({ companyId, salespeople, isSuper = false }: { compa
 
   // Super admin only: narrow the whole board to one company. Built from the
   // telecaller list the page already loaded (unique company_id → name).
+  // THE COMPANY LIST COMES FROM THE COMPANIES TABLE, NOT FROM THE REPS.
+  //
+  // It used to be inferred: every distinct company_id among the telecallers.
+  // That made the entire import flow depend on a query two components away —
+  // if the telecaller list came back short or without company_id for any
+  // reason, this list was empty, which left the import modal with no company
+  // to pick, therefore no target company, therefore a permanently disabled
+  // "Which rep?" dropdown and a red "Choose a company first" pointing at a
+  // control that was not on screen. A founder cannot debug that from the UI.
+  //
+  // It was also wrong on its own terms: a company that has not hired a
+  // telecaller yet still exists and can still receive imported leads.
   const companies = isSuper
-    ? Array.from(
-        new Map(
-          salespeople
-            .filter((s) => s.company_id)
-            .map((s) => [s.company_id as string, s.company_name ?? "—"]),
-        ).entries(),
-      ).sort((a, b) => a[1].localeCompare(b[1]))
+    ? (allCompanies.length
+        ? [...allCompanies].sort((a, b) => a[1].localeCompare(b[1]))
+        : Array.from(
+            new Map(
+              salespeople
+                .filter((s) => s.company_id)
+                .map((s) => [s.company_id as string, s.company_name ?? "—"]),
+            ).entries(),
+          ).sort((a, b) => a[1].localeCompare(b[1])))
     : [];
   const [companyFilter, setCompanyFilter] = useState<string>("");
   // Reps shown in chips/assign menu — scoped to the picked company when set.
