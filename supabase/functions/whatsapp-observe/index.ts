@@ -347,6 +347,52 @@ Deno.serve(async (req) => {
     receipts += count ?? 0;
   }
 
+  // ── attachments, arriving after their message ──────────────────────────────
+  //
+  // A file is downloaded on its own schedule, long after the message it belongs
+  // to has been stored — a history sync of four thousand photos cannot hold the
+  // conversation hostage while it fetches them. So the worker reports each file
+  // as a patch against a message id that already exists here.
+  //
+  // Same rule as everywhere else: the file is only kept for a KNOWN LEAD. An
+  // unmatched conversation keeps its counts and its number so the lead can be
+  // recovered; storing a stranger's photos would go past what watching a
+  // company SIM was agreed to mean.
+  let files = 0;
+  for (const raw of (Array.isArray(body?.media) ? body.media : []) as unknown[]) {
+    const f = raw as Record<string, unknown>;
+    const waId = String(f.id ?? "");
+    const b64 = typeof f.media_b64 === "string" ? f.media_b64 : null;
+    if (!waId || !b64) continue;
+
+    const { data: row } = await admin
+      .from("wa_observed_messages")
+      .select("id, contact_id, media_kind, media_path")
+      .eq("salesperson_id", salespersonId)
+      .eq("wa_message_id", waId)
+      .maybeSingle();
+    // No row, not a lead, or already have the file: nothing to do. The last of
+    // those makes a replayed batch free rather than a duplicate upload.
+    if (!row || !row.contact_id || row.media_path) continue;
+
+    try {
+      const bytes = decodeBase64(b64);
+      const mime = typeof f.mime_type === "string" && f.mime_type ? f.mime_type : "application/octet-stream";
+      const ext = extensionFor(mime, normaliseKind(row.media_kind) ?? "other");
+      const path = `${companyId}/${salespersonId}/${waId}${ext}`;
+      const { error: upErr } = await admin.storage.from("wa-media").upload(path, bytes, {
+        contentType: mime, upsert: true,
+      });
+      if (upErr) { console.error("wa-media upload failed", upErr.message); continue; }
+      await admin.from("wa_observed_messages")
+        .update({ media_path: path })
+        .eq("id", row.id);
+      files++;
+    } catch (e) {
+      console.error("wa-media decode failed", String(e));
+    }
+  }
+
   // ── deletions and edits ────────────────────────────────────────────────────
   //
   // WHAT THE REP TOOK BACK. "Delete for everyone" was invisible here: the row

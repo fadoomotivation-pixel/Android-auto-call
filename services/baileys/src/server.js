@@ -77,7 +77,12 @@ const MAX_BATCH = 200;
 // A batch that carries downloaded files is capped far lower: 200 voice notes
 // in one POST is tens of megabytes and an edge function that times out
 // halfway through a history import.
-const MAX_MEDIA_BATCH = Number(process.env.MAX_MEDIA_BATCH || 15);
+const MAX_MEDIA_BATCH = Number(process.env.MAX_MEDIA_BATCH || 10);
+// How many attachments may wait to be downloaded. A year of a busy rep's
+// photos fits; the cap only exists so a pathological account cannot
+// exhaust memory holding message objects it will never get through.
+const MAX_MEDIA_QUEUE = Number(process.env.MAX_MEDIA_QUEUE || 25_000);
+const MAX_MEDIA_IN_FLIGHT = Number(process.env.MAX_MEDIA_IN_FLIGHT || 3);
 // Room for a history sync, which arrives as one burst rather than a trickle.
 // A year of a working telecaller's lead conversations fits comfortably; the
 // non-lead ones are dropped by the CRM, not here, so this holds the raw feed.
@@ -129,11 +134,42 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.08.30-7";
+const WORKER_VERSION = "2026.08.30-8";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
   process.exit(1);
+}
+
+/**
+ * THE REASON EVERY UPDATE COSTS A TELECALLER ANOTHER QR SCAN.
+ *
+ * Hostinger's "deployment from source files" REPLACES the application
+ * directory. If AUTH_DIR sits inside it — and "./auth", the default, always
+ * does — then every upload of a new build deletes the saved WhatsApp login
+ * along with the old code. The worker comes back up healthy, logs "QR ready",
+ * and someone has to go and ask a rep to scan again for what was supposed to be
+ * an invisible bug fix. That has now happened on every single deploy.
+ *
+ * The fix is one environment variable pointing somewhere the deploy does not
+ * touch. This cannot enforce it — the worker has no idea what the platform
+ * will overwrite — so it says so loudly at startup, every time, until it is set.
+ */
+{
+  const resolved = path.resolve(AUTH_DIR);
+  const insideApp = resolved.startsWith(path.resolve(process.cwd()) + path.sep);
+  if (insideApp) {
+    console.warn(
+      "\n" +
+      "  ⚠  AUTH_DIR IS INSIDE THE APP FOLDER — the next deploy will wipe the login.\n" +
+      `     Now:  ${resolved}\n` +
+      "     Every upload replaces this folder, so every rep has to scan a new QR.\n" +
+      "     Set AUTH_DIR to a path OUTSIDE the app directory (persistent storage),\n" +
+      "     then restart ONCE and scan. After that, updates keep the session.\n",
+    );
+  } else {
+    console.log(`auth stored at ${resolved} — outside the app folder, so deploys keep the login`);
+  }
 }
 
 const log = pino({ level: process.env.LOG_LEVEL || "info" });
@@ -182,6 +218,12 @@ function newSession(id, salespersonId) {
     pendingContacts: [],
     // Online/typing states, when WATCH_PRESENCE is on.
     pendingPresence: [],
+    // Attachments still to download, and the files already fetched and waiting
+    // to be reported. Separate because one is work and the other is a result.
+    mediaQueue: [],
+    mediaWorkers: 0,
+    mediaQueueWarned: false,
+    pendingMedia: [],
     flushTimer: null,
     state: {
       status: "disconnected", // disconnected | connecting | qr | connected
@@ -661,21 +703,58 @@ async function fetchMedia(s, msg, kind, declaredSize) {
 }
 
 /**
- * How many media downloads are in flight right now.
+ * The attachment backlog, and the loop that works through it.
  *
- * A history sync arrives as one burst of thousands of messages. Awaiting a
- * download for each would either serialise the import into something that takes
- * an afternoon, or — if fired in parallel — open thousands of simultaneous
- * fetches against WhatsApp's media CDN from one freshly-linked number, which is
- * the behaviour that gets a number flagged.
+ * A history sync arrives as one burst of thousands. Downloading inline would
+ * either serialise the whole import behind the files, or — fired in parallel —
+ * open thousands of simultaneous fetches at WhatsApp's media CDN from a number
+ * that has just linked a new device, which is the behaviour that gets a number
+ * flagged. Skipping them, which is what the first version did, loses precisely
+ * the photos and brochures a re-scan exists to recover.
  *
- * So capture degrades instead of queueing: while the box is already busy the
- * message is stored with its text and its kind and no file. Live traffic, which
- * is one message at a time, effectively always gets its media; a backlog import
- * gets whatever it can without ever holding the import up.
+ * So: bounded concurrency, unbounded patience. The queue holds the message
+ * objects (Baileys needs the original to decrypt), a few workers pull from it
+ * continuously, and each finished file is reported to the CRM as a patch
+ * against the message id that is already stored. Slow is fine. Lossy is not.
  */
-let mediaInFlight = 0;
-const MAX_MEDIA_IN_FLIGHT = Number(process.env.MAX_MEDIA_IN_FLIGHT || 3);
+function queueMedia(s, msg, waId, kind, declaredSize) {
+  if (declaredSize && Number(declaredSize) > MAX_MEDIA_BYTES) return;
+  if (s.mediaQueue.length >= MAX_MEDIA_QUEUE) {
+    // Bounded so a pathological account cannot exhaust memory. Logged rather
+    // than silent, because "some files missing" with no explanation is the
+    // thing that cost days on this feature already.
+    if (!s.mediaQueueWarned) {
+      s.mediaQueueWarned = true;
+      log.warn({ id: s.id, cap: MAX_MEDIA_QUEUE }, "media backlog full — later attachments will be named only");
+    }
+    return;
+  }
+  s.mediaQueue.push({ msg, waId, kind });
+  void drainMedia(s);
+}
+
+async function drainMedia(s) {
+  if (s.mediaWorkers >= MAX_MEDIA_IN_FLIGHT) return;
+  s.mediaWorkers += 1;
+  try {
+    while (s.mediaQueue.length) {
+      const job = s.mediaQueue.shift();
+      if (!job) break;
+      const b64 = await fetchMedia(s, job.msg, job.kind, null);
+      if (b64) {
+        s.pendingMedia.push({ id: job.waId, media_b64: b64, mime_type: mediaMetaOf(job.msg).mime_type ?? null });
+        if (!s.flushTimer) s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
+      }
+      // Every completed file frees the message object for collection; holding
+      // a whole history's worth of them is what the cap above is protecting.
+      job.msg = null;
+    }
+  } catch (e) {
+    log.warn({ id: s.id, err: String(e?.message || e) }, "media drainer stopped");
+  } finally {
+    s.mediaWorkers -= 1;
+  }
+}
 
 async function queueObserved(s, msg) {
   const jid = msg?.key?.remoteJid ?? "";
@@ -708,15 +787,21 @@ async function queueObserved(s, msg) {
   if (!text.trim() && !kind) return;
 
   const meta = mediaMetaOf(msg);
-  let mediaB64 = null;
-  if (kind && mediaInFlight < MAX_MEDIA_IN_FLIGHT) {
-    mediaInFlight += 1;
-    try {
-      mediaB64 = await fetchMedia(s, msg, kind, meta.file_size);
-    } finally {
-      mediaInFlight -= 1;
-    }
-  }
+
+  // TEXT NOW, FILE AFTER — AND THE FILE IS NEVER DROPPED.
+  //
+  // The first version of this downloaded inline and gave up whenever the box
+  // was already busy, which meant a history sync — thousands of messages in one
+  // burst, the exact moment every old photo and brochure arrives — captured
+  // almost no files at all. It degraded silently and would have wasted the one
+  // re-scan a telecaller can reasonably be asked for.
+  //
+  // Now the message itself is queued immediately, so the conversation lands
+  // fast and in order, and the attachment is handed to a drainer that works
+  // through the backlog at a controlled rate and reports each file as it
+  // arrives. A sync of four thousand photos takes a while and finishes; nothing
+  // is thrown away because the queue happened to be deep when it appeared.
+  if (kind && CAPTURE_MEDIA) queueMedia(s, msg, id, kind, meta.file_size);
 
   s.pending.push({
     id,
@@ -727,10 +812,6 @@ async function queueObserved(s, msg) {
     // are. Never used for matching — that is phone-number-only, on purpose.
     peer_name: msg?.pushName ?? null,
     ...meta,
-    // base64, or null when capture is off, the file was too large, the box was
-    // already busy, or the download failed. The CRM uploads it to storage —
-    // this worker holds no Supabase key and never touches the bucket itself.
-    media_b64: mediaB64,
     is_group: isGroup,
     // The whole message. The worker is not where privacy is decided — it cannot
     // even tell whether this number is a lead. The CRM's match_wa_contact drops
@@ -775,7 +856,7 @@ async function flushObserved(s) {
   // calls invisible for exactly the reps who make the most of them.
   if (s.pending.length === 0 && s.pendingCalls.length === 0 && s.pendingReceipts.length === 0
       && s.pendingEdits.length === 0 && s.pendingContacts.length === 0
-      && s.pendingPresence.length === 0) return;
+      && s.pendingPresence.length === 0 && s.pendingMedia.length === 0) return;
   if (!INGEST_URL || !INGEST_SECRET) {
     // Said once per flush rather than silently dropping: a watcher with nowhere
     // to report looks identical to a rep who sent nothing.
@@ -792,6 +873,9 @@ async function flushObserved(s) {
   const edits = s.pendingEdits.splice(0, MAX_BATCH);
   const contacts = s.pendingContacts.splice(0, MAX_BATCH);
   const presence = s.pendingPresence.splice(0, MAX_BATCH);
+  // Files are orders of magnitude bigger than any other row here, so a
+  // media batch is capped by its own much smaller limit.
+  const media = s.pendingMedia.splice(0, MAX_MEDIA_BATCH);
   try {
     const r = await fetch(INGEST_URL, {
       method: "POST",
@@ -812,6 +896,7 @@ async function flushObserved(s) {
         edits,
         contacts,
         presence,
+        media,
         // So the dashboard can tell which worker build is live without anyone
         // guessing from behaviour.
         worker_version: WORKER_VERSION,
@@ -826,6 +911,9 @@ async function flushObserved(s) {
     // A backlog drains at its own pace, not the idle heartbeat's. At one batch
     // per FLUSH_MS a history sync would take half an hour to land, and the
     // admin watching the lead page would conclude it had not worked.
+    if (s.pendingMedia.length > 0 && !s.flushTimer) {
+      s.flushTimer = setTimeout(() => flushObserved(s), 1500);
+    }
     if (s.pending.length > 0) {
       s.flushTimer = setTimeout(() => flushObserved(s), 500);
       return;
@@ -839,6 +927,7 @@ async function flushObserved(s) {
     s.pendingEdits.unshift(...edits);
     s.pendingContacts.unshift(...contacts);
     s.pendingPresence.unshift(...presence);
+    s.pendingMedia.unshift(...media);
     log.warn({ id: s.id, err: String(e?.message || e), queued: s.pending.length }, "ingest failed, will retry");
   }
   if ((s.pending.length > 0 || s.pendingCalls.length > 0 || s.pendingReceipts.length > 0) && !s.flushTimer) {
@@ -958,6 +1047,8 @@ const server = http.createServer(async (req, res) => {
         existing.pendingEdits.length = 0;
         existing.pendingContacts.length = 0;
         existing.pendingPresence.length = 0;
+        existing.pendingMedia.length = 0;
+        existing.mediaQueue.length = 0;
         try { existing.sock?.end?.(); } catch { /* already gone */ }
         sessions.delete(salespersonId);
       }

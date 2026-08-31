@@ -126,8 +126,39 @@ the problem is gone permanently:
 5. `AUTH_DIR` stays **unset**. See the warning below: setting it now would
    abandon the logged-in sessions.
 
-Until that switch happens, every worker change means a fresh zip. Which build is
-actually running is answerable without guessing:
+## Stop paying a QR scan for every update
+
+The single most expensive thing about this worker is that **every deploy logs
+every telecaller out.** Hostinger's "deployment from source files" REPLACES the
+application directory, and `AUTH_DIR` defaults to `./auth` — inside it. So each
+new build deletes the saved WhatsApp login along with the old code, the worker
+restarts healthy, logs `QR ready`, and a real telecaller has to be interrupted
+and asked to scan again for what was meant to be an invisible fix.
+
+**Set `AUTH_DIR` to a path outside the application folder**, on storage the
+deploy does not touch — a sibling directory of the app root is enough. Then:
+
+1. Set it, restart, scan **once**.
+2. Every later upload keeps that session. No rep is disturbed again.
+
+The worker now says which side of this line it is on, in its first log lines:
+
+```
+auth stored at /home/…/wa-auth — outside the app folder, so deploys keep the login
+```
+
+or, if it is still on the default:
+
+```
+⚠  AUTH_DIR IS INSIDE THE APP FOLDER — the next deploy will wipe the login.
+```
+
+Do this **before** the next scan, not after — changing `AUTH_DIR` on a
+logged-in worker abandons the session that is already there and costs one more
+scan to fix.
+
+Until the GitHub switch happens, every worker change means a fresh zip. Which
+build is actually running is answerable without guessing:
 
 ```
 curl https://<worker>/health
