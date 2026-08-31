@@ -52,20 +52,40 @@ export default async function LeadsPage() {
     // Service role bypasses per-company RLS so the super admin sees every
     // company's telecallers, each labelled with its company.
     const svc = getServiceSupabase();
-    const { data: reps, error: repsErr } = await svc
-      .from("profiles")
-      .select("id, full_name, territory, company_id, companies(name)")
-      .eq("role", "salesperson")
-      .order("full_name");
-    if (repsErr) repsError = repsErr.message;
 
-    const { data: cos, error: coErr } = await svc
-      .from("companies").select("id, name").order("name");
+    // NO EMBED. `companies(name)` looked like the obvious way to label each
+    // rep, and it failed outright with "more than one relationship was found
+    // for 'profiles' and 'companies'" — which is why this query returned
+    // nothing at all and the whole import flow went dead.
+    //
+    // There is only ONE foreign key between the two tables. The ambiguity
+    // comes from the other twenty-eight: every table carrying both a
+    // company_id and a salesperson_id — contacts, call_logs, wa_observed_
+    // messages and the rest — reads to PostgREST as a junction offering
+    // another possible path, so it refuses to guess. It will only get worse
+    // as tables are added, so the join is done here instead: two flat reads
+    // and a lookup, which cannot become ambiguous later.
+    const [{ data: reps, error: repsErr }, { data: cos, error: coErr }] = await Promise.all([
+      svc.from("profiles")
+        .select("id, full_name, territory, company_id")
+        .eq("role", "salesperson")
+        .order("full_name"),
+      svc.from("companies").select("id, name").order("name"),
+    ]);
+    if (repsErr) repsError = repsErr.message;
     if (coErr && !repsError) repsError = coErr.message;
+
     allCompanies = (cos ?? []).map((c) => [String(c.id), String(c.name ?? "—")] as [string, string]);
+    const companyName = new Map(allCompanies);
     salespeople = (reps ?? []).map((r) => {
-      const rec = r as { id: string; full_name: string | null; territory: string | null; company_id: string | null; companies?: { name?: string | null } | null };
-      return { id: rec.id, full_name: rec.full_name, territory: rec.territory, company_id: rec.company_id, company_name: rec.companies?.name ?? null };
+      const rec = r as { id: string; full_name: string | null; territory: string | null; company_id: string | null };
+      return {
+        id: rec.id,
+        full_name: rec.full_name,
+        territory: rec.territory,
+        company_id: rec.company_id,
+        company_name: rec.company_id ? companyName.get(rec.company_id) ?? null : null,
+      };
     });
 
     // A super admin with their own company's reps beats a super admin with
