@@ -354,6 +354,27 @@ export default async function TelecallerActivityPage({
             a rep doing nothing — they are on a different number. Re-scanning a
             QR cannot fix that, and until this line existed, re-scanning was the
             only thing anyone knew to try. */}
+        {/* GIVING A REP THEIR OWN WORK BACK.
+            Ankita lost WhatsApp off her own phone while we were asking her to
+            re-scan for a bug re-scanning could not fix, and this database
+            turned out to hold the only surviving copy of a year of her
+            conversations. That should be one click, not a favour someone has
+            to write SQL for. */}
+        {current.wa_messages + current.wa_offbook > 0 && (
+          <div className="card" style={{ marginBottom: 16, padding: 12 }}>
+            <strong>📦 Download their WhatsApp archive</strong>
+            <p className="subtitle" style={{ marginTop: 4, marginBottom: 8 }}>
+              Every conversation this CRM has stored for {current.rep_name || "this telecaller"},
+              as one file that opens on any phone — useful if they ever lose WhatsApp itself.
+              Attachments are listed by name; the files were not captured before this week.
+            </p>
+            <a className="btn" style={{ textDecoration: "none", display: "inline-block" }}
+              href={`/dashboard/platform/telecallers-activity/export?rep=${current.rep_id}`}>
+              Download archive
+            </a>
+          </div>
+        )}
+
         {fit && fit.numbers_whatsapped > 0 && fit.leads_called >= 20 &&
           fit.overlap * 20 < fit.leads_called && (
           <div className="card" style={{
