@@ -368,10 +368,20 @@ export default async function TelecallerActivityPage({
               as one file that opens on any phone — useful if they ever lose WhatsApp itself.
               Attachments are listed by name; the files were not captured before this week.
             </p>
-            <a className="btn" style={{ textDecoration: "none", display: "inline-block" }}
-              href={`/dashboard/platform/telecallers-activity/export?rep=${current.rep_id}`}>
-              Download archive
-            </a>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <a className="btn" style={{ textDecoration: "none", display: "inline-block" }}
+                href={`/dashboard/platform/telecallers-activity/export?rep=${current.rep_id}`}>
+                Download as web page
+              </a>
+              {/* The same conversations in WhatsApp's own Export-chat layout.
+                  Not a restore — WhatsApp has no import, from any file — but it
+                  is the format every notes app and chat viewer already reads,
+                  and it is what a rep can keep on their phone. */}
+              <a className="btn-ghost" style={{ textDecoration: "none", display: "inline-block" }}
+                href={`/dashboard/platform/telecallers-activity/export?rep=${current.rep_id}&format=txt`}>
+                Download as WhatsApp .txt
+              </a>
+            </div>
           </div>
         )}
 

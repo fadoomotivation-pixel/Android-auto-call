@@ -52,8 +52,62 @@ const day = (iso: string) =>
 const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-IN", { ...IST, hour: "numeric", minute: "2-digit", hour12: true });
 
+/**
+ * WhatsApp's own "Export chat" text format.
+ *
+ * NOT a msgstore.db, and it cannot be one. WhatsApp restores only from a
+ * .crypt15 backup encrypted with a key that lives on the handset (or behind
+ * her 64-digit end-to-end backup key), and it only ever reads one at
+ * registration time. A database file assembled here has no valid key, so the
+ * app would reject it — there is no import path into WhatsApp at all, from any
+ * file, which is worth knowing before paying for a tool that claims otherwise.
+ *
+ * This is the next best thing and a real one: byte-for-byte the layout
+ * WhatsApp itself produces from Export chat, so it opens in any notes or text
+ * app, is searchable, and is the format every third-party chat viewer already
+ * understands.
+ */
+function asWhatsAppText(repName: string, chats: [string, Row[]][], total: number): string {
+  const out: string[] = [];
+  const stamp = (iso: string) =>
+    `${new Date(iso).toLocaleDateString("en-GB", { ...IST, day: "2-digit", month: "2-digit", year: "2-digit" })}, ` +
+    `${new Date(iso).toLocaleTimeString("en-IN", { ...IST, hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase()}`;
+
+  out.push(`WhatsApp archive for ${repName}`);
+  out.push(`${total} messages across ${chats.length} chats, saved by Call Pro AI.`);
+  out.push(`Attachments show as <Media omitted> — the files themselves were not kept.`);
+  out.push("");
+
+  for (const [phone, msgs] of chats) {
+    const label = msgs.find((m) => m.lead_name)?.lead_name
+      ?? msgs.find((m) => m.peer_name)?.peer_name
+      ?? phone;
+    out.push("==================================================");
+    out.push(`Chat with ${label} (${phone}) — ${msgs.length} messages`);
+    out.push("==================================================");
+    for (const m of msgs) {
+      const who = m.direction === "out" ? repName : String(label);
+      let text: string;
+      if (m.deleted_at) text = m.body ? `This message was deleted: ${m.body}` : "This message was deleted";
+      else if (m.media_kind && !m.body) text = `<Media omitted>${m.file_name ? ` (${m.file_name})` : ""}`;
+      else if (m.media_kind && m.body) text = `<Media omitted> ${m.body}`;
+      else text = m.body ?? "";
+      // WhatsApp writes a multi-line message as continuation lines under the
+      // stamped first one; keeping that means a parser reading this file back
+      // does not treat every newline as a new message.
+      const [head, ...rest] = text.split("\n");
+      out.push(`${stamp(m.sent_at)} - ${who}: ${head}`);
+      for (const line of rest) out.push(line);
+    }
+    out.push("");
+  }
+  return out.join("\n");
+}
+
 export async function GET(req: Request) {
-  const rep = new URL(req.url).searchParams.get("rep") ?? "";
+  const url = new URL(req.url);
+  const rep = url.searchParams.get("rep") ?? "";
+  const format = url.searchParams.get("format") === "txt" ? "txt" : "html";
   if (!rep) return new Response("rep required", { status: 400 });
 
   const supabase = await createClient();
@@ -78,6 +132,17 @@ export async function GET(req: Request) {
   }
   // Busiest conversations first — the ones most worth having back.
   const ordered = [...chats.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  const fileBase = repName.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  if (format === "txt") {
+    return new Response(asWhatsAppText(repName, ordered, rows.length), {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": `attachment; filename="WhatsApp Chat - ${fileBase}.txt"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
 
   const parts: string[] = [];
   parts.push(`<!doctype html><html lang="en"><head><meta charset="utf-8">
