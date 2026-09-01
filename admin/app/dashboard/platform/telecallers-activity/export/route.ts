@@ -52,8 +52,143 @@ const day = (iso: string) =>
 const clock = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-IN", { ...IST, hour: "numeric", minute: "2-digit", hour12: true });
 
+/**
+ * WhatsApp's own "Export chat" text format.
+ *
+ * NOT a msgstore.db, and it cannot be one. WhatsApp restores only from a
+ * .crypt15 backup encrypted with a key that lives on the handset (or behind
+ * her 64-digit end-to-end backup key), and it only ever reads one at
+ * registration time. A database file assembled here has no valid key, so the
+ * app would reject it — there is no import path into WhatsApp at all, from any
+ * file, which is worth knowing before paying for a tool that claims otherwise.
+ *
+ * This is the next best thing and a real one: byte-for-byte the layout
+ * WhatsApp itself produces from Export chat, so it opens in any notes or text
+ * app, is searchable, and is the format every third-party chat viewer already
+ * understands.
+ */
+function asWhatsAppText(repName: string, chats: [string, Row[]][], total: number): string {
+  const out: string[] = [];
+  const stamp = (iso: string) =>
+    `${new Date(iso).toLocaleDateString("en-GB", { ...IST, day: "2-digit", month: "2-digit", year: "2-digit" })}, ` +
+    `${new Date(iso).toLocaleTimeString("en-IN", { ...IST, hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase()}`;
+
+  out.push(`WhatsApp archive for ${repName}`);
+  out.push(`${total} messages across ${chats.length} chats, saved by Call Pro AI.`);
+  out.push(`Attachments show as <Media omitted> — the files themselves were not kept.`);
+  out.push("");
+
+  for (const [phone, msgs] of chats) {
+    const label = msgs.find((m) => m.lead_name)?.lead_name
+      ?? msgs.find((m) => m.peer_name)?.peer_name
+      ?? phone;
+    out.push("==================================================");
+    out.push(`Chat with ${label} (${phone}) — ${msgs.length} messages`);
+    out.push("==================================================");
+    for (const m of msgs) {
+      const who = m.direction === "out" ? repName : String(label);
+      let text: string;
+      if (m.deleted_at) text = m.body ? `This message was deleted: ${m.body}` : "This message was deleted";
+      else if (m.media_kind && !m.body) text = `<Media omitted>${m.file_name ? ` (${m.file_name})` : ""}`;
+      else if (m.media_kind && m.body) text = `<Media omitted> ${m.body}`;
+      else text = m.body ?? "";
+      // WhatsApp writes a multi-line message as continuation lines under the
+      // stamped first one; keeping that means a parser reading this file back
+      // does not treat every newline as a new message.
+      const [head, ...rest] = text.split("\n");
+      out.push(`${stamp(m.sent_at)} - ${who}: ${head}`);
+      for (const line of rest) out.push(line);
+    }
+    out.push("");
+  }
+  return out.join("\n");
+}
+
+/**
+ * The same archive as a spreadsheet, because remembering is a list job.
+ *
+ * Reading a year of chat back is not how anyone reconstructs a contact list.
+ * Sorting 348 numbers by how much was said, seeing what each person opened
+ * with and where the thread was left, and ticking them off — that is. So the
+ * `clients` sheet is one row per number and the `messages` sheet is every
+ * line, and both open straight into Excel.
+ *
+ * CSV rather than a real .xlsx on purpose: no library, no build-size cost, and
+ * Excel opens it natively. The BOM is not optional — without it Excel reads the
+ * file as its legacy codepage and every Hindi message becomes mojibake, which
+ * on this data is most of them.
+ */
+const BOM = "﻿";
+
+const csvCell = (v: string | number | null) => {
+  const s = v === null || v === undefined ? "" : String(v);
+  // A cell opening with =, +, - or @ is executed as a formula by Excel. A
+  // leading space reads identically and defuses it.
+  const safe = /^[=+\-@]/.test(s) ? ` ${s}` : s;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
+
+const csvRows = (rows: (string | number | null)[][]) =>
+  BOM + rows.map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+
+const oneLine = (s: string, limit = 120) => {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length <= limit ? t : `${t.slice(0, limit - 1)}…`;
+};
+
+function clientsCsv(chats: [string, Row[]][]): string {
+  const out: (string | number | null)[][] = [[
+    "#", "Phone number", "Name", "Total messages", "They sent", "Rep sent",
+    "First message", "Last message", "Days talking",
+    "First thing they said", "Last thing said in this chat", "Open chat",
+  ]];
+  chats.forEach(([phone, msgs], i) => {
+    const name = msgs.find((m) => m.lead_name)?.lead_name
+      ?? msgs.find((m) => m.peer_name)?.peer_name ?? "";
+    const theirs = msgs.filter((m) => m.direction === "in").length;
+    // Almost every row's Name is blank, and that is the truth of the data, not
+    // a gap to paper over: WhatsApp sends a name only for numbers saved in the
+    // handset's contacts, and on a restored session there are none. What they
+    // opened with and where it was left is what actually identifies a number.
+    const firstSaid = msgs.find((m) => m.direction === "in" && m.body?.trim())?.body ?? "";
+    const lastSaid = [...msgs].reverse().find((m) => m.body?.trim())?.body ?? "";
+    out.push([
+      i + 1, phone, name, msgs.length, theirs, msgs.length - theirs,
+      day(msgs[0].sent_at), day(msgs[msgs.length - 1].sent_at),
+      new Set(msgs.map((m) => day(m.sent_at))).size,
+      oneLine(firstSaid), oneLine(lastSaid), `https://wa.me/${phone}`,
+    ]);
+  });
+  return csvRows(out);
+}
+
+function messagesCsv(repName: string, chats: [string, Row[]][]): string {
+  const out: (string | number | null)[][] = [[
+    "Phone number", "Name", "Date", "Time", "Who", "Message",
+    "Attachment", "File name", "Deleted",
+  ]];
+  for (const [phone, msgs] of chats) {
+    const name = msgs.find((m) => m.lead_name)?.lead_name
+      ?? msgs.find((m) => m.peer_name)?.peer_name ?? "";
+    for (const m of msgs) {
+      out.push([
+        phone, name, day(m.sent_at), clock(m.sent_at),
+        m.direction === "out" ? repName : (name || "Client"),
+        m.body ?? "", m.media_kind ?? "", m.file_name ?? "",
+        m.deleted_at ? "yes" : "",
+      ]);
+    }
+  }
+  return csvRows(out);
+}
+
+const FORMATS = new Set(["html", "txt", "csv", "clients"]);
+
 export async function GET(req: Request) {
-  const rep = new URL(req.url).searchParams.get("rep") ?? "";
+  const url = new URL(req.url);
+  const rep = url.searchParams.get("rep") ?? "";
+  const asked = url.searchParams.get("format") ?? "html";
+  const format = FORMATS.has(asked) ? asked : "html";
   if (!rep) return new Response("rep required", { status: 400 });
 
   const supabase = await createClient();
@@ -78,6 +213,28 @@ export async function GET(req: Request) {
   }
   // Busiest conversations first — the ones most worth having back.
   const ordered = [...chats.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  const fileBase = repName.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  if (format === "csv" || format === "clients") {
+    const body = format === "clients" ? clientsCsv(ordered) : messagesCsv(repName, ordered);
+    const what = format === "clients" ? "numbers" : "messages";
+    return new Response(body, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="whatsapp-${what}-${fileBase}.csv"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+  if (format === "txt") {
+    return new Response(asWhatsAppText(repName, ordered, rows.length), {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Disposition": `attachment; filename="WhatsApp Chat - ${fileBase}.txt"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
 
   const parts: string[] = [];
   parts.push(`<!doctype html><html lang="en"><head><meta charset="utf-8">

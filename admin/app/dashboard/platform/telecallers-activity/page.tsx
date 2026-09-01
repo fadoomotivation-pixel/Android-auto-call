@@ -368,10 +368,38 @@ export default async function TelecallerActivityPage({
               as one file that opens on any phone — useful if they ever lose WhatsApp itself.
               Attachments are listed by name; the files were not captured before this week.
             </p>
-            <a className="btn" style={{ textDecoration: "none", display: "inline-block" }}
-              href={`/dashboard/platform/telecallers-activity/export?rep=${current.rep_id}`}>
-              Download archive
-            </a>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <a className="btn" style={{ textDecoration: "none", display: "inline-block" }}
+                href={`/dashboard/platform/telecallers-activity/export?rep=${current.rep_id}`}>
+                Download as web page
+              </a>
+              {/* The same conversations in WhatsApp's own Export-chat layout.
+                  Not a restore — WhatsApp has no import, from any file — but it
+                  is the format every notes app and chat viewer already reads,
+                  and it is what a rep can keep on their phone. */}
+              <a className="btn-ghost" style={{ textDecoration: "none", display: "inline-block" }}
+                href={`/dashboard/platform/telecallers-activity/export?rep=${current.rep_id}&format=txt`}>
+                Download as WhatsApp .txt
+              </a>
+              {/* REBUILDING A CONTACT LIST IS A LIST JOB, NOT A READING JOB.
+                  Nobody reconstructs a year of clients by scrolling a year of
+                  chat. They sort the numbers by how much was said, look at what
+                  each person opened with, and work down the list — which is a
+                  spreadsheet, so here is one. */}
+              <a className="btn-ghost" style={{ textDecoration: "none", display: "inline-block" }}
+                href={`/dashboard/platform/telecallers-activity/export?rep=${current.rep_id}&format=clients`}>
+                Excel: every number
+              </a>
+              <a className="btn-ghost" style={{ textDecoration: "none", display: "inline-block" }}
+                href={`/dashboard/platform/telecallers-activity/export?rep=${current.rep_id}&format=csv`}>
+                Excel: every message
+              </a>
+            </div>
+            <p className="subtitle" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
+              The Excel files list every number, busiest first, with what the client
+              first said and where the chat was left — names are usually blank
+              because WhatsApp only sends a name for numbers saved in the phone.
+            </p>
           </div>
         )}
 
