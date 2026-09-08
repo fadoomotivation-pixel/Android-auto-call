@@ -226,6 +226,7 @@ export class BaileysProvider implements WhatsAppProvider {
   async repQr(salespersonId: string): Promise<{
     status: string; qr: string | null; gen: number | null;
     reachable: boolean; error: string | null; worker_version: string | null;
+    wa_version: string | null; wa_version_source: string | null;
   }> {
     try {
       const r = await fetch(this.repUrl(salespersonId, "/qr?format=json"), { headers: this.headers() });
@@ -233,6 +234,7 @@ export class BaileysProvider implements WhatsAppProvider {
         return {
           status: "disconnected", qr: null, gen: null, reachable: true,
           error: `The WhatsApp worker answered ${r.status}.`, worker_version: null,
+          wa_version: null, wa_version_source: null,
         };
       }
       const d = await r.json();
@@ -243,12 +245,17 @@ export class BaileysProvider implements WhatsAppProvider {
         reachable: true,
         error: d?.error ?? null,
         worker_version: d?.worker_version ?? null,
+        // The protocol version the worker claimed, and whether it managed to
+        // look that up or fell back. When WhatsApp refuses a handshake this is
+        // the deciding fact, so it travels all the way to the screen.
+        wa_version: d?.wa_version ?? null,
+        wa_version_source: d?.wa_version_source ?? null,
       };
     } catch {
       return {
         status: "disconnected", qr: null, gen: null, reachable: false,
         error: "Could not reach the WhatsApp worker. Check that the service is running.",
-        worker_version: null,
+        worker_version: null, wa_version: null, wa_version_source: null,
       };
     }
   }

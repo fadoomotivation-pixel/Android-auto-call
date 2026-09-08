@@ -165,6 +165,10 @@ export function TelecallerWhatsApp({
   // hosting panel every time; it belongs on the screen that depends on it.
   const [workerBuild, setWorkerBuild] = useState<string | null>(null);
   const [workerDown, setWorkerDown] = useState(false);
+  // The WhatsApp protocol version the worker claimed, and whether it looked it
+  // up or fell back. When WhatsApp closes the handshake before offering a QR,
+  // this is the fact that decides what to do next.
+  const [waVersion, setWaVersion] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -302,6 +306,11 @@ export function TelecallerWhatsApp({
       );
       setWorkerBuild((r.worker_version as string | null) ?? null);
       setWorkerDown(r.reachable === false);
+      setWaVersion(
+        r.wa_version
+          ? `${r.wa_version} (${r.wa_version_source ?? "source unknown"})`
+          : (r.wa_version_source as string | null) ?? null,
+      );
       // Three empty polls — about twenty seconds — is well past the point where
       // a healthy pairing would have produced a square. Past that it is not
       // slowness, it is a session resuming a login that no longer works.
@@ -549,6 +558,7 @@ export function TelecallerWhatsApp({
                   the new build or the old one. */}
               <div style={{ fontSize: 11.5, marginTop: 6, opacity: 0.75 }}>
                 Worker build: {workerBuild ?? "not reported — this is an older build"}
+                {waVersion && <><br />WhatsApp version claimed: {waVersion}</>}
               </div>
               <button className="btn" style={{ marginTop: 8 }}
                 onClick={() => void openQr(qrFor, true)}>
