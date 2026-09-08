@@ -69,6 +69,19 @@ export default async function LeadsPage() {
       svc.from("profiles")
         .select("id, full_name, territory, company_id")
         .eq("role", "salesperson")
+        // A PROFILE WITH NO COMPANY IS NOT A TELECALLER — IT IS A STRANGER.
+        //
+        // This Supabase project is shared with another product, and every
+        // signup anywhere on it runs the same handle_new_user trigger: a
+        // profiles row, role 'salesperson', company_id null. Thirty-seven of
+        // those had accumulated against thirteen real telecallers, so three out
+        // of every four names in the "Which rep?" dropdown belonged to a
+        // different company's website.
+        //
+        // Company isolation makes this a correctness rule, not a tidiness one:
+        // a rep who belongs to no company must never be assignable, or a lead
+        // ends up owned by one company and worked by nobody.
+        .not("company_id", "is", null)
         .order("full_name"),
       svc.from("companies").select("id, name").order("name"),
     ]);

@@ -147,6 +147,19 @@ export function TelecallerWhatsApp({
   // notices it has been waiting too long and offers the one thing that
   // actually fixes it — throwing the saved login away.
   const [qrStuck, setQrStuck] = useState(false);
+  // WHICH LOGIN ARE WE WAITING FOR?
+  //
+  // "Connected" on its own is not proof that anybody scanned anything. If the
+  // login being replaced is still reporting itself, or a dying socket writes
+  // its old credentials back and the new session resumes them, the worker says
+  // connected and the rep never saw a square. That is exactly what re-scanning
+  // Ankita's number did every time.
+  //
+  // Each reset returns the credential generation it moved the rep to. The
+  // panel holds that number and refuses to call it connected until the worker
+  // reports the same one back. Null means a worker too old to say — then the
+  // old behaviour stands, because refusing to ever show success would be worse.
+  const [wantGen, setWantGen] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -228,13 +241,14 @@ export function TelecallerWhatsApp({
    * rep has scanned it.
    */
   const openQr = useCallback(async (id: string, fresh = false) => {
-    setQrFor(id); setQr(null); setMsg(null); setQrStuck(false);
-    setQrNote(fresh ? "Forgetting the old login…" : "Starting the session…");
+    setQrFor(id); setQr(null); setMsg(null); setQrStuck(false); setWantGen(null);
+    setQrNote(fresh ? "Unlinking the old device…" : "Starting the session…");
     // rep_reset forgets the saved credentials so WhatsApp treats this as a
     // first link — the only way to get a QR back, and the only way it sends the
     // conversation history. rep_reconnect just resumes and would show nothing.
     const r = await call(fresh ? "rep_reset" : "rep_reconnect", id);
     if (!r.ok) { setQrNote(null); setQrFor(null); setMsg(String(r.error ?? "Could not reach the worker.")); return; }
+    if (fresh && typeof r.gen === "number") setWantGen(r.gen);
     setQrNote("Waiting for WhatsApp to offer a QR…");
   }, [call]);
 
@@ -249,14 +263,28 @@ export function TelecallerWhatsApp({
       const r = await call("rep_qr", qrFor);
       if (!alive) return;
       if (!r.ok) { setQrNote(String(r.error ?? "Could not reach the worker.")); return; }
-      if (r.status === "connected") {
+      // Only the login we asked for counts. A "connected" carrying the previous
+      // generation is the old session still talking, or a resumed credential
+      // that came back from the dead — either way nobody scanned, and calling
+      // it success is what hid this bug for weeks.
+      const gen = typeof r.gen === "number" ? (r.gen as number) : null;
+      const rightLogin = wantGen === null || gen === null || gen >= wantGen;
+      if (r.status === "connected" && rightLogin) {
         setQr(null); setQrNote("Connected. This rep's WhatsApp is now being watched.");
         setQrStuck(false);
         void load();
         return;
       }
       setQr((r.qr as string) ?? null);
-      setQrNote((r.qr ? null : "Waiting for WhatsApp to offer a QR…"));
+      setQrNote(
+        r.qr
+          ? null
+          : r.status === "connected"
+            // Says the true thing rather than the reassuring one: the worker is
+            // reporting the login we just replaced, so the square is still coming.
+            ? "Still finishing with the old login — the new QR is coming…"
+            : "Waiting for WhatsApp to offer a QR…",
+      );
       // Three empty polls — about twenty seconds — is well past the point where
       // a healthy pairing would have produced a square. Past that it is not
       // slowness, it is a session resuming a login that no longer works.
@@ -265,7 +293,7 @@ export function TelecallerWhatsApp({
     void tick();
     const h = setInterval(() => void tick(), 6000);
     return () => { alive = false; clearInterval(h); };
-  }, [qrFor, call, load]);
+  }, [qrFor, wantGen, call, load]);
 
   const add = async () => {
     if (!repId) { setMsg("Pick a telecaller first."); return; }
@@ -290,7 +318,12 @@ export function TelecallerWhatsApp({
     await load();
     // Straight into the QR. Saving a row and then leaving an admin to work out
     // what to do next is how a setup flow stalls at step one.
-    void openQr(connected);
+    //
+    // A fresh link even though this rep is new to the table: a rep who was
+    // removed and re-added still has credentials on the worker's disk, and
+    // resuming those is precisely the silent "Connected, no QR" this flow keeps
+    // falling into. One path for everyone.
+    void openQr(connected, true);
   };
 
   const remove = async (id: string) => {
@@ -418,30 +451,32 @@ export function TelecallerWhatsApp({
                         View chats
                       </a>
                     )}
-                    {/* Two different things, and conflating them is what made
-                        an already-linked rep unfixable: a plain reconnect
-                        RESUMES the saved login, while a reset throws it away so
-                        WhatsApp pairs from scratch and sends the history.
-                        A resume can only ever produce a QR when there is no
-                        saved login to resume — which is why a rep who has
-                        linked before and broken since (dead or taken-over
-                        credentials, and `s.wa_number` is the tell that they
-                        once linked) needs the reset, not the resume. Pressing
-                        "Show QR" for them used to guarantee a QR that never
-                        arrives. */}
+                    {/* THIS BUTTON ALWAYS STARTS A FRESH LINK. IT USED TO GUESS.
+                        It picked between "resume the saved login" and "throw it
+                        away", using this row as evidence — connected, or a
+                        wa_number proving they had linked before. Both readings
+                        come from a mirrored row that can be wrong, and for
+                        Ankita they were: her row said disconnected with no
+                        number while a perfectly good credential sat on the
+                        worker's disk. So the button chose resume, the worker
+                        resumed, and the panel reported Connected without ever
+                        showing a square. Twice, on two different days.
+                        A resume is never what someone pressing this wants —
+                        the worker already resumes by itself on restart, and
+                        only a fresh link makes WhatsApp send the history. One
+                        behaviour, no guessing, and the confirm is honest about
+                        the cost. */}
                     <button className="btn-ghost"
                       onClick={() => {
                         const name = repName.get(s.salesperson_id) ?? "this telecaller";
-                        const linkedBefore = Boolean(s.wa_number);
-                        const wipe = health === "connected" || linkedBefore;
-                        if (health === "connected" &&
-                            !confirm(`Re-link ${name}'s WhatsApp?\n\n` +
-                              "They will have to scan a new QR. Do this to import conversations from " +
-                              "before they first connected — WhatsApp only sends the history on a fresh link.\n\n" +
-                              "Messages already saved are kept.")) return;
-                        void openQr(s.salesperson_id, wipe);
+                        if (!confirm(`Get a new QR for ${name}?\n\n` +
+                          "Their old link is removed and they scan again from their own phone. " +
+                          "This is also the only way to import chats from before they first " +
+                          "connected — WhatsApp sends the history only on a fresh link.\n\n" +
+                          "Messages already saved are kept.")) return;
+                        void openQr(s.salesperson_id, true);
                       }}>
-                      {health === "connected" ? "Re-scan" : s.wa_number ? "Fix — new QR" : "Show QR"}
+                      {health === "connected" ? "Re-scan" : "Show QR"}
                     </button>
                     <button className="btn-ghost" disabled={busy === s.salesperson_id}
                       onClick={() => void remove(s.salesperson_id)}>
@@ -482,21 +517,21 @@ export function TelecallerWhatsApp({
               background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)",
             }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: "#f59e0b" }}>
-                No QR is coming.
+                Still no QR.
               </div>
               <div style={{ fontSize: 12.5, marginTop: 4 }}>
-                This rep still has an old login saved, so WhatsApp is trying to resume it instead
-                of showing a new code. Throw it away and start over — the rep scans once more and
-                their history comes with it.
+                The old login is taking longer than usual to let go, or the worker is on an
+                older build. Ask for it once more — that is almost always enough. If two
+                tries do nothing, restart the worker and come back here.
               </div>
               <button className="btn" style={{ marginTop: 8 }}
                 onClick={() => void openQr(qrFor, true)}>
-                Start fresh — get a new QR
+                Ask again
               </button>
             </div>
           )}
           <div style={{ marginTop: 10 }}>
-            <button className="btn-ghost" onClick={() => { setQrFor(null); setQr(null); setQrNote(null); setQrStuck(false); }}>
+            <button className="btn-ghost" onClick={() => { setQrFor(null); setQr(null); setQrNote(null); setQrStuck(false); setWantGen(null); }}>
               Close
             </button>
           </div>

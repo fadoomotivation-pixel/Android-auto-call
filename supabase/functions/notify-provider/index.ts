@@ -166,6 +166,9 @@ Deno.serve(async (req) => {
     if (action === "rep_reset") {
       const rr = await w.repReset(salespersonId);
       if (!rr.ok) return json({ ok: false, error: rr.error }, 502);
+      // Handed back to the browser so the QR panel can tell the rep's new scan
+      // apart from the login it just replaced. Not a secret: a counter of how
+      // many times this rep has re-linked.
       await admin.from("wa_rep_sessions").update({
         status: "disconnected",
         wa_number: null,
@@ -177,7 +180,7 @@ Deno.serve(async (req) => {
         // for a bug in the ingest.
         last_seen_at: null,
       }).eq("salesperson_id", salespersonId);
-      return json({ ok: true, status: "connecting" });
+      return json({ ok: true, status: "connecting", gen: rr.gen });
     }
     if (action === "rep_qr") {
       return json({ ok: true, ...(await w.repQr(salespersonId)) });

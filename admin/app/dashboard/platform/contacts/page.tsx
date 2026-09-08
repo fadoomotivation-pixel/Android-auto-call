@@ -31,6 +31,9 @@ export default async function PlatformContactsPage() {
       .from("profiles")
       .select("id,full_name,company_id")
       .eq("role", "salesperson")
+      // Company-less profiles come from the other product sharing this Supabase
+      // project. They are not telecallers and must not be offered as owners.
+      .not("company_id", "is", null)
       .order("full_name")
       .returns<LiteSalesperson[]>(),
   ]);

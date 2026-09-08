@@ -50,6 +50,10 @@
 import http from "node:http";
 import path from "node:path";
 import fs from "node:fs/promises";
+// The generation pointer is read while building a session, which is not an
+// async context — one tiny synchronous read beats making session creation
+// await, and it happens once per rep per process.
+import fsSync from "node:fs";
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
@@ -134,7 +138,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.08.30-8";
+const WORKER_VERSION = "2026.09.08-9";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -180,6 +184,111 @@ const FOUNDER = "founder";
 /** id -> session. Created on demand, never destroyed while the process lives. */
 const sessions = new Map();
 
+/**
+ * WHY A REP'S LOGIN LIVES IN A NUMBERED FOLDER.
+ *
+ * Re-scan used to delete `rep-<id>/` and start again. It looked right and it did
+ * not work, for a reason that only shows up under a race:
+ *
+ *   1. reset ends the old socket but leaves its listeners attached
+ *   2. the socket's close handler schedules its own reconnect, on a session
+ *      object we already dropped from the map — an orphan nobody can see
+ *   3. the directory is deleted
+ *   4. two seconds later the orphan reconnects, and Baileys' multi-file auth
+ *      state writes the credentials it still holds in memory straight back to
+ *      the path we just cleared
+ *   5. the new session then LOADS those resurrected credentials, resumes the
+ *      old link instead of pairing, and reports "connected"
+ *
+ * The rep never scanned anything. The dashboard said Connected, no QR was ever
+ * offered, and no history arrived — which is exactly what re-scanning Ankita's
+ * number did, every time, while we blamed the QR poller.
+ *
+ * Deleting faster cannot win that race; there is always a write that lands
+ * after the last delete. So a reset does not reuse the path at all. Generation 1
+ * is the plain `rep-<id>` folder every existing login already sits in, and each
+ * reset moves to `rep-<id>__g2`, `__g3` and so on. A resurrected orphan writes
+ * into the folder it was born in, which nothing reads again — the race still
+ * happens and no longer matters.
+ */
+function repAuthDir(salespersonId, gen) {
+  const base = path.join(AUTH_DIR, `rep-${salespersonId}`);
+  return gen > 1 ? `${base}__g${gen}` : base;
+}
+const genFile = (salespersonId) => path.join(AUTH_DIR, `rep-${salespersonId}.gen`);
+
+/** Which generation this rep is on. Survives a restart; defaults to the original folder. */
+function readGen(salespersonId) {
+  try {
+    const n = parseInt(fsSync.readFileSync(genFile(salespersonId), "utf8").trim(), 10);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function writeGen(salespersonId, gen) {
+  try {
+    fsSync.mkdirSync(AUTH_DIR, { recursive: true });
+    fsSync.writeFileSync(genFile(salespersonId), String(gen));
+  } catch (e) {
+    // Not fatal: the running process keeps the generation in the session. A
+    // restart would fall back to an older folder, which shows a QR rather than
+    // silently resuming — the safe direction to fail in.
+    log.error({ id: salespersonId, err: String(e?.message || e) }, "could not record the login generation");
+  }
+}
+
+/**
+ * Delete the credential folders a rep has moved on from.
+ *
+ * Housekeeping, deliberately separated from the reset itself and run after it:
+ * a stale login left on disk costs a few kilobytes, whereas deleting a folder
+ * something is still writing to is the race this whole scheme exists to avoid.
+ * Waiting a few seconds first lets any dying socket finish and be wrong in a
+ * place nothing reads.
+ */
+async function cleanOldAuthDirs(salespersonId, keepGen) {
+  await new Promise((r) => setTimeout(r, 15_000));
+  for (let g = 1; g < keepGen; g += 1) {
+    try {
+      await fs.rm(repAuthDir(salespersonId, g), { recursive: true, force: true });
+    } catch (e) {
+      log.warn({ id: salespersonId, gen: g, err: String(e?.message || e) },
+        "could not remove an old login folder — harmless, it is no longer read");
+    }
+  }
+}
+
+/**
+ * Take a session out of service permanently.
+ *
+ * Order matters and is the whole point: listeners come off BEFORE the socket is
+ * ended, so the close event that end() causes cannot reach the handler that
+ * schedules a reconnect. `dead` is the second line of defence for anything
+ * already queued.
+ */
+function destroySession(s) {
+  s.dead = true;
+  clearTimeout(s.reconnectTimer);
+  clearTimeout(s.flushTimer);
+  s.reconnectTimer = null;
+  s.flushTimer = null;
+  s.pending.length = 0;
+  s.pendingCalls.length = 0;
+  s.pendingReceipts.length = 0;
+  s.pendingEdits.length = 0;
+  s.pendingContacts.length = 0;
+  s.pendingPresence.length = 0;
+  s.pendingMedia.length = 0;
+  s.mediaQueue.length = 0;
+  if (s.sock) {
+    try { s.sock.ev.removeAllListeners(); } catch { /* nothing attached */ }
+    try { s.sock.end(); } catch { /* already gone */ }
+    s.sock = null;
+  }
+}
+
 function newSession(id, salespersonId) {
   return {
     id,
@@ -187,10 +296,20 @@ function newSession(id, salespersonId) {
     // files the observed messages under.
     salespersonId: salespersonId ?? null,
     observeOnly: Boolean(salespersonId),
+    // Which re-link this is. 1 is the original folder; every reset moves on by
+    // one so a dying socket cannot write its old credentials back underneath us.
+    // The dashboard reads it too: "connected" only counts as a successful scan
+    // when it is the generation the admin just asked for.
+    gen: salespersonId ? readGen(salespersonId) : 1,
     // Each login gets its own directory. Sharing one would have two accounts
     // overwriting each other's keys, which presents as both being logged out.
-    authDir: salespersonId ? path.join(AUTH_DIR, `rep-${salespersonId}`) : AUTH_DIR,
+    authDir: salespersonId
+      ? repAuthDir(salespersonId, readGen(salespersonId))
+      : AUTH_DIR,
     sock: null,
+    // Set once a session has been replaced. A dead session must never
+    // reconnect: it is the orphan that resurrects deleted credentials.
+    dead: false,
     reconnectTimer: null,
     // start() awaits twice before it assigns s.sock, so two overlapping calls
     // (the reconnect timer firing while an admin presses Show QR) would both
@@ -266,6 +385,13 @@ async function start(s) {
   // pairing — Baileys only emits a qr event when it has nothing to resume
   // with. So the dashboard's "Waiting for WhatsApp to offer a QR…" was
   // waiting for an event that could never arrive.
+  // A session that has been replaced never comes back. Without this, the close
+  // event from its own teardown schedules a reconnect that recreates the
+  // credentials a reset just threw away.
+  if (s.dead) {
+    log.warn({ id: s.id }, "start() on a replaced session — ignoring");
+    return;
+  }
   if (s.starting) {
     log.warn({ id: s.id }, "start() already in flight — ignoring the duplicate");
     return;
@@ -297,7 +423,15 @@ async function start(s) {
     log.error({ id: s.id, err: s.state.lastError }, "could not prepare the connection");
     throw e;
   }
-  s.starting = false;
+
+  // Reset can land while those two awaits are in flight. If it did, this
+  // session is already the old one — building its socket now would reconnect
+  // the very login the admin asked to forget.
+  if (s.dead) {
+    s.starting = false;
+    log.warn({ id: s.id }, "session was replaced while connecting — dropping it");
+    return;
+  }
 
   s.sock = makeWASocket({
     version,
@@ -543,6 +677,10 @@ async function start(s) {
   }
 
   s.sock.ev.on("connection.update", async (u) => {
+    // Nothing a replaced session hears can be acted on: not a QR nobody will
+    // scan, not an "open" that would report the forgotten login as connected,
+    // and above all not a "close" that schedules its own return.
+    if (s.dead) return;
     const { connection, lastDisconnect, qr } = u;
 
     if (qr) {
@@ -598,6 +736,11 @@ async function start(s) {
       s.backoffMs = Math.min(s.backoffMs * 2, MAX_BACKOFF_MS);
     }
   });
+
+  // Cleared only now that the socket exists and every listener is attached.
+  // Cleared any earlier and a third caller could slip through the guard while
+  // this one was still wiring up, which is how two sockets got onto one login.
+  s.starting = false;
 }
 
 // ── observer plumbing ────────────────────────────────────────────────────────
@@ -968,6 +1111,10 @@ function statusOf(s) {
     role: s.observeOnly ? "observe" : "notify",
     status: s.state.status,
     number: s.state.number,
+    // Which re-link this session is on. The dashboard compares it with the
+    // generation its reset returned, so a "connected" left over from the login
+    // being replaced can never be mistaken for the rep having just scanned.
+    gen: s.gen,
     last_seen: s.state.lastSeen,
     queued: s.pending.length,
     queued_calls: s.pendingCalls.length,
@@ -1027,43 +1174,54 @@ const server = http.createServer(async (req, res) => {
     // empty lead page and no button anywhere would fix it: the control labelled
     // Re-scan could not re-scan.
     //
-    // This closes the socket, deletes that rep's auth directory and forgets the
-    // session, so the next request starts from nothing: new QR, new link, and a
-    // history sync. Destructive by design — the rep must scan again — so the
-    // dashboard asks first.
+    // It tells WhatsApp to unlink the device, retires the session, and moves the
+    // rep to a NEW credential folder, so the next request starts from nothing:
+    // new QR, new link, and a history sync. Destructive by design — the rep must
+    // scan again — so the dashboard asks first.
     //
     // Deliberately before getSession(): creating the session only to tear it
-    // down would race the reconnect timer against the directory delete.
+    // down would race the reconnect timer against the teardown.
     if (action === "reset" && req.method === "POST") {
       const existing = sessions.get(salespersonId);
       if (existing) {
-        clearTimeout(existing.reconnectTimer);
-        clearTimeout(existing.flushTimer);
+        // LOG OUT FIRST, WHILE THERE IS STILL A SOCKET TO SAY IT ON.
+        //
+        // Deleting credentials only makes us forget the device; WhatsApp still
+        // has it listed and will happily resume it if a copy of those keys
+        // survives anywhere. logout() invalidates them at the source, which
+        // also means the rep sees the old entry disappear from Linked devices
+        // instead of accumulating one dead row per attempt. Best effort: it
+        // throws when the socket is not open, and that is fine — the folder
+        // move below is what actually guarantees the fresh start.
+        if (existing.state.status === "connected") {
+          try { await existing.sock?.logout?.(); } catch { /* not connected; nothing to unlink */ }
+        }
         // Anything it saw but never delivered dies with it; the CRM keeps what
         // it already stored, and the fresh link re-sends the history anyway.
-        existing.pending.length = 0;
-        existing.pendingCalls.length = 0;
-        existing.pendingReceipts.length = 0;
-        existing.pendingEdits.length = 0;
-        existing.pendingContacts.length = 0;
-        existing.pendingPresence.length = 0;
-        existing.pendingMedia.length = 0;
-        existing.mediaQueue.length = 0;
-        try { existing.sock?.end?.(); } catch { /* already gone */ }
+        destroySession(existing);
         sessions.delete(salespersonId);
       }
-      const dir = path.join(AUTH_DIR, `rep-${salespersonId}`);
-      try {
-        await fs.rm(dir, { recursive: true, force: true });
-      } catch (e) {
-        log.error({ id: salespersonId, err: String(e?.message || e) }, "could not clear auth dir");
-        return send(res, 500, { ok: false, error: "could not clear the saved login" });
-      }
-      log.info({ id: salespersonId }, "session reset — next request will offer a fresh QR");
+
+      // The old folder is left behind on purpose for a moment: a socket that is
+      // still shutting down may write to it, and letting it do so harmlessly is
+      // the entire trick. The new session reads a different path.
+      const oldGen = existing?.gen ?? readGen(salespersonId);
+      const nextGen = oldGen + 1;
+      writeGen(salespersonId, nextGen);
+      log.info({ id: salespersonId, from: oldGen, to: nextGen },
+        "session reset — new credential generation, a fresh QR is on its way");
+
       // Start it again so a QR is already being generated by the time the
       // dashboard asks for one.
-      getSession(salespersonId, salespersonId);
-      return send(res, 200, { ok: true, status: "connecting" });
+      const fresh = getSession(salespersonId, salespersonId);
+
+      // Now sweep the folders this rep no longer uses. Late — after the new
+      // session is already reading somewhere else — so a straggling write from
+      // the old socket cannot land back in a path anybody cares about. Failing
+      // to delete is untidy, never wrong, so it does not fail the request.
+      void cleanOldAuthDirs(salespersonId, nextGen);
+
+      return send(res, 200, { ok: true, status: "connecting", gen: fresh.gen });
     }
 
     const s = getSession(salespersonId, salespersonId);
@@ -1073,7 +1231,7 @@ const server = http.createServer(async (req, res) => {
       // HTML by default so the rep can just open the link; JSON on request for
       // the dashboard.
       if (url.searchParams.get("format") === "json") {
-        return send(res, 200, { ok: true, status: s.state.status, qr: s.state.qrDataUrl });
+        return send(res, 200, { ok: true, status: s.state.status, qr: s.state.qrDataUrl, gen: s.gen });
       }
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       return res.end(qrPage(s));

@@ -181,7 +181,11 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   // row. The action menu needs both to prefill a WhatsApp message, and a row
   // that fetched its own would be twenty-five round trips on a busy morning.
   const repQ = supabase.from("profiles")
-    .select("id, full_name, phone, company_id").eq("role", "salesperson");
+    .select("id, full_name, phone, company_id").eq("role", "salesperson")
+    // Company-less profiles are another product's signups on this shared
+    // project, not telecallers. Applied even in the all-companies view, which
+    // is precisely where the company filter below does not run.
+    .not("company_id", "is", null);
   if (scope) repQ.eq("company_id", scope);
 
   const [companyRows, pending, fups, alerts, quality, reminders, repRows] = await Promise.all([

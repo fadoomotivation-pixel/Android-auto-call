@@ -160,18 +160,25 @@ export class BaileysProvider implements WhatsAppProvider {
    *
    * Destructive: the rep has to scan again. The caller confirms first.
    */
-  async repReset(salespersonId: string): Promise<{ ok: boolean; error: string | null }> {
+  async repReset(
+    salespersonId: string,
+  ): Promise<{ ok: boolean; error: string | null; gen: number | null }> {
     try {
       const r = await fetch(this.repUrl(salespersonId, "/reset"), {
         method: "POST", headers: this.headers(),
       });
+      const d = await r.json().catch(() => ({}));
       if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        return { ok: false, error: d?.error ?? `Worker answered ${r.status}.` };
+        return { ok: false, error: d?.error ?? `Worker answered ${r.status}.`, gen: null };
       }
-      return { ok: true, error: null };
+      // The credential generation this rep is now on. The dashboard holds on to
+      // it and refuses to call the rep connected until the worker reports the
+      // same number back — otherwise the "connected" belonging to the login we
+      // just replaced reads as a successful scan. Null from a worker too old to
+      // send it, which the caller treats as "cannot verify".
+      return { ok: true, error: null, gen: typeof d?.gen === "number" ? d.gen : null };
     } catch {
-      return { ok: false, error: "Could not reach the worker." };
+      return { ok: false, error: "Could not reach the worker.", gen: null };
     }
   }
 
@@ -204,14 +211,20 @@ export class BaileysProvider implements WhatsAppProvider {
     }
   }
 
-  async repQr(salespersonId: string): Promise<{ status: string; qr: string | null }> {
+  async repQr(
+    salespersonId: string,
+  ): Promise<{ status: string; qr: string | null; gen: number | null }> {
     try {
       const r = await fetch(this.repUrl(salespersonId, "/qr?format=json"), { headers: this.headers() });
-      if (!r.ok) return { status: "disconnected", qr: null };
+      if (!r.ok) return { status: "disconnected", qr: null, gen: null };
       const d = await r.json();
-      return { status: d?.status ?? "disconnected", qr: d?.qr ?? null };
+      return {
+        status: d?.status ?? "disconnected",
+        qr: d?.qr ?? null,
+        gen: typeof d?.gen === "number" ? d.gen : null,
+      };
     } catch {
-      return { status: "disconnected", qr: null };
+      return { status: "disconnected", qr: null, gen: null };
     }
   }
 
