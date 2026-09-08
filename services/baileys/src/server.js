@@ -138,7 +138,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.08-11";
+const WORKER_VERSION = "2026.09.08-12";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -348,6 +348,13 @@ function newSession(id, salespersonId) {
     // version or an identity WhatsApp will not accept both look like this, and
     // both are invisible from the dashboard without counting them.
     handshakeFails: 0,
+    // The client identity these credentials were paired with, if they already
+    // exist. Read from disk so a worker restart keeps claiming the same thing —
+    // WhatsApp registered the device under it, and coming back as something
+    // else is not the device it linked.
+    pinnedIdentity: salespersonId
+      ? readPinnedIdentity(repAuthDir(salespersonId, readGen(salespersonId)))
+      : null,
     // Whether this attempt got as far as a QR. Reset per attempt, because
     // "closed after showing a QR" (the rep was slow) and "closed instead of
     // showing one" (we were refused) need opposite responses.
@@ -486,21 +493,61 @@ async function resolveWaVersion() {
   return waVersionMemo;
 }
 
+const DESKTOP_IDENTITY = ["Mac OS", "Desktop", "14.4.1"];
+const BROWSER_IDENTITY = ["Call Pro AI", "Chrome", "1.0.0"];
+
 /**
- * What this session tells WhatsApp it is.
+ * What this session tells WhatsApp it is — AND WHY IT MUST NOT CHANGE LATER.
  *
  * A watcher claims to be a desktop app because that is the only client
- * WhatsApp pushes a full history archive to — that discovery is what finally
- * recovered a year of Ankita's conversations. But the claim is only useful if
- * the handshake succeeds, so after two refusals it drops to an ordinary
- * browser, which WhatsApp has never been fussy about. A linked rep with three
- * months of history beats an unlinked rep with the promise of a year.
+ * WhatsApp pushes a full history archive to — the discovery that recovered a
+ * year of Ankita's conversations. The claim only pays off if the handshake
+ * succeeds, so after two refusals it drops to an ordinary browser.
+ *
+ * The part that cost us a scan: the identity is registered WITH the device.
+ * WhatsApp remembers what linked, and a reconnect that introduces itself
+ * differently is not the device it paired with. That matters immediately,
+ * because a fresh pair is always followed by a mandatory restart — so the very
+ * next connection after the rep scans must make the identical claim.
+ *
+ * It did not. The QR was only produced after falling back to the browser
+ * identity, and rendering that QR reset the failure counter, so the restart
+ * went back to claiming Desktop. The phone had paired with one client and a
+ * different one came back. It sat on "Logging in…" until it gave up.
+ *
+ * So: whatever identity gets as far as a QR is pinned next to the credentials
+ * it created, and every later connection on that generation reuses it. The
+ * fallback decides once, at pairing time, and never again.
  */
 function identityFor(s) {
-  if (!s.observeOnly) return ["Call Pro AI", "Chrome", "1.0.0"];
-  return s.handshakeFails >= 2
-    ? ["Call Pro AI", "Chrome", "1.0.0"]
-    : ["Mac OS", "Desktop", "14.4.1"];
+  if (!s.observeOnly) return BROWSER_IDENTITY;
+  if (s.pinnedIdentity) return s.pinnedIdentity;
+  return s.handshakeFails >= 2 ? BROWSER_IDENTITY : DESKTOP_IDENTITY;
+}
+
+const identityFile = (authDir) => path.join(authDir, "identity.json");
+
+/** Read the identity these credentials were created with, if they have one. */
+function readPinnedIdentity(authDir) {
+  try {
+    const v = JSON.parse(fsSync.readFileSync(identityFile(authDir), "utf8"));
+    return Array.isArray(v) && v.length === 3 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remember it, so every reconnect on this credential set says the same thing. */
+async function pinIdentity(s, identity) {
+  if (s.pinnedIdentity) return;
+  s.pinnedIdentity = identity;
+  try {
+    await fs.mkdir(s.authDir, { recursive: true });
+    await fs.writeFile(identityFile(s.authDir), JSON.stringify(identity));
+  } catch (e) {
+    log.warn({ id: s.id, err: String(e?.message || e) },
+      "could not save the client identity — a restart may claim a different one");
+  }
 }
 
 async function cacheWaVersion(version) {
@@ -858,12 +905,20 @@ async function start(s) {
         // form anything else can replay.
         s.state.qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 });
         s.state.status = "qr";
-        // A handshake that got this far was accepted; the counter that drives
-        // the identity fallback is about being refused, not about a rep being
-        // slow to scan.
+        // A handshake that got this far was accepted. Whatever we claimed to be
+        // is now the thing the rep is about to pair with, so it is pinned here
+        // and reused for every reconnect on these credentials — the restart
+        // that follows a scan MUST introduce itself identically.
+        //
+        // handshakeFails is deliberately NOT reset. It is what chose this
+        // identity; zeroing it would un-choose it on the very next connect,
+        // which is precisely how a scanned QR ended up stuck on "Logging in…".
         s.sawQr = true;
-        s.handshakeFails = 0;
-        log.info({ id: s.id }, "QR ready — scan it from the right phone");
+        // Back to a short retry, so the mandatory post-pair restart is not
+        // sitting behind a backoff grown by the failures that came before.
+        s.backoffMs = 2_000;
+        await pinIdentity(s, identityFor(s));
+        log.info({ id: s.id, identity: s.state.identity }, "QR ready — scan it from the right phone");
       } catch (e) {
         s.state.lastError = `Could not render the QR image: ${String(e?.message || e)}`;
         log.error({ id: s.id, err: s.state.lastError }, "QR render failed");
@@ -883,6 +938,30 @@ async function start(s) {
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = code === DisconnectReason.loggedOut;
+
+      // 515 IS NOT A FAILURE. IT IS THE SECOND HALF OF PAIRING.
+      //
+      // WhatsApp always drops the socket with restartRequired immediately
+      // after a fresh scan: the credentials are written, and the client is
+      // expected to come straight back on them. Until it does, the rep's phone
+      // sits on "Logging in…" — which is exactly where Ankita's stopped.
+      //
+      // It used to fall through to the generic retry below, and therefore
+      // waited `backoffMs`. That counter only reset on a successful open, so
+      // after the run of 428 refusals it had doubled its way to the five-minute
+      // ceiling. The scan worked; the reconnect it depends on was parked for
+      // five minutes; the phone gave up long before.
+      //
+      // Handled first, on its own, with no backoff and nothing recorded as an
+      // error — because nothing went wrong.
+      if (code === DisconnectReason.restartRequired) {
+        s.state.status = "connecting";
+        s.state.lastError = null;
+        s.backoffMs = 2_000;
+        log.info({ id: s.id }, "paired — restarting straight away to finish logging in");
+        s.reconnectTimer = setTimeout(() => start(s).catch((e) => log.error(e)), 250);
+        return;
+      }
       // 440. RETRYING IS WHAT CAUSES IT, SO RETRYING CANNOT BE THE ANSWER.
       //
       // connectionReplaced means something else took this login — either the
