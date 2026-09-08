@@ -138,7 +138,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.08-10";
+const WORKER_VERSION = "2026.09.08-11";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -344,12 +344,25 @@ function newSession(id, salespersonId) {
     mediaQueueWarned: false,
     pendingMedia: [],
     flushTimer: null,
+    // Handshakes that died before WhatsApp ever offered a QR. A wrong protocol
+    // version or an identity WhatsApp will not accept both look like this, and
+    // both are invisible from the dashboard without counting them.
+    handshakeFails: 0,
+    // Whether this attempt got as far as a QR. Reset per attempt, because
+    // "closed after showing a QR" (the rep was slow) and "closed instead of
+    // showing one" (we were refused) need opposite responses.
+    sawQr: false,
     state: {
       status: "disconnected", // disconnected | connecting | qr | connected
       number: null,
       qrDataUrl: null,
       lastSeen: null,
       lastError: null,
+      // What we told WhatsApp we are, and where those answers came from. The
+      // first questions worth asking when a handshake is refused.
+      waVersion: null,
+      waVersionSource: null,
+      identity: null,
     },
   };
 }
@@ -368,6 +381,134 @@ function getSession(id, salespersonId) {
 }
 
 const MAX_BACKOFF_MS = 5 * 60_000;
+
+/**
+ * WHICH WHATSAPP WEB VERSION WE CLAIM TO BE — AND WHY IT IS WORTH THIS MUCH CODE.
+ *
+ * WhatsApp refuses handshakes from protocol versions it has retired. When it
+ * does, the stream is closed before any qr event is emitted, so the symptom is
+ * "Connection closed (428)" on repeat and a QR that never appears. No amount of
+ * re-scanning helps, because there is nothing to scan.
+ *
+ * The trap is that fetchLatestBaileysVersion() DOES NOT THROW when it cannot
+ * reach GitHub. It catches its own error and hands back the version baked into
+ * the installed Baileys, with `isLatest: false`. So a blocked outbound request
+ * on the host looks exactly like a successful lookup, and the worker
+ * confidently introduces itself with a version that may be a year stale. We
+ * were treating that return value as authoritative.
+ *
+ * So: check `isLatest`, keep the last good answer on disk, and try a second
+ * source before giving up — jsdelivr serves the same file from a different
+ * network path, and shared hosts often block one and not the other. Whatever
+ * happens, the source is recorded and shown on the dashboard, because "which
+ * version did we actually claim" is the first question when a handshake fails
+ * and it used to be unanswerable.
+ */
+const VERSION_CACHE = path.join(AUTH_DIR, "wa-version.json");
+const VERSION_URL =
+  "https://cdn.jsdelivr.net/gh/WhiskeySockets/Baileys@master/src/Defaults/baileys-version.json";
+let waVersionMemo = null;
+
+async function resolveWaVersion() {
+  if (waVersionMemo) return waVersionMemo;
+
+  // An explicit override always wins. This is the escape hatch when WhatsApp
+  // moves and neither source is reachable from the host: set WA_VERSION to
+  // something like 2.3000.1027000000 and restart, no redeploy needed.
+  const forced = (process.env.WA_VERSION || "").trim();
+  if (forced) {
+    const parts = forced.split(".").map((n) => Number(n));
+    if (parts.length === 3 && parts.every(Number.isFinite)) {
+      waVersionMemo = { version: parts, source: `WA_VERSION env (${forced})` };
+      log.info({ version: forced }, "using the WhatsApp version pinned in WA_VERSION");
+      return waVersionMemo;
+    }
+    log.warn({ WA_VERSION: forced }, "WA_VERSION is not three numbers separated by dots — ignoring it");
+  }
+
+  // Baileys' own lookup first: when it works it is the right answer.
+  try {
+    const r = await Promise.race([
+      fetchLatestBaileysVersion(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), 8_000)),
+    ]);
+    if (r?.isLatest && Array.isArray(r.version)) {
+      await cacheWaVersion(r.version);
+      waVersionMemo = { version: r.version, source: "fetched live" };
+      return waVersionMemo;
+    }
+    log.warn({ err: String(r?.error ?? "no error given") },
+      "the WhatsApp version lookup did not reach GitHub — it returned the version bundled with Baileys");
+  } catch (e) {
+    log.warn({ err: String(e?.message || e) }, "the WhatsApp version lookup failed outright");
+  }
+
+  // Second source, different network path.
+  try {
+    const res = await Promise.race([
+      fetch(VERSION_URL),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timed out")), 8_000)),
+    ]);
+    if (res?.ok) {
+      const j = await res.json();
+      if (Array.isArray(j?.version) && j.version.length === 3) {
+        await cacheWaVersion(j.version);
+        waVersionMemo = { version: j.version, source: "fetched from the mirror" };
+        return waVersionMemo;
+      }
+    }
+  } catch (e) {
+    log.warn({ err: String(e?.message || e) }, "the mirror lookup failed too");
+  }
+
+  // The last answer that did work, from a previous run. Better than the
+  // bundled one by definition: it was current at some point on this box.
+  try {
+    const cached = JSON.parse(await fs.readFile(VERSION_CACHE, "utf8"));
+    if (Array.isArray(cached?.version) && cached.version.length === 3) {
+      waVersionMemo = {
+        version: cached.version,
+        source: `saved from ${String(cached.at ?? "an earlier run").slice(0, 10)}`,
+      };
+      log.warn({ version: cached.version.join(".") },
+        "both lookups failed — using the last version that worked on this box");
+      return waVersionMemo;
+    }
+  } catch { /* no cache yet */ }
+
+  // Nothing left. Omitting the field makes Baileys use its own bundled
+  // version, which is the thing most likely to be refused — so this is
+  // reported loudly rather than passed off as normal.
+  waVersionMemo = {
+    version: null,
+    source: "UNKNOWN — using the version bundled with Baileys, which WhatsApp may refuse",
+  };
+  return waVersionMemo;
+}
+
+/**
+ * What this session tells WhatsApp it is.
+ *
+ * A watcher claims to be a desktop app because that is the only client
+ * WhatsApp pushes a full history archive to — that discovery is what finally
+ * recovered a year of Ankita's conversations. But the claim is only useful if
+ * the handshake succeeds, so after two refusals it drops to an ordinary
+ * browser, which WhatsApp has never been fussy about. A linked rep with three
+ * months of history beats an unlinked rep with the promise of a year.
+ */
+function identityFor(s) {
+  if (!s.observeOnly) return ["Call Pro AI", "Chrome", "1.0.0"];
+  return s.handshakeFails >= 2
+    ? ["Call Pro AI", "Chrome", "1.0.0"]
+    : ["Mac OS", "Desktop", "14.4.1"];
+}
+
+async function cacheWaVersion(version) {
+  try {
+    await fs.mkdir(AUTH_DIR, { recursive: true });
+    await fs.writeFile(VERSION_CACHE, JSON.stringify({ version, at: new Date().toISOString() }));
+  } catch { /* a cache that cannot be written is not worth failing a connect over */ }
+}
 
 async function start(s) {
   // TWO SOCKETS ON ONE LOGIN IS WHAT 440 MEANS, AND WE WERE CAUSING IT.
@@ -407,6 +548,10 @@ async function start(s) {
   }
   s.state.status = "connecting";
   s.state.lastError = null;
+  // Per attempt, not per session: the identity fallback keys off whether THIS
+  // handshake was refused, and a QR seen twenty minutes ago says nothing about
+  // the one starting now.
+  s.sawQr = false;
 
   // Reading the saved login is the only step here that must succeed, so it
   // carries the guard: a failure has to clear `starting`, or the session is
@@ -422,32 +567,9 @@ async function start(s) {
     throw e;
   }
 
-  // NEVER LET A VERSION LOOKUP DECIDE WHETHER A REP CAN SCAN.
-  //
-  // fetchLatestBaileysVersion() reaches out to GitHub for the protocol version
-  // WhatsApp Web is currently on. It used to be awaited bare, which made an
-  // outbound call to a third party a hard prerequisite for showing a QR — on a
-  // shared host that blocks or throttles it, the await simply never settles.
-  // The session then sits in "connecting" with no socket, no qr event and no
-  // error, and the dashboard shows "Waiting for WhatsApp to offer a QR…"
-  // forever. Nothing in that chain says the word GitHub, so it reads as a
-  // broken QR poller.
-  //
-  // It is an optimisation, not a requirement: Baileys ships a known-good
-  // version and uses it when the field is omitted. So it gets five seconds,
-  // and past that we go with the bundled one and note it. A slightly stale
-  // protocol version costs nothing next to a rep who cannot link at all.
-  let version = null;
-  try {
-    version = await Promise.race([
-      fetchLatestBaileysVersion().then((r) => r.version),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("timed out after 5s")), 5_000)),
-    ]);
-  } catch (e) {
-    log.warn({ id: s.id, err: String(e?.message || e) },
-      "could not fetch the latest WhatsApp version — using the one bundled with Baileys");
-  }
+  const { version, source: versionSource } = await resolveWaVersion();
+  s.state.waVersion = Array.isArray(version) ? version.join(".") : null;
+  s.state.waVersionSource = versionSource;
 
   // Reset can land while the awaits above are in flight. If it did, this
   // session is already the old one — building its socket now would reconnect
@@ -505,8 +627,18 @@ async function start(s) {
     //
     // Senders do not need it: the founder session pushes one message a day and
     // has no business pulling anyone's history.
-    browser: s.observeOnly ? ["Mac OS", "Desktop", "14.4.1"] : ["Call Pro AI", "Chrome", "1.0.0"],
+    //
+    // WITH A FALLBACK, BECAUSE HISTORY IS WORTH LESS THAN LINKING AT ALL.
+    //
+    // The desktop identity is the one that gets the archive, and it is also the
+    // more exotic claim — if WhatsApp declines to shake hands with it from this
+    // host, the rep can never link, and a rep who cannot link has no history
+    // either. So after two handshakes that die before a QR appears, the next
+    // attempt asks as a plain browser instead. Thinner sync, but a working
+    // link, and the dashboard says which one it settled on.
+    browser: identityFor(s),
   });
+  s.state.identity = identityFor(s).join(" · ");
 
   s.sock.ev.on("creds.update", saveCreds);
 
@@ -716,12 +848,26 @@ async function start(s) {
     const { connection, lastDisconnect, qr } = u;
 
     if (qr) {
-      // Rendered here rather than in the browser so the raw pairing string —
-      // which is enough to hijack the session — never leaves this box in a form
-      // anything else can replay.
-      s.state.qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 });
-      s.state.status = "qr";
-      log.info({ id: s.id }, "QR ready — scan it from the right phone");
+      // Wrapped because this is an async listener: an throw in here rejects a
+      // promise nobody is awaiting, so a failure to render would discard the
+      // one QR WhatsApp offered and leave the panel waiting on a code that
+      // already came and went.
+      try {
+        // Rendered here rather than in the browser so the raw pairing string —
+        // which is enough to hijack the session — never leaves this box in a
+        // form anything else can replay.
+        s.state.qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 });
+        s.state.status = "qr";
+        // A handshake that got this far was accepted; the counter that drives
+        // the identity fallback is about being refused, not about a rep being
+        // slow to scan.
+        s.sawQr = true;
+        s.handshakeFails = 0;
+        log.info({ id: s.id }, "QR ready — scan it from the right phone");
+      } catch (e) {
+        s.state.lastError = `Could not render the QR image: ${String(e?.message || e)}`;
+        log.error({ id: s.id, err: s.state.lastError }, "QR render failed");
+      }
     }
 
     if (connection === "open") {
@@ -750,13 +896,35 @@ async function start(s) {
       // only way out, and let a human press Re-scan (which wipes the creds).
       const replaced = code === DisconnectReason.connectionReplaced;
       s.state.status = "disconnected";
+
+      // CLOSED BEFORE A QR EVER APPEARED IS A DIFFERENT ANIMAL.
+      //
+      // If WhatsApp shuts the stream during the handshake, no qr event is ever
+      // emitted, so the dashboard sits on "waiting" while the worker quietly
+      // retries forever. There is nothing for the rep to scan and no amount of
+      // re-scanning creates one. In practice it means WhatsApp declined what we
+      // introduced ourselves as — a retired protocol version, or a client
+      // identity it will not accept from this host.
+      const refused = !s.sawQr;
+      if (refused) s.handshakeFails += 1;
+
       s.state.lastError = loggedOut
         ? "WhatsApp logged this session out. Press Re-scan and scan the new QR."
         : replaced
           ? "This WhatsApp got linked somewhere else, so this login no longer works. " +
             "Press Re-scan and scan the new QR from the rep's phone."
-          : `Connection closed (${code ?? "unknown"}). Retrying.`;
-      log.warn({ id: s.id, code, loggedOut, replaced }, "connection closed");
+          : refused
+            ? `WhatsApp closed the connection (${code ?? "unknown"}) before offering a QR — ` +
+              `attempt ${s.handshakeFails}. It is refusing what we identify as, not the scan. ` +
+              `Claiming version ${s.state.waVersion ?? "bundled/unknown"} (${s.state.waVersionSource ?? "?"}) ` +
+              `as ${s.state.identity ?? "?"}.` +
+              (s.handshakeFails >= 2 ? " Retrying as a plain browser." : " Retrying.")
+            : `Connection closed (${code ?? "unknown"}). Retrying.`;
+      log.warn({
+        id: s.id, code, loggedOut, replaced, refused,
+        handshakeFails: s.handshakeFails,
+        waVersion: s.state.waVersion, identity: s.state.identity,
+      }, "connection closed");
 
       if (loggedOut || replaced) {
         // Reconnecting with dead or contested credentials just fails forever
@@ -1154,6 +1322,12 @@ function statusOf(s) {
     // generation its reset returned, so a "connected" left over from the login
     // being replaced can never be mistaken for the rep having just scanned.
     gen: s.gen,
+    // What we claimed to be, and where that claim came from. When WhatsApp
+    // refuses a handshake these are the only two facts that matter, and until
+    // now neither left the box.
+    wa_version: s.state.waVersion,
+    wa_version_source: s.state.waVersionSource,
+    identity: s.state.identity,
     last_seen: s.state.lastSeen,
     queued: s.pending.length,
     queued_calls: s.pendingCalls.length,
@@ -1287,6 +1461,8 @@ const server = http.createServer(async (req, res) => {
           gen: s.gen,
           error: s.state.lastError,
           worker_version: WORKER_VERSION,
+          wa_version: s.state.waVersion,
+          wa_version_source: s.state.waVersionSource,
         });
       }
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
