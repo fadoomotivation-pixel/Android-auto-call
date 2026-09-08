@@ -211,20 +211,45 @@ export class BaileysProvider implements WhatsAppProvider {
     }
   }
 
-  async repQr(
-    salespersonId: string,
-  ): Promise<{ status: string; qr: string | null; gen: number | null }> {
+  /**
+   * The QR, and — when there is none — why there is none.
+   *
+   * This used to collapse three different outcomes into one shrug. A worker
+   * that could not be reached, a worker answering 500, and a worker genuinely
+   * still starting all returned `{ status: "disconnected", qr: null }`, and the
+   * dashboard rendered every one of them as "Waiting for WhatsApp to offer a
+   * QR…". Whole afternoons went into that sentence.
+   *
+   * `reachable` separates "the worker did not answer" from everything else, and
+   * `error` carries the worker's own account of the problem.
+   */
+  async repQr(salespersonId: string): Promise<{
+    status: string; qr: string | null; gen: number | null;
+    reachable: boolean; error: string | null; worker_version: string | null;
+  }> {
     try {
       const r = await fetch(this.repUrl(salespersonId, "/qr?format=json"), { headers: this.headers() });
-      if (!r.ok) return { status: "disconnected", qr: null, gen: null };
+      if (!r.ok) {
+        return {
+          status: "disconnected", qr: null, gen: null, reachable: true,
+          error: `The WhatsApp worker answered ${r.status}.`, worker_version: null,
+        };
+      }
       const d = await r.json();
       return {
         status: d?.status ?? "disconnected",
         qr: d?.qr ?? null,
         gen: typeof d?.gen === "number" ? d.gen : null,
+        reachable: true,
+        error: d?.error ?? null,
+        worker_version: d?.worker_version ?? null,
       };
     } catch {
-      return { status: "disconnected", qr: null, gen: null };
+      return {
+        status: "disconnected", qr: null, gen: null, reachable: false,
+        error: "Could not reach the WhatsApp worker. Check that the service is running.",
+        worker_version: null,
+      };
     }
   }
 

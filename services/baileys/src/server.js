@@ -138,7 +138,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.08-9";
+const WORKER_VERSION = "2026.09.08-10";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -408,23 +408,48 @@ async function start(s) {
   s.state.status = "connecting";
   s.state.lastError = null;
 
-  // The two awaits are the only part that can throw before a socket exists, so
-  // they carry the guard: a failure here has to clear `starting`, or the
-  // session is wedged for the life of the process and even Re-scan cannot
-  // revive it.
-  let auth, saveCreds, version;
+  // Reading the saved login is the only step here that must succeed, so it
+  // carries the guard: a failure has to clear `starting`, or the session is
+  // wedged for the life of the process and even Re-scan cannot revive it.
+  let auth, saveCreds;
   try {
     ({ state: auth, saveCreds } = await useMultiFileAuthState(s.authDir));
-    ({ version } = await fetchLatestBaileysVersion());
   } catch (e) {
     s.starting = false;
     s.state.status = "disconnected";
-    s.state.lastError = String(e?.message || e);
+    s.state.lastError = `Could not read the saved login at ${s.authDir}: ${String(e?.message || e)}`;
     log.error({ id: s.id, err: s.state.lastError }, "could not prepare the connection");
     throw e;
   }
 
-  // Reset can land while those two awaits are in flight. If it did, this
+  // NEVER LET A VERSION LOOKUP DECIDE WHETHER A REP CAN SCAN.
+  //
+  // fetchLatestBaileysVersion() reaches out to GitHub for the protocol version
+  // WhatsApp Web is currently on. It used to be awaited bare, which made an
+  // outbound call to a third party a hard prerequisite for showing a QR — on a
+  // shared host that blocks or throttles it, the await simply never settles.
+  // The session then sits in "connecting" with no socket, no qr event and no
+  // error, and the dashboard shows "Waiting for WhatsApp to offer a QR…"
+  // forever. Nothing in that chain says the word GitHub, so it reads as a
+  // broken QR poller.
+  //
+  // It is an optimisation, not a requirement: Baileys ships a known-good
+  // version and uses it when the field is omitted. So it gets five seconds,
+  // and past that we go with the bundled one and note it. A slightly stale
+  // protocol version costs nothing next to a rep who cannot link at all.
+  let version = null;
+  try {
+    version = await Promise.race([
+      fetchLatestBaileysVersion().then((r) => r.version),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("timed out after 5s")), 5_000)),
+    ]);
+  } catch (e) {
+    log.warn({ id: s.id, err: String(e?.message || e) },
+      "could not fetch the latest WhatsApp version — using the one bundled with Baileys");
+  }
+
+  // Reset can land while the awaits above are in flight. If it did, this
   // session is already the old one — building its socket now would reconnect
   // the very login the admin asked to forget.
   if (s.dead) {
@@ -433,8 +458,15 @@ async function start(s) {
     return;
   }
 
+  // Everything from here to the end of the function is wrapped so that ANY
+  // throw still clears `starting`. Without that, one bad build or one missing
+  // native dependency leaves the session permanently "already in flight" and
+  // every later attempt — including Re-scan — returns silently.
+  try {
   s.sock = makeWASocket({
-    version,
+    // Omitted entirely when the lookup above did not answer, so Baileys falls
+    // back to the version it ships with rather than being handed a null.
+    ...(version ? { version } : {}),
     auth,
     // We are a sender or a watcher, never a reader. Marking ourselves online
     // would make the phone stop showing notifications for these messages,
@@ -737,10 +769,17 @@ async function start(s) {
     }
   });
 
-  // Cleared only now that the socket exists and every listener is attached.
-  // Cleared any earlier and a third caller could slip through the guard while
-  // this one was still wiring up, which is how two sockets got onto one login.
-  s.starting = false;
+  } catch (e) {
+    s.state.status = "disconnected";
+    s.state.lastError = `Could not open the WhatsApp connection: ${String(e?.message || e)}`;
+    log.error({ id: s.id, err: s.state.lastError }, "makeWASocket failed");
+    throw e;
+  } finally {
+    // Cleared only now that the socket exists and every listener is attached.
+    // Cleared any earlier and a third caller could slip through the guard while
+    // this one was still wiring up, which is how two sockets got onto one login.
+    s.starting = false;
+  }
 }
 
 // ── observer plumbing ────────────────────────────────────────────────────────
@@ -1231,7 +1270,24 @@ const server = http.createServer(async (req, res) => {
       // HTML by default so the rep can just open the link; JSON on request for
       // the dashboard.
       if (url.searchParams.get("format") === "json") {
-        return send(res, 200, { ok: true, status: s.state.status, qr: s.state.qrDataUrl, gen: s.gen });
+        // THE REASON, NOT JUST THE ABSENCE.
+        //
+        // This used to answer with status and qr alone, so every distinct
+        // failure — a version lookup that never returned, an unreadable auth
+        // folder, a socket that threw on construction — reached the dashboard
+        // as an empty qr and rendered as "Waiting for WhatsApp to offer a QR…".
+        // The worker knew exactly what was wrong the whole time and had no way
+        // to say it. worker_version rides along for the same reason: "is the
+        // new build even running?" was costing a round trip through Hostinger's
+        // panel every single time.
+        return send(res, 200, {
+          ok: true,
+          status: s.state.status,
+          qr: s.state.qrDataUrl,
+          gen: s.gen,
+          error: s.state.lastError,
+          worker_version: WORKER_VERSION,
+        });
       }
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       return res.end(qrPage(s));
