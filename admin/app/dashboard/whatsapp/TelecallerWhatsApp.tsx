@@ -160,6 +160,11 @@ export function TelecallerWhatsApp({
   // reports the same one back. Null means a worker too old to say — then the
   // old behaviour stands, because refusing to ever show success would be worse.
   const [wantGen, setWantGen] = useState<number | null>(null);
+  // Which build is actually answering, and whether it is answering at all.
+  // "Is the worker even on the new version?" was costing a trip through the
+  // hosting panel every time; it belongs on the screen that depends on it.
+  const [workerBuild, setWorkerBuild] = useState<string | null>(null);
+  const [workerDown, setWorkerDown] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -276,15 +281,27 @@ export function TelecallerWhatsApp({
         return;
       }
       setQr((r.qr as string) ?? null);
+      // THE WORKER'S OWN WORDS, WHEN IT HAS ANY.
+      //
+      // "Waiting for WhatsApp to offer a QR…" was shown for a worker that was
+      // switched off, a worker throwing 500s, and a worker stuck on a version
+      // lookup that never returned. One sentence for three problems is how a
+      // fixed bug still looks broken.
+      const workerSaid = (r.error as string | null) ?? null;
       setQrNote(
         r.qr
           ? null
-          : r.status === "connected"
-            // Says the true thing rather than the reassuring one: the worker is
-            // reporting the login we just replaced, so the square is still coming.
-            ? "Still finishing with the old login — the new QR is coming…"
-            : "Waiting for WhatsApp to offer a QR…",
+          : workerSaid
+            ? workerSaid
+            : r.status === "connected"
+              // Says the true thing rather than the reassuring one: the worker
+              // is reporting the login we just replaced, so the square is
+              // still coming.
+              ? "Still finishing with the old login — the new QR is coming…"
+              : "Waiting for WhatsApp to offer a QR…",
       );
+      setWorkerBuild((r.worker_version as string | null) ?? null);
+      setWorkerDown(r.reachable === false);
       // Three empty polls — about twenty seconds — is well past the point where
       // a healthy pairing would have produced a square. Past that it is not
       // slowness, it is a session resuming a login that no longer works.
@@ -517,12 +534,21 @@ export function TelecallerWhatsApp({
               background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)",
             }}>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: "#f59e0b" }}>
-                Still no QR.
+                {workerDown ? "The WhatsApp worker is not answering." : "Still no QR."}
               </div>
               <div style={{ fontSize: 12.5, marginTop: 4 }}>
-                The old login is taking longer than usual to let go, or the worker is on an
-                older build. Ask for it once more — that is almost always enough. If two
-                tries do nothing, restart the worker and come back here.
+                {workerDown
+                  ? "Nothing on this card can work until the service is running again. " +
+                    "Restart it on the host, then press Ask again."
+                  : "Ask for it once more — that is usually enough. If two tries do nothing, " +
+                    "restart the worker on the host and come back here."}
+              </div>
+              {/* Named on the card because the alternative is guessing. Twice
+                  now a fix has been shipped, deployed, and then debugged from
+                  scratch because nobody could tell whether the box was running
+                  the new build or the old one. */}
+              <div style={{ fontSize: 11.5, marginTop: 6, opacity: 0.75 }}>
+                Worker build: {workerBuild ?? "not reported — this is an older build"}
               </div>
               <button className="btn" style={{ marginTop: 8 }}
                 onClick={() => void openQr(qrFor, true)}>
