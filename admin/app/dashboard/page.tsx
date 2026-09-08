@@ -38,7 +38,11 @@ export default async function OverviewPage({
   // so cast manually rather than via .returns<>() (which rejects non-array T).
   const [{ data: statsRaw }, { data: people }, { data: speedRaw }] = await Promise.all([
     supabase.rpc("get_overview_stats"),
-    supabase.from("profiles").select("id, full_name").eq("role", "salesperson"),
+    // Only people who actually belong to a company. This project is shared with
+    // another product, whose signups land here as company-less 'salesperson'
+    // profiles and would otherwise be counted as telecallers on this dashboard.
+    supabase.from("profiles").select("id, full_name")
+      .eq("role", "salesperson").not("company_id", "is", null),
     supabase.rpc("get_speed_to_lead"),
   ]);
 
