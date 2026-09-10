@@ -71,15 +71,26 @@ function istToday(): string {
  * matches v_rep_whatsapp_health and the Daily Pulse, so the dashboard and the
  * 7pm report cannot disagree about whether a rep was being watched.
  */
-type Health = "connected" | "stale" | "disconnected";
+type Health = "connected" | "stale" | "scan" | "disconnected";
 
 const LINK_FRESH_MS = 15 * 60_000;
 
 function healthOf(s: Session): Health {
+  // WHAT THE WORKER SAYS ABOUT ITSELF COMES FIRST.
+  //
+  // The compatibility fallback below reads recent traffic as proof of a live
+  // link. That was fine until a deploy wiped the login: the worker sat on
+  // status "qr" waiting to be scanned while an hour-old ingest timestamp kept
+  // the card green. Both halves were technically true and together they said
+  // the opposite of what was happening.
+  //
+  // A worker reporting anything other than "connected" is reporting it NOW,
+  // and that always beats an inference drawn from an old timestamp.
+  if (s.status === "qr") return "scan";
+  if (s.status && s.status !== "connected") return "disconnected";
+
   if (s.link_ok_at) {
-    const fresh = Date.now() - new Date(s.link_ok_at).getTime() < LINK_FRESH_MS;
-    if (!fresh) return "stale";
-    return s.status === "connected" ? "connected" : "disconnected";
+    return Date.now() - new Date(s.link_ok_at).getTime() < LINK_FRESH_MS ? "connected" : "stale";
   }
   if (!s.last_seen_at) return "disconnected";
   return Date.now() - new Date(s.last_seen_at).getTime() < 2 * 3600_000 ? "connected" : "stale";
@@ -88,10 +99,11 @@ function healthOf(s: Session): Health {
 const HEALTH_LABEL: Record<Health, string> = {
   connected: "Connected",
   stale: "Stale",
+  scan: "Waiting for scan",
   disconnected: "Disconnected",
 };
 const HEALTH_TONE: Record<Health, string> = {
-  connected: "#22c55e", stale: "#f59e0b", disconnected: "#ef4444",
+  connected: "#22c55e", stale: "#f59e0b", scan: "#f59e0b", disconnected: "#ef4444",
 };
 
 function ago(iso: string | null): string {
@@ -471,18 +483,20 @@ export function TelecallerWhatsApp({
                         traffic, and a linked rep having a quiet morning is
                         entitled to have nothing in the second one. */}
                     <div className="subtitle" style={{ fontSize: 12 }}>
-                      {s.last_error
-                        ? s.last_error
-                        : health === "disconnected"
-                          ? (s.link_ok_at || s.last_seen_at
-                              ? "The link has dropped — have the rep scan a new QR"
-                              : "Never connected — have the rep scan the QR")
-                          : health === "stale"
-                            ? `Link last confirmed ${ago(s.link_ok_at ?? s.last_seen_at)} — the worker may be down`
-                            : `Link checked ${ago(s.link_ok_at ?? s.last_seen_at)} · ` +
-                              (s.last_seen_at
-                                ? `last message ${ago(s.last_seen_at)}`
-                                : "no messages yet")}
+                      {health === "scan"
+                        ? "A QR is ready and waiting — press Re-scan and have the rep scan it"
+                        : s.last_error
+                          ? s.last_error
+                          : health === "disconnected"
+                            ? (s.link_ok_at || s.last_seen_at
+                                ? "The link has dropped — have the rep scan a new QR"
+                                : "Never connected — have the rep scan the QR")
+                            : health === "stale"
+                              ? `Link last confirmed ${ago(s.link_ok_at ?? s.last_seen_at)} — the worker may be down`
+                              : `Link checked ${ago(s.link_ok_at ?? s.last_seen_at)} · ` +
+                                (s.last_seen_at
+                                  ? `last message ${ago(s.last_seen_at)}`
+                                  : "no messages yet")}
                     </div>
                     {/* WHY THE ROW IS ZERO.
                         A rep who barely opens WhatsApp and a rep having four
