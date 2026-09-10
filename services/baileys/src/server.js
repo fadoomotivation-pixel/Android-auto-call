@@ -138,7 +138,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.08-12";
+const WORKER_VERSION = "2026.09.10-13";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -272,8 +272,10 @@ function destroySession(s) {
   s.dead = true;
   clearTimeout(s.reconnectTimer);
   clearTimeout(s.flushTimer);
+  clearInterval(s.heartbeatTimer);
   s.reconnectTimer = null;
   s.flushTimer = null;
+  s.heartbeatTimer = null;
   s.pending.length = 0;
   s.pendingCalls.length = 0;
   s.pendingReceipts.length = 0;
@@ -311,6 +313,9 @@ function newSession(id, salespersonId) {
     // reconnect: it is the orphan that resurrects deleted credentials.
     dead: false,
     reconnectTimer: null,
+    // Says "still here" to the CRM on a timer, so a quiet rep is not mistaken
+    // for a broken link.
+    heartbeatTimer: null,
     // start() awaits twice before it assigns s.sock, so two overlapping calls
     // (the reconnect timer firing while an admin presses Show QR) would both
     // sail past any "is there a socket already" check and build two. This is
@@ -932,6 +937,10 @@ async function start(s) {
       s.state.lastError = null;
       s.backoffMs = 2_000;
       s.state.number = s.sock?.user?.id ? String(s.sock.user.id).split(":")[0] : null;
+      // Tell the CRM immediately, then keep saying it. Without the first one,
+      // a rep who links and then has a quiet morning would not appear
+      // connected on the dashboard until their first message to a lead.
+      startHeartbeat(s);
       log.info({ id: s.id, number: s.state.number }, "connected");
     }
 
@@ -1275,6 +1284,52 @@ async function queueObserved(s, msg) {
     return;
   }
   if (!s.flushTimer) s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
+}
+
+/**
+ * "Still here" — the message a watcher sends when it has nothing to say.
+ *
+ * The dashboard used to infer a rep's connection from when data last arrived,
+ * because that was the only signal it had. So a linked, healthy watcher on a
+ * quiet morning was indistinguishable from a dead one, and the card said
+ * "Never connected — have the rep scan the QR" about a device the rep's own
+ * phone was listing as active. Someone then went and asked her to scan again.
+ *
+ * Silence had to stop being ambiguous, and the only way is to break it on
+ * purpose. This posts nothing but the fact of being connected, so the CRM can
+ * tell a quiet rep from a broken link without the dashboard being open.
+ */
+const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 4 * 60_000);
+
+async function sendHeartbeat(s) {
+  if (s.dead || !s.observeOnly) return;
+  if (!INGEST_URL || !INGEST_SECRET) return;
+  if (s.state.status !== "connected") return;
+  try {
+    await fetch(INGEST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${INGEST_SECRET}` },
+      body: JSON.stringify({
+        salesperson_id: s.salespersonId,
+        wa_number: s.state.number,
+        heartbeat: true,
+        status: s.state.status,
+        worker_version: WORKER_VERSION,
+      }),
+    });
+  } catch (e) {
+    // A missed heartbeat is not worth a log line every four minutes; the CRM
+    // notices the gap on its own, which is the entire point of sending them.
+    log.debug({ id: s.id, err: String(e?.message || e) }, "heartbeat failed");
+  }
+}
+
+/** One timer per session, started when it connects and cleared when it dies. */
+function startHeartbeat(s) {
+  if (!s.observeOnly) return;
+  clearInterval(s.heartbeatTimer);
+  void sendHeartbeat(s);
+  s.heartbeatTimer = setInterval(() => void sendHeartbeat(s), HEARTBEAT_MS);
 }
 
 async function flushObserved(s) {

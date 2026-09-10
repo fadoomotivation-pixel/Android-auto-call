@@ -11,6 +11,8 @@ type Session = {
   status: string;
   wa_number: string | null;
   last_seen_at: string | null;
+  /** When the connection itself was last confirmed up. See healthOf. */
+  link_ok_at: string | null;
   last_error: string | null;
 };
 
@@ -45,12 +47,40 @@ function istToday(): string {
  * not healthy. A watcher that logged out at 11am reports exactly the same
  * numbers as a rep who sent nothing, and only one of those is the rep's fault.
  *
- * Two hours matches v_rep_whatsapp_health and the Daily Pulse, so the dashboard
- * and the 7pm report can never disagree about whether a rep was being watched.
+ * IS THE LINK UP IS NOT THE SAME QUESTION AS IS ANYTHING ARRIVING.
+ *
+ * This used to be computed purely from last_seen_at, which the ingest stamps
+ * only when there is data to report. So a rep whose WhatsApp was linked and
+ * perfectly healthy, but who had not messaged a lead that morning, read as
+ * "Disconnected — Never connected, have the rep scan the QR". Ankita's own
+ * phone listed the device as active at the same moment this card said that,
+ * and the only remedy it offered was the one thing that could not help.
+ *
+ * It lied in the other direction too: `status` from the worker was never
+ * consulted, so a genuinely dead link kept reading Connected for two hours
+ * after its final message.
+ *
+ * So health now comes from link_ok_at — stamped by the worker's heartbeat, by
+ * a status poll, or by real traffic — together with what the worker says. A
+ * heartbeat every four minutes means a fifteen-minute window is generous
+ * without being slow to notice a real drop.
+ *
+ * The last branch is the compatibility path: link_ok_at is null for any worker
+ * older than 2026.09.10-13, and until that build is uploaded the old
+ * traffic-based reading is still the best available guess. Two hours there
+ * matches v_rep_whatsapp_health and the Daily Pulse, so the dashboard and the
+ * 7pm report cannot disagree about whether a rep was being watched.
  */
 type Health = "connected" | "stale" | "disconnected";
 
+const LINK_FRESH_MS = 15 * 60_000;
+
 function healthOf(s: Session): Health {
+  if (s.link_ok_at) {
+    const fresh = Date.now() - new Date(s.link_ok_at).getTime() < LINK_FRESH_MS;
+    if (!fresh) return "stale";
+    return s.status === "connected" ? "connected" : "disconnected";
+  }
   if (!s.last_seen_at) return "disconnected";
   return Date.now() - new Date(s.last_seen_at).getTime() < 2 * 3600_000 ? "connected" : "stale";
 }
@@ -174,7 +204,7 @@ export function TelecallerWhatsApp({
     setLoading(true);
     const [{ data: s }, { data: t }, { data: f }, { data: a }] = await Promise.all([
       supabase.from("wa_rep_sessions")
-        .select("salesperson_id, base_url, status, wa_number, last_seen_at, last_error")
+        .select("salesperson_id, base_url, status, wa_number, last_seen_at, link_ok_at, last_error")
         .eq("company_id", companyId).returns<Session[]>(),
       supabase.from("v_rep_whatsapp_daily")
         .select("salesperson_id, messages_sent, leads_messaged, leads_given_details, leads_who_replied")
@@ -236,7 +266,7 @@ export function TelecallerWhatsApp({
     if (ids.length === 0) return;
     await Promise.all(ids.map((id) => call("rep_status", id)));
     const { data: s } = await supabase.from("wa_rep_sessions")
-      .select("salesperson_id, base_url, status, wa_number, last_seen_at, last_error")
+      .select("salesperson_id, base_url, status, wa_number, last_seen_at, link_ok_at, last_error")
       .eq("company_id", companyId).returns<Session[]>();
     if (s) setSessions(s);
   }, [call, supabase, companyId]);
@@ -434,12 +464,25 @@ export function TelecallerWhatsApp({
                     <span style={{ color: HEALTH_TONE[health], fontWeight: 600 }}>
                       {HEALTH_LABEL[health]}
                     </span>
+                    {/* SAY WHICH OF THE TWO FACTS IS BEING REPORTED.
+                        One line used to serve both, and it told a rep with a
+                        live linked device to go and scan a QR. "Link checked"
+                        is about the connection; "last message" is about
+                        traffic, and a linked rep having a quiet morning is
+                        entitled to have nothing in the second one. */}
                     <div className="subtitle" style={{ fontSize: 12 }}>
                       {s.last_error
                         ? s.last_error
                         : health === "disconnected"
-                          ? "Never connected — have the rep scan the QR"
-                          : `last heard ${ago(s.last_seen_at)}`}
+                          ? (s.link_ok_at || s.last_seen_at
+                              ? "The link has dropped — have the rep scan a new QR"
+                              : "Never connected — have the rep scan the QR")
+                          : health === "stale"
+                            ? `Link last confirmed ${ago(s.link_ok_at ?? s.last_seen_at)} — the worker may be down`
+                            : `Link checked ${ago(s.link_ok_at ?? s.last_seen_at)} · ` +
+                              (s.last_seen_at
+                                ? `last message ${ago(s.last_seen_at)}`
+                                : "no messages yet")}
                     </div>
                     {/* WHY THE ROW IS ZERO.
                         A rep who barely opens WhatsApp and a rep having four

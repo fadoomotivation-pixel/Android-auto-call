@@ -151,11 +151,38 @@ Deno.serve(async (req) => {
   // this deployment needs — the worker ships ahead and waits to be caught up.
   const editsIn = Array.isArray(body?.edits) ? body.edits.length : 0;
   const contactsIn = Array.isArray(body?.contacts) ? body.contacts.length : 0;
+
+  const admin = createClient(SUPABASE_URL, SERVICE);
+
+  // A HEARTBEAT: THE LINK IS UP AND THERE IS NOTHING TO REPORT.
+  //
+  // Those are two different facts and the dashboard used to have room for only
+  // one. Health was read from last_seen_at, which the ingest only stamps when
+  // there is data — so a rep whose WhatsApp was perfectly linked but who had
+  // not messaged a lead all morning was shown as "Never connected — have the
+  // rep scan the QR". Ankita's phone listed the device as active at the same
+  // moment the card said that, and the only remedy the card offered was the one
+  // thing that could not possibly help.
+  //
+  // The worker now says "still here" every few minutes whether or not it has
+  // traffic, and that lands in link_ok_at. last_seen_at goes back to meaning
+  // what it says: when data last arrived.
+  if (body?.heartbeat === true) {
+    const { error } = await admin
+      .from("wa_rep_sessions")
+      .update({
+        link_ok_at: new Date().toISOString(),
+        status: typeof body?.status === "string" ? body.status : "connected",
+        ...(body?.wa_number ? { wa_number: String(body.wa_number) } : {}),
+      })
+      .eq("salesperson_id", salespersonId);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, heartbeat: true });
+  }
+
   if (messages.length === 0 && callsIn === 0 && receiptsIn === 0 && editsIn === 0 && contactsIn === 0) {
     return json({ ok: true, stored: 0, skipped: 0, calls: 0, receipts: 0 });
   }
-
-  const admin = createClient(SUPABASE_URL, SERVICE);
 
   // The session decides the company — never the caller. A worker that could
   // name its own company_id could write into any tenant on the platform.
@@ -500,6 +527,10 @@ Deno.serve(async (req) => {
     .from("wa_rep_sessions")
     .update({
       last_seen_at: new Date().toISOString(),
+      // Traffic proves the link is up just as well as a heartbeat does, so both
+      // stamps move together here. Keeping them separate is only about what
+      // SILENCE means: no traffic is normal, no heartbeat is not.
+      link_ok_at: new Date().toISOString(),
       status: "connected",
       // Cleared on every successful ingest. A warning that outlives its cause
       // is worse than no warning, because it is read as current.
