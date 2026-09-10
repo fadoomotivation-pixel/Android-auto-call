@@ -54,6 +54,9 @@ import fs from "node:fs/promises";
 // async context — one tiny synchronous read beats making session creation
 // await, and it happens once per rep per process.
 import fsSync from "node:fs";
+// For the home directory, which is the one writable path on a shared host that
+// a deployment does not replace.
+import os from "node:os";
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
@@ -63,12 +66,81 @@ import makeWASocket, {
 import pino from "pino";
 import QRCode from "qrcode";
 
+/**
+ * WHERE THE WHATSAPP LOGIN LIVES — AND WHY THE DEFAULT HAD TO CHANGE.
+ *
+ * The default used to be "./auth", relative to the app. On Hostinger that
+ * resolves to something like
+ *
+ *     .../hostingersite.com/hbuilds/versions/01a089d9-de3b-7309-8.../auth
+ *
+ * — a folder created fresh FOR EACH DEPLOYMENT. So the login was not merely
+ * "inside the app folder" and at risk; it was in a directory guaranteed to be
+ * new on every single upload. Every deploy therefore logged the rep out, the
+ * worker came back up printing "QR ready", and someone went and asked Ankita
+ * to scan again. That happened five times over this one bug, and each time we
+ * treated the fresh QR as a symptom of whatever we were debugging rather than
+ * of the deploy itself.
+ *
+ * There was a startup warning about it for weeks. A warning that has to be
+ * read in a hosting panel and acted on by hand is not a fix — it is a note
+ * describing the bug. The default is now a path that survives deploys, so the
+ * correct behaviour needs no configuration at all.
+ *
+ * The home directory is the one place on a shared host that is both writable
+ * and outside the versioned build tree. An explicit AUTH_DIR still wins, so
+ * anyone who already set one is unaffected.
+ */
+function resolveAuthDir() {
+  const explicit = (process.env.AUTH_DIR || "").trim();
+  if (explicit) return explicit;
+  try {
+    const home = os.homedir();
+    if (home && home !== "/") {
+      const dir = path.join(home, ".callpro-wa-auth");
+      fsSync.mkdirSync(dir, { recursive: true });
+      return dir;
+    }
+  } catch {
+    // Unwritable or unusual home; fall through to the old behaviour, which at
+    // least works until the next deploy and warns loudly below.
+  }
+  return "./auth";
+}
+
+/**
+ * Carry an existing login across to the persistent location, once.
+ *
+ * Changing where credentials live would otherwise log everyone out on the very
+ * deploy that fixes logging everyone out. If the old folder still holds a
+ * session and the new one is empty, it moves across and nobody scans anything.
+ * Baileys' multi-file auth state writes flat files, so a flat copy is complete.
+ */
+function migrateLegacyAuth(target) {
+  const legacy = path.resolve("./auth");
+  if (path.resolve(target) === legacy) return;
+  try {
+    if (!fsSync.existsSync(path.join(legacy, "creds.json"))) return;
+    if (fsSync.existsSync(path.join(target, "creds.json"))) return;
+    fsSync.mkdirSync(target, { recursive: true });
+    let moved = 0;
+    for (const entry of fsSync.readdirSync(legacy, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      fsSync.copyFileSync(path.join(legacy, entry.name), path.join(target, entry.name));
+      moved += 1;
+    }
+    console.log(`moved ${moved} saved-login files from ./auth to ${target} — no re-scan needed`);
+  } catch (e) {
+    console.warn(`could not carry the old login across: ${String(e?.message || e)}`);
+  }
+}
+
 const PORT = Number(process.env.PORT || 8080);
 const SECRET = process.env.BAILEYS_SECRET || "";
 // Must point at a PERSISTENT volume. On an ephemeral filesystem the session is
 // lost on every deploy and everyone is asked to rescan a QR each time, which is
 // how this feature quietly stops being used.
-const AUTH_DIR = process.env.AUTH_DIR || "./auth";
+const AUTH_DIR = resolveAuthDir();
 
 // Where observed messages go. Only telecaller sessions ever post; the founder's
 // session has no observer attached.
@@ -138,7 +210,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.10-13";
+const WORKER_VERSION = "2026.09.10-14";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -161,8 +233,12 @@ if (!SECRET) {
  */
 {
   const resolved = path.resolve(AUTH_DIR);
+  migrateLegacyAuth(resolved);
   const insideApp = resolved.startsWith(path.resolve(process.cwd()) + path.sep);
   if (insideApp) {
+    // Only reachable now if someone set AUTH_DIR to an in-app path on purpose,
+    // or the home directory could not be written to. Still worth shouting
+    // about, because the consequence is a rep re-scanning after every upload.
     console.warn(
       "\n" +
       "  ⚠  AUTH_DIR IS INSIDE THE APP FOLDER — the next deploy will wipe the login.\n" +
