@@ -222,6 +222,13 @@ Deno.serve(async (req) => {
     // reason given. So a poll with nothing to report leaves the field alone and
     // lets the ingest own it.
     const patch: Record<string, unknown> = { status: rs.status, wa_number: rs.number };
+    // A poll that found the worker connected is itself proof the link is up,
+    // so it refreshes link_ok_at — which is what the card's Connected/
+    // Disconnected badge now reads. Deliberately NOT last_seen_at: that one
+    // means "data arrived", and a status poll proves nothing of the kind.
+    // Conflating the two is how a linked rep on a quiet morning was reported
+    // as never connected.
+    if (rs.status === "connected") patch.link_ok_at = new Date().toISOString();
     const problem = rs.error ?? stuck;
     if (problem) patch.last_error = problem;
     // last_seen_at is the INGEST's to set. A status poll proves the worker is
