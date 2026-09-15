@@ -120,19 +120,47 @@ function migrateLegacyAuth(target) {
   const legacy = path.resolve("./auth");
   if (path.resolve(target) === legacy) return;
   try {
-    if (!fsSync.existsSync(path.join(legacy, "creds.json"))) return;
-    if (fsSync.existsSync(path.join(target, "creds.json"))) return;
+    if (!fsSync.existsSync(legacy)) return;
     fsSync.mkdirSync(target, { recursive: true });
-    let moved = 0;
-    for (const entry of fsSync.readdirSync(legacy, { withFileTypes: true })) {
-      if (!entry.isFile()) continue;
-      fsSync.copyFileSync(path.join(legacy, entry.name), path.join(target, entry.name));
-      moved += 1;
+    const moved = copyInto(legacy, target);
+    if (moved) {
+      console.log(`carried ${moved} saved-login files from ./auth to ${target} — no re-scan needed`);
     }
-    console.log(`moved ${moved} saved-login files from ./auth to ${target} — no re-scan needed`);
   } catch (e) {
     console.warn(`could not carry the old login across: ${String(e?.message || e)}`);
   }
+}
+
+/**
+ * Copy a login tree across, never overwriting a newer one.
+ *
+ * RECURSIVE, AND THAT IS THE WHOLE POINT.
+ *
+ * The first version of this skipped anything that was not a plain file. The
+ * founder's own session keeps its credentials as loose files directly in the
+ * auth folder, so it migrated and looked like proof the move worked — while
+ * every TELECALLER, whose login lives in a `rep-<id>/` subfolder, was silently
+ * left behind. The one deploy that existed to stop reps being logged out would
+ * have logged out exactly the reps it was written for, and the only symptom
+ * would have been another QR.
+ *
+ * Skips any file already present at the destination, so a session that has
+ * been running and writing fresh keys is never clobbered by a stale copy.
+ */
+function copyInto(from, to) {
+  let n = 0;
+  for (const entry of fsSync.readdirSync(from, { withFileTypes: true })) {
+    const src = path.join(from, entry.name);
+    const dst = path.join(to, entry.name);
+    if (entry.isDirectory()) {
+      fsSync.mkdirSync(dst, { recursive: true });
+      n += copyInto(src, dst);
+    } else if (entry.isFile() && !fsSync.existsSync(dst)) {
+      fsSync.copyFileSync(src, dst);
+      n += 1;
+    }
+  }
+  return n;
 }
 
 const PORT = Number(process.env.PORT || 8080);
@@ -210,7 +238,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.10-14";
+const WORKER_VERSION = "2026.09.15-15";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
