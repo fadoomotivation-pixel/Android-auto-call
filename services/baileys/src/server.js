@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.15-17";
+const WORKER_VERSION = "2026.09.15-18";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -652,7 +652,11 @@ const BROWSER_IDENTITY = ["Call Pro AI", "Chrome", "1.0.0"];
 function identityFor(s) {
   if (!s.observeOnly) return BROWSER_IDENTITY;
   if (s.pinnedIdentity) return s.pinnedIdentity;
-  return s.handshakeFails >= 2 ? BROWSER_IDENTITY : DESKTOP_IDENTITY;
+  // ONE refusal is enough to move on. WhatsApp is currently declining the
+  // desktop identity outright, and every extra attempt is another twenty
+  // seconds in which the card says "Disconnected" and a human goes looking for
+  // a problem that is about to fix itself.
+  return s.handshakeFails >= 1 ? BROWSER_IDENTITY : DESKTOP_IDENTITY;
 }
 
 const identityFile = (authDir) => path.join(authDir, "identity.json");
@@ -1162,6 +1166,14 @@ async function start(s) {
       // identity it will not accept from this host.
       const refused = !s.sawQr;
       if (refused) s.handshakeFails += 1;
+      // MID-RETRY IS NOT GIVING UP.
+      //
+      // A refused handshake set status "disconnected", so the card read
+      // "Never connected — have the rep scan the QR" during the twenty seconds
+      // before the next attempt produced one. That is the same lie that has
+      // sent someone to fetch a telecaller more than once. We are retrying, so
+      // say so.
+      if (refused && !loggedOut && !replaced) s.state.status = "connecting";
 
       s.state.lastError = loggedOut
         ? "WhatsApp logged this session out. Press Re-scan and scan the new QR."
@@ -1173,7 +1185,7 @@ async function start(s) {
               `attempt ${s.handshakeFails}. It is refusing what we identify as, not the scan. ` +
               `Claiming version ${s.state.waVersion ?? "bundled/unknown"} (${s.state.waVersionSource ?? "?"}) ` +
               `as ${s.state.identity ?? "?"}.` +
-              (s.handshakeFails >= 2 ? " Retrying as a plain browser." : " Retrying.")
+              (s.handshakeFails >= 1 ? " Retrying as a plain browser." : " Retrying.")
             : `Connection closed (${code ?? "unknown"}). Retrying.`;
       log.warn({
         id: s.id, code, loggedOut, replaced, refused,
