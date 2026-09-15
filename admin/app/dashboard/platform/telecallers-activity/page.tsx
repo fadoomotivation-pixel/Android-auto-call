@@ -633,6 +633,23 @@ export default async function TelecallerActivityPage({
           </>
         )}
 
+        {/* A CLEAN SLATE SHOULD NOT LOOK LIKE A BROKEN SCREEN.
+            Retiring an old capture drops this panel from hundreds of rows to
+            nothing, and an unexplained empty page is precisely what sent us
+            round this loop before. Say what happened and what to do next. */}
+        {conversations.length === 0 && (
+          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+            <strong>Ready for a fresh scan</strong>
+            <p className="subtitle" style={{ marginTop: 6, marginBottom: 0 }}>
+              The earlier capture for this telecaller has been retired, so nothing below is
+              mixed in with it. Nothing was deleted — those messages are still stored and can
+              be brought back. Press <strong>Show QR</strong> on the WhatsApp page and have the
+              rep scan once; their chats, groups, photos and PDFs will appear here as they
+              arrive.
+            </p>
+          </div>
+        )}
+
         {byLead.size === 0 ? (
           <div className="empty">
             No WhatsApp conversations with this company&apos;s <strong>leads</strong>.
