@@ -224,7 +224,17 @@ const WATCH_EDITS = flag("WATCH_EDITS", true);
 const SYNC_CONTACTS = flag("SYNC_CONTACTS", true);
 /** Group chats. OFF: a broker group is dozens of people who never agreed to be
  *  recorded in someone's CRM, and the volume is large. */
-const WATCH_GROUPS = flag("WATCH_GROUPS", false);
+// ON BY DEFAULT, BECAUSE THE GROUPS ARE THE JOB.
+//
+// This defaulted to false on the reasonable-sounding theory that a group is
+// noise and a lead is a one-to-one chat. Ankita's actual WhatsApp says
+// otherwise: "Employes updation group", "Payment claim" with a colleague
+// posting a photo, site maps going out as PDFs to named deal groups — with 23
+// unread across them. Every one of those was dropped at this line before it
+// reached the CRM, which is a large part of why her recent work looked like an
+// empty screen. A rep's day is not less visible because the buyer brought
+// their brother into the chat.
+const WATCH_GROUPS = flag("WATCH_GROUPS", true);
 /** Ask WhatsApp for online/typing state of leads. OFF: it is a per-chat
  *  subscription, it is chatty, and it is the least load-bearing of these. */
 const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
@@ -238,7 +248,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.15-15";
+const WORKER_VERSION = "2026.09.15-16";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -420,6 +430,8 @@ function newSession(id, salespersonId) {
     // Says "still here" to the CRM on a timer, so a quiet rep is not mistaken
     // for a broken link.
     heartbeatTimer: null,
+    // When WhatsApp last sent us anything at all. The watchdog reads it.
+    lastEventAt: Date.now(),
     // start() awaits twice before it assigns s.sock, so two overlapping calls
     // (the reconnect timer firing while an admin presses Show QR) would both
     // sail past any "is there a socket already" check and build two. This is
@@ -816,6 +828,7 @@ async function start(s) {
       // the event loop on it would stall every other WhatsApp event behind it.
       // Each message is independent and the CRM upserts on WhatsApp's own id,
       // so completion order does not matter.
+      noteEvent(s);
       for (const m of ev?.messages ?? []) {
         void queueObserved(s, m).catch((e) =>
           log.warn({ id: s.id, err: String(e?.message || e) }, "could not queue a message"));
@@ -1001,6 +1014,7 @@ async function start(s) {
     // scan, not an "open" that would report the forgotten login as connected,
     // and above all not a "close" that schedules its own return.
     if (s.dead) return;
+    noteEvent(s);
     const { connection, lastDisconnect, qr } = u;
 
     if (qr) {
@@ -1355,6 +1369,12 @@ async function queueObserved(s, msg) {
     peer_name: msg?.pushName ?? null,
     ...meta,
     is_group: isGroup,
+    // In a group, peer_phone is the GROUP's id and says nothing about who
+    // spoke. WhatsApp puts the actual sender on key.participant, and without
+    // it a group thread reads as one anonymous voice.
+    sender_phone: isGroup && msg?.key?.participant
+      ? String(msg.key.participant).split("@")[0].split(":")[0]
+      : null,
     // The whole message. The worker is not where privacy is decided — it cannot
     // even tell whether this number is a lead. The CRM's match_wa_contact drops
     // every non-lead conversation on arrival, so clipping here would only
@@ -1405,6 +1425,41 @@ async function queueObserved(s, msg) {
  */
 const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 4 * 60_000);
 
+/**
+ * A SOCKET THAT SAYS "CONNECTED" IS NOT PROOF WHATSAPP IS STILL TALKING TO US.
+ *
+ * The heartbeat reports s.state.status, an in-memory flag set once when the
+ * connection opened. It proves the worker process is alive. It does not prove
+ * the WhatsApp stream is still delivering, and those came apart: this session
+ * has reported "connected" continuously since 9 September while the rep's
+ * phone shows a working day of messages, voice calls and PDFs that never
+ * arrived here. A stream can stop delivering without ever emitting a close,
+ * and nothing in the worker was positioned to notice.
+ *
+ * So: every WhatsApp event of any kind stamps lastEventAt, and a connected
+ * session that has heard absolutely nothing for WATCHDOG_MS rebuilds its
+ * socket on the same credentials. No QR, no human, nothing lost — a reconnect
+ * is cheap and a silent day is not.
+ *
+ * Deliberately generous at 90 minutes. A watched number genuinely goes quiet
+ * at night, and the cost of being wrong is one needless reconnect.
+ */
+const WATCHDOG_MS = Number(process.env.WATCHDOG_MS || 90 * 60_000);
+
+function noteEvent(s) { s.lastEventAt = Date.now(); }
+
+function checkStreamAlive(s) {
+  if (s.dead || !s.observeOnly) return;
+  if (s.state.status !== "connected") return;
+  const since = Date.now() - (s.lastEventAt || 0);
+  if (since < WATCHDOG_MS) return;
+  log.warn({ id: s.id, quietMinutes: Math.round(since / 60000) },
+    "connected but the WhatsApp stream has been silent — rebuilding the socket");
+  s.state.lastError = "The WhatsApp stream went quiet while connected, so the link was rebuilt.";
+  s.lastEventAt = Date.now();
+  void start(s).catch((e) => log.error({ id: s.id, err: String(e?.message || e) }, "watchdog restart failed"));
+}
+
 async function sendHeartbeat(s) {
   if (s.dead || !s.observeOnly) return;
   if (!INGEST_URL || !INGEST_SECRET) return;
@@ -1433,7 +1488,10 @@ function startHeartbeat(s) {
   if (!s.observeOnly) return;
   clearInterval(s.heartbeatTimer);
   void sendHeartbeat(s);
-  s.heartbeatTimer = setInterval(() => void sendHeartbeat(s), HEARTBEAT_MS);
+  s.heartbeatTimer = setInterval(() => {
+    void sendHeartbeat(s);
+    checkStreamAlive(s);
+  }, HEARTBEAT_MS);
 }
 
 async function flushObserved(s) {

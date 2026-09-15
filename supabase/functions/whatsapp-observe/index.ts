@@ -277,6 +277,11 @@ Deno.serve(async (req) => {
       // Always recorded, lead or not. This is what makes an unknown number
       // recoverable later instead of anonymous.
       peer_phone: peer,
+      // A group conversation, and who actually spoke in it. Without the second
+      // one a group thread reads as one anonymous voice; peer_phone is the
+      // group's id, not a person's.
+      is_group: m?.is_group === true,
+      sender_phone: typeof m?.sender_phone === "string" ? m.sender_phone : null,
       wa_message_id: waId,
       direction,
       // In full. A cap here would silently clip the one message an admin
