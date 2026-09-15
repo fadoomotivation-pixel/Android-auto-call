@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { captureLead } from "./actions";
 import { WaThread } from "./WaThread";
+import { WaInbox } from "./WaInbox";
 
 /**
  * Every telecaller on the platform, one screen, worst first.
@@ -295,16 +296,44 @@ export default async function TelecallerActivityPage({
     const named = thread.find((t) => t.peer_name)?.peer_name ?? null;
     const ordered = [...thread].reverse();
 
+    const label = named ?? peer;
+    const inCrm = conversations.find((c) => c.peer_phone === peer)?.contact_id ?? null;
+
     return (
       <>
-        <h2>💬 {named ?? peer}</h2>
-        <p className="subtitle">
+        <h2 style={{ marginBottom: 2 }}>
+          💬 {current.rep_name || "Telecaller"} · {current.company_name.trim()}
+        </h2>
+        <p className="subtitle" style={{ marginTop: 0, marginBottom: 14 }}>
           <a href={`/dashboard/platform/telecallers-activity${qs({ rep: current.rep_id, days })}`}>
-            ← Back to {current.rep_name || "this telecaller"}
+            ← Back to the summary
           </a>
-          {" · "}{peer} · {thread.length} messages · not a lead in {current.company_name.trim()}
+          {" · "}{conversations.length} conversations on this WhatsApp
         </p>
-        {pErr && <div className="error">{pErr.message}</div>}
+        {pErr && <div className="error" style={{ marginBottom: 12 }}>{pErr.message}</div>}
+
+        <WaInbox
+          conversations={conversations}
+          activePeer={peer}
+          baseHref={`/dashboard/platform/telecallers-activity?rep=${current.rep_id}&days=${days}`}
+        >
+        {/* The conversation header, the way a chat app puts it: who, their
+            number, and how much of it there is — pinned above the scroll so it
+            is still there four hundred messages down. */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12, paddingBottom: 12,
+          borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: 14,
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#e9edef" }}>{label}</div>
+            <div className="subtitle" style={{ fontSize: 12.5, marginTop: 2 }}>
+              {peer} · {thread.length} messages
+              {inCrm
+                ? <> · <span style={{ color: "#22c55e" }}>a lead in {current.company_name.trim()}</span></>
+                : <> · <span style={{ color: "#f59e0b" }}>not in the CRM</span></>}
+            </div>
+          </div>
+        </div>
 
         {/* WHAT TO TELL THE REP, WITHOUT READING SIX MONTHS FIRST.
             A super admin opening a thread is deciding one thing: is this deal
@@ -377,6 +406,7 @@ export default async function TelecallerActivityPage({
           If it reads like a colleague or something personal, it is neither a buyer nor a problem —
           leave it. This list is a shortlist to judge, not a verdict.
         </p>
+        </WaInbox>
       </>
     );
   }
@@ -531,6 +561,13 @@ export default async function TelecallerActivityPage({
             above may well have just said — both come out empty while thousands
             of her messages sit in the database. This is the panel that shows
             them. Click any row to read the conversation. */}
+        {/* EVERY CONVERSATION, AS A CHAT APP AND NOT A SPREADSHEET.
+            This was a six-column table, one link per row, so reading a chat
+            cost a page load and coming back lost your place among three
+            hundred and forty-eight rows. The person reading it is holding
+            WhatsApp in their other hand; matching that layout is what makes a
+            six-month thread readable in one scroll. Search and the filters are
+            instant because all the rows are already here. */}
         {conversations.length > 0 && (
           <>
             <h3 style={{ marginTop: 8, marginBottom: 4 }}>
@@ -538,63 +575,30 @@ export default async function TelecallerActivityPage({
             </h3>
             <p className="subtitle" style={{ marginTop: 0, marginBottom: 12 }}>
               Everyone this telecaller has messaged on the linked WhatsApp — leads and
-              non-leads, all time, newest first. <strong>Click a row to read the chat.</strong>
+              non-leads, all time, newest first. <strong>Pick one to read it.</strong>
             </p>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Who</th>
-                  <th>Last message</th>
-                  <th style={{ textAlign: "right" }}>Messages</th>
-                  <th style={{ textAlign: "right" }}>They sent</th>
-                  <th style={{ textAlign: "right" }}>Called</th>
-                  <th>Last seen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {conversations.map((c) => (
-                  <tr key={c.peer_phone}>
-                    <td>
-                      <a href={`/dashboard/platform/telecallers-activity${qs({ rep: current.rep_id, days, peer: c.peer_phone })}`}>
-                        <strong>{c.lead_name || c.peer_name || c.peer_phone}</strong>
-                      </a>
-                      {(c.lead_name || c.peer_name) && (
-                        <div className="subtitle" style={{ fontFamily: "monospace", fontSize: 12 }}>
-                          {c.peer_phone}
-                        </div>
-                      )}
-                      {/* Says which side of the CRM this person is on, because
-                          that is the difference between supervision and a lead
-                          nobody wrote down. */}
-                      {!c.contact_id && (
-                        <div style={{ fontSize: 11.5, color: "#f59e0b" }}>not in the CRM</div>
-                      )}
-                    </td>
-                    <td style={{ fontSize: 12.5, maxWidth: 380 }}>
-                      {c.last_body
-                        ? (c.last_body.length > 110 ? `${c.last_body.slice(0, 109)}…` : c.last_body)
-                        : c.last_media
-                          ? <span style={{ opacity: 0.6, fontStyle: "italic" }}>{c.last_media}</span>
-                          : <span style={{ opacity: 0.35 }}>—</span>}
-                    </td>
-                    <td style={{ textAlign: "right" }}>{c.messages}</td>
-                    <td style={{ textAlign: "right" }}>
-                      {c.they_sent > 0
-                        ? <strong style={{ color: "#22c55e" }}>{c.they_sent}</strong>
-                        : <span style={{ opacity: 0.4 }}>0</span>}
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      {c.calls > 0
-                        ? <strong style={{ color: "#f59e0b" }}>{c.calls}×</strong>
-                        : <span style={{ opacity: 0.3 }}>—</span>}
-                    </td>
-                    <td className="subtitle" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
-                      {ago(c.last_at)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <WaInbox
+              conversations={conversations}
+              activePeer=""
+              baseHref={`/dashboard/platform/telecallers-activity?rep=${current.rep_id}&days=${days}`}
+            >
+              <div style={{
+                height: "100%", display: "grid", placeItems: "center",
+                textAlign: "center", color: "#8696a0", padding: 24,
+              }}>
+                <div>
+                  <div style={{ fontSize: 40, marginBottom: 10, opacity: 0.5 }}>💬</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "#e9edef" }}>
+                    Pick a conversation
+                  </div>
+                  <p style={{ fontSize: 13, maxWidth: 360, margin: "8px auto 0", lineHeight: 1.5 }}>
+                    Photos, documents and voice notes open inside the chat.
+                    Anything sent before this CRM started keeping files says so
+                    rather than showing an empty bubble.
+                  </p>
+                </div>
+              </div>
+            </WaInbox>
           </>
         )}
 
