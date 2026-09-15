@@ -235,6 +235,9 @@ const SYNC_CONTACTS = flag("SYNC_CONTACTS", true);
 // empty screen. A rep's day is not less visible because the buyer brought
 // their brother into the chat.
 const WATCH_GROUPS = flag("WATCH_GROUPS", true);
+// Whether a watcher tells WhatsApp it is reachable. See makeWASocket below —
+// this is the difference between receiving live messages and receiving none.
+const MARK_ONLINE = flag("MARK_ONLINE", true);
 /** Ask WhatsApp for online/typing state of leads. OFF: it is a per-chat
  *  subscription, it is chatty, and it is the least load-bearing of these. */
 const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
@@ -248,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.15-16";
+const WORKER_VERSION = "2026.09.15-17";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -432,6 +435,12 @@ function newSession(id, salespersonId) {
     heartbeatTimer: null,
     // When WhatsApp last sent us anything at all. The watchdog reads it.
     lastEventAt: Date.now(),
+    // QR churn. A session with no credentials regenerates one every twenty
+    // seconds for as long as it is allowed to, which floods the host's log
+    // until it is truncated — the founder's own sender has been doing exactly
+    // that for weeks, unnoticed, because nothing was watching for it.
+    qrCount: 0,
+    lastQrRequestAt: 0,
     // start() awaits twice before it assigns s.sock, so two overlapping calls
     // (the reconnect timer firing while an admin presses Show QR) would both
     // sail past any "is there a socket already" check and build two. This is
@@ -761,7 +770,25 @@ async function start(s) {
     // We are a sender or a watcher, never a reader. Marking ourselves online
     // would make the phone stop showing notifications for these messages,
     // because WhatsApp would think the account is already reading them here.
-    markOnlineOnConnect: false,
+    // "I AM UNAVAILABLE" IS WHY NOTHING LIVE EVER ARRIVED.
+    //
+    // Baileys turns this flag into a presence update on connect — false sends
+    // sendPresenceUpdate('unavailable') (Socket/chats.js), which tells WhatsApp
+    // this device is not reachable. WhatsApp then has no reason to route live
+    // message notifications to it, and the offline queue is never flushed here.
+    //
+    // It matches the evidence exactly. The socket connects, contact sync runs,
+    // the heartbeat is green, and a fresh link still pulls a full history —
+    // none of which depend on presence. What never arrived, for ANY rep, in the
+    // entire life of this feature, was a single live message: zero since the
+    // 30 August history sync while the rep's phone shows a full working day,
+    // and zero media files captured platform-wide.
+    //
+    // It was set false to protect the rep's own phone notifications. That is a
+    // real concern and it is worth less than the feature working at all — a
+    // watcher that is told to be unavailable is not a watcher. Baileys' own
+    // default is true. MARK_ONLINE=0 puts it back if a rep ever complains.
+    markOnlineOnConnect: s.observeOnly ? MARK_ONLINE : false,
     // OFF BY DEFAULT, AND THAT DEFAULT COST US THE WHOLE IMPORT.
     //
     // With syncFullHistory false WhatsApp pushes only a token slice of recent
@@ -1037,11 +1064,33 @@ async function start(s) {
         // identity; zeroing it would un-choose it on the very next connect,
         // which is precisely how a scanned QR ended up stuck on "Logging in…".
         s.sawQr = true;
+        s.qrCount = (s.qrCount || 0) + 1;
         // Back to a short retry, so the mandatory post-pair restart is not
         // sitting behind a backoff grown by the failures that came before.
         s.backoffMs = 2_000;
         await pinIdentity(s, identityFor(s));
         log.info({ id: s.id, identity: s.state.identity }, "QR ready — scan it from the right phone");
+
+        // NOBODY IS LOOKING AT THIS ONE.
+        //
+        // A session with no saved login regenerates a QR every twenty seconds
+        // for as long as the socket lives. The founder's own sender has been
+        // doing that for weeks — it filled the host's runtime log to its cap,
+        // buried every line worth reading, and nothing was watching for it.
+        // The dashboard polls /qr while a human has the panel open, so that
+        // poll is the signal that someone is actually there to scan. Two
+        // minutes of squares with nobody asking means stop and wait to be
+        // asked.
+        if (s.qrCount > 6 && Date.now() - (s.lastQrRequestAt || 0) > 60_000) {
+          s.state.qrDataUrl = null;
+          s.state.status = "disconnected";
+          s.state.lastError = "No one scanned the QR, so it stopped refreshing. Press Show QR to start again.";
+          s.qrCount = 0;
+          log.warn({ id: s.id }, "QR went unscanned — pausing until someone asks for it");
+          try { s.sock?.ev.removeAllListeners(); } catch { /* nothing attached */ }
+          try { s.sock?.end(); } catch { /* already gone */ }
+          s.sock = null;
+        }
       } catch (e) {
         s.state.lastError = `Could not render the QR image: ${String(e?.message || e)}`;
         log.error({ id: s.id, err: s.state.lastError }, "QR render failed");
@@ -1739,6 +1788,11 @@ const server = http.createServer(async (req, res) => {
     if (action === "qr") {
       // HTML by default so the rep can just open the link; JSON on request for
       // the dashboard.
+      s.lastQrRequestAt = Date.now();
+      // Asked for while paused: start again so the panel gets a fresh square.
+      if (!s.sock && !s.starting) {
+        void start(s).catch((e) => log.error({ id: s.id, err: String(e?.message || e) }, "restart for QR failed"));
+      }
       if (url.searchParams.get("format") === "json") {
         // THE REASON, NOT JUST THE ABSENCE.
         //
