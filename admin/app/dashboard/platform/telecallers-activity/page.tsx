@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { captureLead } from "./actions";
 import { WaThread } from "./WaThread";
 import { WaInbox } from "./WaInbox";
+import { OpenAtLatest } from "./OpenAtLatest";
 
 /**
  * Every telecaller on the platform, one screen, worst first.
@@ -332,6 +333,26 @@ export default async function TelecallerActivityPage({
                 ? <> · <span style={{ color: "#22c55e" }}>a lead in {current.company_name.trim()}</span></>
                 : <> · <span style={{ color: "#f59e0b" }}>not in the CRM</span></>}
             </div>
+            {/* WHEN THIS CONVERSATION ACTUALLY STOPPED.
+                "Today's messages aren't showing" is the reasonable conclusion
+                from a thread that opens on an old day, and the answer — that
+                the last message really was weeks ago — was four screens below
+                the fold. It belongs in the header, where the question is
+                asked. */}
+            {ordered.length > 0 && (
+              <div className="subtitle" style={{ fontSize: 12, marginTop: 2, opacity: 0.85 }}>
+                {new Date(ordered[0].sent_at).toLocaleDateString("en-IN", {
+                  timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric",
+                })}
+                {" → last message "}
+                <strong style={{ color: "#e9edef" }}>
+                  {new Date(ordered[ordered.length - 1].sent_at).toLocaleDateString("en-IN", {
+                    timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric",
+                  })}
+                </strong>
+                {thread.length >= 400 && " · showing the latest 400"}
+              </div>
+            )}
           </div>
         </div>
 
@@ -375,6 +396,10 @@ export default async function TelecallerActivityPage({
         })()}
 
         <WaThread messages={ordered} mediaUrl={purl} whoIn={named ?? peer} whoOut={current.rep_name || "Rep"} />
+        {/* Puts the pane at the newest message, which is where a chat opens.
+            Without it a long thread opened on its oldest day and read as "the
+            recent messages are missing". */}
+        <OpenAtLatest count={ordered.length} />
 
         {/* THE STEP THAT WAS MISSING. Finding these was only ever half of it:
             the list could point at thirty-four uncaptured relationships and
