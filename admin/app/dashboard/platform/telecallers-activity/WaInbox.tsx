@@ -46,6 +46,8 @@ export type Conversation = {
   last_at: string;
   last_body: string | null;
   last_media: string | null;
+  /** A WhatsApp group. peer_phone is then the group's id, not a person's. */
+  is_group?: boolean | null;
 };
 
 const IST = { timeZone: "Asia/Kolkata" } as const;
@@ -167,7 +169,8 @@ export function WaInbox({
             <p className="wai-none">No conversation matches that.</p>
           )}
           {shown.map((c) => {
-            const name = c.lead_name || c.peer_name || c.peer_phone;
+            const name = c.lead_name || c.peer_name
+              || (c.is_group ? "Group chat" : c.peer_phone);
             const preview = c.last_body?.trim()
               ? c.last_body
               : c.last_media
@@ -184,7 +187,9 @@ export function WaInbox({
                   style={{ background: `hsl(${hueOf(c.peer_phone)} 42% 32%)` }}
                   aria-hidden
                 >
-                  {initials(name, c.peer_phone) ?? <span className="wai-anon">👤</span>}
+                  {c.is_group
+                    ? <span className="wai-anon">👥</span>
+                    : initials(name, c.peer_phone) ?? <span className="wai-anon">👤</span>}
                 </span>
                 <span className="wai-mid">
                   <span className="wai-top">
@@ -207,8 +212,9 @@ export function WaInbox({
                       which is the difference between a wrong dial and a
                       working relationship living on one person's phone. */}
                   <span className="wai-tags">
+                    {c.is_group && <em className="tag grp">group</em>}
                     {c.contact_id && <em className="tag lead">lead</em>}
-                    {!c.contact_id && c.calls > 0 && (
+                    {!c.contact_id && !c.is_group && c.calls > 0 && (
                       <em className="tag warn">called {c.calls}× · not in CRM</em>
                     )}
                     {c.they_sent > 0 && <em className="tag in">{c.they_sent} from them</em>}
@@ -286,6 +292,7 @@ const CSS = `
   padding:1px 6px;border-radius:4px;white-space:nowrap}
 .tag.warn{background:rgba(245,158,11,.16);color:#f5b342}
 .tag.lead{background:rgba(0,168,132,.2);color:#4fd6ae}
+.tag.grp{background:rgba(129,140,248,.16);color:#a5b4fc}
 .tag.in{background:rgba(255,255,255,.07);color:#8696a0}
 .wai-anon{font-size:18px;opacity:.75;line-height:1}
 .wai-pane{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;

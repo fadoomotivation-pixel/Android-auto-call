@@ -224,7 +224,20 @@ const WATCH_EDITS = flag("WATCH_EDITS", true);
 const SYNC_CONTACTS = flag("SYNC_CONTACTS", true);
 /** Group chats. OFF: a broker group is dozens of people who never agreed to be
  *  recorded in someone's CRM, and the volume is large. */
-const WATCH_GROUPS = flag("WATCH_GROUPS", false);
+// ON BY DEFAULT, BECAUSE THE GROUPS ARE THE JOB.
+//
+// This defaulted to false on the reasonable-sounding theory that a group is
+// noise and a lead is a one-to-one chat. Ankita's actual WhatsApp says
+// otherwise: "Employes updation group", "Payment claim" with a colleague
+// posting a photo, site maps going out as PDFs to named deal groups — with 23
+// unread across them. Every one of those was dropped at this line before it
+// reached the CRM, which is a large part of why her recent work looked like an
+// empty screen. A rep's day is not less visible because the buyer brought
+// their brother into the chat.
+const WATCH_GROUPS = flag("WATCH_GROUPS", true);
+// Whether a watcher tells WhatsApp it is reachable. See makeWASocket below —
+// this is the difference between receiving live messages and receiving none.
+const MARK_ONLINE = flag("MARK_ONLINE", true);
 /** Ask WhatsApp for online/typing state of leads. OFF: it is a per-chat
  *  subscription, it is chatty, and it is the least load-bearing of these. */
 const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
@@ -238,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.15-15";
+const WORKER_VERSION = "2026.09.15-17";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -420,6 +433,14 @@ function newSession(id, salespersonId) {
     // Says "still here" to the CRM on a timer, so a quiet rep is not mistaken
     // for a broken link.
     heartbeatTimer: null,
+    // When WhatsApp last sent us anything at all. The watchdog reads it.
+    lastEventAt: Date.now(),
+    // QR churn. A session with no credentials regenerates one every twenty
+    // seconds for as long as it is allowed to, which floods the host's log
+    // until it is truncated — the founder's own sender has been doing exactly
+    // that for weeks, unnoticed, because nothing was watching for it.
+    qrCount: 0,
+    lastQrRequestAt: 0,
     // start() awaits twice before it assigns s.sock, so two overlapping calls
     // (the reconnect timer firing while an admin presses Show QR) would both
     // sail past any "is there a socket already" check and build two. This is
@@ -749,7 +770,25 @@ async function start(s) {
     // We are a sender or a watcher, never a reader. Marking ourselves online
     // would make the phone stop showing notifications for these messages,
     // because WhatsApp would think the account is already reading them here.
-    markOnlineOnConnect: false,
+    // "I AM UNAVAILABLE" IS WHY NOTHING LIVE EVER ARRIVED.
+    //
+    // Baileys turns this flag into a presence update on connect — false sends
+    // sendPresenceUpdate('unavailable') (Socket/chats.js), which tells WhatsApp
+    // this device is not reachable. WhatsApp then has no reason to route live
+    // message notifications to it, and the offline queue is never flushed here.
+    //
+    // It matches the evidence exactly. The socket connects, contact sync runs,
+    // the heartbeat is green, and a fresh link still pulls a full history —
+    // none of which depend on presence. What never arrived, for ANY rep, in the
+    // entire life of this feature, was a single live message: zero since the
+    // 30 August history sync while the rep's phone shows a full working day,
+    // and zero media files captured platform-wide.
+    //
+    // It was set false to protect the rep's own phone notifications. That is a
+    // real concern and it is worth less than the feature working at all — a
+    // watcher that is told to be unavailable is not a watcher. Baileys' own
+    // default is true. MARK_ONLINE=0 puts it back if a rep ever complains.
+    markOnlineOnConnect: s.observeOnly ? MARK_ONLINE : false,
     // OFF BY DEFAULT, AND THAT DEFAULT COST US THE WHOLE IMPORT.
     //
     // With syncFullHistory false WhatsApp pushes only a token slice of recent
@@ -816,6 +855,7 @@ async function start(s) {
       // the event loop on it would stall every other WhatsApp event behind it.
       // Each message is independent and the CRM upserts on WhatsApp's own id,
       // so completion order does not matter.
+      noteEvent(s);
       for (const m of ev?.messages ?? []) {
         void queueObserved(s, m).catch((e) =>
           log.warn({ id: s.id, err: String(e?.message || e) }, "could not queue a message"));
@@ -1001,6 +1041,7 @@ async function start(s) {
     // scan, not an "open" that would report the forgotten login as connected,
     // and above all not a "close" that schedules its own return.
     if (s.dead) return;
+    noteEvent(s);
     const { connection, lastDisconnect, qr } = u;
 
     if (qr) {
@@ -1023,11 +1064,33 @@ async function start(s) {
         // identity; zeroing it would un-choose it on the very next connect,
         // which is precisely how a scanned QR ended up stuck on "Logging in…".
         s.sawQr = true;
+        s.qrCount = (s.qrCount || 0) + 1;
         // Back to a short retry, so the mandatory post-pair restart is not
         // sitting behind a backoff grown by the failures that came before.
         s.backoffMs = 2_000;
         await pinIdentity(s, identityFor(s));
         log.info({ id: s.id, identity: s.state.identity }, "QR ready — scan it from the right phone");
+
+        // NOBODY IS LOOKING AT THIS ONE.
+        //
+        // A session with no saved login regenerates a QR every twenty seconds
+        // for as long as the socket lives. The founder's own sender has been
+        // doing that for weeks — it filled the host's runtime log to its cap,
+        // buried every line worth reading, and nothing was watching for it.
+        // The dashboard polls /qr while a human has the panel open, so that
+        // poll is the signal that someone is actually there to scan. Two
+        // minutes of squares with nobody asking means stop and wait to be
+        // asked.
+        if (s.qrCount > 6 && Date.now() - (s.lastQrRequestAt || 0) > 60_000) {
+          s.state.qrDataUrl = null;
+          s.state.status = "disconnected";
+          s.state.lastError = "No one scanned the QR, so it stopped refreshing. Press Show QR to start again.";
+          s.qrCount = 0;
+          log.warn({ id: s.id }, "QR went unscanned — pausing until someone asks for it");
+          try { s.sock?.ev.removeAllListeners(); } catch { /* nothing attached */ }
+          try { s.sock?.end(); } catch { /* already gone */ }
+          s.sock = null;
+        }
       } catch (e) {
         s.state.lastError = `Could not render the QR image: ${String(e?.message || e)}`;
         log.error({ id: s.id, err: s.state.lastError }, "QR render failed");
@@ -1355,6 +1418,12 @@ async function queueObserved(s, msg) {
     peer_name: msg?.pushName ?? null,
     ...meta,
     is_group: isGroup,
+    // In a group, peer_phone is the GROUP's id and says nothing about who
+    // spoke. WhatsApp puts the actual sender on key.participant, and without
+    // it a group thread reads as one anonymous voice.
+    sender_phone: isGroup && msg?.key?.participant
+      ? String(msg.key.participant).split("@")[0].split(":")[0]
+      : null,
     // The whole message. The worker is not where privacy is decided — it cannot
     // even tell whether this number is a lead. The CRM's match_wa_contact drops
     // every non-lead conversation on arrival, so clipping here would only
@@ -1405,6 +1474,41 @@ async function queueObserved(s, msg) {
  */
 const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 4 * 60_000);
 
+/**
+ * A SOCKET THAT SAYS "CONNECTED" IS NOT PROOF WHATSAPP IS STILL TALKING TO US.
+ *
+ * The heartbeat reports s.state.status, an in-memory flag set once when the
+ * connection opened. It proves the worker process is alive. It does not prove
+ * the WhatsApp stream is still delivering, and those came apart: this session
+ * has reported "connected" continuously since 9 September while the rep's
+ * phone shows a working day of messages, voice calls and PDFs that never
+ * arrived here. A stream can stop delivering without ever emitting a close,
+ * and nothing in the worker was positioned to notice.
+ *
+ * So: every WhatsApp event of any kind stamps lastEventAt, and a connected
+ * session that has heard absolutely nothing for WATCHDOG_MS rebuilds its
+ * socket on the same credentials. No QR, no human, nothing lost — a reconnect
+ * is cheap and a silent day is not.
+ *
+ * Deliberately generous at 90 minutes. A watched number genuinely goes quiet
+ * at night, and the cost of being wrong is one needless reconnect.
+ */
+const WATCHDOG_MS = Number(process.env.WATCHDOG_MS || 90 * 60_000);
+
+function noteEvent(s) { s.lastEventAt = Date.now(); }
+
+function checkStreamAlive(s) {
+  if (s.dead || !s.observeOnly) return;
+  if (s.state.status !== "connected") return;
+  const since = Date.now() - (s.lastEventAt || 0);
+  if (since < WATCHDOG_MS) return;
+  log.warn({ id: s.id, quietMinutes: Math.round(since / 60000) },
+    "connected but the WhatsApp stream has been silent — rebuilding the socket");
+  s.state.lastError = "The WhatsApp stream went quiet while connected, so the link was rebuilt.";
+  s.lastEventAt = Date.now();
+  void start(s).catch((e) => log.error({ id: s.id, err: String(e?.message || e) }, "watchdog restart failed"));
+}
+
 async function sendHeartbeat(s) {
   if (s.dead || !s.observeOnly) return;
   if (!INGEST_URL || !INGEST_SECRET) return;
@@ -1433,7 +1537,10 @@ function startHeartbeat(s) {
   if (!s.observeOnly) return;
   clearInterval(s.heartbeatTimer);
   void sendHeartbeat(s);
-  s.heartbeatTimer = setInterval(() => void sendHeartbeat(s), HEARTBEAT_MS);
+  s.heartbeatTimer = setInterval(() => {
+    void sendHeartbeat(s);
+    checkStreamAlive(s);
+  }, HEARTBEAT_MS);
 }
 
 async function flushObserved(s) {
@@ -1681,6 +1788,11 @@ const server = http.createServer(async (req, res) => {
     if (action === "qr") {
       // HTML by default so the rep can just open the link; JSON on request for
       // the dashboard.
+      s.lastQrRequestAt = Date.now();
+      // Asked for while paused: start again so the panel gets a fresh square.
+      if (!s.sock && !s.starting) {
+        void start(s).catch((e) => log.error({ id: s.id, err: String(e?.message || e) }, "restart for QR failed"));
+      }
       if (url.searchParams.get("format") === "json") {
         // THE REASON, NOT JUST THE ABSENCE.
         //
