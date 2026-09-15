@@ -84,6 +84,31 @@ type Msg = {
 
 /** A number this rep talked to that is not a lead in their company. Counts and
  *  identity only — never the message bodies, which stay on the lead pages. */
+/**
+ * One row per person this rep has ever talked to — lead or not, no time window.
+ *
+ * Every other panel on this screen is filtered: by the selected range, or down
+ * to peers matched to a lead of the company. For Ankita both filters remove
+ * everything — her archive is a 30 August history sync and her linked number
+ * overlaps Fanbe's leads by exactly zero — so the page reported nothing while
+ * the database held 13,289 of her messages. This is the panel with no filter
+ * on it, which is the one that answers "show me her chats".
+ */
+type Conversation = {
+  peer_phone: string;
+  peer_name: string | null;
+  lead_name: string | null;
+  contact_id: string | null;
+  messages: number;
+  they_sent: number;
+  rep_sent: number;
+  calls: number;
+  first_at: string;
+  last_at: string;
+  last_body: string | null;
+  last_media: string | null;
+};
+
 type UnknownRow = {
   peer_phone: string;
   peer_name: string | null;
@@ -185,9 +210,17 @@ export default async function TelecallerActivityPage({
   let unknown: UnknownRow[] = [];
   let fit: Fit | null = null;
   let blasts: Blast[] = [];
+  let conversations: Conversation[] = [];
+  let rpcErrors: string[] = [];
   const mediaUrl = new Map<string, string>();
   if (current) {
-    const [{ data: m }, { data: u }, { data: f }, { data: b }] = await Promise.all([
+    const [
+      { data: m, error: mErr },
+      { data: u, error: uErr },
+      { data: f, error: fErr },
+      { data: b, error: bErr },
+      { data: cv, error: cvErr },
+    ] = await Promise.all([
       supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 }),
       // 0 = every number ever. An uncaptured lead does not stop being
       // uncaptured because nobody messaged them this week; one that went
@@ -195,11 +228,29 @@ export default async function TelecallerActivityPage({
       supabase.rpc("super_rep_unknown_numbers", { p_rep: current.rep_id, p_days: 0 }),
       supabase.rpc("super_rep_wa_fit", { p_rep: current.rep_id }),
       supabase.rpc("super_rep_blasts", { p_rep: current.rep_id, p_days: days }),
+      supabase.rpc("super_rep_conversations", { p_rep: current.rep_id }),
     ]);
     msgs = (m ?? []) as Msg[];
     unknown = (u ?? []) as UnknownRow[];
     fit = (Array.isArray(f) ? f[0] : f) as Fit ?? null;
     blasts = (b ?? []) as Blast[];
+    conversations = (cv ?? []) as Conversation[];
+
+    // A PANEL THAT FAILS MUST NOT LOOK LIKE A PANEL WITH NOTHING IN IT.
+    //
+    // Every one of these calls used to destructure `data` and drop `error` on
+    // the floor. So an RPC that was missing, renamed, or refused returned
+    // undefined, the section rendered its empty state, and the screen said the
+    // rep had no conversations — which is indistinguishable from the truth and
+    // sends whoever is reading it off to re-scan a QR. The same discarded-error
+    // mistake cost a full debugging round on the leads page.
+    rpcErrors = [
+      mErr && `conversations with leads: ${mErr.message}`,
+      cvErr && `all conversations: ${cvErr.message}`,
+      uErr && `numbers that are not leads: ${uErr.message}`,
+      fErr && `number check: ${fErr.message}`,
+      bErr && `copy-paste check: ${bErr.message}`,
+    ].filter(Boolean) as string[];
 
     // SIGNED, NEVER PUBLIC. wa-media is a private bucket for the same reason
     // call-recordings is: a buyer's voice note is not something that should be
@@ -346,6 +397,21 @@ export default async function TelecallerActivityPage({
           <a href={`/dashboard/platform/telecallers-activity${qs({ days })}`}>← All telecallers</a>
           {" · "}{current.calls} calls, {fmtTalk(current.talk_seconds)} talk, {current.wa_messages} WhatsApp
           messages in {days} day{days === 1 ? "" : "s"}
+          {/* THE ALL-TIME NUMBER, BECAUSE THE WINDOWED ONE READ AS "NOTHING EXISTS".
+              "0 WhatsApp messages in 7 days" is true and, standing alone, deeply
+              misleading: this rep has 13,289 stored. Her archive arrived as one
+              history sync weeks ago, so every range shorter than that shows
+              zero. Saying both numbers costs one clause and stops the screen
+              claiming there is nothing to look at. */}
+          {conversations.length > 0 && (
+            <>
+              {" · "}
+              <strong>
+                {conversations.reduce((n, c) => n + c.messages, 0).toLocaleString("en-IN")} messages
+                with {conversations.length} people saved in total
+              </strong>
+            </>
+          )}
         </p>
         {/* IS THIS EVEN THE RIGHT WHATSAPP?
             The question the product could not ask, and the reason a green
@@ -450,11 +516,99 @@ export default async function TelecallerActivityPage({
           </div>
         )}
 
+        {/* SAID OUT LOUD, NOT INFERRED FROM AN EMPTY PANEL. */}
+        {rpcErrors.length > 0 && (
+          <div className="error" style={{ marginBottom: 16 }}>
+            Some of this page could not load, so the sections below are incomplete rather than
+            empty: {rpcErrors.join("; ")}
+          </div>
+        )}
+
+        {/* EVERY CONVERSATION, WITH NO FILTER ON IT.
+            The threads below are only peers matched to a lead of this company,
+            and every count on this page is windowed to the selected range. For
+            a rep whose WhatsApp does not overlap the CRM — which the banner
+            above may well have just said — both come out empty while thousands
+            of her messages sit in the database. This is the panel that shows
+            them. Click any row to read the conversation. */}
+        {conversations.length > 0 && (
+          <>
+            <h3 style={{ marginTop: 8, marginBottom: 4 }}>
+              💬 All conversations ({conversations.length})
+            </h3>
+            <p className="subtitle" style={{ marginTop: 0, marginBottom: 12 }}>
+              Everyone this telecaller has messaged on the linked WhatsApp — leads and
+              non-leads, all time, newest first. <strong>Click a row to read the chat.</strong>
+            </p>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Who</th>
+                  <th>Last message</th>
+                  <th style={{ textAlign: "right" }}>Messages</th>
+                  <th style={{ textAlign: "right" }}>They sent</th>
+                  <th style={{ textAlign: "right" }}>Called</th>
+                  <th>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conversations.map((c) => (
+                  <tr key={c.peer_phone}>
+                    <td>
+                      <a href={`/dashboard/platform/telecallers-activity${qs({ rep: current.rep_id, days, peer: c.peer_phone })}`}>
+                        <strong>{c.lead_name || c.peer_name || c.peer_phone}</strong>
+                      </a>
+                      {(c.lead_name || c.peer_name) && (
+                        <div className="subtitle" style={{ fontFamily: "monospace", fontSize: 12 }}>
+                          {c.peer_phone}
+                        </div>
+                      )}
+                      {/* Says which side of the CRM this person is on, because
+                          that is the difference between supervision and a lead
+                          nobody wrote down. */}
+                      {!c.contact_id && (
+                        <div style={{ fontSize: 11.5, color: "#f59e0b" }}>not in the CRM</div>
+                      )}
+                    </td>
+                    <td style={{ fontSize: 12.5, maxWidth: 380 }}>
+                      {c.last_body
+                        ? (c.last_body.length > 110 ? `${c.last_body.slice(0, 109)}…` : c.last_body)
+                        : c.last_media
+                          ? <span style={{ opacity: 0.6, fontStyle: "italic" }}>{c.last_media}</span>
+                          : <span style={{ opacity: 0.35 }}>—</span>}
+                    </td>
+                    <td style={{ textAlign: "right" }}>{c.messages}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {c.they_sent > 0
+                        ? <strong style={{ color: "#22c55e" }}>{c.they_sent}</strong>
+                        : <span style={{ opacity: 0.4 }}>0</span>}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {c.calls > 0
+                        ? <strong style={{ color: "#f59e0b" }}>{c.calls}×</strong>
+                        : <span style={{ opacity: 0.3 }}>—</span>}
+                    </td>
+                    <td className="subtitle" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                      {ago(c.last_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
         {byLead.size === 0 ? (
           <div className="empty">
-            No WhatsApp conversations with this company&apos;s leads.
+            No WhatsApp conversations with this company&apos;s <strong>leads</strong>.
+            {/* Standing alone under a table of hundreds of conversations this
+                read as "there is nothing here", which is how a screen holding
+                13,289 messages got reported as broken. Name what it is about
+                and point at the panel that does have them. */}
+            {conversations.length > 0 &&
+              ` Their ${conversations.length} other conversations are in the table above — this rep's WhatsApp does not overlap the CRM.`}
             {current.wa_watch === "none" && " Their WhatsApp is not connected — nothing is being watched."}
-            {current.wa_watch === "stale" && " Their watcher has not reported in over two hours, so this is UNKNOWN rather than zero."}
+            {current.wa_watch === "stale" && " Their watcher has not reported recently, so this is UNKNOWN rather than zero."}
             {current.wa_watch === "ok" && current.wa_offbook > 0 &&
               ` The watcher is working and saw ${current.wa_offbook} messages in this period, but none were with a number in your CRM.`}
           </div>
