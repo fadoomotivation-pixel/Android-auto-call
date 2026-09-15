@@ -321,9 +321,15 @@ export default async function TelecallerActivityPage({
         {/* The conversation header, the way a chat app puts it: who, their
             number, and how much of it there is — pinned above the scroll so it
             is still there four hundred messages down. */}
+        {/* Pinned, now that the pane genuinely scrolls: four hundred messages
+            down, "whose chat am I reading" should still be answerable. The
+            negative offset cancels the pane's own padding so nothing shows
+            through above it. */}
         <div style={{
           display: "flex", alignItems: "center", gap: 12, paddingBottom: 12,
           borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: 14,
+          position: "sticky", top: -16, zIndex: 2,
+          background: "#0b1411", paddingTop: 16, marginTop: -16,
         }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: "#e9edef" }}>{label}</div>

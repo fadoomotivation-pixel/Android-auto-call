@@ -129,8 +129,12 @@ export function WaInbox({
   const href = (phone: string) => `${baseHref}&peer=${encodeURIComponent(phone)}`;
 
   return (
-    <div className={`wai ${activePeer ? "wai-open" : ""}`}>
+    // The wrapper is the container-query context. An element cannot be styled
+    // by a query against itself, and it is `.wai`'s own grid that has to
+    // collapse when the panel is narrow — so the context sits one level up.
+    <div className="wai-wrap">
       <style>{CSS}</style>
+      <div className={`wai ${activePeer ? "wai-open" : ""}`}>
 
       <aside className="wai-list">
         <div className="wai-search">
@@ -216,16 +220,35 @@ export function WaInbox({
         </div>
       </aside>
 
-      <section className="wai-pane">{children}</section>
+        <section className="wai-pane">{children}</section>
+      </div>
     </div>
   );
 }
 
 const CSS = `
-.wai{display:grid;grid-template-columns:352px minmax(0,1fr);gap:0;
+/* THE ONE LINE THAT WAS MISSING: min-height:0 ON THE GRID ITEMS.
+   A grid item defaults to min-height:auto, so it refuses to shrink below its
+   content. Both panes therefore grew to the full height of what was inside
+   them — a 400-message thread made the right pane thousands of pixels tall —
+   and .wai's overflow:hidden simply clipped it. overflow-y:auto never engaged,
+   because the box was never smaller than its content.
+   Everything reported followed from that one default: no scrollbar on the
+   right, the newest messages sitting below the clip with no way to reach them
+   (which reads as "the new chats never arrived"), and the centred empty state
+   pushed out of view. OpenAtLatest could not find a scrollable ancestor
+   either, so opening at the newest message silently did nothing.
+   min-height:0 is what lets a grid or flex child actually be a scroll box. */
+.wai{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:0;
   border:1px solid rgba(255,255,255,.09);border-radius:16px;overflow:hidden;
-  background:#0b1411;height:76vh;min-height:520px}
-.wai-list{display:flex;flex-direction:column;min-width:0;
+  background:#0b1411;height:min(76vh,760px);min-height:520px;
+  /* So the layout responds to the column it actually sits in. The dashboard
+     sidebar leaves roughly 840px here on a 1450px screen, so a viewport media
+     query never fired and the panes were sized for a width this box has never
+     had. */
+  }
+.wai-wrap{container-type:inline-size}
+.wai-list{display:flex;flex-direction:column;min-width:0;min-height:0;
   border-right:1px solid rgba(255,255,255,.09);background:#111b21}
 .wai-search{padding:12px;border-bottom:1px solid rgba(255,255,255,.07);flex:none}
 .wai-search input{width:100%;padding:9px 13px;border-radius:999px;
@@ -239,7 +262,7 @@ const CSS = `
   font-size:11.5px;font-weight:600;white-space:nowrap}
 .wai-chips button:hover{color:#e9edef}
 .wai-chips button.on{background:#00a884;border-color:#00a884;color:#06231c}
-.wai-rows{overflow-y:auto;flex:1}
+.wai-rows{overflow-y:auto;flex:1;min-height:0;overscroll-behavior:contain}
 .wai-none{color:#8696a0;font-size:13px;padding:18px 14px;margin:0}
 .wai-row{display:flex;gap:11px;padding:10px 12px;text-decoration:none;color:inherit;
   border-bottom:1px solid rgba(255,255,255,.045);align-items:flex-start}
@@ -265,12 +288,37 @@ const CSS = `
 .tag.lead{background:rgba(0,168,132,.2);color:#4fd6ae}
 .tag.in{background:rgba(255,255,255,.07);color:#8696a0}
 .wai-anon{font-size:18px;opacity:.75;line-height:1}
-.wai-pane{min-width:0;overflow-y:auto;padding:16px}
-@media (max-width:900px){
-  .wai{grid-template-columns:1fr;height:auto}
-  .wai-list{border-right:none;max-height:62vh}
+.wai-pane{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:16px}
+/* Deliberately NOT scroll-behavior:smooth. OpenAtLatest jumps the pane to the
+   bottom on mount by setting scrollTop, and smooth would turn that into a
+   three-thousand-pixel animated scroll past the whole conversation every time
+   a chat is opened — slow, and interruptible halfway. The "Latest message"
+   button asks for smooth explicitly, which still works. */
+/* Visible scrollbars. The default overlay bar on a dark panel is effectively
+   invisible, so a pane that DID scroll still looked like one that could not. */
+.wai-rows::-webkit-scrollbar,.wai-pane::-webkit-scrollbar{width:10px}
+.wai-rows::-webkit-scrollbar-thumb,.wai-pane::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.16);border-radius:999px;
+  border:3px solid transparent;background-clip:content-box}
+.wai-rows::-webkit-scrollbar-thumb:hover,.wai-pane::-webkit-scrollbar-thumb:hover{
+  background:rgba(255,255,255,.3);background-clip:content-box}
+.wai-rows,.wai-pane{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent}
+/* Keyed to the panel's own width, not the window's. */
+@container (max-width:700px){
+  .wai{grid-template-columns:minmax(0,1fr)}
+  .wai-list{border-right:none}
   .wai .wai-pane{display:none}
   .wai.wai-open .wai-list{display:none}
   .wai.wai-open .wai-pane{display:block}
+}
+@supports not (container-type:inline-size){
+  @media (max-width:900px){
+    .wai{grid-template-columns:1fr}
+    .wai-list{border-right:none}
+    .wai .wai-pane{display:none}
+    .wai.wai-open .wai-list{display:none}
+    .wai.wai-open .wai-pane{display:block}
+  }
 }
 `;
