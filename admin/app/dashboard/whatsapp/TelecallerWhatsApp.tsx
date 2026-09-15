@@ -71,7 +71,7 @@ function istToday(): string {
  * matches v_rep_whatsapp_health and the Daily Pulse, so the dashboard and the
  * 7pm report cannot disagree about whether a rep was being watched.
  */
-type Health = "connected" | "stale" | "scan" | "disconnected";
+type Health = "connected" | "stale" | "scan" | "connecting" | "disconnected";
 
 const LINK_FRESH_MS = 15 * 60_000;
 
@@ -87,6 +87,15 @@ function healthOf(s: Session): Health {
   // A worker reporting anything other than "connected" is reporting it NOW,
   // and that always beats an inference drawn from an old timestamp.
   if (s.status === "qr") return "scan";
+  // A RESTART IS NOT A LOST LOGIN.
+  //
+  // Every worker upload restarts the process, and for the minute it takes to
+  // come back the session reports "connecting". That was being folded into
+  // "disconnected", so the card said "The link has dropped — have the rep scan
+  // a new QR" about a session that was reconnecting on perfectly good
+  // credentials. Someone reads that sixty seconds after a deploy and goes to
+  // fetch the telecaller. It has sent us round this loop more than once.
+  if (s.status === "connecting") return "connecting";
   if (s.status && s.status !== "connected") return "disconnected";
 
   if (s.link_ok_at) {
@@ -100,10 +109,12 @@ const HEALTH_LABEL: Record<Health, string> = {
   connected: "Connected",
   stale: "Stale",
   scan: "Waiting for scan",
+  connecting: "Reconnecting…",
   disconnected: "Disconnected",
 };
 const HEALTH_TONE: Record<Health, string> = {
-  connected: "#22c55e", stale: "#f59e0b", scan: "#f59e0b", disconnected: "#ef4444",
+  connected: "#22c55e", stale: "#f59e0b", scan: "#f59e0b",
+  connecting: "#8696a0", disconnected: "#ef4444",
 };
 
 function ago(iso: string | null): string {
@@ -483,7 +494,9 @@ export function TelecallerWhatsApp({
                         traffic, and a linked rep having a quiet morning is
                         entitled to have nothing in the second one. */}
                     <div className="subtitle" style={{ fontSize: 12 }}>
-                      {health === "scan"
+                      {health === "connecting"
+                        ? "Coming back up after a restart — this clears by itself, do not re-scan"
+                        : health === "scan"
                         ? "A QR is ready and waiting — press Re-scan and have the rep scan it"
                         : s.last_error
                           ? s.last_error
