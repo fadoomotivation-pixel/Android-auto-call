@@ -116,7 +116,18 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
     );
   }
 
-  // Named, never downloaded. Every attachment older than media capture is here.
+  // Named, never downloaded.
+  //
+  // THE REASON MATTERS, AND THE OLD ONE WAS A GUESS.
+  //
+  // This used to say "sent before this CRM started keeping attachments", which
+  // sounds like something a later version will fix. It will not, and the real
+  // reason is worth knowing: WhatsApp keeps a file on its servers for about a
+  // month and then deletes it. Everything in this archive arrived in one
+  // history sync, by which point the older files were already gone from
+  // WhatsApp's side — the message survived, the file did not, and no re-scan
+  // or upgrade can bring it back. Anything sent from now on is fetched within
+  // seconds and does open.
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, marginBottom: 4,
@@ -127,7 +138,8 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "block", fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>{label}</span>
         <span style={{ fontSize: 11, opacity: 0.65 }}>
-          File not saved — sent before this CRM started keeping attachments
+          WhatsApp had already deleted this file — it only keeps one for about a
+          month, and this arrived later in a history sync. The message is kept; the file is gone.
         </span>
       </span>
     </div>
