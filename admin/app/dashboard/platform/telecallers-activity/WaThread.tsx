@@ -188,6 +188,32 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
     );
   }
 
+  // STORED, BUT NO LINK TO IT.
+  //
+  // The file is in the bucket and the row says so; what failed is minting the
+  // short-lived URL to read it. That is a permissions problem, not a capture
+  // one, and calling it "not saved" sent a founder looking at the worker for a
+  // bug that was in a storage policy.
+  if (state === "stored") {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10, marginBottom: 4,
+        padding: "10px 12px", borderRadius: 8,
+        background: "rgba(245,158,11,0.10)", border: "1px dashed rgba(245,158,11,0.35)",
+      }}>
+        <span style={{ fontSize: 20, opacity: 0.7 }}>{ICON[kind] ?? "📎"}</span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>
+            {label}{size ? ` · ${size}` : ""}
+          </span>
+          <span style={{ fontSize: 11, opacity: 0.75 }}>
+            Saved, but this view could not open it. The banner at the top of the page says why.
+          </span>
+        </span>
+      </div>
+    );
+  }
+
   if (state === "failed" || state === "skipped") {
     return (
       <div style={{
