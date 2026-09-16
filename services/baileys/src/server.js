@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.16-19";
+const WORKER_VERSION = "2026.09.16-20";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -400,7 +400,11 @@ function destroySession(s) {
   s.pendingContacts.length = 0;
   s.pendingPresence.length = 0;
   s.pendingMedia.length = 0;
+  s.pendingLidMap.length = 0;
   s.mediaQueue.length = 0;
+  // Not the LID map or the group names: those describe WhatsApp, not this
+  // socket, and re-learning them costs another round of unresolved numbers.
+  s.groupAsked.clear();
   if (s.sock) {
     try { s.sock.ev.removeAllListeners(); } catch { /* nothing attached */ }
     try { s.sock.end(); } catch { /* already gone */ }
@@ -469,6 +473,23 @@ function newSession(id, salespersonId) {
     // WhatsApp display names for numbers, so an unknown number on the dashboard
     // has a human attached to it.
     pendingContacts: [],
+    // LID → phone number, learned as WhatsApp reveals it. Held for the life of
+    // the session so the second message from a contact resolves even when only
+    // the first carried sender_pn.
+    lidPn: new Map(),
+    // The mappings not yet reported, so the CRM can re-key rows it stored
+    // before the number was known.
+    pendingLidMap: [],
+    // Group subjects. Ten rows all reading "Group chat" is not a conversation
+    // list, and the subject is the only thing that tells them apart.
+    groupNames: new Map(),
+    // Groups whose metadata we have already asked WhatsApp for. One query per
+    // group per session — it is a network round trip, not a lookup.
+    groupAsked: new Set(),
+    // Addresses thrown away, by their suffix. The LID bug was invisible for a
+    // fortnight because a dropped message left no trace anywhere; this is how
+    // the next such mistake gets noticed in a day.
+    dropped: new Map(),
     // Online/typing states, when WATCH_PRESENCE is on.
     pendingPresence: [],
     // Attachments still to download, and the files already fetched and waiting
@@ -887,13 +908,49 @@ async function start(s) {
     // non-lead. This imports the rep's conversations WITH THIS COMPANY'S LEADS
     // and nothing else.
     s.sock.ev.on("messaging-history.set", (h) => {
+      // THE TWO ARRAYS THAT WERE BEING THROWN AWAY.
+      //
+      // A history sync does not only carry messages. It carries the chat list —
+      // with every group's subject and, for a migrated contact, the LID beside
+      // the phone number — and a contacts list with the display names. Reading
+      // only `messages` is why a year of imported chat arrived with every single
+      // name blank, and why the numbers behind LID conversations stayed unknown
+      // when WhatsApp had just handed them over.
+      //
+      // These run BEFORE the messages so a name and a number are already known
+      // by the time the first message that needs them is queued.
+      for (const c of h?.contacts ?? []) {
+        if (c?.lid && c?.jid) noteLid(s, c.lid, c.jid);
+        const name = c?.name ?? c?.notify ?? c?.verifiedName ?? null;
+        const peer = phoneFor(s, String(c?.id ?? ""), c?.jid)
+          ?? (isLidJid(c?.id) ? jidDigits(c.id) : null);
+        if (name && peer) noteName(s, peer, name);
+      }
+      for (const c of h?.chats ?? []) {
+        const id = String(c?.id ?? "");
+        if (c?.lidJid) noteLid(s, c.lidJid, id);
+        if (!c?.name) continue;
+        if (isGroupJid(id)) noteName(s, id, c.name);
+        else {
+          const peer = phoneFor(s, id) ?? (isLidJid(id) ? jidDigits(id) : null);
+          if (peer) noteName(s, peer, c.name);
+        }
+      }
+
       const msgs = h?.messages ?? [];
       if (msgs.length) {
-        log.info({ id: s.id, count: msgs.length, progress: h?.progress ?? null }, "history sync");
+        log.info({
+          id: s.id, count: msgs.length, progress: h?.progress ?? null,
+          chats: (h?.chats ?? []).length, contacts: (h?.contacts ?? []).length,
+          lids: s.lidPn.size,
+        }, "history sync");
       }
       for (const m of msgs) {
         void queueObserved(s, m).catch((e) =>
           log.warn({ id: s.id, err: String(e?.message || e) }, "could not queue history message"));
+      }
+      if (s.pendingContacts.length && !s.flushTimer) {
+        s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
       }
     });
 
@@ -944,13 +1001,38 @@ async function start(s) {
     if (SYNC_CONTACTS) {
       const noteContact = (c) => {
         const jid = String(c?.id ?? "");
-        if (!jid.endsWith("@s.whatsapp.net")) return;
+        // A Baileys contact carries BOTH addresses when it knows both, which
+        // makes this the richest source of LID mappings there is — richer than
+        // the messages themselves, because it covers people who have not
+        // written today.
+        if (c?.lid && c?.jid) noteLid(s, c.lid, c.jid);
         const name = c?.name ?? c?.notify ?? c?.verifiedName ?? null;
         if (!name) return;
-        s.pendingContacts.push({ peer: jid.split("@")[0], name: String(name).slice(0, 120) });
+        // Name the number when we can, and the LID when that is all there is —
+        // the row will be re-keyed to the number the moment one turns up.
+        const peer = phoneFor(s, jid, c?.jid) ?? (isLidJid(jid) ? jidDigits(jid) : null);
+        if (peer) noteName(s, peer, name);
       };
       s.sock.ev.on("contacts.upsert", (cs) => { for (const c of cs ?? []) noteContact(c); });
       s.sock.ev.on("contacts.update", (cs) => { for (const c of cs ?? []) noteContact(c); });
+
+      // WhatsApp announcing, unprompted, that a LID belongs to a number. This
+      // is the event the whole LID fix hangs on and it was not being listened
+      // for at all.
+      s.sock.ev.on("chats.phoneNumberShare", (p) => noteLid(s, p?.lid, p?.jid));
+    }
+
+    // WHAT THE GROUP IS CALLED.
+    //
+    // Ten conversations all titled "Group chat" is not a list a founder can use.
+    // Subjects arrive on these events when they change, and are asked for once
+    // per group otherwise (askGroupName).
+    if (WATCH_GROUPS) {
+      const noteGroups = (gs) => {
+        for (const g of gs ?? []) if (g?.id && g?.subject) noteName(s, g.id, g.subject);
+      };
+      s.sock.ev.on("groups.upsert", noteGroups);
+      s.sock.ev.on("groups.update", noteGroups);
     }
 
     // WHEN THE BUYER IS ACTUALLY HOLDING THEIR PHONE.
@@ -964,8 +1046,9 @@ async function start(s) {
     if (WATCH_PRESENCE) {
       s.sock.ev.on("presence.update", (u) => {
         const jid = String(u?.id ?? "");
-        if (!jid.endsWith("@s.whatsapp.net")) return;
-        const peer = jid.split("@")[0];
+        if (!isPersonJid(jid)) return;
+        const peer = phoneFor(s, jid);
+        if (!peer) return;
         for (const st of Object.values(u?.presences ?? {})) {
           const kind = st?.lastKnownPresence;
           if (!kind) continue;
@@ -992,11 +1075,16 @@ async function start(s) {
     s.sock.ev.on("call", (events) => {
       for (const c of events ?? []) {
         const from = String(c?.from ?? c?.chatId ?? "");
-        if (!from.endsWith("@s.whatsapp.net")) continue;
-        if (!c?.id) continue;
+        // A WhatsApp call from a LID-addressed buyer is still a call. Only its
+        // number needs resolving, and an unresolved one is dropped here rather
+        // than stored — a call row exists to be counted against a lead, and a
+        // LID cannot be.
+        if (!isPersonJid(from) || !c?.id) continue;
+        const peer = phoneFor(s, from);
+        if (!peer) continue;
         s.pendingCalls.push({
           id: String(c.id),
-          peer: from.split("@")[0],
+          peer,
           // isGroup is filtered above; outbound calls report differently across
           // WhatsApp versions, so trust the flag when present and default to
           // inbound, which is the safer thing to under-claim.
@@ -1029,15 +1117,17 @@ async function start(s) {
     s.sock.ev.on("messages.update", (updates) => {
       for (const u of updates ?? []) {
         const jid = String(u?.key?.remoteJid ?? "");
-        if (!jid.endsWith("@s.whatsapp.net")) continue;
+        if (!isPersonJid(jid)) continue;
         if (u?.key?.fromMe) continue;
         const st = u?.update?.status;
         // Baileys reports status as a number or a name depending on version.
         const readish = st === 4 || st === 5 || st === "READ" || st === "PLAYED";
         if (!readish || !u?.key?.id) continue;
+        // Keyed by WhatsApp's own message id, so a LID here is harmless: the
+        // CRM finds the row by id and the peer is only a hint.
         s.pendingReceipts.push({
           id: String(u.key.id),
-          peer: jid.split("@")[0],
+          peer: phoneFor(s, jid, u?.key?.senderPn) ?? jidDigits(jid),
           read_at: new Date().toISOString(),
         });
       }
@@ -1382,14 +1472,26 @@ async function drainMedia(s) {
 
 async function queueObserved(s, msg) {
   const jid = msg?.key?.remoteJid ?? "";
-  // One-to-one lead work only, unless groups are explicitly switched on.
-  // Broadcasts and status updates are never included either way.
-  const isGroup = jid.endsWith("@g.us");
-  if (!jid.endsWith("@s.whatsapp.net") && !(WATCH_GROUPS && isGroup)) return;
+  // A person — by phone number or by LID, see the note on jidDigits — or a
+  // group when groups are switched on. Broadcasts and status updates are never
+  // included either way.
+  const isGroup = isGroupJid(jid);
+  if (!isPersonJid(jid) && !(WATCH_GROUPS && isGroup)) {
+    const suffix = String(jid).includes("@") ? `@${String(jid).split("@").pop()}` : "(no jid)";
+    s.dropped.set(suffix, (s.dropped.get(suffix) ?? 0) + 1);
+    return;
+  }
   const id = msg?.key?.id;
   if (!id) return;
 
-  const peer = jid.split("@")[0];
+  // For a group this is the group's own id and always resolves. For a person it
+  // is their number when WhatsApp has revealed it, and their LID when it has
+  // not — kept either way, and flagged so the CRM does not try to match a LID
+  // against a lead's phone number.
+  const resolved = isGroup ? jidDigits(jid) : phoneFor(s, jid, msg?.key?.senderPn);
+  const peer = resolved || jidDigits(jid);
+  const peerIsLid = !isGroup && !resolved;
+  if (!peer) return;
   const text = String(textOf(msg) || "");
   const kind = mediaKindOf(msg);
 
@@ -1402,8 +1504,13 @@ async function queueObserved(s, msg) {
   // own number, with an empty body — which the dashboard then reported as
   // "16 messages seen, none with a lead". Technically true and completely
   // misleading: there was nothing there to match in the first place.
-  const own = String(s.sock?.user?.id ?? "").split(":")[0].split("@")[0];
-  if (own && peer === own) return;
+  //
+  // Both identities, because the rep now HAS two: WhatsApp gives the account a
+  // phone-number id and a LID, and a self-addressed stanza may arrive under
+  // either. Checking only the first let the LID copies through.
+  const ownPn = jidDigits(s.sock?.user?.id);
+  const ownLid = jidDigits(s.sock?.user?.lid);
+  if (!isGroup && ((ownPn && peer === ownPn) || (ownLid && peer === ownLid))) return;
 
   // An empty shell is not a message. No text, no attachment — nothing a human
   // sent and nothing anyone could read on a lead page. Counting them makes the
@@ -1427,6 +1534,11 @@ async function queueObserved(s, msg) {
   // is thrown away because the queue happened to be deep when it appeared.
   if (kind && CAPTURE_MEDIA) queueMedia(s, msg, id, kind, meta.file_size);
 
+  // A group we have not named yet. WhatsApp does not put the subject on the
+  // message, so it is asked for once — the alternative is the conversation list
+  // the founder is looking at now, ten rows all reading "Group chat".
+  if (isGroup && !s.groupNames.has(peer)) askGroupName(s, jid);
+
   s.pending.push({
     id,
     peer,
@@ -1434,14 +1546,26 @@ async function queueObserved(s, msg) {
     // What WhatsApp shows this contact as. Useful when the CRM's name for a
     // lead is "Facebook Lead 4412" and the buyer's own profile says who they
     // are. Never used for matching — that is phone-number-only, on purpose.
-    peer_name: msg?.pushName ?? null,
+    //
+    // History-synced messages carry no pushName at all (WhatsApp sends those
+    // separately, as a PUSH_NAME sync), which is why a year of imported chat
+    // came through with every name blank. Group subjects fill in from the
+    // metadata we asked for above.
+    peer_name: msg?.pushName ?? (isGroup ? s.groupNames.get(peer) ?? null : null),
     ...meta,
     is_group: isGroup,
+    // True when WhatsApp addressed this person by LID and has not told us their
+    // number. The conversation is kept and readable; the CRM just knows better
+    // than to match this against a lead's phone number, and re-keys the rows
+    // as soon as a mapping arrives.
+    peer_is_lid: peerIsLid,
     // In a group, peer_phone is the GROUP's id and says nothing about who
-    // spoke. WhatsApp puts the actual sender on key.participant, and without
-    // it a group thread reads as one anonymous voice.
-    sender_phone: isGroup && msg?.key?.participant
-      ? String(msg.key.participant).split("@")[0].split(":")[0]
+    // spoke. WhatsApp puts the actual sender on key.participant — as a LID for
+    // a migrated account, with the number alongside on participant_pn — and
+    // without it a group thread reads as one anonymous voice.
+    sender_phone: isGroup
+      ? (phoneFor(s, msg?.key?.participant, msg?.key?.participantPn)
+         ?? jidDigits(msg?.key?.participant) ?? null) || null
       : null,
     // The whole message. The worker is not where privacy is decided — it cannot
     // even tell whether this number is a lead. The CRM's match_wa_contact drops
@@ -1570,7 +1694,8 @@ async function flushObserved(s) {
   // calls invisible for exactly the reps who make the most of them.
   if (s.pending.length === 0 && s.pendingCalls.length === 0 && s.pendingReceipts.length === 0
       && s.pendingEdits.length === 0 && s.pendingContacts.length === 0
-      && s.pendingPresence.length === 0 && s.pendingMedia.length === 0) return;
+      && s.pendingPresence.length === 0 && s.pendingMedia.length === 0
+      && s.pendingLidMap.length === 0) return;
   if (!INGEST_URL || !INGEST_SECRET) {
     // Said once per flush rather than silently dropping: a watcher with nowhere
     // to report looks identical to a rep who sent nothing.
@@ -1587,6 +1712,9 @@ async function flushObserved(s) {
   const edits = s.pendingEdits.splice(0, MAX_BATCH);
   const contacts = s.pendingContacts.splice(0, MAX_BATCH);
   const presence = s.pendingPresence.splice(0, MAX_BATCH);
+  // LID → phone number. Sent before anything else is read so the CRM can
+  // re-key rows it stored while the number was still hidden.
+  const lidmap = s.pendingLidMap.splice(0, MAX_BATCH);
   // Files are orders of magnitude bigger than any other row here, so a
   // media batch is capped by its own much smaller limit.
   const media = s.pendingMedia.splice(0, MAX_MEDIA_BATCH);
@@ -1611,6 +1739,7 @@ async function flushObserved(s) {
         contacts,
         presence,
         media,
+        lidmap,
         // So the dashboard can tell which worker build is live without anyone
         // guessing from behaviour.
         worker_version: WORKER_VERSION,
@@ -1642,6 +1771,7 @@ async function flushObserved(s) {
     s.pendingContacts.unshift(...contacts);
     s.pendingPresence.unshift(...presence);
     s.pendingMedia.unshift(...media);
+    s.pendingLidMap.unshift(...lidmap);
     log.warn({ id: s.id, err: String(e?.message || e), queued: s.pending.length }, "ingest failed, will retry");
   }
   if ((s.pending.length > 0 || s.pendingCalls.length > 0 || s.pendingReceipts.length > 0) && !s.flushTimer) {
@@ -1653,6 +1783,105 @@ async function flushObserved(s) {
 function toJid(phone) {
   const digits = String(phone || "").replace(/\D/g, "");
   return `${digits}@s.whatsapp.net`;
+}
+
+// ── HOW WHATSAPP ADDRESSES PEOPLE NOW ───────────────────────────────────────
+//
+// THE BUG THESE FOUR LINES EXIST TO FIX.
+//
+// Every listener in this worker used to begin `if (!jid.endsWith(
+// "@s.whatsapp.net")) return;`. That was correct for years: a one-to-one chat
+// was addressed by phone number, and anything else was a group, a broadcast or
+// a status update we did not want.
+//
+// WhatsApp has since moved accounts onto LID addressing — an opaque per-account
+// id at "@lid" that does not reveal a phone number — and a migrated contact's
+// one-to-one chat now arrives as `<lid>@lid`. Baileys decodes it faithfully
+// (Utils/decode-wa-message.js: `if (isJidUser(from) || isLidUser(from))`), hands
+// it to us, and the line above threw every one of them away.
+//
+// What that looked like from the outside, and cost a fortnight:
+//
+//   · Ankita's capture held 673 messages in August and 15 in September, then
+//     nothing — "ye to sirf august tak ka data h". Not a sync that stopped: the
+//     month her contacts finished migrating to LID.
+//   · The re-link after that imported 1,106 messages in ten conversations, and
+//     every single one was a GROUP — groups are still "@g.us" and sailed
+//     through. "ye to khali group chat khol raha h."
+//   · Three re-scans, none of which could have helped, because nothing was
+//     wrong with the pairing.
+//
+// The fix is to accept "@lid" and then answer the question it hides: which
+// phone number is this? WhatsApp tells us, on the stanza itself — `sender_pn`
+// for a one-to-one chat and `participant_pn` inside a group, surfaced by
+// Baileys as key.senderPn / key.participantPn. Those are recorded as they pass
+// (noteLid) so a later message from the same person resolves even when the
+// attribute is absent, and the mapping is shipped to the CRM so rows already
+// stored under a LID can be re-keyed to the real number.
+//
+// When it cannot be resolved the conversation is still kept, flagged
+// peer_is_lid. An unreadable number is a poor outcome; a missing conversation
+// is a worse one, and the founder can still read what was said.
+
+/** The number part of any WhatsApp address: 9199…@s.whatsapp.net, 1234@lid,
+ *  9199…:3@s.whatsapp.net and 12036…@g.us all reduce to their digits. */
+function jidDigits(jid) {
+  return String(jid ?? "").split("@")[0].split(":")[0].replace(/\D/g, "");
+}
+const isPnJid = (jid) => String(jid ?? "").endsWith("@s.whatsapp.net");
+const isLidJid = (jid) => String(jid ?? "").endsWith("@lid");
+const isGroupJid = (jid) => String(jid ?? "").endsWith("@g.us");
+/** A person, however WhatsApp chose to address them. */
+const isPersonJid = (jid) => isPnJid(jid) || isLidJid(jid);
+
+/** Remember that this LID belongs to this phone number, and tell the CRM once. */
+function noteLid(s, lidJid, pnJid) {
+  const lid = jidDigits(lidJid);
+  const phone = jidDigits(pnJid);
+  if (!lid || !phone || lid === phone) return;
+  if (s.lidPn.get(lid) === phone) return;
+  s.lidPn.set(lid, phone);
+  // The CRM re-keys anything it already stored under the LID. Without this a
+  // buyer would sit in the dashboard as two separate conversations: the one
+  // captured before the number was known, and the one after.
+  s.pendingLidMap.push({ lid, phone });
+}
+
+/**
+ * The phone number behind an address, or null when WhatsApp has not revealed it.
+ * `hint` is the sender_pn / participant_pn WhatsApp attaches to LID stanzas.
+ */
+function phoneFor(s, jid, hint) {
+  if (hint && jidDigits(hint)) { noteLid(s, jid, hint); return jidDigits(hint); }
+  if (isPnJid(jid)) return jidDigits(jid) || null;
+  if (isLidJid(jid)) return s.lidPn.get(jidDigits(jid)) ?? null;
+  return null;
+}
+
+/** Record a name for a number or a group, and let the CRM backfill it. */
+function noteName(s, key, name) {
+  const peer = jidDigits(key);
+  const clean = String(name ?? "").trim().slice(0, 120);
+  if (!peer || !clean) return;
+  if (isGroupJid(key)) {
+    if (s.groupNames.get(peer) === clean) return;
+    s.groupNames.set(peer, clean);
+  }
+  s.pendingContacts.push({ peer, name: clean });
+}
+
+/**
+ * Ask WhatsApp what a group is called. Once per group per session — it is a
+ * network round trip, and a rep in forty groups should not produce forty
+ * queries every time the socket reconnects.
+ */
+function askGroupName(s, jid) {
+  const gid = jidDigits(jid);
+  if (!gid || s.groupAsked.has(gid) || !s.sock?.groupMetadata) return;
+  s.groupAsked.add(gid);
+  void s.sock.groupMetadata(jid)
+    .then((md) => { if (md?.subject) noteName(s, jid, md.subject); })
+    .catch((e) => log.debug({ id: s.id, gid, err: String(e?.message || e) }, "no group metadata"));
 }
 
 function send(res, code, obj) {
@@ -1696,6 +1925,15 @@ function statusOf(s) {
     queued: s.pending.length,
     queued_calls: s.pendingCalls.length,
     queued_receipts: s.pendingReceipts.length,
+    // WHAT IS BEING THROWN AWAY, AND WHAT HAS BEEN WORKED OUT.
+    //
+    // A dropped message used to leave no trace anywhere, which is how "we only
+    // accept @s.whatsapp.net" survived a full WhatsApp addressing change and a
+    // fortnight of re-scans without anyone being able to see it. Both numbers
+    // are one request away now.
+    dropped: Object.fromEntries(s.dropped),
+    lids_known: s.lidPn.size,
+    groups_named: s.groupNames.size,
     worker_version: WORKER_VERSION,
     error: s.state.lastError,
   };

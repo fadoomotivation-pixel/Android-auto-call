@@ -39,7 +39,22 @@ type Msg = {
   sent_at: string;
   /** Optional: only some callers select it, and it only decorates a label. */
   file_size?: number | null;
+  /** In a group, who actually spoke. Null in a one-to-one chat, where the side
+   *  of the bubble already says it. */
+  sender_phone?: string | null;
+  is_group?: boolean | null;
 };
+
+/**
+ * A colour per speaker, the way WhatsApp tints names in a group. Same number,
+ * same colour, every time — that consistency is what lets someone follow one
+ * person down a long thread without reading the label each time.
+ */
+function speakerHue(phone: string): number {
+  let h = 0;
+  for (let i = 0; i < phone.length; i++) h = (h * 31 + phone.charCodeAt(i)) % 360;
+  return h;
+}
 
 const IST = { timeZone: "Asia/Kolkata" } as const;
 
@@ -118,16 +133,20 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
 
   // Named, never downloaded.
   //
-  // THE REASON MATTERS, AND THE OLD ONE WAS A GUESS.
+  // THE REASON MATTERS, AND BOTH OF THE OLD ONES WERE WRONG.
   //
-  // This used to say "sent before this CRM started keeping attachments", which
-  // sounds like something a later version will fix. It will not, and the real
-  // reason is worth knowing: WhatsApp keeps a file on its servers for about a
-  // month and then deletes it. Everything in this archive arrived in one
-  // history sync, by which point the older files were already gone from
-  // WhatsApp's side — the message survived, the file did not, and no re-scan
-  // or upgrade can bring it back. Anything sent from now on is fetched within
-  // seconds and does open.
+  // First this said "sent before this CRM started keeping attachments", which
+  // sounds like something a later version will fix. Then it said, flatly, that
+  // WhatsApp had already deleted the file — true of the year-old archive, and
+  // completely false for the 345 attachments that arrived in the last fortnight
+  // and were discarded on receipt by a lead-only gate in whatsapp-observe. The
+  // founder was reading a confident explanation of a bug.
+  //
+  // So it no longer asserts a cause it cannot know. An old message almost
+  // certainly lost its file to WhatsApp's own one-month expiry; a recent one
+  // almost certainly did not, and the honest thing is to say which case this is
+  // and stop there.
+  const old = Date.now() - new Date(m.sent_at).getTime() > 40 * 86400_000;
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, marginBottom: 4,
@@ -138,8 +157,9 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "block", fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>{label}</span>
         <span style={{ fontSize: 11, opacity: 0.65 }}>
-          WhatsApp had already deleted this file — it only keeps one for about a
-          month, and this arrived later in a history sync. The message is kept; the file is gone.
+          {old
+            ? "The file was not saved. WhatsApp keeps one on its servers for about a month, and this message was imported after that — the text survived, the file did not."
+            : "The file was not saved. Attachments from now on are fetched within seconds and open here."}
         </span>
       </span>
     </div>
@@ -203,6 +223,22 @@ export function WaThread({
                 color: "rgba(255,255,255,0.94)",
                 boxShadow: "0 1px 1px rgba(0,0,0,0.25)",
               }}>
+                {/* WHO SPOKE, IN A GROUP.
+                    A group thread without this is one anonymous voice: 525
+                    messages from a dozen people, every bubble on the same side,
+                    with no way to tell a site engineer from a buyer. WhatsApp
+                    solves it with a coloured name above the bubble and so does
+                    this. Only inbound, and only in a group — the rep's own
+                    messages are already told apart by their side and colour. */}
+                {m.is_group && !mine && m.sender_phone && (
+                  <div style={{
+                    fontSize: 11.5, fontWeight: 700, marginBottom: 3,
+                    color: `hsl(${speakerHue(m.sender_phone)} 70% 72%)`,
+                  }}>
+                    +{m.sender_phone}
+                  </div>
+                )}
+
                 {m.signal && (
                   <div style={{ fontSize: 10.5, fontWeight: 700, color: edge ?? undefined, marginBottom: 3 }}>
                     {m.signal === "risk" ? "⚠️ SOUNDS READY TO WALK" : "🔥 SOUNDS READY TO BOOK"}

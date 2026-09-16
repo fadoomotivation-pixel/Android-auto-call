@@ -151,6 +151,12 @@ Deno.serve(async (req) => {
   // this deployment needs — the worker ships ahead and waits to be caught up.
   const editsIn = Array.isArray(body?.edits) ? body.edits.length : 0;
   const contactsIn = Array.isArray(body?.contacts) ? body.contacts.length : 0;
+  // Files and LID mappings arrive on their own too — a drainer working through
+  // a photo backlog sends no messages at all, and a mapping learned from the
+  // contact list can turn up in a batch with nothing else in it. Leaving them
+  // out of the guard below would have thrown both away at the door.
+  const mediaIn = Array.isArray(body?.media) ? body.media.length : 0;
+  const lidmapIn = Array.isArray(body?.lidmap) ? body.lidmap.length : 0;
 
   const admin = createClient(SUPABASE_URL, SERVICE);
 
@@ -180,7 +186,8 @@ Deno.serve(async (req) => {
     return json({ ok: true, heartbeat: true });
   }
 
-  if (messages.length === 0 && callsIn === 0 && receiptsIn === 0 && editsIn === 0 && contactsIn === 0) {
+  if (messages.length === 0 && callsIn === 0 && receiptsIn === 0 && editsIn === 0
+      && contactsIn === 0 && mediaIn === 0 && lidmapIn === 0) {
     return json({ ok: true, stored: 0, skipped: 0, calls: 0, receipts: 0 });
   }
 
@@ -210,6 +217,30 @@ Deno.serve(async (req) => {
   let unmatched = 0;
   const rows: Record<string, unknown>[] = [];
 
+  // ── THE NUMBER BEHIND AN ANONYMOUS ID ──────────────────────────────────────
+  //
+  // Run before the messages, because the mapping changes what those messages
+  // are joining onto. The worker learns a LID's phone number at some point
+  // after it first sees the LID — from a sender_pn on a later stanza, from the
+  // contact list, from chats.phoneNumberShare — and reports it here.
+  //
+  // Without this a buyer appears twice in the conversation list: once under the
+  // LID, from before their number was known, and once under their number. With
+  // it the earlier rows are re-keyed and the two halves become one thread on
+  // the lead they belong to.
+  let relinked = 0;
+  for (const raw of (Array.isArray(body?.lidmap) ? body.lidmap : []) as unknown[]) {
+    const p = raw as Record<string, unknown>;
+    const lid = String(p.lid ?? "").replace(/\D/g, "");
+    const phone = String(p.phone ?? "").replace(/\D/g, "");
+    if (!lid || !phone) continue;
+    const { data, error } = await admin.rpc("wa_resolve_lid", {
+      p_rep: salespersonId, p_lid: lid, p_phone: phone,
+    });
+    if (error) console.error("wa_resolve_lid failed", error.message);
+    else relinked += Number(data ?? 0);
+  }
+
   for (const raw of messages) {
     const m = raw as Record<string, unknown>;
     const peer = String(m.peer ?? "");
@@ -229,10 +260,24 @@ Deno.serve(async (req) => {
     // So this still decides whether the conversation belongs to a known lead —
     // and every lead-scoped count still filters on that — but it no longer
     // decides whether the conversation is allowed to exist.
-    const { data: contactId } = await admin.rpc("match_wa_contact", {
-      p_company: companyId,
-      p_phone: peer,
-    });
+    // A LID IS NOT A PHONE NUMBER, AND MUST NEVER BE MATCHED AS ONE.
+    //
+    // When WhatsApp addresses a contact anonymously the worker sends their LID
+    // here with this flag set. It is a long number and match_wa_contact takes
+    // the last ten digits of anything it is given, so feeding it one is a
+    // coin-flip chance of attaching a stranger's conversation to somebody's
+    // lead. The conversation is still stored and still readable; it simply has
+    // no owner until the real number turns up, at which point wa_resolve_lid
+    // re-keys it and matches it properly.
+    const peerIsLid = m?.peer_is_lid === true;
+    let contactId: string | null = null;
+    if (!peerIsLid) {
+      const { data } = await admin.rpc("match_wa_contact", {
+        p_company: companyId,
+        p_phone: peer,
+      });
+      contactId = (data as string | null) ?? null;
+    }
     if (!contactId) unmatched++;
 
     const text = typeof m.text === "string" ? m.text : "";
@@ -247,14 +292,32 @@ Deno.serve(async (req) => {
     // hands it over as base64 — it deliberately holds no Supabase key, so the
     // upload happens here.
     //
-    // ONLY FOR A KNOWN LEAD. An unmatched conversation keeps its counts and its
-    // number so the lead can be recovered, and nothing else; storing a stranger's
-    // voice note would go well beyond what "watch the company SIM" was agreed to
-    // mean. A failed upload never fails the message: the row is written either
-    // way and only the attachment is missing.
+    // WHY THE "KNOWN LEAD ONLY" GATE IS GONE.
+    //
+    // This used to read `if (b64 && contactId && kind)`, matching an older rule
+    // that also discarded the MESSAGE unless the peer was a known lead. That
+    // rule was lifted for messages, with the reasoning written a few lines above
+    // — these are company-allotted SIMs, there is no private life on them, and a
+    // buyer who is not in the CRM is a lead nobody wrote down rather than
+    // someone to protect. The file gate was simply not lifted with it.
+    //
+    // The result was a panel that looked broken and had a plausible lie ready to
+    // explain it. Ankita's fresh capture: 345 messages with an attachment, zero
+    // files stored, because not one of the ten conversations matched a lead —
+    // they are all groups, and a group can never match. Every one rendered as
+    // "WhatsApp had already deleted this file", which was true of the year-old
+    // archive and completely false here. The founder was looking at photos and
+    // brochures that had arrived minutes earlier and been thrown away on
+    // receipt: "image or pdf khul rahe h jo message me h — yaha to khulne
+    // chahiye."
+    //
+    // A file now follows its message. The privacy question is settled once, for
+    // the conversation, in the same place and on the same grounds — not a second
+    // time, differently, for its attachments. A failed upload still never fails
+    // the message: the row is written either way and only the file is missing.
     let mediaPath: string | null = null;
     const b64 = typeof m.media_b64 === "string" ? m.media_b64 : null;
-    if (b64 && contactId && kind) {
+    if (b64 && kind) {
       try {
         const bytes = decodeBase64(b64);
         const ext = extensionFor(String(m.mime_type ?? ""), kind);
@@ -281,6 +344,9 @@ Deno.serve(async (req) => {
       // one a group thread reads as one anonymous voice; peer_phone is the
       // group's id, not a person's.
       is_group: m?.is_group === true,
+      // WhatsApp gave us an anonymous id instead of a number. Kept so no
+      // reader mistakes it for one — see wa_resolve_lid.
+      peer_is_lid: peerIsLid,
       sender_phone: typeof m?.sender_phone === "string" ? m.sender_phone : null,
       wa_message_id: waId,
       direction,
@@ -386,10 +452,18 @@ Deno.serve(async (req) => {
   // conversation hostage while it fetches them. So the worker reports each file
   // as a patch against a message id that already exists here.
   //
-  // Same rule as everywhere else: the file is only kept for a KNOWN LEAD. An
-  // unmatched conversation keeps its counts and its number so the lead can be
-  // recovered; storing a stranger's photos would go past what watching a
-  // company SIM was agreed to mean.
+  // AND THIS IS THE GATE THAT ACTUALLY THREW THE FILES AWAY.
+  //
+  // Almost every attachment arrives down this path rather than inline with its
+  // message — the worker queues the message immediately and drains the
+  // downloads behind it — so `!row.contact_id` here is what discarded 345
+  // photos and PDFs from Ankita's fresh capture. Every one belonged to a group,
+  // and a group can never match a lead.
+  //
+  // Lifted for the same reason as the message gate above it: the conversation
+  // is already stored, the privacy decision was already taken, and taking it a
+  // second time — differently, for the file — only produces a chat where the
+  // words arrive and the brochure does not.
   let files = 0;
   for (const raw of (Array.isArray(body?.media) ? body.media : []) as unknown[]) {
     const f = raw as Record<string, unknown>;
@@ -403,9 +477,9 @@ Deno.serve(async (req) => {
       .eq("salesperson_id", salespersonId)
       .eq("wa_message_id", waId)
       .maybeSingle();
-    // No row, not a lead, or already have the file: nothing to do. The last of
-    // those makes a replayed batch free rather than a duplicate upload.
-    if (!row || !row.contact_id || row.media_path) continue;
+    // No row, or we already have the file: nothing to do. The second makes a
+    // replayed batch free rather than a duplicate upload.
+    if (!row || row.media_path) continue;
 
     try {
       const bytes = decodeBase64(b64);
@@ -543,5 +617,5 @@ Deno.serve(async (req) => {
     })
     .eq("salesperson_id", salespersonId);
 
-  return json({ ok: true, stored, skipped, calls, receipts, edits, named });
+  return json({ ok: true, stored, skipped, calls, receipts, edits, named, relinked });
 });
