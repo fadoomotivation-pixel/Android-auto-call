@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.16-21";
+const WORKER_VERSION = "2026.09.16-22";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -1589,15 +1589,29 @@ async function queueObserved(s, msg) {
     id,
     peer,
     direction: msg?.key?.fromMe ? "out" : "in",
-    // What WhatsApp shows this contact as. Useful when the CRM's name for a
-    // lead is "Facebook Lead 4412" and the buyer's own profile says who they
-    // are. Never used for matching — that is phone-number-only, on purpose.
+    // WHOSE NAME pushName ACTUALLY IS.
+    //
+    // It is the name of whoever SENT the message, and that is only the peer in
+    // one of the three cases here. Taking it blindly produced a conversation
+    // list where seven different buyers were all called "fanbedevelopers0001" —
+    // Ankita's own WhatsApp name, copied off her own outgoing messages — and
+    // where a group named itself after whoever had spoken in it last, so the
+    // PVC-panels group was filed under "sunder singh".
+    //
+    //   inbound, one-to-one   pushName IS the peer. Use it.
+    //   outbound, one-to-one   pushName is the REP. Never the peer's name.
+    //   group                  pushName is the participant, not the group.
+    //                          The subject comes from groupMetadata instead.
     //
     // History-synced messages carry no pushName at all (WhatsApp sends those
     // separately, as a PUSH_NAME sync), which is why a year of imported chat
-    // came through with every name blank. Group subjects fill in from the
-    // metadata we asked for above.
-    peer_name: msg?.pushName ?? (isGroup ? s.groupNames.get(peer) ?? null : null),
+    // came through with every name blank.
+    peer_name: isGroup
+      ? (s.groupNames.get(peer) ?? null)
+      : (msg?.key?.fromMe ? null : (msg?.pushName ?? null)),
+    // In a group the participant's name IS worth keeping — it is what turns a
+    // thread of fifteen-digit ids into people talking to each other.
+    sender_name: isGroup && !msg?.key?.fromMe ? (msg?.pushName ?? null) : null,
     ...meta,
     is_group: isGroup,
     // True when WhatsApp addressed this person by LID and has not told us their

@@ -353,6 +353,9 @@ Deno.serve(async (req) => {
       decrypt_failed: m?.decrypt_failed === true,
       decrypt_error: typeof m?.decrypt_error === "string" ? m.decrypt_error : null,
       sender_phone: typeof m?.sender_phone === "string" ? m.sender_phone : null,
+      // Who spoke, by name. A group thread of fifteen-digit ids is not a
+      // conversation anyone can follow.
+      sender_name: typeof m?.sender_name === "string" ? m.sender_name : null,
       wa_message_id: waId,
       direction,
       // In full. A cap here would silently clip the one message an admin

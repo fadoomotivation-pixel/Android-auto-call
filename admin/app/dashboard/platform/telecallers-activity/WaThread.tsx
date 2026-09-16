@@ -42,6 +42,7 @@ type Msg = {
   /** In a group, who actually spoke. Null in a one-to-one chat, where the side
    *  of the bubble already says it. */
   sender_phone?: string | null;
+  sender_name?: string | null;
   is_group?: boolean | null;
   /** It arrived and WhatsApp's keys could not open it. The row is real; the
    *  words are not recoverable. */
@@ -260,12 +261,20 @@ export function WaThread({
                     solves it with a coloured name above the bubble and so does
                     this. Only inbound, and only in a group — the rep's own
                     messages are already told apart by their side and colour. */}
-                {m.is_group && !mine && m.sender_phone && (
+                {m.is_group && !mine && (m.sender_name || m.sender_phone) && (
                   <div style={{
                     fontSize: 11.5, fontWeight: 700, marginBottom: 3,
-                    color: `hsl(${speakerHue(m.sender_phone)} 70% 72%)`,
+                    color: `hsl(${speakerHue(m.sender_name || m.sender_phone || "")} 70% 72%)`,
                   }}>
-                    +{m.sender_phone}
+                    {/* WhatsApp's own name where we have it. The number is the
+                        fallback, and since a migrated account is addressed by
+                        an opaque id rather than a phone number, an unnamed
+                        speaker reads as "someone" rather than as a fake
+                        fifteen-digit phone number nobody can ring. */}
+                    {m.sender_name
+                      ?? (m.sender_phone && m.sender_phone.length <= 13
+                            ? `+${m.sender_phone}`
+                            : "Someone in this group")}
                   </div>
                 )}
 
