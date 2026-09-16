@@ -43,6 +43,10 @@ type Msg = {
    *  of the bubble already says it. */
   sender_phone?: string | null;
   is_group?: boolean | null;
+  /** It arrived and WhatsApp's keys could not open it. The row is real; the
+   *  words are not recoverable. */
+  decrypt_failed?: boolean | null;
+  decrypt_error?: string | null;
 };
 
 /**
@@ -146,7 +150,33 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
   // certainly lost its file to WhatsApp's own one-month expiry; a recent one
   // almost certainly did not, and the honest thing is to say which case this is
   // and stop there.
-  const old = Date.now() - new Date(m.sent_at).getTime() > 40 * 86400_000;
+  // A FILE THAT HAS NOT LANDED YET IS NOT A FILE THAT IS GONE.
+  //
+  // The message is stored the moment it arrives; the attachment follows through
+  // a download queue seconds to minutes later, so for that gap media_path is
+  // legitimately null. This panel said "The file was not saved" over a photo
+  // that was mid-download and did in fact arrive — the founder read a failure
+  // notice about something that was working. Anything from the last ten minutes
+  // is treated as still coming, because it usually is.
+  const age = Date.now() - new Date(m.sent_at).getTime();
+  if (age < 10 * 60_000) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10, marginBottom: 4,
+        padding: "10px 12px", borderRadius: 8,
+        background: "rgba(0,0,0,0.18)", border: "1px dashed rgba(255,255,255,0.14)",
+      }}>
+        <span style={{ fontSize: 20, opacity: 0.6 }}>{ICON[kind] ?? "📎"}</span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>{label}</span>
+          <span style={{ fontSize: 11, opacity: 0.65 }}>
+            Downloading… refresh in a moment and it will open here.
+          </span>
+        </span>
+      </div>
+    );
+  }
+  const old = age > 40 * 86400_000;
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, marginBottom: 4,
@@ -245,7 +275,25 @@ export function WaThread({
                   </div>
                 )}
 
-                {m.deleted_at ? (
+                {m.decrypt_failed ? (
+                  /* IT CAME. IT WOULD NOT OPEN.
+                     Showing the bubble is the whole point: the conversation is
+                     real and the founder can see it happening, which is the
+                     difference between a quiet rep and a broken link. */
+                  <div style={{
+                    fontSize: 13, fontStyle: "italic", opacity: 0.8,
+                    display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    <span style={{ fontSize: 15 }}>🔒</span>
+                    <span>
+                      A message came through here that could not be unlocked.
+                      <span style={{ display: "block", fontSize: 11, opacity: 0.75, fontStyle: "normal" }}>
+                        The link&apos;s security keys are out of date — have the rep link again
+                        and everything after that opens normally.
+                      </span>
+                    </span>
+                  </div>
+                ) : m.deleted_at ? (
                   <>
                     <div style={{ fontSize: 12.5, fontStyle: "italic", opacity: 0.75, marginBottom: 3 }}>
                       🗑 Deleted by {mine ? "the rep" : "them"} — kept below

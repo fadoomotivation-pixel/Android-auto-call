@@ -114,6 +114,15 @@ type Conversation = {
   peer_is_lid: boolean | null;
 };
 
+/** A conversation whose messages arrived and could not be decrypted. */
+type LockedChat = {
+  peer_phone: string;
+  peer_name: string | null;
+  locked: number;
+  last_at: string;
+  why: string | null;
+};
+
 type UnknownRow = {
   peer_phone: string;
   peer_name: string | null;
@@ -145,6 +154,9 @@ type PeerMsg = {
   /** In a group, who spoke. The thread is unreadable without it. */
   sender_phone: string | null;
   is_group: boolean | null;
+  /** It arrived and the keys could not open it — see migration 0193. */
+  decrypt_failed: boolean | null;
+  decrypt_error: string | null;
 };
 
 /** The same message, sent to many different people. */
@@ -219,6 +231,7 @@ export default async function TelecallerActivityPage({
   let fit: Fit | null = null;
   let blasts: Blast[] = [];
   let conversations: Conversation[] = [];
+  let locked: LockedChat[] = [];
   let rpcErrors: string[] = [];
   const mediaUrl = new Map<string, string>();
   if (current) {
@@ -228,6 +241,7 @@ export default async function TelecallerActivityPage({
       { data: f, error: fErr },
       { data: b, error: bErr },
       { data: cv, error: cvErr },
+      { data: lk, error: lkErr },
     ] = await Promise.all([
       supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 }),
       // 0 = every number ever. An uncaptured lead does not stop being
@@ -237,9 +251,14 @@ export default async function TelecallerActivityPage({
       supabase.rpc("super_rep_wa_fit", { p_rep: current.rep_id }),
       supabase.rpc("super_rep_blasts", { p_rep: current.rep_id, p_days: days }),
       supabase.rpc("super_rep_conversations", { p_rep: current.rep_id }),
+      // Chats that arrived and could not be opened. This is the one number
+      // that distinguishes "this rep is quiet" from "the link is broken", and
+      // for a fortnight the screen had no way to tell them apart.
+      supabase.rpc("super_rep_locked_chats", { p_rep: current.rep_id }),
     ]);
     msgs = (m ?? []) as Msg[];
     unknown = (u ?? []) as UnknownRow[];
+    locked = (lk ?? []) as LockedChat[];
     fit = (Array.isArray(f) ? f[0] : f) as Fit ?? null;
     blasts = (b ?? []) as Blast[];
     conversations = (cv ?? []) as Conversation[];
@@ -255,6 +274,7 @@ export default async function TelecallerActivityPage({
     rpcErrors = [
       mErr && `conversations with leads: ${mErr.message}`,
       cvErr && `all conversations: ${cvErr.message}`,
+      lkErr && `locked chats: ${lkErr.message}`,
       uErr && `numbers that are not leads: ${uErr.message}`,
       fErr && `number check: ${fErr.message}`,
       bErr && `copy-paste check: ${bErr.message}`,
@@ -617,6 +637,35 @@ export default async function TelecallerActivityPage({
             WhatsApp in their other hand; matching that layout is what makes a
             six-month thread readable in one scroll. Search and the filters are
             instant because all the rows are already here. */}
+        {/* THE ONE THING THAT DISTINGUISHES A QUIET REP FROM A BROKEN LINK.
+            Messages that arrived and could not be decrypted used to be dropped
+            in silence, so a rep whose every chat was failing looked exactly
+            like a rep with no chats — and the only remedy anyone could think
+            of was another QR scan, three times over. If this banner is showing,
+            re-linking is not a guess: it is the fix, and the only one. */}
+        {locked.length > 0 && (
+          <div className="card" style={{
+            marginBottom: 16, padding: 14,
+            background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.35)",
+          }}>
+            <strong style={{ color: "#ef4444" }}>
+              🔒 {locked.reduce((a, c) => a + c.locked, 0)} messages arrived that could not be read
+            </strong>
+            <p className="subtitle" style={{ marginTop: 6, marginBottom: 8 }}>
+              Across <strong>{locked.length}</strong> conversation{locked.length === 1 ? "" : "s"}. The
+              messages are reaching this CRM — the security keys from the last link no longer
+              match, so the contents cannot be opened. This is not a sync delay and it does not
+              clear on its own.
+            </p>
+            <p className="subtitle" style={{ margin: 0, fontSize: 12.5 }}>
+              <strong>Have the rep link again once</strong> — WhatsApp → Linked devices → Link a
+              device. Everything from that moment on arrives readable. The messages already locked
+              stay locked; nothing can recover those.
+              {locked[0]?.why ? ` WhatsApp's own reason: “${locked[0].why}”.` : ""}
+            </p>
+          </div>
+        )}
+
         {conversations.length > 0 && (
           <>
             <h3 style={{ marginTop: 8, marginBottom: 4 }}>

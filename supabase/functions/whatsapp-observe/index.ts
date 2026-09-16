@@ -347,6 +347,11 @@ Deno.serve(async (req) => {
       // WhatsApp gave us an anonymous id instead of a number. Kept so no
       // reader mistakes it for one — see wa_resolve_lid.
       peer_is_lid: peerIsLid,
+      // It arrived and could not be opened. Kept so the conversation is
+      // visible — "nothing came" and "everything came locked" are opposite
+      // problems and looked identical until this column existed.
+      decrypt_failed: m?.decrypt_failed === true,
+      decrypt_error: typeof m?.decrypt_error === "string" ? m.decrypt_error : null,
       sender_phone: typeof m?.sender_phone === "string" ? m.sender_phone : null,
       wa_message_id: waId,
       direction,

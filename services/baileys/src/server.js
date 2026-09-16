@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.16-20";
+const WORKER_VERSION = "2026.09.16-21";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -490,6 +490,11 @@ function newSession(id, salespersonId) {
     // fortnight because a dropped message left no trace anywhere; this is how
     // the next such mistake gets noticed in a day.
     dropped: new Map(),
+    // Messages that arrived and could not be decrypted, per peer, and which
+    // peers have already said so in the log. A poisoned Signal store fails
+    // every message in a chat, so this counts fast and must not log fast.
+    undecryptable: new Map(),
+    undecryptableLogged: new Set(),
     // Online/typing states, when WATCH_PRESENCE is on.
     pendingPresence: [],
     // Attachments still to download, and the files already fetched and waiting
@@ -1495,6 +1500,44 @@ async function queueObserved(s, msg) {
   const text = String(textOf(msg) || "");
   const kind = mediaKindOf(msg);
 
+  // ── A MESSAGE THAT ARRIVED AND COULD NOT BE READ ───────────────────────────
+  //
+  // WhatsApp hands Baileys an encrypted envelope; if the Signal session no
+  // longer matches, decryption fails and Baileys still emits the message — with
+  // messageStubType CIPHERTEXT (2), an empty body, and the libsignal error in
+  // messageStubParameters ("Bad MAC", "No session record", …).
+  //
+  // Until now that landed two lines below, in `if (!text.trim() && !kind)
+  // return;`, and was thrown away without a word. That silence is expensive:
+  // this box's log has been full of "Failed to decrypt message with any known
+  // session / Session error: Bad MAC" for a fortnight while the dashboard
+  // showed a clean, healthy, empty screen. Nobody could tell the difference
+  // between "this rep has no one-to-one chats" and "every one of them arrived
+  // and none could be opened".
+  //
+  // Those are opposite problems with opposite fixes, and they now look
+  // different. The row is stored — number, direction, timestamp, and a flag —
+  // so the conversation EXISTS on screen and says honestly that its contents
+  // could not be unlocked. A founder can see a buyer is messaging even when the
+  // words are unavailable, which is the difference between a quiet rep and a
+  // broken link.
+  //
+  // Bad MAC itself has no repair. Only a fresh pairing mints new keys.
+  const CIPHERTEXT_STUB = 2;
+  const failed = msg?.messageStubType === CIPHERTEXT_STUB
+    || msg?.messageStubType === "CIPHERTEXT";
+  if (failed) {
+    const why = String(msg?.messageStubParameters?.[0] ?? "could not decrypt").slice(0, 120);
+    s.undecryptable.set(peer, (s.undecryptable.get(peer) ?? 0) + 1);
+    // Once per peer per session. A poisoned key store fails EVERY message, and
+    // a line each would bury the host log the way it did before.
+    if (!s.undecryptableLogged.has(peer)) {
+      s.undecryptableLogged.add(peer);
+      log.warn({ id: s.id, peer, group: isGroup, why },
+        "message arrived but could not be decrypted — this chat needs a fresh link");
+    }
+  }
+
   // THE REP TALKING TO THEMSELVES IS NOT LEAD WORK.
   //
   // WhatsApp's "Message yourself" chat, and a run of contentless protocol
@@ -1515,7 +1558,10 @@ async function queueObserved(s, msg) {
   // An empty shell is not a message. No text, no attachment — nothing a human
   // sent and nothing anyone could read on a lead page. Counting them makes the
   // "seen" figure a measure of protocol chatter rather than of the rep's work.
-  if (!text.trim() && !kind) return;
+  //
+  // A message that failed to decrypt is the exception: it is empty for a
+  // reason worth knowing, and it is kept.
+  if (!text.trim() && !kind && !failed) return;
 
   const meta = mediaMetaOf(msg);
 
@@ -1559,6 +1605,11 @@ async function queueObserved(s, msg) {
     // than to match this against a lead's phone number, and re-keys the rows
     // as soon as a mapping arrives.
     peer_is_lid: peerIsLid,
+    // Arrived, could not be opened. See the block above.
+    decrypt_failed: failed,
+    decrypt_error: failed
+      ? String(msg?.messageStubParameters?.[0] ?? "could not decrypt").slice(0, 120)
+      : null,
     // In a group, peer_phone is the GROUP's id and says nothing about who
     // spoke. WhatsApp puts the actual sender on key.participant — as a LID for
     // a migrated account, with the number alongside on participant_pn — and
@@ -1934,6 +1985,13 @@ function statusOf(s) {
     dropped: Object.fromEntries(s.dropped),
     lids_known: s.lidPn.size,
     groups_named: s.groupNames.size,
+    // THE QUESTION THIS ANSWERS IN ONE REQUEST.
+    //
+    // "No one-to-one chats are showing up" has two opposite causes — nothing
+    // arrived, or everything arrived and none of it could be opened. These two
+    // numbers say which, and until now neither existed.
+    undecryptable: [...s.undecryptable.values()].reduce((a, b) => a + b, 0),
+    undecryptable_chats: s.undecryptable.size,
     worker_version: WORKER_VERSION,
     error: s.state.lastError,
   };
