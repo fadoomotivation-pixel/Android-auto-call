@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.15-17";
+const WORKER_VERSION = "2026.09.16-19";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -441,6 +441,10 @@ function newSession(id, salespersonId) {
     // that for weeks, unnoticed, because nothing was watching for it.
     qrCount: 0,
     lastQrRequestAt: 0,
+    // "Link with phone number instead" — the eight characters the rep types
+    // into WhatsApp rather than pointing a camera at a screen. See /paircode.
+    pairingCode: null,
+    pairingPhone: null,
     // start() awaits twice before it assigns s.sock, so two overlapping calls
     // (the reconnect timer firing while an admin presses Show QR) would both
     // sail past any "is there a socket already" check and build two. This is
@@ -652,7 +656,11 @@ const BROWSER_IDENTITY = ["Call Pro AI", "Chrome", "1.0.0"];
 function identityFor(s) {
   if (!s.observeOnly) return BROWSER_IDENTITY;
   if (s.pinnedIdentity) return s.pinnedIdentity;
-  return s.handshakeFails >= 2 ? BROWSER_IDENTITY : DESKTOP_IDENTITY;
+  // ONE refusal is enough to move on. WhatsApp is currently declining the
+  // desktop identity outright, and every extra attempt is another twenty
+  // seconds in which the card says "Disconnected" and a human goes looking for
+  // a problem that is about to fix itself.
+  return s.handshakeFails >= 1 ? BROWSER_IDENTITY : DESKTOP_IDENTITY;
 }
 
 const identityFile = (authDir) => path.join(authDir, "identity.json");
@@ -729,6 +737,9 @@ async function start(s) {
   // handshake was refused, and a QR seen twenty minutes ago says nothing about
   // the one starting now.
   s.sawQr = false;
+  // A code belongs to one pairing attempt. Carrying it across a restart would
+  // show the rep eight characters WhatsApp has already forgotten.
+  s.pairingCode = null;
 
   // Reading the saved login is the only step here that must succeed, so it
   // carries the guard: a failure has to clear `starting`, or the session is
@@ -1162,6 +1173,14 @@ async function start(s) {
       // identity it will not accept from this host.
       const refused = !s.sawQr;
       if (refused) s.handshakeFails += 1;
+      // MID-RETRY IS NOT GIVING UP.
+      //
+      // A refused handshake set status "disconnected", so the card read
+      // "Never connected — have the rep scan the QR" during the twenty seconds
+      // before the next attempt produced one. That is the same lie that has
+      // sent someone to fetch a telecaller more than once. We are retrying, so
+      // say so.
+      if (refused && !loggedOut && !replaced) s.state.status = "connecting";
 
       s.state.lastError = loggedOut
         ? "WhatsApp logged this session out. Press Re-scan and scan the new QR."
@@ -1173,7 +1192,7 @@ async function start(s) {
               `attempt ${s.handshakeFails}. It is refusing what we identify as, not the scan. ` +
               `Claiming version ${s.state.waVersion ?? "bundled/unknown"} (${s.state.waVersionSource ?? "?"}) ` +
               `as ${s.state.identity ?? "?"}.` +
-              (s.handshakeFails >= 2 ? " Retrying as a plain browser." : " Retrying.")
+              (s.handshakeFails >= 1 ? " Retrying as a plain browser." : " Retrying.")
             : `Connection closed (${code ?? "unknown"}). Retrying.`;
       log.warn({
         id: s.id, code, loggedOut, replaced, refused,
@@ -1784,6 +1803,55 @@ const server = http.createServer(async (req, res) => {
 
     const s = getSession(salespersonId, salespersonId);
 
+    // LINK WITH A PHONE NUMBER INSTEAD OF A CAMERA.
+    //
+    // WhatsApp's own second option, and for this product it is the better one.
+    // The QR has to survive a screenshot, a WhatsApp forward and a rep holding
+    // one phone up to another screen, and it expires every twenty seconds while
+    // that happens. An eight-character code can be read out over the phone.
+    //
+    // It is the same socket and the same pairing handshake — only the way the
+    // rep proves they are there changes — so everything downstream (history
+    // sync, groups, media) behaves identically.
+    if (action === "paircode" && req.method === "POST") {
+      const body = await readBody(req);
+      const phone = String(body?.phone ?? "").replace(/\D/g, "");
+      if (phone.length < 10) {
+        return send(res, 400, { ok: false, error: "Give the rep's WhatsApp number with country code, e.g. 919310012981." });
+      }
+      if (s.sock?.authState?.creds?.registered) {
+        return send(res, 409, { ok: false, error: "This rep is already linked. Press Re-scan first if you want to start over." });
+      }
+
+      // The socket has to be far enough along to send the request. A QR event
+      // is Baileys telling us it is ready to pair, so that is the signal to
+      // wait for rather than a guessed delay.
+      const deadline = Date.now() + 20_000;
+      while (Date.now() < deadline && !(s.sock && (s.state.status === "qr" || s.state.qrDataUrl))) {
+        if (!s.sock && !s.starting) {
+          void start(s).catch((e) => log.error({ id: s.id, err: String(e?.message || e) }, "start for pairing failed"));
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      if (!s.sock) {
+        return send(res, 503, { ok: false, error: s.state.lastError || "The WhatsApp connection is not ready yet. Try again in a few seconds." });
+      }
+
+      try {
+        const code = await s.sock.requestPairingCode(phone);
+        s.pairingCode = String(code);
+        s.pairingPhone = phone;
+        s.state.lastError = null;
+        log.info({ id: s.id, phone }, "pairing code issued");
+        return send(res, 200, { ok: true, pair_code: s.pairingCode, phone });
+      } catch (e) {
+        const msg = String(e?.message || e);
+        s.state.lastError = `Could not get a pairing code: ${msg}`;
+        log.error({ id: s.id, err: msg }, "pairing code failed");
+        return send(res, 502, { ok: false, error: s.state.lastError });
+      }
+    }
+
     if (action === "status") return send(res, 200, statusOf(s));
     if (action === "qr") {
       // HTML by default so the rep can just open the link; JSON on request for
@@ -1809,6 +1877,9 @@ const server = http.createServer(async (req, res) => {
           status: s.state.status,
           qr: s.state.qrDataUrl,
           gen: s.gen,
+          // The eight characters, when the admin chose the phone-number route.
+          // Carried on the same poll as the QR so the panel needs one call.
+          pair_code: s.pairingCode,
           error: s.state.lastError,
           worker_version: WORKER_VERSION,
           wa_version: s.state.waVersion,

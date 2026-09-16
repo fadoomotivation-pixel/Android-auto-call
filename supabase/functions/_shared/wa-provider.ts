@@ -182,6 +182,30 @@ export class BaileysProvider implements WhatsAppProvider {
     }
   }
 
+  /**
+   * "Link with phone number instead" — WhatsApp's own second option.
+   *
+   * A QR has to survive a screenshot, a forward, and a rep holding one phone
+   * up to another screen, all inside the twenty seconds before it expires.
+   * Eight characters can be read out over a call.
+   */
+  async repPairCode(
+    salespersonId: string, phone: string,
+  ): Promise<{ ok: boolean; pair_code: string | null; error: string | null }> {
+    try {
+      const r = await fetch(this.repUrl(salespersonId, "/paircode"), {
+        method: "POST",
+        headers: { ...this.headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, pair_code: null, error: d?.error ?? `Worker answered ${r.status}.` };
+      return { ok: true, pair_code: d?.pair_code ?? null, error: null };
+    } catch {
+      return { ok: false, pair_code: null, error: "Could not reach the WhatsApp worker." };
+    }
+  }
+
   async repStatus(salespersonId: string): Promise<{
     status: string; number: string | null; last_seen: string | null; error: string | null;
     /** Messages the worker has seen but the CRM has not accepted yet. */
@@ -227,6 +251,7 @@ export class BaileysProvider implements WhatsAppProvider {
     status: string; qr: string | null; gen: number | null;
     reachable: boolean; error: string | null; worker_version: string | null;
     wa_version: string | null; wa_version_source: string | null;
+    pair_code: string | null;
   }> {
     try {
       const r = await fetch(this.repUrl(salespersonId, "/qr?format=json"), { headers: this.headers() });
@@ -234,7 +259,7 @@ export class BaileysProvider implements WhatsAppProvider {
         return {
           status: "disconnected", qr: null, gen: null, reachable: true,
           error: `The WhatsApp worker answered ${r.status}.`, worker_version: null,
-          wa_version: null, wa_version_source: null,
+          wa_version: null, wa_version_source: null, pair_code: null,
         };
       }
       const d = await r.json();
@@ -250,12 +275,13 @@ export class BaileysProvider implements WhatsAppProvider {
         // the deciding fact, so it travels all the way to the screen.
         wa_version: d?.wa_version ?? null,
         wa_version_source: d?.wa_version_source ?? null,
+        pair_code: d?.pair_code ?? null,
       };
     } catch {
       return {
         status: "disconnected", qr: null, gen: null, reachable: false,
         error: "Could not reach the WhatsApp worker. Check that the service is running.",
-        worker_version: null, wa_version: null, wa_version_source: null,
+        worker_version: null, wa_version: null, wa_version_source: null, pair_code: null,
       };
     }
   }
