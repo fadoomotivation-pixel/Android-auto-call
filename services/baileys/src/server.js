@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.16-24";
+const WORKER_VERSION = "2026.09.16-25";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -1735,7 +1735,14 @@ const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 4 * 60_000);
  */
 const WATCHDOG_MS = Number(process.env.WATCHDOG_MS || 90 * 60_000);
 
-function noteEvent(s) { s.lastEventAt = Date.now(); }
+function noteEvent(s) {
+  s.lastEventAt = Date.now();
+  // Counted as well as timed. "When did WhatsApp last say anything" answers
+  // whether the socket is alive; "how many times" answers whether it is busy —
+  // and a stream that is busy while the CRM sees nothing is a filter bug, not
+  // a connection one. Two very different mornings of work.
+  s.eventCount = (s.eventCount ?? 0) + 1;
+}
 
 function checkStreamAlive(s) {
   if (s.dead || !s.observeOnly) return;
@@ -1753,6 +1760,29 @@ async function sendHeartbeat(s) {
   if (s.dead || !s.observeOnly) return;
   if (!INGEST_URL || !INGEST_SECRET) return;
   if (s.state.status !== "connected") return;
+
+  // SAYING "I AM HERE" TO WHATSAPP, NOT ONLY TO THE CRM.
+  //
+  // markOnlineOnConnect sends presence exactly ONCE, at connect. Setting it
+  // true is what made live messages arrive for the first time in the life of
+  // this feature (v17) — telling WhatsApp the device is unreachable meant
+  // nothing was ever routed here.
+  //
+  // But "once" is the problem now. The socket connects, messages flow for
+  // three quarters of an hour, and then stop dead while the connection stays
+  // open and the stream stays healthy: 13:47 to 19:21 with a fresh heartbeat
+  // and not one message, across nineteen conversations that are certainly not
+  // idle. A device that announced itself once and then went quiet looks, from
+  // WhatsApp's side, like a device that has gone away.
+  //
+  // So presence is re-asserted on the same timer. A real client does this too.
+  // It is one small stanza every four minutes, and it is the difference
+  // between being a linked device and being a forgotten one.
+  if (MARK_ONLINE) {
+    try { await s.sock?.sendPresenceUpdate?.("available"); }
+    catch (e) { log.debug({ id: s.id, err: String(e?.message || e) }, "presence refresh failed"); }
+  }
+
   try {
     await fetch(INGEST_URL, {
       method: "POST",
@@ -1763,6 +1793,29 @@ async function sendHeartbeat(s) {
         heartbeat: true,
         status: s.state.status,
         worker_version: WORKER_VERSION,
+        // WHAT THE BOX CAN SEE AND NOBODY ELSE COULD.
+        //
+        // These counters have existed on /status since v20, and /status is a
+        // bearer-protected endpoint on a host nobody can curl from the CRM. So
+        // "is anything arriving and being dropped?" — the exact question five
+        // hours of silence raises — was unanswerable without SSH.
+        //
+        // They ride the heartbeat now. Four minutes old at worst, readable
+        // with a select, and they turn the next round of this into a
+        // measurement instead of another theory.
+        diag: {
+          dropped: Object.fromEntries(s.dropped),
+          undecryptable: [...s.undecryptable.values()].reduce((a, b) => a + b, 0),
+          lids_known: s.lidPn.size,
+          groups_named: s.groupNames.size,
+          queued: s.pending.length,
+          queued_media: s.mediaQueue.length,
+          // Anything at all from WhatsApp, not just a message we kept. If this
+          // is moving while messages are not, the socket is alive and the
+          // filter is wrong. If it is frozen, WhatsApp has stopped talking.
+          events: s.eventCount ?? 0,
+          last_event_at: s.lastEventAt ?? null,
+        },
       }),
     });
   } catch (e) {

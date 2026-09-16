@@ -180,6 +180,15 @@ Deno.serve(async (req) => {
         link_ok_at: new Date().toISOString(),
         status: typeof body?.status === "string" ? body.status : "connected",
         ...(body?.wa_number ? { wa_number: String(body.wa_number) } : {}),
+        // WHAT THE WORKER CAN SEE, WRITTEN SOMEWHERE READABLE.
+        //
+        // The worker's counters lived on /status — a bearer-protected endpoint
+        // on a host that cannot be reached from here. So the one question five
+        // hours of silence actually raises, "is anything arriving and being
+        // dropped?", needed SSH to answer. Now it needs a select.
+        ...(body?.diag && typeof body.diag === "object"
+          ? { diag: body.diag, worker_version: typeof body?.worker_version === "string" ? body.worker_version : null }
+          : {}),
       })
       .eq("salesperson_id", salespersonId);
     if (error) return json({ error: error.message }, 500);
