@@ -347,6 +347,10 @@ Deno.serve(async (req) => {
       // WhatsApp gave us an anonymous id instead of a number. Kept so no
       // reader mistakes it for one — see wa_resolve_lid.
       peer_is_lid: peerIsLid,
+      // Where the attachment has got to. "Downloading…" is only honest while
+      // something is actually downloading; without this the panel said it over
+      // 347 files that were never queued and never coming.
+      media_status: typeof m?.media_status === "string" ? m.media_status : null,
       // It arrived and could not be opened. Kept so the conversation is
       // visible — "nothing came" and "everything came locked" are opposite
       // problems and looked identical until this column existed.
@@ -477,7 +481,7 @@ Deno.serve(async (req) => {
     const f = raw as Record<string, unknown>;
     const waId = String(f.id ?? "");
     const b64 = typeof f.media_b64 === "string" ? f.media_b64 : null;
-    if (!waId || !b64) continue;
+    if (!waId) continue;
 
     const { data: row } = await admin
       .from("wa_observed_messages")
@@ -489,6 +493,22 @@ Deno.serve(async (req) => {
     // replayed batch free rather than a duplicate upload.
     if (!row || row.media_path) continue;
 
+    // A FAILURE IS A RESULT, AND IT HAS TO BE WRITTEN DOWN.
+    //
+    // The worker used to report successes only, so a file that was too big or
+    // that WhatsApp had already deleted left the row exactly as it was —
+    // has_media true, media_path null — which the panel renders as "still
+    // downloading" forever. It now says which, in words, once.
+    if (!b64) {
+      await admin.from("wa_observed_messages")
+        .update({
+          media_status: "failed",
+          media_error: typeof f.error === "string" ? f.error.slice(0, 300) : "The file could not be downloaded.",
+        })
+        .eq("id", row.id);
+      continue;
+    }
+
     try {
       const bytes = decodeBase64(b64);
       const mime = typeof f.mime_type === "string" && f.mime_type ? f.mime_type : "application/octet-stream";
@@ -499,7 +519,7 @@ Deno.serve(async (req) => {
       });
       if (upErr) { console.error("wa-media upload failed", upErr.message); continue; }
       await admin.from("wa_observed_messages")
-        .update({ media_path: path })
+        .update({ media_path: path, media_status: "stored", media_error: null })
         .eq("id", row.id);
       files++;
     } catch (e) {
@@ -558,19 +578,29 @@ Deno.serve(async (req) => {
   // 9199… tells a founder nothing. WhatsApp's own display name is usually the
   // only clue. Backfilled onto rows that have no name yet; never used for
   // matching, which stays phone-number-only on purpose.
+  // ONE NAME PER NUMBER, NOT ONE PER MESSAGE.
+  //
+  // This used to write the name onto every message row that had none, which
+  // made the conversation list pick one with max() — so the name a buyer
+  // showed up under changed depending on which of their messages sorted
+  // highest. Names now live in wa_peer_names, one row per number per rep, with
+  // where they came from: a name saved in the rep's phone or a group's real
+  // subject ("book") always beats a display name lifted off a message
+  // ("push"). The rows themselves keep their pushName as a last resort.
   let named = 0;
   for (const raw of (Array.isArray(body?.contacts) ? body.contacts : []) as unknown[]) {
     const c = raw as Record<string, unknown>;
     const peer = String(c.peer ?? "");
     const name = typeof c.name === "string" ? c.name.trim() : "";
     if (!peer || !name) continue;
-    const { count } = await admin
-      .from("wa_observed_messages")
-      .update({ peer_name: name }, { count: "exact" })
-      .eq("salesperson_id", salespersonId)
-      .eq("peer_phone", peer)
-      .is("peer_name", null);
-    named += count ?? 0;
+    const { error } = await admin.rpc("wa_note_peer_name", {
+      p_rep: salespersonId,
+      p_peer: peer,
+      p_name: name,
+      p_source: c.source === "push" ? "push" : "book",
+    });
+    if (error) console.error("wa_note_peer_name failed", error.message);
+    else named += 1;
   }
 
   // Liveness, so a session that logged out days ago shows up as stale in

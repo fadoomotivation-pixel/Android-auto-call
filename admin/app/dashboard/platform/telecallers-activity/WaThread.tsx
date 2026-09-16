@@ -48,6 +48,10 @@ type Msg = {
    *  words are not recoverable. */
   decrypt_failed?: boolean | null;
   decrypt_error?: string | null;
+  /** queued = still coming · stored = here · failed = it will not arrive,
+   *  and media_error says why · skipped = never queued. */
+  media_status?: string | null;
+  media_error?: string | null;
 };
 
 /**
@@ -151,16 +155,22 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
   // certainly lost its file to WhatsApp's own one-month expiry; a recent one
   // almost certainly did not, and the honest thing is to say which case this is
   // and stop there.
-  // A FILE THAT HAS NOT LANDED YET IS NOT A FILE THAT IS GONE.
+  // A FILE THAT HAS NOT LANDED YET IS NOT A FILE THAT IS GONE — AND A FILE
+  // THAT IS GONE MUST NOT PRETEND TO BE COMING.
   //
-  // The message is stored the moment it arrives; the attachment follows through
-  // a download queue seconds to minutes later, so for that gap media_path is
-  // legitimately null. This panel said "The file was not saved" over a photo
-  // that was mid-download and did in fact arrive — the founder read a failure
-  // notice about something that was working. Anything from the last ten minutes
-  // is treated as still coming, because it usually is.
+  // This said "Downloading…" for anything under ten minutes old and "not
+  // saved" for everything else, which was a guess from a clock. It was wrong
+  // in both directions: a photo still in the queue after twenty minutes read
+  // as lost, and 347 attachments that were never queued at all sat on
+  // "Downloading…" with nothing behind them.
+  //
+  // The worker now reports what actually happened to each file, so this can
+  // stop guessing and say it.
   const age = Date.now() - new Date(m.sent_at).getTime();
-  if (age < 10 * 60_000) {
+  const size = m.file_size ? kb(m.file_size) : "";
+  const state = m.media_status ?? (age < 10 * 60_000 ? "queued" : null);
+
+  if (state === "queued") {
     return (
       <div style={{
         display: "flex", alignItems: "center", gap: 10, marginBottom: 4,
@@ -171,12 +181,36 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
         <span style={{ minWidth: 0 }}>
           <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>{label}</span>
           <span style={{ fontSize: 11, opacity: 0.65 }}>
-            Downloading… refresh in a moment and it will open here.
+            Downloading{size ? ` ${size}` : ""} — refresh in a moment.
           </span>
         </span>
       </div>
     );
   }
+
+  if (state === "failed" || state === "skipped") {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10, marginBottom: 4,
+        padding: "10px 12px", borderRadius: 8,
+        background: "rgba(0,0,0,0.18)", border: "1px dashed rgba(255,255,255,0.18)",
+      }}>
+        <span style={{ fontSize: 20, opacity: 0.5 }}>{ICON[kind] ?? "📎"}</span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>
+            {label}{size ? ` · ${size}` : ""}
+          </span>
+          {/* WhatsApp's own reason where there is one. A cause beats a
+              symptom, and this panel has already shipped two confident
+              explanations that turned out to be wrong. */}
+          <span style={{ fontSize: 11, opacity: 0.65 }}>
+            {m.media_error || "The file could not be downloaded."}
+          </span>
+        </span>
+      </div>
+    );
+  }
+
   const old = age > 40 * 86400_000;
   return (
     <div style={{

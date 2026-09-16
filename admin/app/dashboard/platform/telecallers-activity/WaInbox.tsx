@@ -52,6 +52,8 @@ export type Conversation = {
    *  revealed their number. peer_phone holds that id, so it must never be
    *  shown as a phone number or offered as one to dial. */
   peer_is_lid?: boolean | null;
+  files_saved?: number | null;
+  files_total?: number | null;
 };
 
 const IST = { timeZone: "Asia/Kolkata" } as const;
@@ -227,6 +229,13 @@ export function WaInbox({
                       <em className="tag warn">called {c.calls}× · not in CRM</em>
                     )}
                     {c.they_sent > 0 && <em className="tag in">{c.they_sent} from them</em>}
+                    {/* "Kitna download ho gaya", on the row rather than only
+                        inside the chat — a conversation whose photos are all
+                        missing is worth spotting from the list. Shown only
+                        when some are missing; all-present needs no badge. */}
+                    {(c.files_total ?? 0) > 0 && (c.files_saved ?? 0) < (c.files_total ?? 0) && (
+                      <em className="tag file">{c.files_saved ?? 0}/{c.files_total} files</em>
+                    )}
                   </span>
                 </span>
               </a>
@@ -302,6 +311,7 @@ const CSS = `
 .tag.warn{background:rgba(245,158,11,.16);color:#f5b342}
 .tag.lead{background:rgba(0,168,132,.2);color:#4fd6ae}
 .tag.grp{background:rgba(129,140,248,.16);color:#a5b4fc}
+.tag.file{background:rgba(59,130,246,0.16);color:#93c5fd}
 .tag.in{background:rgba(255,255,255,.07);color:#8696a0}
 .wai-anon{font-size:18px;opacity:.75;line-height:1}
 .wai-pane{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;

@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.16-22";
+const WORKER_VERSION = "2026.09.16-23";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -1016,7 +1016,8 @@ async function start(s) {
         // Name the number when we can, and the LID when that is all there is —
         // the row will be re-keyed to the number the moment one turns up.
         const peer = phoneFor(s, jid, c?.jid) ?? (isLidJid(jid) ? jidDigits(jid) : null);
-        if (peer) noteName(s, peer, name);
+        // From the rep's own address book — the best name there is.
+        if (peer) noteName(s, peer, name, "book");
       };
       s.sock.ev.on("contacts.upsert", (cs) => { for (const c of cs ?? []) noteContact(c); });
       s.sock.ev.on("contacts.update", (cs) => { for (const c of cs ?? []) noteContact(c); });
@@ -1215,6 +1216,7 @@ async function start(s) {
       // connected on the dashboard until their first message to a lead.
       startHeartbeat(s);
       log.info({ id: s.id, number: s.state.number }, "connected");
+      if (s.observeOnly) void learnNames(s);
     }
 
     if (connection === "close") {
@@ -1397,27 +1399,44 @@ function mediaMetaOf(msg) {
  * worse trade than losing the attachment.
  */
 async function fetchMedia(s, msg, kind, declaredSize) {
-  if (!CAPTURE_MEDIA || !kind) return null;
+  // WHY THIS RETURNS A REASON AND NOT JUST null.
+  //
+  // Every failure here used to come back as null and end there, which put the
+  // panel in the one state it cannot explain: a message that says it has a
+  // photo, and no photo. The founder read "the file was not saved" and had no
+  // way to tell a file that was too big from one WhatsApp had expired from one
+  // that simply had not started yet. Each of those needs a different sentence,
+  // and none of them is a spinner.
+  const mb = (n) => `${(Number(n) / 1024 / 1024).toFixed(1)} MB`;
+  if (!CAPTURE_MEDIA || !kind) return { b64: null, error: null };
   if (declaredSize && Number(declaredSize) > MAX_MEDIA_BYTES) {
     log.info({ id: s.id, kind, size: Number(declaredSize) }, "media too large — naming it only");
-    return null;
+    return { b64: null, error: `Too big to store (${mb(declaredSize)}); the limit is ${mb(MAX_MEDIA_BYTES)}.` };
   }
   try {
     const buf = await downloadMediaMessage(msg, "buffer", {}, {
       logger: pino({ level: "silent" }),
       reuploadRequest: s.sock.updateMediaMessage,
     });
-    if (!buf?.length) return null;
+    if (!buf?.length) return { b64: null, error: "WhatsApp returned an empty file." };
     // Re-checked after the fact: WhatsApp's declared fileLength is absent on
     // some message shapes, so the only trustworthy size is the one we hold.
     if (buf.length > MAX_MEDIA_BYTES) {
       log.info({ id: s.id, kind, size: buf.length }, "media over cap after download — dropped");
-      return null;
+      return { b64: null, error: `Too big to store (${mb(buf.length)}); the limit is ${mb(MAX_MEDIA_BYTES)}.` };
     }
-    return buf.toString("base64");
+    return { b64: buf.toString("base64"), error: null };
   } catch (e) {
-    log.warn({ id: s.id, kind, err: String(e?.message || e) }, "media download failed — keeping the message");
-    return null;
+    const why = String(e?.message || e);
+    log.warn({ id: s.id, kind, err: why }, "media download failed — keeping the message");
+    return {
+      b64: null,
+      // WhatsApp deletes a file from its servers after about a month; the
+      // message survives the file, and that is the commonest cause by far.
+      error: /410|404|not found|expired/i.test(why)
+        ? "WhatsApp no longer has this file — it only keeps one for about a month."
+        : `Could not download: ${why.slice(0, 120)}`,
+    };
   }
 }
 
@@ -1437,7 +1456,7 @@ async function fetchMedia(s, msg, kind, declaredSize) {
  * against the message id that is already stored. Slow is fine. Lossy is not.
  */
 function queueMedia(s, msg, waId, kind, declaredSize) {
-  if (declaredSize && Number(declaredSize) > MAX_MEDIA_BYTES) return;
+  if (declaredSize && Number(declaredSize) > MAX_MEDIA_BYTES) return false;
   if (s.mediaQueue.length >= MAX_MEDIA_QUEUE) {
     // Bounded so a pathological account cannot exhaust memory. Logged rather
     // than silent, because "some files missing" with no explanation is the
@@ -1446,10 +1465,11 @@ function queueMedia(s, msg, waId, kind, declaredSize) {
       s.mediaQueueWarned = true;
       log.warn({ id: s.id, cap: MAX_MEDIA_QUEUE }, "media backlog full — later attachments will be named only");
     }
-    return;
+    return false;
   }
   s.mediaQueue.push({ msg, waId, kind });
   void drainMedia(s);
+  return true;
 }
 
 async function drainMedia(s) {
@@ -1459,11 +1479,17 @@ async function drainMedia(s) {
     while (s.mediaQueue.length) {
       const job = s.mediaQueue.shift();
       if (!job) break;
-      const b64 = await fetchMedia(s, job.msg, job.kind, null);
-      if (b64) {
-        s.pendingMedia.push({ id: job.waId, media_b64: b64, mime_type: mediaMetaOf(job.msg).mime_type ?? null });
-        if (!s.flushTimer) s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
-      }
+      const got = await fetchMedia(s, job.msg, job.kind, null);
+      // Reported either way. A file that failed is a fact the screen needs, and
+      // reporting only successes is what left 347 attachments sitting on
+      // "Downloading…" with nothing behind them and no reason given.
+      s.pendingMedia.push({
+        id: job.waId,
+        media_b64: got.b64,
+        error: got.error,
+        mime_type: mediaMetaOf(job.msg).mime_type ?? null,
+      });
+      if (!s.flushTimer) s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
       // Every completed file frees the message object for collection; holding
       // a whole history's worth of them is what the cap above is protecting.
       job.msg = null;
@@ -1578,11 +1604,13 @@ async function queueObserved(s, msg) {
   // through the backlog at a controlled rate and reports each file as it
   // arrives. A sync of four thousand photos takes a while and finishes; nothing
   // is thrown away because the queue happened to be deep when it appeared.
-  if (kind && CAPTURE_MEDIA) queueMedia(s, msg, id, kind, meta.file_size);
+  const queued = kind && CAPTURE_MEDIA ? queueMedia(s, msg, id, kind, meta.file_size) : false;
 
   // A group we have not named yet. WhatsApp does not put the subject on the
   // message, so it is asked for once — the alternative is the conversation list
   // the founder is looking at now, ten rows all reading "Group chat".
+  // learnNames() fetches every group on connect; this only catches one the rep
+  // was added to afterwards.
   if (isGroup && !s.groupNames.has(peer)) askGroupName(s, jid);
 
   s.pending.push({
@@ -1619,6 +1647,10 @@ async function queueObserved(s, msg) {
     // than to match this against a lead's phone number, and re-keys the rows
     // as soon as a mapping arrives.
     peer_is_lid: peerIsLid,
+    // WAITING, NOT MISSING. Set when the attachment has actually been handed to
+    // the download queue, so the panel can say "coming" where it is true and
+    // stop saying it where it never will be.
+    media_status: kind ? (queued ? "queued" : "skipped") : null,
     // Arrived, could not be opened. See the block above.
     decrypt_failed: failed,
     decrypt_error: failed
@@ -1923,8 +1955,21 @@ function phoneFor(s, jid, hint) {
   return null;
 }
 
-/** Record a name for a number or a group, and let the CRM backfill it. */
-function noteName(s, key, name) {
+/**
+ * Record a name for a number or a group, and let the CRM backfill it.
+ *
+ * `source` says how much to trust it, because three different things call
+ * themselves a name here and only two of them are any good:
+ *
+ *   book   the name saved in the rep's own phone, or a group's real subject.
+ *          Authoritative — it is what the rep sees on their handset.
+ *   push   the display name WhatsApp attaches to a message. Whatever the
+ *          sender chose to call themselves, and for an outbound message it is
+ *          the REP's own name, which is how seven buyers ended up sharing one.
+ *
+ * The CRM keeps them apart and never lets a push name overwrite a book one.
+ */
+function noteName(s, key, name, source = "book") {
   const peer = jidDigits(key);
   const clean = String(name ?? "").trim().slice(0, 120);
   if (!peer || !clean) return;
@@ -1932,7 +1977,61 @@ function noteName(s, key, name) {
     if (s.groupNames.get(peer) === clean) return;
     s.groupNames.set(peer, clean);
   }
-  s.pendingContacts.push({ peer, name: clean });
+  s.pendingContacts.push({ peer, name: clean, source });
+}
+
+/**
+ * ASK FOR THE NAMES INSTEAD OF WAITING FOR THEM.
+ *
+ * Both of these arrive on their own — but only on a FRESH LINK, in the initial
+ * app-state sync. A worker that reconnects on existing credentials skips that
+ * sync entirely (Socket/chats.js only runs it when syncState is Syncing), which
+ * is why after four worker uploads the conversation list still read as bare
+ * phone numbers and "Group chat" ten times over, while the rep's own handset
+ * showed names for every one of them.
+ *
+ * So they are requested explicitly, once per connection:
+ *
+ *   groupFetchAllParticipating  every group this account is in, with its
+ *                               subject, in a single query. The previous
+ *                               approach asked for one group's metadata the
+ *                               first time a message arrived in it, which meant
+ *                               a quiet group stayed nameless indefinitely.
+ *
+ *   resyncAppState              re-delivers the address book as contacts.upsert,
+ *                               so "917056208162" becomes whatever the rep has
+ *                               that number saved as.
+ *
+ * Neither is allowed to fail the connection. A rep with no groups, or an
+ * account WhatsApp declines to resync, still gets everything else.
+ */
+async function learnNames(s) {
+  try {
+    const groups = await s.sock?.groupFetchAllParticipating?.();
+    let n = 0;
+    for (const g of Object.values(groups ?? {})) {
+      if (g?.id && g?.subject) { noteName(s, g.id, g.subject); n += 1; }
+      if (g?.id) s.groupAsked.add(jidDigits(g.id));
+    }
+    if (n) log.info({ id: s.id, groups: n }, "group names fetched");
+  } catch (e) {
+    log.warn({ id: s.id, err: String(e?.message || e) }, "could not fetch group names");
+  }
+
+  try {
+    // The collections that carry contacts and chats. critical_block is the
+    // blocklist and is no use here.
+    await s.sock?.resyncAppState?.(
+      ["critical_unblock_low", "regular_high", "regular_low", "regular"], false,
+    );
+    log.info({ id: s.id }, "address book resynced");
+  } catch (e) {
+    log.warn({ id: s.id, err: String(e?.message || e) }, "could not resync the address book");
+  }
+
+  if (s.pendingContacts.length && !s.flushTimer) {
+    s.flushTimer = setTimeout(() => flushObserved(s), FLUSH_MS);
+  }
 }
 
 /**

@@ -112,6 +112,9 @@ type Conversation = {
   is_group: boolean | null;
   /** peer_phone is a WhatsApp LID, not a number — see migration 0191. */
   peer_is_lid: boolean | null;
+  /** Attachments here, and how many of them are actually stored. */
+  files_saved: number | null;
+  files_total: number | null;
 };
 
 /** A conversation whose messages arrived and could not be decrypted. */
@@ -158,6 +161,9 @@ type PeerMsg = {
   /** It arrived and the keys could not open it — see migration 0193. */
   decrypt_failed: boolean | null;
   decrypt_error: string | null;
+  media_status: string | null;
+  media_error: string | null;
+  file_size: number | null;
 };
 
 /** The same message, sent to many different people. */
@@ -423,6 +429,29 @@ export default async function TelecallerActivityPage({
                 {hot > 0 && <span style={{ color: "#22c55e" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
                 {risk > 0 && <span style={{ color: "#ef4444" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
                 <span style={{ opacity: 0.7 }}>{ordered.length} messages</span>
+                {/* "KITNA DOWNLOAD HO GAYA", ANSWERED WITH A NUMBER.
+                    A photo arrives as a message first and as a file a few
+                    seconds later, so a chat opened straight away is genuinely
+                    part-downloaded. Saying so — with the count — beats a row
+                    of identical "Downloading…" labels that give the reader no
+                    way to tell progress from a stall. Green once they are all
+                    in, so the common case reads as done rather than as a
+                    warning. */}
+                {(() => {
+                  const withFile = thread.filter((x) => x.media_kind);
+                  if (withFile.length === 0) return null;
+                  const got = withFile.filter((x) => x.media_path).length;
+                  const coming = withFile.filter(
+                    (x) => !x.media_path && (x.media_status ?? "queued") === "queued",
+                  ).length;
+                  const done = got === withFile.length;
+                  return (
+                    <span style={{ color: done ? "#22c55e" : coming > 0 ? "#f59e0b" : "#8696a0" }}>
+                      📎 {got}/{withFile.length} file{withFile.length === 1 ? "" : "s"}
+                      {done ? " downloaded" : coming > 0 ? ` downloaded · ${coming} still coming` : " downloaded"}
+                    </span>
+                  );
+                })()}
               </div>
             </div>
           );
