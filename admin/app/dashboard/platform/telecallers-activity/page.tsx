@@ -153,6 +153,7 @@ type PeerMsg = {
   sent_at: string;
   /** In a group, who spoke. The thread is unreadable without it. */
   sender_phone: string | null;
+  sender_name: string | null;
   is_group: boolean | null;
   /** It arrived and the keys could not open it — see migration 0193. */
   decrypt_failed: boolean | null;
