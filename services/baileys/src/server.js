@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.16-23";
+const WORKER_VERSION = "2026.09.16-24";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -1923,7 +1923,17 @@ function toJid(phone) {
 /** The number part of any WhatsApp address: 9199…@s.whatsapp.net, 1234@lid,
  *  9199…:3@s.whatsapp.net and 12036…@g.us all reduce to their digits. */
 function jidDigits(jid) {
-  return String(jid ?? "").split("@")[0].split(":")[0].replace(/\D/g, "");
+  const local = String(jid ?? "").split("@")[0].split(":")[0];
+  // A GROUP ID IS NOT A NUMBER AND MUST NOT BE TREATED AS ONE.
+  //
+  // Modern groups are plain digits (120363…), but a group made years ago is
+  // "<creator>-<timestamp>", hyphen and all. Stripping non-digits turned
+  // 919991804787-1578638344 into 9199918047871578638344 — so the name
+  // "Employes updation group" was filed under an id that matches none of that
+  // group's 526 messages, and the conversation stayed called "Group chat"
+  // while its name sat in the directory one row away.
+  if (String(jid ?? "").endsWith("@g.us")) return local;
+  return local.replace(/\D/g, "");
 }
 const isPnJid = (jid) => String(jid ?? "").endsWith("@s.whatsapp.net");
 const isLidJid = (jid) => String(jid ?? "").endsWith("@lid");
