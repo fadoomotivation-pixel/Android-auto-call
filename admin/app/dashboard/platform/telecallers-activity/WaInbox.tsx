@@ -48,6 +48,10 @@ export type Conversation = {
   last_media: string | null;
   /** A WhatsApp group. peer_phone is then the group's id, not a person's. */
   is_group?: boolean | null;
+  /** WhatsApp addressed this contact by an anonymous id (a LID) and has not
+   *  revealed their number. peer_phone holds that id, so it must never be
+   *  shown as a phone number or offered as one to dial. */
+  peer_is_lid?: boolean | null;
 };
 
 const IST = { timeZone: "Asia/Kolkata" } as const;
@@ -169,8 +173,13 @@ export function WaInbox({
             <p className="wai-none">No conversation matches that.</p>
           )}
           {shown.map((c) => {
+            // A LID is not a phone number and showing it as one invites a
+            // founder to dial fifteen digits that ring nowhere. Say what it
+            // actually is; the conversation is still here and still readable.
             const name = c.lead_name || c.peer_name
-              || (c.is_group ? "Group chat" : c.peer_phone);
+              || (c.is_group ? "Group chat"
+                : c.peer_is_lid ? "Number not shown by WhatsApp"
+                : c.peer_phone);
             const preview = c.last_body?.trim()
               ? c.last_body
               : c.last_media

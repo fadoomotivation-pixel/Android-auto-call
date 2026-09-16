@@ -109,6 +109,9 @@ type Conversation = {
   last_at: string;
   last_body: string | null;
   last_media: string | null;
+  is_group: boolean | null;
+  /** peer_phone is a WhatsApp LID, not a number — see migration 0191. */
+  peer_is_lid: boolean | null;
 };
 
 type UnknownRow = {
@@ -139,6 +142,9 @@ type PeerMsg = {
   body_original: string | null;
   peer_name: string | null;
   sent_at: string;
+  /** In a group, who spoke. The thread is unreadable without it. */
+  sender_phone: string | null;
+  is_group: boolean | null;
 };
 
 /** The same message, sent to many different people. */
@@ -547,9 +553,21 @@ export default async function TelecallerActivityPage({
               from, and a WhatsApp Business on their own handset. Ask which number they message
               buyers on, and link that one.
             </p>
+            {/* THIS LINE USED TO SAY "NOTHING IS BROKEN".
+                It said the matching, the sync and the number format had all
+                been checked, and that re-scanning would not change anything.
+                Something WAS broken: the worker accepted only "@s.whatsapp.net"
+                addresses, and WhatsApp had moved one-to-one chats onto LID
+                addressing — so every conversation with a migrated contact was
+                discarded before it was ever counted. This panel's confident
+                all-clear is part of why that took a fortnight to find.
+                A reassurance is only worth printing if it can be justified,
+                and this one names what it rests on. */}
             <p className="subtitle" style={{ margin: 0, fontSize: 12.5 }}>
-              Nothing is broken — the matching, the sync and the number format were all checked
-              against this data. Re-scanning will not change this.
+              This compares the numbers they DIAL against the numbers they MESSAGE. It is
+              worth checking the second number first — but if their WhatsApp capture is also
+              missing recent chats or is all groups, that is a different problem and the
+              worker version on this page will say so.
             </p>
             {fit.called_and_messaged > 0 && (
               <p style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}>
