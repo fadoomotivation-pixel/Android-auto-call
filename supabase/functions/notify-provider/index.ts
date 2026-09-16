@@ -141,7 +141,8 @@ Deno.serve(async (req) => {
   // now. Proxied through here for the same reason the founder's QR is: the
   // worker's bearer lives in the vault and must never reach a browser, where it
   // would sit in history and in every screenshot of the page.
-  if (action === "rep_status" || action === "rep_qr" || action === "rep_reconnect" || action === "rep_reset") {
+  if (action === "rep_status" || action === "rep_qr" || action === "rep_reconnect"
+      || action === "rep_reset" || action === "rep_pair_code") {
     const salespersonId = String(body?.salesperson_id ?? "");
     if (!salespersonId) return json({ ok: false, error: "salesperson_id required" }, 400);
 
@@ -181,6 +182,18 @@ Deno.serve(async (req) => {
         last_seen_at: null,
       }).eq("salesperson_id", salespersonId);
       return json({ ok: true, status: "connecting", gen: rr.gen });
+    }
+    // The eight-character alternative to a QR. The rep's own WhatsApp number is
+    // required — WhatsApp sends the code to that account, so a wrong number
+    // simply never receives one.
+    if (action === "rep_pair_code") {
+      const phone = String(body?.phone ?? "").replace(/\D/g, "");
+      if (phone.length < 10) {
+        return json({ ok: false, error: "Enter the rep's WhatsApp number with country code." }, 400);
+      }
+      const pc = await w.repPairCode(salespersonId, phone);
+      if (!pc.ok) return json({ ok: false, error: pc.error }, 502);
+      return json({ ok: true, pair_code: pc.pair_code });
     }
     if (action === "rep_qr") {
       return json({ ok: true, ...(await w.repQr(salespersonId)) });

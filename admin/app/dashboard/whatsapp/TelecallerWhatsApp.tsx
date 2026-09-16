@@ -222,6 +222,11 @@ export function TelecallerWhatsApp({
   // up or fell back. When WhatsApp closes the handshake before offering a QR,
   // this is the fact that decides what to do next.
   const [waVersion, setWaVersion] = useState<string | null>(null);
+  // WhatsApp's own second option: eight characters the rep types in, instead of
+  // a QR that has to survive a screenshot, a forward, and a twenty-second life.
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [pairPhone, setPairPhone] = useState("");
+  const [pairBusy, setPairBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -304,6 +309,7 @@ export function TelecallerWhatsApp({
    */
   const openQr = useCallback(async (id: string, fresh = false) => {
     setQrFor(id); setQr(null); setMsg(null); setQrStuck(false); setWantGen(null);
+    setPairCode(null); setPairPhone("");
     setQrNote(fresh ? "Unlinking the old device…" : "Starting the session…");
     // rep_reset forgets the saved credentials so WhatsApp treats this as a
     // first link — the only way to get a QR back, and the only way it sends the
@@ -357,6 +363,7 @@ export function TelecallerWhatsApp({
               ? "Still finishing with the old login — the new QR is coming…"
               : "Waiting for WhatsApp to offer a QR…",
       );
+      if (r.pair_code) setPairCode(String(r.pair_code));
       setWorkerBuild((r.worker_version as string | null) ?? null);
       setWorkerDown(r.reachable === false);
       setWaVersion(
@@ -373,6 +380,30 @@ export function TelecallerWhatsApp({
     const h = setInterval(() => void tick(), 6000);
     return () => { alive = false; clearInterval(h); };
   }, [qrFor, wantGen, call, load]);
+
+  /**
+   * Ask WhatsApp for a pairing code for this rep's own number.
+   *
+   * The code is delivered to that WhatsApp account, so a wrong number simply
+   * never receives one — which is why the number is typed rather than guessed
+   * from the CRM.
+   */
+  const getPairCode = async (id: string) => {
+    const phone = pairPhone.replace(/\D/g, "");
+    if (phone.length < 10) {
+      setMsg("Enter the rep's WhatsApp number with country code, e.g. 919310012981.");
+      return;
+    }
+    setPairBusy(true); setMsg(null);
+    const { data, error } = await supabase.functions.invoke<Record<string, unknown>>(
+      "notify-provider",
+      { body: { action: "rep_pair_code", company_id: companyId, salesperson_id: id, phone } },
+    );
+    setPairBusy(false);
+    if (error) { setMsg(error.message); return; }
+    if (!data?.ok) { setMsg(String(data?.error ?? "Could not get a code.")); return; }
+    setPairCode(String(data.pair_code));
+  };
 
   const add = async () => {
     if (!repId) { setMsg("Pick a telecaller first."); return; }
@@ -601,6 +632,63 @@ export function TelecallerWhatsApp({
             ? <img src={qr} alt="WhatsApp QR" width={280} height={280} style={{ maxWidth: "100%", height: "auto" }} />
             : <div className="empty">{qrNote ?? "…"}</div>}
           {qr && qrNote && <div className="subtitle" style={{ fontSize: 12 }}>{qrNote}</div>}
+
+          {/* LINK WITH A PHONE NUMBER INSTEAD — WHATSAPP'S OWN SECOND OPTION.
+              A QR has to survive a screenshot, a forward, and a rep holding one
+              phone up to another screen, all inside the twenty seconds before
+              it expires. Eight characters can be read out over a call. Same
+              socket, same pairing handshake, same history sync afterwards —
+              only the way the rep proves they are there changes. */}
+          <div style={{
+            marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)", textAlign: "left",
+          }}>
+            {pairCode ? (
+              <>
+                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+                  On {repName.get(qrFor) ?? "the rep"}&apos;s phone: WhatsApp → Linked devices →
+                  Link a device → <strong>Link with phone number instead</strong>, then type:
+                </div>
+                <div style={{
+                  fontFamily: "monospace", fontSize: 26, fontWeight: 700, letterSpacing: 4,
+                  textAlign: "center", padding: "10px 6px", borderRadius: 10,
+                  background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.35)",
+                  color: "#22c55e",
+                }}>
+                  {pairCode}
+                </div>
+                <div className="subtitle" style={{ fontSize: 11.5, marginTop: 6 }}>
+                  Valid for a few minutes. You can read it out over the phone — no screenshot needed.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+                  Camera not working? Link with a phone number instead.
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <input
+                    value={pairPhone}
+                    onChange={(e) => setPairPhone(e.target.value)}
+                    placeholder="919310012981"
+                    inputMode="numeric"
+                    style={{
+                      flex: 1, minWidth: 150, padding: "8px 10px", borderRadius: 8,
+                      border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)",
+                      color: "var(--text)", fontSize: 13,
+                    }}
+                  />
+                  <button className="btn" disabled={pairBusy}
+                    onClick={() => void getPairCode(qrFor)}>
+                    {pairBusy ? "Asking…" : "Get code"}
+                  </button>
+                </div>
+                <div className="subtitle" style={{ fontSize: 11.5, marginTop: 6 }}>
+                  The rep&apos;s own WhatsApp number, with country code. WhatsApp sends the code to
+                  that account, so a wrong number simply never receives one.
+                </div>
+              </>
+            )}
+          </div>
           {/* THE WAY OUT OF THE WAIT THAT NEVER ENDS.
               Without this the panel just sat on "Waiting for WhatsApp to offer
               a QR…", and for the one case that matters — a saved login that
