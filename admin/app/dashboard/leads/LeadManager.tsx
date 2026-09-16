@@ -126,6 +126,9 @@ export function LeadManager({
   const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assignTo, setAssignTo] = useState("");
+  /** Reset the lead so the new rep opens it like one that just arrived. Off by
+   *  default — see the checkbox in the assign bar for why. */
+  const [asNew, setAsNew] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -340,6 +343,7 @@ export function LeadManager({
     for (const batch of chunk(ids, 500)) {
       const { error } = await supabase.rpc("admin_assign_contacts", {
         p_contact_ids: batch, p_company_id: target.company_id, p_salesperson_id: assignTo,
+        p_as_new: asNew,
       });
       if (error) { ok = false; setMsg(`Assign failed: ${error.message}`); break; }
     }
@@ -348,6 +352,16 @@ export function LeadManager({
 
   async function assignSelected() {
     if (!assignTo || selected.size === 0) return;
+    // Asked once, plainly, and only for the reset. The rep cannot undo it and
+    // cannot even see that it happened, so the person clicking should know
+    // exactly what the other side will look like.
+    if (asNew && !confirm(
+      `Give ${selected.size} lead(s) to ${nameOf(assignTo)} as BRAND-NEW leads?\n\n` +
+      `They will open in New, with no stage, no notes, no score and no call history — ` +
+      `as if they had just arrived.\n\n` +
+      `Nothing is deleted: you and the founder keep the full history, and any callback ` +
+      `the previous rep had booked is cancelled.`
+    )) return;
     setBusy(true);
     const ids = Array.from(selected);
     if (isCrossCompany(assignTo)) {
@@ -366,7 +380,7 @@ export function LeadManager({
       // in the same company as the leads.
       for (const batch of chunk(ids, 500)) {
         const { error } = await supabase.rpc("reassign_contacts", {
-          p_contact_ids: batch, p_salesperson_id: assignTo,
+          p_contact_ids: batch, p_salesperson_id: assignTo, p_as_new: asNew,
         });
         if (error) {
           setBusy(false);
@@ -377,7 +391,7 @@ export function LeadManager({
       }
       setBusy(false);
     }
-    setMsg(`Assigned ${selected.size} lead(s) to ${nameOf(assignTo)}.`);
+    setMsg(`Assigned ${selected.size} lead(s) to ${nameOf(assignTo)}${asNew ? " as brand-new leads" : ""}.`);
     setSelected(new Set());
     await load(true);
     await refreshStats();
@@ -386,10 +400,11 @@ export function LeadManager({
 
   async function assignAllUnassigned() {
     if (!assignTo) return;
-    if (!confirm(`Assign ALL ${stats.unassigned} unassigned leads to ${nameOf(assignTo)}?`)) return;
+    if (!confirm(`Assign ALL ${stats.unassigned} unassigned leads to ${nameOf(assignTo)}${asNew ? " AS BRAND-NEW LEADS (no stage, notes, score or call history)" : ""}?`)) return;
     setBusy(true);
-    if (isCrossCompany(assignTo)) {
-      // Cross-company needs explicit ids for the RPC — collect all unassigned first.
+    // Both the cross-company move and the reset need explicit ids for their
+    // RPC; only the plain same-company case can be done as one bulk update.
+    if (isCrossCompany(assignTo) || asNew) {
       const ids: string[] = [];
       let from = 0;
       let more = true;
@@ -403,9 +418,24 @@ export function LeadManager({
         if (page.length < 1000) more = false;
         else from += 1000;
       }
-      const ok = await reassignCrossCompany(ids);
-      setBusy(false);
-      if (!ok) { setTimeout(() => setMsg(null), 3500); return; }
+      if (isCrossCompany(assignTo)) {
+        const ok = await reassignCrossCompany(ids);
+        setBusy(false);
+        if (!ok) { setTimeout(() => setMsg(null), 3500); return; }
+      } else {
+        for (const batch of chunk(ids, 500)) {
+          const { error } = await supabase.rpc("reassign_contacts", {
+            p_contact_ids: batch, p_salesperson_id: assignTo, p_as_new: true,
+          });
+          if (error) {
+            setBusy(false);
+            setMsg(`Assign failed: ${error.message}`);
+            setTimeout(() => setMsg(null), 3500);
+            return;
+          }
+        }
+        setBusy(false);
+      }
     } else {
       let q = supabase.from("contacts").update({ salesperson_id: assignTo }).is("salesperson_id", null);
       const s = safe(search);
@@ -413,7 +443,7 @@ export function LeadManager({
       await q;
       setBusy(false);
     }
-    setMsg(`Assigned all unassigned leads to ${nameOf(assignTo)}.`);
+    setMsg(`Assigned all unassigned leads to ${nameOf(assignTo)}${asNew ? " as brand-new leads" : ""}.`);
     setSelected(new Set());
     await load(true);
     await refreshStats();
@@ -667,6 +697,26 @@ export function LeadManager({
             ⚠ Moves the lead(s) into {spOf(assignTo)?.company_name}&apos;s account.
           </span>
         )}
+
+        {/* HANDING A LEAD OVER AND HANDING IT OVER AS NEW ARE DIFFERENT JOBS.
+            A rep goes on leave and a colleague picks up the conversation —
+            there the history is the point, and losing it means ringing a buyer
+            to ask what they already said. Redistributing a pile of old leads is
+            the opposite: the last rep's "not interested" from March is exactly
+            what stops the new one calling with an open mind.
+            So it is a choice, made per batch, and off by default — the
+            destructive reading of an ambiguous click should never be the
+            silent one. */}
+        <label style={{
+          display: "flex", alignItems: "center", gap: 7, fontSize: 13,
+          padding: "6px 10px", borderRadius: 8, cursor: "pointer",
+          background: asNew ? "rgba(245,158,11,0.12)" : "transparent",
+          border: `1px solid ${asNew ? "rgba(245,158,11,0.4)" : "var(--border)"}`,
+        }}>
+          <input type="checkbox" checked={asNew} onChange={(e) => setAsNew(e.target.checked)} />
+          <span style={{ fontWeight: asNew ? 600 : 400 }}>Give as a brand-new lead</span>
+        </label>
+
         <button className="primary" style={{ width: "auto", padding: "8px 14px" }} disabled={busy || !assignTo || selected.size === 0} onClick={assignSelected}>
           Assign selected ({selected.size})
         </button>
