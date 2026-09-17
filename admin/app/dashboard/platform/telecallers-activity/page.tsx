@@ -682,6 +682,37 @@ export default async function TelecallerActivityPage({
             WhatsApp in their other hand; matching that layout is what makes a
             six-month thread readable in one scroll. Search and the filters are
             instant because all the rows are already here. */}
+        {/* A WATCHER THAT IS NOT RUNNING, SAID LOUDLY.
+            The worker has stopped twice in twenty-six hours — five hours once,
+            fourteen the next — and through both outages wa_rep_sessions.status
+            still read "connected", because nothing writes that column when a
+            process simply stops. Every screen was confidently wrong, and the
+            founder found out by noticing a video he had sent was missing from a
+            chat.
+            The watchdog now flips it and says how long (migration 0202). This
+            is where that lands: above the conversations, in red, before anyone
+            starts wondering why a rep has gone quiet. A silent capture must
+            never be mistaken for a silent rep. */}
+        {current.wa_watch !== "ok" && (
+          <div className="card" style={{
+            marginBottom: 16, padding: 14,
+            background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.45)",
+          }}>
+            <strong style={{ color: "#ef4444" }}>
+              {current.wa_watch === "none"
+                ? "⚠️ This telecaller's WhatsApp is not connected"
+                : "⚠️ Nothing is being captured right now"}
+            </strong>
+            <p className="subtitle" style={{ marginTop: 6, marginBottom: 0 }}>
+              {current.wa_watch === "none"
+                ? "No WhatsApp has been linked for this rep, so none of their messages reach the CRM."
+                : "The watcher has stopped reporting. Everything below is what was captured BEFORE it "
+                  + "stopped — anything sent since is not here and will arrive only once it is running "
+                  + "again. This is not the rep going quiet."}
+            </p>
+          </div>
+        )}
+
         {/* THE ONE THING THAT DISTINGUISHES A QUIET REP FROM A BROKEN LINK.
             Messages that arrived and could not be decrypted used to be dropped
             in silence, so a rep whose every chat was failing looked exactly
