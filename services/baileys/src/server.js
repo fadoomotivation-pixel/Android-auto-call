@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.17-26";
+const WORKER_VERSION = "2026.09.18-27";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -750,6 +750,19 @@ async function start(s) {
   }
   s.starting = true;
   clearTimeout(s.reconnectTimer);
+  // THE HEARTBEAT STARTS WITH THE SESSION, NOT WITH THE CONNECTION.
+  //
+  // It used to be armed only inside `connection === "open"`. So a session that
+  // never connected, or one that was logged out and parked waiting for a QR,
+  // sent nothing at all — and the CRM read that silence as the whole box being
+  // dead. Fifteen hours went into that reading, twice, while the worker sat
+  // there answering /health and saying, to anyone who could ask it, that the
+  // WhatsApp login had been removed and a rep needed to scan.
+  //
+  // Now the timer exists for the life of the session, so "logged out, waiting
+  // for a scan" reaches the dashboard every four minutes, in those words,
+  // instead of looking identical to a dead server.
+  startHeartbeat(s);
   // Ended BEFORE the awaits below, not after: the old socket must be gone
   // before the new one authenticates, or the two overlap and 440 fires again.
   if (s.sock) {
@@ -1191,7 +1204,7 @@ async function start(s) {
         if (s.qrCount > 6 && Date.now() - (s.lastQrRequestAt || 0) > 60_000) {
           s.state.qrDataUrl = null;
           s.state.status = "disconnected";
-          s.state.lastError = "No one scanned the QR, so it stopped refreshing. Press Show QR to start again.";
+          s.state.lastError = "This WhatsApp is logged out. The rep needs to scan the QR again — nothing can be captured until they do.";
           s.qrCount = 0;
           log.warn({ id: s.id }, "QR went unscanned — pausing until someone asks for it");
           try { s.sock?.ev.removeAllListeners(); } catch { /* nothing attached */ }
