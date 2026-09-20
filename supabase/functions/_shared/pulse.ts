@@ -109,6 +109,18 @@ export type RepPulse = {
   /** The likeliest of them, for the report to name one instead of printing a
    *  bare count nobody acts on. */
   waUncapturedTop: string | null;
+  /** Things this rep said ON A RECORDED CALL that she would do, and that no
+   *  other channel shows she did — no WhatsApp carrying the file, no call
+   *  back, no visit in the diary (migration 0211).
+   *
+   *  Not a discipline score and never presented as one. 70 of the 82 leads who
+   *  agreed to a site visit on the phone got no WhatsApp at all afterwards,
+   *  which is not laziness — it is 137 open leads and no list of what is owed.
+   *  This is that list. */
+  promisesOpen: number;
+  /** The oldest one, so the report can name a person and a thing instead of
+   *  printing a count. */
+  promiseWorst: { lead: string; promise: string; days: number } | null;
   /** Buyer messages today that read as ready-to-move / about-to-walk, from a
    *  plain keyword read of their own WhatsApp text — migration 0175. Zero for
    *  a rep with no observer, same as every other WhatsApp field here. */
@@ -175,6 +187,16 @@ export type CompanyPulse = {
    *  signal here into a performance review, and then reps stop letting buyers
    *  finish the sentence. */
   objections: { code: string; leads: number; lost: number; stalled: number; example: string | null }[];
+  /** The bridge between "they said yes on the phone" and "they came".
+   *
+   *  Built from the recordings, settled against WhatsApp and the diary
+   *  (migration 0211). This is the only place in the product that can answer
+   *  "why did 82 people agree to a site visit and 11 turn up" — and the answer
+   *  is not the pitch, it is that 70 of them never got a message afterwards. */
+  promises: {
+    kind: string; made: number; kept: number; missed: number; open: number;
+    missedOnLost: number; leadsMissed: number; oldest: string | null;
+  }[];
 };
 
 /**
@@ -252,6 +274,8 @@ export async function buildCompany(
     signalHits,
     waUncaptured,
     objections,
+    openPromises,
+    promiseTotals,
   ] = await Promise.all([
     admin.from("profiles")
       .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson"),
@@ -371,6 +395,23 @@ export async function buildCompany(
     admin.from("v_company_objections")
       .select("objection_code, leads, already_lost, stalled, example")
       .eq("company_id", companyId),
+    // WHAT WE SAID WE WOULD DO, AND DID NOT.
+    //
+    // Per rep, because unlike an objection this IS her own work and she is the
+    // only person who can clear it. Three weeks, matching the window the
+    // phone's Call now uses (0211): older than that and it is history for the
+    // founder's tally, not a job for tomorrow morning.
+    admin.from("v_open_promises")
+      .select("salesperson_id, lead_name, promise, days_open, status, is_terminal")
+      .eq("company_id", companyId).eq("status", "missed").eq("is_terminal", false)
+      .gte("said_at", new Date(Date.now() - 21 * 86400_000).toISOString())
+      .order("days_open", { ascending: false }).limit(2000),
+    // The same thing counted for the whole company, including the dead leads —
+    // "we never sent it and then we lost them" is the sentence that changes a
+    // founder's Monday meeting.
+    admin.from("v_company_promises")
+      .select("kind, made, kept, missed, still_open, missed_on_lost, leads_missed, oldest_missed")
+      .eq("company_id", companyId),
   ]);
 
   const repList = reps ?? [];
@@ -390,6 +431,7 @@ export async function buildCompany(
         waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0, waWatch: "none",
         waReplyMins: null, waWaiting: 0, waWaitingWorst: null,
         waUncaptured: 0, waUncapturedTop: null,
+        promisesOpen: 0, promiseWorst: null,
         waHot: 0, waRisk: 0, waRiskHit: null,
         topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, bookings: 0,
         revenue: 0, aiUpdates: [], callsTrusted: true, syncedAt: null,
@@ -434,6 +476,22 @@ export async function buildCompany(
     const mins = Number(a.waiting_minutes ?? 0);
     if (!r.waWaitingWorst || mins > r.waWaitingWorst.minutes) {
       r.waWaitingWorst = { name: String(a.lead_name ?? "a buyer"), minutes: mins };
+    }
+  }
+
+  // What she said on a call and never delivered. Ordered oldest-first by the
+  // query, so the first one seen per rep is the one that has been rotting
+  // longest — that is the one worth naming, not the newest.
+  for (const p of (openPromises.data ?? []) as Record<string, unknown>[]) {
+    const r = rep(String(p.salesperson_id ?? ""));
+    if (!r) continue;
+    r.promisesOpen += 1;
+    if (!r.promiseWorst) {
+      r.promiseWorst = {
+        lead: String(p.lead_name ?? "a lead"),
+        promise: String(p.promise ?? "").trim(),
+        days: Number(p.days_open ?? 0),
+      };
     }
   }
 
@@ -790,7 +848,24 @@ export async function buildCompany(
     .filter((o) => o.code && o.lost + o.stalled > 0)
     .sort((a, b) => (b.lost + b.stalled) - (a.lost + a.stalled));
 
-  return { date, totals, reps: pulses, objections: objectionRows };
+  // Only the kinds that actually have a broken one. A row reading
+  // "price_check: 0 missed" is a line the founder learns to skip, and then
+  // they skip the block.
+  const promiseRows = ((promiseTotals.data ?? []) as Record<string, unknown>[])
+    .map((p) => ({
+      kind: String(p.kind ?? ""),
+      made: Number(p.made ?? 0),
+      kept: Number(p.kept ?? 0),
+      missed: Number(p.missed ?? 0),
+      open: Number(p.still_open ?? 0),
+      missedOnLost: Number(p.missed_on_lost ?? 0),
+      leadsMissed: Number(p.leads_missed ?? 0),
+      oldest: typeof p.oldest_missed === "string" ? p.oldest_missed : null,
+    }))
+    .filter((p) => p.kind && p.missed > 0)
+    .sort((a, b) => b.missed - a.missed);
+
+  return { date, totals, reps: pulses, objections: objectionRows, promises: promiseRows };
 }
 
 /**
@@ -956,6 +1031,51 @@ function waUncapturedLine(r: {
        ` Add them and you get the callback reminders and the whole chat on one page.`]
     : [`• 💼 ${n} ${n === 1 ? "number" : "numbers"} they ring AND message are not in the CRM${who}.` +
        ` That pipeline is on the handset, not in the company.`];
+}
+
+/** What each kind of promise is, in the four words a report can print. */
+const PROMISE_LABEL: Record<string, string> = {
+  send: "Send the details",
+  visit: "Fix the site visit",
+  price_check: "Come back with a rate",
+};
+
+/**
+ * THE LOOP THAT WAS LEFT OPEN.
+ *
+ * She said it out loud on a recorded call — "photos bhej deti hoon", "Sunday
+ * aa jaiye" — and the other channels show it never happened. This is the only
+ * line in the whole report that is built by reading a RECORDING and a WHATSAPP
+ * THREAD against each other, and it exists because of one measurement: of 82
+ * leads who discussed a site visit on the phone, 70 got no WhatsApp at all
+ * afterwards and 11 ever reached the site-visit stage.
+ *
+ * WRITTEN AS A LIST, NOT A CHARGE.
+ *
+ * A rep with 137 open leads does not break promises because she does not care;
+ * she breaks them because nothing anywhere holds the list of what she said she
+ * would do. So to her it reads as that list, with the oldest one named and the
+ * thing itself spelled out, because "1 promise open" is a scolding and "Send
+ * the floor plan to Rakesh — 4 days" is a job she can finish in a minute.
+ *
+ * Never a percentage, and never a league table of reps. The moment this
+ * becomes a score, the honest move for a rep is to stop promising anything on
+ * the phone — and a telecaller who promises nothing sells nothing.
+ */
+function promiseLine(r: {
+  promisesOpen: number; promiseWorst: { lead: string; promise: string; days: number } | null;
+}, forRep: boolean): string[] {
+  if (!r.promisesOpen || !r.promiseWorst) return [];
+  const w = r.promiseWorst;
+  const others = r.promisesOpen - 1;
+  const age = w.days <= 0 ? "since yesterday" : `${w.days} day${w.days === 1 ? "" : "s"}`;
+  const more = others > 0 ? ` (+${others} more)` : "";
+  return forRep
+    ? [`• 🤝 ${r.promisesOpen} thing${r.promisesOpen === 1 ? "" : "s"} you said on a call ${
+         r.promisesOpen === 1 ? "is" : "are"} still not done` +
+       ` — ${w.promise} for ${w.lead}, ${age}${more}`]
+    : [`• 🤝 ${r.promisesOpen} promise${r.promisesOpen === 1 ? "" : "s"} from their calls not delivered` +
+       ` — ${w.promise} for ${w.lead}, ${age}${more}`];
 }
 
 /** The countable objection codes, in the words a founder uses. The codes are
@@ -1256,8 +1376,11 @@ export function repText(
       // to — and the rep most likely to have an uncaptured pipeline is the one
       // whose work keeps landing outside the CRM.
       const uncap = waUncapturedLine(r, true);
-      if (waiting.length || signal.length || uncap.length) {
-        L.push("", ...waiting, ...signal, ...uncap);
+      // A quiet day and an open promise is the exact pairing worth printing:
+      // there is nothing else to do and something concrete that is owed.
+      const owed = promiseLine(r, true);
+      if (waiting.length || signal.length || uncap.length || owed.length) {
+        L.push("", ...waiting, ...signal, ...uncap, ...owed);
       }
     }
     L.push("", PULSE_FOOTER);
@@ -1277,6 +1400,12 @@ export function repText(
   // is MORE urgent, not less, and gating it on today's activity would hide
   // exactly the rep who has stopped answering.
   if (!waWarn) L.push(...waWaitingLine(r), ...waSignalLine(r), ...waUncapturedLine(r, true));
+  // Outside the WhatsApp guard on purpose. A promise is made on a CALL, and
+  // the evidence that it was kept can be a call back or a booked visit — so a
+  // rep with no WhatsApp observer at all still has a real list here, and
+  // hiding it behind a dead watcher would silence the one rep most likely to
+  // be working entirely off the phone.
+  L.push(...promiseLine(r, true));
   const stale = staleNote(r);
   if (stale) L.push(stale);
   const offCrm = showOffCrm ? offCrmLine(r) : null;
@@ -1417,6 +1546,37 @@ export function pulseText(
     }
   }
 
+  // THE GAP BETWEEN "THEY SAID YES" AND "THEY CAME".
+  //
+  // The block above says why buyers walked away. This one says what WE did,
+  // and it is harder reading: these are things a telecaller committed to on a
+  // recorded call that no other channel shows were ever delivered.
+  //
+  // The measurement that produced it: 82 leads discussed a site visit on the
+  // phone, 11 reached the site-visit stage, and 70 of the 82 received no
+  // WhatsApp at all after that call. No dropdown, no rep self-report and no
+  // model opinion is involved in the "not delivered" half — settle_promises()
+  // looks for the file on WhatsApp, the call back, or the date in the diary,
+  // and it is four SQL statements anyone can re-run.
+  //
+  // Counted company-wide here. The per-rep version is in each rep's own
+  // section and in her own message, phrased as the to-do list she never had —
+  // because the fix for this is a list, not a lecture.
+  if (p.promises.length) {
+    const missed = p.promises.reduce((n, x) => n + x.missed, 0);
+    const lostToo = p.promises.reduce((n, x) => n + x.missedOnLost, 0);
+    L.push("", `🤝 What we promised on calls and did not deliver (${missed})`);
+    for (const x of p.promises.slice(0, 3)) {
+      const kept = x.made > 0 ? ` · ${x.kept}/${x.made} delivered` : "";
+      L.push(`• ${PROMISE_LABEL[x.kind] ?? x.kind}: ${x.missed} not done${kept}`);
+    }
+    // The most expensive line in the report: we dropped the ball AND the lead
+    // is now closed. Printed only when it is true, never as a zero.
+    if (lostToo > 0) {
+      L.push(`• ${lostToo} of them on leads already written off — the ball was dropped before they were.`);
+    }
+  }
+
   // Named, not summarised. "2 watchers down" makes a founder go looking; the
   // names make them act, and it is the same treatment the blind phones get.
   const waBlind = p.reps.filter((r) => r.waWatch === "stale");
@@ -1467,6 +1627,10 @@ export function pulseText(
     if (offCrm) L.push(offCrm);
     if (r.win) L.push(`✅ ${r.win}`);
     if (r.risk) L.push(`🔸 ${r.risk}`);
+    // Her own open loops, named. The company total above tells the founder the
+    // size of the leak; this tells them which conversation to have, and with
+    // whom, without anyone having to open a screen.
+    L.push(...promiseLine(r, false));
     r.nextSteps.slice(0, 2).forEach((s) => L.push(`🎯 Next: ${s.lead} — ${s.when}`));
     r.aiUpdates.forEach((u) => L.push(`🤖 ${u}`));
   }

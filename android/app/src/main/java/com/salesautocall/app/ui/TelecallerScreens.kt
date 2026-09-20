@@ -2857,6 +2857,8 @@ private fun LeadCard(
     // is smart-cast with no argument, and this line is read far more often
     // than it is written.
     val waitingSince = work?.waitingSince
+    val promiseDueSince = work?.promiseDueSince
+    val promiseText = work?.promiseText
     val intent: Pair<String, Color>? = when {
         // THE BUYER WROTE AND NOBODY WROTE BACK.
         //
@@ -2874,6 +2876,23 @@ private fun LeadCard(
         // — she does not have to reply on WhatsApp to make it go away.
         waitingSince != null ->
             "💬 They wrote ${agoLabel(waitingSince)} — no reply yet" to Red
+        // YOU SAID YOU WOULD DO THIS, AND IT IS NOT DONE.
+        //
+        // Below the buyer-waiting line, because someone who wrote to you today
+        // outranks a note about yourself. Above the callback note, because a
+        // thing you promised out loud outranks a time you wrote in a diary.
+        //
+        // The app read it off the recording: 82 leads discussed a site visit
+        // on a call, 11 got there, and 70 of them were never sent a single
+        // WhatsApp afterwards. Nobody was slacking — there was simply no list
+        // anywhere of what had been promised, so it lived in one person's head
+        // until it fell out.
+        //
+        // It clears itself the moment the thing actually happens, on any
+        // channel: the file goes out on WhatsApp, the visit lands in the
+        // diary, or she rings them back. She never has to tick anything off.
+        promiseDueSince != null && !promiseText.isNullOrBlank() ->
+            "🤝 You said: $promiseText · ${agoLabel(promiseDueSince)}" to Red
         followUp != null -> {
             val late = (instantMillis(followUp.dueAt) ?: Long.MAX_VALUE) <= now
             // WHY this lead is waiting, not just that it is.

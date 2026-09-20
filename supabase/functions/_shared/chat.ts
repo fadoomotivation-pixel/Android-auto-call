@@ -12,7 +12,14 @@
 // The fix is resilience, not a migration. The default order:
 //
 //   1. Mistral   — mistral-large, the primary for this work
-//   2. Groq      — llama-3.3-70b-versatile, fast and proven
+//   2. Groq      — openai/gpt-oss-120b, fast and proven. The model NAME is
+//                  not a constant of nature: on 20 Sep 2026 Groq had retired
+//                  every Llama chat model on this account, and because every
+//                  caller in this repo swallowed the 404 into a null, the
+//                  whole product's AI had simply stopped answering — coach
+//                  briefs ended 12 Sep and nobody was told. GROQ_MODEL
+//                  overrides this without a deploy; set it the day this one
+//                  goes too.
 //   3. Gemini    — a different model family
 //   4. Cerebras  — LAST, because it currently answers 402 on every model, and
 //                  a dead provider high in the chain costs a wasted round-trip
@@ -78,7 +85,7 @@ const CEREBRAS_KEYS = keys("CEREBRAS_API_KEY", "cerebras", "CEREBRAS");
 const MISTRAL_KEYS = keys("MISTRAL_API_KEY", "mistral", "MISTRAL");
 const GEMINI_KEYS = keys("GEMINI_API_KEY");
 
-const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "llama-3.3-70b-versatile";
+const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
 const CEREBRAS_MODEL = Deno.env.get("CEREBRAS_MODEL") ?? "gpt-oss-120b";
 const MISTRAL_MODEL = Deno.env.get("MISTRAL_MODEL") ?? "mistral-large-latest";
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-latest";

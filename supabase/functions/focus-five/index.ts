@@ -40,6 +40,11 @@ const SYSTEM_PROMPT =
   "on WhatsApp, and an opener built from it beats anything built from the record. what_stopped_them is the " +
   "objection the buyer raised in their own words — answer it in the opener rather than talking around it. " +
   "Never contradict either, and never invent one when it is absent.\n" +
+  "you_promised is something THE REP HERSELF said on a recorded call that she would do and has not done. A lead " +
+  "carrying it is almost always a top pick: the customer is waiting for exactly that. The opener must DELIVER it " +
+  "— lead with the thing itself, warmly and without apologising twice (e.g. 'Rakesh ji, 2BHK ka floor plan main " +
+  "abhi WhatsApp kar rahi hoon — ek baar dekh lijiye'). Never open by asking how they are while the thing you " +
+  "promised is still not sent.\n" +
   "The opener MUST be SPECIFIC to THIS lead and PICK UP THE THREAD — use the lead's " +
   "NAME, and reference their last_call / notes / stage / budget (e.g. 'pichhli baar " +
   "aapne 2BHK ke baare me poochha tha', 'aapki site visit ho chuki hai'), then drive " +
@@ -111,6 +116,31 @@ Deno.serve(async (req) => {
     }
   }
 
+  // WHAT SHE ALREADY TOLD THEM SHE WOULD DO.
+  //
+  // Of 82 leads who discussed a site visit on a recorded call, 70 received no
+  // WhatsApp at all afterwards (migration 0211). An open promise is therefore
+  // the single strongest reason to ring someone today: the buyer is expecting
+  // the call, the rep has an obvious first sentence, and it is the one thing
+  // in this whole list she can close in sixty seconds.
+  //
+  // It also fixes an opener that would otherwise be embarrassing — "sir aapse
+  // baat karni thi" to a man still waiting for the floor plan she promised on
+  // Tuesday.
+  const owed = new Map<string, string>();
+  {
+    const { data: promises } = await u.from("v_open_promises")
+      .select("contact_id, promise, days_open")
+      .in("contact_id", ids)
+      .eq("status", "missed")
+      .order("days_open", { ascending: false });
+    for (const p of promises ?? []) {
+      if (p.contact_id && !owed.has(p.contact_id)) {
+        owed.set(p.contact_id, `${p.promise} (${p.days_open}d ago, still not done)`);
+      }
+    }
+  }
+
   // Company facts (RAG, ownership-guarded + shared global brain) so openers can
   // name a real project / price / offer instead of being generic.
   let facts: string[] = [];
@@ -147,6 +177,7 @@ Deno.serve(async (req) => {
     ...(memory.get(l.id)?.thread ? { where_we_left_it: memory.get(l.id)!.thread } : {}),
     ...(memory.get(l.id)?.wants ? { buyer_wants: memory.get(l.id)!.wants } : {}),
     ...(memory.get(l.id)?.blocker ? { what_stopped_them: memory.get(l.id)!.blocker } : {}),
+    ...(owed.get(l.id) ? { you_promised: owed.get(l.id) } : {}),
   }));
 
   const userMsg =
@@ -158,7 +189,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: 0.55,
+        model: (Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b"), temperature: 0.55,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },

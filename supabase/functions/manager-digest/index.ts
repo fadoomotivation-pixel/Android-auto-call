@@ -43,7 +43,7 @@ async function generateForCompany(admin: SupabaseClient, companyId: string, date
   const ch = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST", headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile", temperature: 0.4,
+      model: (Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b"), temperature: 0.4,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: `Stats for ${date}:\n${JSON.stringify(stats)}` },

@@ -214,6 +214,21 @@ data class LeadWork(
      *  and a lead that moves without saying why is the thing this app is not
      *  allowed to do. Null for every other lead. */
     @SerialName("waiting_since") val waitingSince: String? = null,
+    /** Set when this rep said on a RECORDED CALL that she would do something —
+     *  send the floor plan, fix a Sunday visit, come back with a rate — and no
+     *  other channel shows she did it inside the window she had (24h to send,
+     *  48h to fix a visit). Read out of the call transcript; settled against
+     *  WhatsApp, later calls and the diary, never by asking anyone.
+     *
+     *  Measured before it was built: of 82 leads who agreed to a site visit on
+     *  the phone, 70 got no WhatsApp at all afterwards and 11 ever reached the
+     *  site-visit stage. That is not carelessness, it is 137 open leads and no
+     *  list of what is owed. This is the list. Null for every other lead. */
+    @SerialName("promise_due_since") val promiseDueSince: String? = null,
+    /** WHAT she promised, in her own short words, so the row can say the thing
+     *  instead of the category. A lead that moves without saying why is the
+     *  thing this app is not allowed to do. */
+    @SerialName("promise_text") val promiseText: String? = null,
 )
 
 /** A company project's pinned location, used to geo-fence site-visit arrivals. */
