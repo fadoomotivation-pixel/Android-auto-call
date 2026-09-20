@@ -238,6 +238,16 @@ data class AppState(
     // RAG v12: a ready-to-send WhatsApp follow-up drafted for the open lead.
     val messageDraft: String? = null,
     val messageDraftLoading: Boolean = false,
+    /** Why THIS message and not a generic one — shown above the draft so the
+     *  rep can disagree with the AI instead of just trusting it. */
+    val messageDraftReason: String? = null,
+    /** The logged draft, so pressing Send can tell the server it was opened.
+     *  Whether it was really SENT is settled from the WhatsApp observer. */
+    val messageDraftId: String? = null,
+    /** "draft" or "call_instead" — the latter when four messages in a
+     *  fortnight went unanswered and the honest next step is a phone call. */
+    val messageVerdict: String? = null,
+    val messageSentCount: Int = 0,
     /** One-line failure notice for the AI Coach card (never mixed into results,
      *  so an error can never be copied or WhatsApp'd to a customer). */
     val coachError: String? = null,
@@ -3745,24 +3755,72 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * follow-up for the open lead, grounded in the company's playbook. One-shot,
      * tied to the lead so a stale reply never lands on the wrong lead.
      */
-    fun draftMessage(contact: Contact, purpose: String = "follow_up") {
+    /**
+     * Write the follow-up for THIS buyer.
+     *
+     * No purpose to pick any more. The server chooses the angle from what was
+     * actually said on the call and on WhatsApp, what the rep still owes them,
+     * and which angles have been getting replies in this company — then logs
+     * the choice so it can be judged by whether the buyer answered.
+     *
+     * It can also come back refusing to write anything: after four unanswered
+     * messages in a fortnight the verdict is "call_instead". That is the
+     * feature working, not failing.
+     */
+    fun draftMessage(contact: Contact) {
         if (_state.value.messageDraftLoading) return
-        set { it.copy(messageDraftLoading = true, messageDraft = null, coachError = null) }
+        val id = contact.id ?: return
+        set { it.copy(messageDraftLoading = true, messageDraft = null, messageDraftReason = null,
+                      messageDraftId = null, messageVerdict = null, coachError = null) }
         viewModelScope.launch {
-            val reply = runCatching { Repository.draftFollowUp(contact, purpose, _state.value.profile?.speaksAs) }.getOrNull()
+            val d = runCatching { Repository.smartDraft(id) }.getOrNull()
             set {
-                // A failure NEVER becomes the draft — otherwise the error text
-                // shows under "READY TO SEND" and could be WhatsApp'd verbatim.
-                if (it.leadDetailId == contact.id) it.copy(
-                    messageDraft = reply, messageDraftLoading = false,
-                    coachError = if (reply == null) "Couldn't draft the message. Please try again." else null,
-                )
-                else it.copy(messageDraftLoading = false)
+                if (it.leadDetailId != contact.id) return@set it.copy(messageDraftLoading = false)
+                when {
+                    d == null -> it.copy(
+                        messageDraftLoading = false,
+                        coachError = "Couldn't write the message. Please try again.",
+                    )
+                    d.verdict == "call_instead" -> it.copy(
+                        messageDraftLoading = false, messageVerdict = "call_instead",
+                        messageSentCount = d.sent14d, messageDraftReason = d.reason,
+                    )
+                    // A failure NEVER becomes the draft — otherwise the error
+                    // text shows under "READY TO SEND" and could be WhatsApp'd
+                    // to a customer verbatim.
+                    d.body.isNullOrBlank() -> it.copy(
+                        messageDraftLoading = false,
+                        coachError = "Couldn't write the message. Please try again.",
+                    )
+                    else -> it.copy(
+                        messageDraft = d.body, messageDraftReason = d.reason,
+                        messageDraftId = d.draftId, messageVerdict = "draft",
+                        messageDraftLoading = false, coachError = null,
+                    )
+                }
             }
         }
     }
 
-    fun clearMessageDraft() = set { it.copy(messageDraft = null, coachError = null) }
+    /** She pressed Send and WhatsApp opened with the text in it. Recorded as
+     *  "opened", never as "sent" — the observer decides that. */
+    fun markDraftOpened() {
+        val id = _state.value.messageDraftId ?: return
+        viewModelScope.launch { Repository.markDraft(id, "opened") }
+    }
+
+    /** She read it and chose not to send it. That is a real answer about the
+     *  draft and it is worth as much to the loop as a reply is. */
+    fun skipDraft() {
+        val id = _state.value.messageDraftId
+        if (id != null) viewModelScope.launch { Repository.markDraft(id, "skipped") }
+        clearMessageDraft()
+    }
+
+    fun clearMessageDraft() = set {
+        it.copy(messageDraft = null, messageDraftReason = null, messageDraftId = null,
+                messageVerdict = null, messageSentCount = 0, coachError = null)
+    }
 
     /**
      * RAG v13 — "Second Chance". One tap: the AI mines the rep's dead leads
@@ -3797,7 +3855,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
-        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadCoach = null, leadCoachLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false, coachError = null) }
+        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadCoach = null, leadCoachLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false, messageDraftReason = null,
+            messageDraftId = null, messageVerdict = null, messageSentCount = 0, coachError = null) }
         viewModelScope.launch {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())

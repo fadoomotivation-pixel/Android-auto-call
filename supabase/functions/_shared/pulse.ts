@@ -197,6 +197,16 @@ export type CompanyPulse = {
     kind: string; made: number; kept: number; missed: number; open: number;
     missedOnLost: number; leadsMissed: number; oldest: string | null;
   }[];
+  /** WHAT THE FOLLOW-UP BRAIN HAS LEARNED, and the only honest way to show it.
+   *
+   *  Every message this product suggests is logged, proved sent by the
+   *  WhatsApp observer rather than claimed by the app, and scored by one
+   *  thing: did the buyer write back (0214). This is that scoreboard.
+   *
+   *  An angle with fewer than five real sends carries no rate at all and does
+   *  not appear. A founder shown "100% reply rate" off one message will plan
+   *  a quarter around a coincidence. */
+  angles: { angle: string; sent: number; replied: number; rate: number }[];
 };
 
 /**
@@ -276,6 +286,7 @@ export async function buildCompany(
     objections,
     openPromises,
     promiseTotals,
+    angleStats,
   ] = await Promise.all([
     admin.from("profiles")
       .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson"),
@@ -412,6 +423,15 @@ export async function buildCompany(
     admin.from("v_company_promises")
       .select("kind, made, kept, missed, still_open, missed_on_lost, leads_missed, oldest_missed")
       .eq("company_id", companyId),
+    // WHICH KIND OF MESSAGE ACTUALLY GETS ANSWERED HERE.
+    //
+    // Not opinion and not open rates — a reply, from a real buyer, to a
+    // message we can prove went. The drafter reads the same numbers before it
+    // writes the next one, so this block is literally the brain's report on
+    // itself.
+    admin.from("v_company_angle_performance")
+      .select("angle, sent, replied, reply_rate")
+      .eq("company_id", companyId).not("reply_rate", "is", null),
   ]);
 
   const repList = reps ?? [];
@@ -865,7 +885,17 @@ export async function buildCompany(
     .filter((p) => p.kind && p.missed > 0)
     .sort((a, b) => b.missed - a.missed);
 
-  return { date, totals, reps: pulses, objections: objectionRows, promises: promiseRows };
+  const angleRows = ((angleStats.data ?? []) as Record<string, unknown>[])
+    .map((a) => ({
+      angle: String(a.angle ?? ""),
+      sent: Number(a.sent ?? 0),
+      replied: Number(a.replied ?? 0),
+      rate: Number(a.reply_rate ?? 0),
+    }))
+    .filter((a) => a.angle && a.sent >= 5)
+    .sort((a, b) => b.rate - a.rate);
+
+  return { date, totals, reps: pulses, objections: objectionRows, promises: promiseRows, angles: angleRows };
 }
 
 /**
@@ -1032,6 +1062,17 @@ function waUncapturedLine(r: {
     : [`• 💼 ${n} ${n === 1 ? "number" : "numbers"} they ring AND message are not in the CRM${who}.` +
        ` That pipeline is on the handset, not in the company.`];
 }
+
+/** The seven follow-up angles in the words a founder uses. */
+const ANGLE_LABEL: Record<string, string> = {
+  deliver_promise: "Sending what we promised",
+  answer_objection: "Answering their objection",
+  visit_invite: "Asking for a site visit",
+  new_information: "Telling them something new",
+  reply_to_them: "Answering their message",
+  re_engage: "Waking up a quiet lead",
+  soft_check_in: "A plain check-in",
+};
 
 /** What each kind of promise is, in the four words a report can print. */
 const PROMISE_LABEL: Record<string, string> = {
@@ -1575,6 +1616,26 @@ export function pulseText(
     if (lostToo > 0) {
       L.push(`• ${lostToo} of them on leads already written off — the ball was dropped before they were.`);
     }
+  }
+
+  // WHAT THE FOLLOW-UP BRAIN HAS LEARNED THIS MONTH.
+  //
+  // The product now writes the WhatsApp follow-ups, and every one of them is
+  // marked sent only when the observer sees it really go, and scored only by
+  // whether the buyer wrote back. So this is not a feature report — it is the
+  // brain grading itself in public, and the same numbers steer what it writes
+  // tomorrow.
+  //
+  // Best and worst, nothing in between. The gap between them is the whole
+  // message: a founder who learns that asking for a visit gets answered four
+  // times as often as "koi update sir?" has learned something about the
+  // business, not about software.
+  if (p.angles.length >= 2) {
+    const best = p.angles[0];
+    const worst = p.angles[p.angles.length - 1];
+    L.push("", "💬 What buyers actually reply to (from our own messages)");
+    L.push(`• Best: ${ANGLE_LABEL[best.angle] ?? best.angle} — ${best.rate}% replied (${best.sent} sent)`);
+    L.push(`• Worst: ${ANGLE_LABEL[worst.angle] ?? worst.angle} — ${worst.rate}% (${worst.sent} sent)`);
   }
 
   // Named, not summarised. "2 watchers down" makes a founder go looking; the

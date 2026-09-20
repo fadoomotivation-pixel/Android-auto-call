@@ -487,9 +487,19 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         onClear = { vm.clearRebuttal() },
                         draft = app.messageDraft,
                         draftLoading = app.messageDraftLoading,
-                        onDraft = { purpose -> vm.draftMessage(contact, purpose) },
-                        onSend = { msg -> openWhatsAppLocal(context, contact.phone, msg) },
-                        onClearDraft = { vm.clearMessageDraft() },
+                        draftReason = app.messageDraftReason,
+                        draftVerdict = app.messageVerdict,
+                        draftSentCount = app.messageSentCount,
+                        onDraft = { vm.draftMessage(contact) },
+                        onSend = { msg ->
+                            // Tell the server the chat was opened with this text
+                            // BEFORE handing over to WhatsApp — the app never
+                            // comes back to this line once the intent fires.
+                            vm.markDraftOpened()
+                            openWhatsAppLocal(context, contact.phone, msg)
+                        },
+                        onCallInstead = { doCall() },
+                        onClearDraft = { vm.skipDraft() },
                         error = app.coachError,
                     )
                 }
@@ -1113,9 +1123,13 @@ private fun AiCoachCard(
     onAsk: (String) -> Unit,
     onClear: () -> Unit,
     draft: String?,
+    draftReason: String?,
+    draftVerdict: String?,
+    draftSentCount: Int,
     draftLoading: Boolean,
-    onDraft: (String) -> Unit,
+    onDraft: () -> Unit,
     onSend: (String) -> Unit,
+    onCallInstead: () -> Unit,
     onClearDraft: () -> Unit,
     error: String? = null,
 ) {
@@ -1288,31 +1302,78 @@ private fun AiCoachCard(
             }
         }
 
-        // ---- 💬 Message section — WhatsApp Smart Templates (RAG v14) ----
-        // Pick a purpose; the AI writes that exact message, grounded in the
-        // company's own facts, ready to send. Remember the last purpose so
-        // "Rewrite" regenerates the same kind.
-        var lastPurpose by remember { mutableStateOf("follow_up") }
+        // ---- 💬 Message section ----
+        //
+        // There used to be a chip row here: intro / details / price / site
+        // visit / festive. The rep picked one and the AI wrote that kind of
+        // message, having never read the recording, never read the WhatsApp
+        // thread, and never once found out whether anything it wrote got a
+        // reply. Choosing the angle WAS the guesswork, so the chips are gone.
+        //
+        // One button. The server reads what was actually said, what she still
+        // owes this buyer, how she herself writes, and which angles have been
+        // getting replies in this company — then writes the message and logs
+        // its own choice so a buyer's reply can judge it later.
         if (mode == "message") {
             if (draftLoading) {
                 Spacer(Modifier.height(12.dp))
-                CoachLoadingRow("Writing your message from the playbook…")
+                CoachLoadingRow("Reading the call and the chat…")
             }
-            if (!draftLoading && draft == null) {
+
+            // THE BRAKE, and it is a feature. Four messages in a fortnight
+            // with no reply and the app refuses to write a fifth. Every
+            // messaging tool answers silence with another message; a good
+            // telecaller picks up the phone, and now so does this.
+            if (!draftLoading && draftVerdict == "call_instead") {
                 Spacer(Modifier.height(12.dp))
-                Text("Pick a message to send", style = MaterialTheme.typography.labelMedium, color = SubInk)
-                Spacer(Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MSG_TEMPLATES.forEach { (key, label) ->
-                        Box(
-                            Modifier.clip(RoundedCornerShape(50)).background(JadeL.copy(alpha = 0.10f))
-                                .border(1.dp, JadeL.copy(alpha = 0.35f), RoundedCornerShape(50))
-                                .clickable { lastPurpose = key; onDraft(key) }
-                                .padding(horizontal = 13.dp, vertical = 8.dp),
-                        ) { Text(label, style = MaterialTheme.typography.labelMedium, color = JadeL, fontWeight = FontWeight.SemiBold) }
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                        .background(RedL.copy(alpha = 0.07f))
+                        .border(1.dp, RedL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
+                        .padding(14.dp),
+                ) {
+                    Text("DON'T MESSAGE — CALL", style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold, color = RedL, letterSpacing = 0.5.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "$draftSentCount messages went in two weeks and not one came back. " +
+                            "Another message will go the same way.",
+                        style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Box(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(RedL)
+                            .clickable { onCallInstead() }.padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Call them now", color = Color.White,
+                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
+
+            if (!draftLoading && draft == null && draftVerdict != "call_instead") {
+                Spacer(Modifier.height(12.dp))
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(JadeL.copy(alpha = 0.10f))
+                        .border(1.dp, JadeL.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .clickable { onDraft() }.padding(vertical = 11.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("✍️  Write the message for this lead", style = MaterialTheme.typography.labelLarge,
+                        color = JadeL, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Uses the last call and this chat. If nothing new is worth saying, it will tell you to call instead.",
+                    style = MaterialTheme.typography.labelMedium, color = SubInk,
+                )
+            }
+
             draft?.let {
                 Spacer(Modifier.height(12.dp))
                 Column(
@@ -1321,10 +1382,21 @@ private fun AiCoachCard(
                         .padding(14.dp),
                 ) {
                     Text("READY TO SEND 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                    // WHY this message. Printed above the text on purpose: a
+                    // rep who can see the reasoning can overrule it, and one
+                    // who cannot is being asked to trust a black box with her
+                    // own customer.
+                    if (!draftReason.isNullOrBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(draftReason, style = MaterialTheme.typography.labelMedium, color = SubInk)
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp)
                     Spacer(Modifier.height(12.dp))
-                    // Send opens WhatsApp pre-filled so the rep can review before hitting send.
+                    // Opens WhatsApp pre-filled, from HER number, so she reads
+                    // it one last time and can edit it before it goes. What she
+                    // changes it to is the best training signal in the system —
+                    // she is the one who actually knows this buyer.
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(WhatsGreen)
                             .clickable { onSend(it.trim()) }.padding(vertical = 11.dp),
@@ -1341,10 +1413,10 @@ private fun AiCoachCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CoachTextAction(Icons.Default.ContentCopy, "Copy") { clipboard.setText(AnnotatedString(it.trim())) }
                         Spacer(Modifier.width(18.dp))
-                        Text("Rewrite", style = MaterialTheme.typography.labelMedium, color = JadeL,
-                            fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onClearDraft(); onDraft(lastPurpose) })
-                        Spacer(Modifier.width(18.dp))
-                        Text("New message", style = MaterialTheme.typography.labelMedium, color = SubInk,
+                        // "Not this one" is recorded, not discarded. A draft
+                        // she reads and refuses says as much about the brain
+                        // as a buyer's reply does.
+                        Text("Not this one", style = MaterialTheme.typography.labelMedium, color = SubInk,
                             fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onClearDraft() })
                     }
                 }
@@ -1353,16 +1425,6 @@ private fun AiCoachCard(
     }
 }
 
-/** WhatsApp Smart Template purposes (RAG v14) — one tap → an AI-written,
- *  company-grounded, ready-to-send message for that intent. */
-private val MSG_TEMPLATES = listOf(
-    "intro" to "👋 Intro",
-    "details" to "📄 Details",
-    "price" to "💰 Price & offer",
-    "site_visit" to "🏠 Site visit",
-    "follow_up" to "🔄 Follow-up",
-    "festive" to "🎉 Greeting",
-)
 
 /** One segment of the AI Coach card's segmented control (Pitch · Objection · Message). */
 @Composable
