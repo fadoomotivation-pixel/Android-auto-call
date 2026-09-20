@@ -2853,7 +2853,27 @@ private fun LeadCard(
     // The one line the rep actually needs — what the customer said / promised.
     val now = System.currentTimeMillis()
     val visitMs = c.siteVisitAt?.let { instantMillis(it) }
+    // Pulled out rather than tested through the safe call inline: a local val
+    // is smart-cast with no argument, and this line is read far more often
+    // than it is written.
+    val waitingSince = work?.waitingSince
     val intent: Pair<String, Color>? = when {
+        // THE BUYER WROTE AND NOBODY WROTE BACK.
+        //
+        // First, above the callback note, because it outranks it: a person who
+        // messaged you today matters more than a time you wrote in a diary for
+        // Friday. The database agrees — v_lead_action_state puts this lead in
+        // Call now for the same reason (migration 0206).
+        //
+        // It says HOW LONG rather than just that something is owed. On the day
+        // this shipped, one buyer had been waiting ten days and another nine,
+        // and the rep had no way at all of knowing: WhatsApp buries a chat
+        // under two hundred others and a group posts forty times a morning.
+        //
+        // A call counts as answering, so this clears the moment she rings them
+        // — she does not have to reply on WhatsApp to make it go away.
+        waitingSince != null ->
+            "💬 They wrote ${agoLabel(waitingSince)} — no reply yet" to Red
         followUp != null -> {
             val late = (instantMillis(followUp.dueAt) ?: Long.MAX_VALUE) <= now
             // WHY this lead is waiting, not just that it is.

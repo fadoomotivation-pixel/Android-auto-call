@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { WaChat, type ThreadMsg } from "./WaChat";
 
 /**
  * A telecaller's WhatsApp, laid out like WhatsApp.
@@ -104,19 +105,93 @@ const MEDIA_WORD: Record<string, string> = {
 
 type Filter = "all" | "crm" | "uncaptured";
 
+type Thread = { messages: ThreadMsg[]; urls: Record<string, string>; warnings: string[] };
+
 export function WaInbox({
-  conversations, activePeer, baseHref, children,
+  conversations, activePeer, baseHref, repId, repName, companyName, days,
+  captureAction, children,
 }: {
   conversations: Conversation[];
   /** "" when nothing is open yet. */
   activePeer: string;
   /** Already carries rep and days; this appends &peer=. */
   baseHref: string;
-  /** The server-rendered conversation pane. */
+  repId: string;
+  repName: string;
+  companyName: string;
+  days: number;
+  captureAction: (formData: FormData) => void | Promise<void>;
+  /** The server-rendered conversation pane, used for a direct ?peer= link. */
   children: React.ReactNode;
 }) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+
+  // ── OPENING A CHAT WITHOUT REBUILDING THE SCREEN ──────────────────────────
+  //
+  // Every row used to be a plain link, so reading a conversation was a full
+  // page navigation: the platform activity summary, three hundred lead
+  // messages, all 228 conversations, the unknown-numbers list and the
+  // copy-paste check all fetched again to render a pane that had not changed.
+  // The list scrolled back to the top and the page flashed. "Ek chat khulne me
+  // pura page load hota h" was exactly right.
+  //
+  // The database was never slow — measured on the live data, the thread itself
+  // is 6ms and the list 11ms. The cost was re-fetching everything else.
+  //
+  // So the list stays mounted and only the thread is fetched. The rows are
+  // still real <a href> links: middle-click, right-click and a shared URL all
+  // keep working, and a click with no modifier key is intercepted instead.
+  // Threads already read are kept, so going back to one is instant.
+  const [openPeer, setOpenPeer] = useState(activePeer);
+  const [thread, setThread] = useState<Thread | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+  const cache = useRef(new Map<string, Thread>());
+  const paneRef = useRef<HTMLElement | null>(null);
+
+  const load = useCallback(async (peerPhone: string) => {
+    setFailed(null);
+    const hit = cache.current.get(peerPhone);
+    if (hit) { setThread(hit); setLoading(false); return; }
+    setLoading(true);
+    setThread(null);
+    try {
+      const r = await fetch(
+        `/dashboard/platform/telecallers-activity/thread?rep=${encodeURIComponent(repId)}&peer=${encodeURIComponent(peerPhone)}`,
+        { cache: "no-store" },
+      );
+      const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
+      const t: Thread = { messages: j.messages ?? [], urls: j.urls ?? {}, warnings: j.warnings ?? [] };
+      cache.current.set(peerPhone, t);
+      setThread(t);
+    } catch (e) {
+      // Said out loud. A pane that silently stays blank is the failure mode
+      // this whole screen has been fighting for a fortnight.
+      setFailed(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [repId]);
+
+  function open(e: React.MouseEvent, peerPhone: string) {
+    // Leave the browser's own behaviour alone for anything but a plain click.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    setOpenPeer(peerPhone);
+    void load(peerPhone);
+    // The URL still points at this conversation, so refreshing or sharing it
+    // lands in the same place — without asking Next to re-render the route.
+    try { window.history.replaceState(null, "", href(peerPhone)); } catch { /* fine */ }
+  }
+
+  // A chat opens at its newest message, the way every chat app does.
+  useEffect(() => {
+    if (!thread) return;
+    const el = paneRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [thread]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -191,7 +266,8 @@ export function WaInbox({
               <a
                 key={c.peer_phone}
                 href={href(c.peer_phone)}
-                className={`wai-row ${c.peer_phone === activePeer ? "on" : ""}`}
+                onClick={(e) => open(e, c.peer_phone)}
+                className={`wai-row ${c.peer_phone === openPeer ? "on" : ""}`}
               >
                 <span
                   className="wai-av"
@@ -244,7 +320,27 @@ export function WaInbox({
         </div>
       </aside>
 
-        <section className="wai-pane">{children}</section>
+        <section className="wai-pane" ref={paneRef}>
+          {loading && (
+            <div className="wai-load">
+              <span className="wai-spin" aria-hidden />
+              <span>Opening the conversation…</span>
+            </div>
+          )}
+          {!loading && failed && (
+            <div className="wai-load" style={{ color: "#fca5a5" }}>
+              Could not open this conversation: {failed}
+            </div>
+          )}
+          {/* The server-rendered pane is what a direct ?peer= link lands on.
+              Once a row has been clicked, the fetched thread takes over. */}
+          {!loading && !failed && (thread
+            ? <WaChat
+                messages={thread.messages} urls={thread.urls} warnings={thread.warnings}
+                peer={openPeer} repId={repId} repName={repName}
+                companyName={companyName} days={days} captureAction={captureAction} />
+            : children)}
+        </section>
       </div>
     </div>
   );
@@ -311,6 +407,12 @@ const CSS = `
 .tag.warn{background:rgba(245,158,11,.16);color:#f5b342}
 .tag.lead{background:rgba(0,168,132,.2);color:#4fd6ae}
 .tag.grp{background:rgba(129,140,248,.16);color:#a5b4fc}
+.wai-load{display:flex;align-items:center;gap:10px;justify-content:center;
+  height:100%;color:#8696a0;font-size:13.5}
+.wai-spin{width:15px;height:15px;border-radius:50%;
+  border:2px solid rgba(255,255,255,0.18);border-top-color:#25d366;
+  animation:wai-sp 0.7s linear infinite}
+@keyframes wai-sp{to{transform:rotate(360deg)}}
 .tag.file{background:rgba(59,130,246,0.16);color:#93c5fd}
 .tag.in{background:rgba(255,255,255,.07);color:#8696a0}
 .wai-anon{font-size:18px;opacity:.75;line-height:1}

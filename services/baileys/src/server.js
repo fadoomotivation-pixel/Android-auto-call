@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.16-25";
+const WORKER_VERSION = "2026.09.18-27";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -750,6 +750,19 @@ async function start(s) {
   }
   s.starting = true;
   clearTimeout(s.reconnectTimer);
+  // THE HEARTBEAT STARTS WITH THE SESSION, NOT WITH THE CONNECTION.
+  //
+  // It used to be armed only inside `connection === "open"`. So a session that
+  // never connected, or one that was logged out and parked waiting for a QR,
+  // sent nothing at all — and the CRM read that silence as the whole box being
+  // dead. Fifteen hours went into that reading, twice, while the worker sat
+  // there answering /health and saying, to anyone who could ask it, that the
+  // WhatsApp login had been removed and a rep needed to scan.
+  //
+  // Now the timer exists for the life of the session, so "logged out, waiting
+  // for a scan" reaches the dashboard every four minutes, in those words,
+  // instead of looking identical to a dead server.
+  startHeartbeat(s);
   // Ended BEFORE the awaits below, not after: the old socket must be gone
   // before the new one authenticates, or the two overlap and 440 fires again.
   if (s.sock) {
@@ -1191,7 +1204,7 @@ async function start(s) {
         if (s.qrCount > 6 && Date.now() - (s.lastQrRequestAt || 0) > 60_000) {
           s.state.qrDataUrl = null;
           s.state.status = "disconnected";
-          s.state.lastError = "No one scanned the QR, so it stopped refreshing. Press Show QR to start again.";
+          s.state.lastError = "This WhatsApp is logged out. The rep needs to scan the QR again — nothing can be captured until they do.";
           s.qrCount = 0;
           log.warn({ id: s.id }, "QR went unscanned — pausing until someone asks for it");
           try { s.sock?.ev.removeAllListeners(); } catch { /* nothing attached */ }
@@ -1734,6 +1747,9 @@ const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 4 * 60_000);
  * at night, and the cost of being wrong is one needless reconnect.
  */
 const WATCHDOG_MS = Number(process.env.WATCHDOG_MS || 90 * 60_000);
+/** How long a session may sit off WhatsApp before it is rebuilt regardless of
+ *  what the reconnect logic thinks it is doing. See checkStuck. */
+const STUCK_MS = Number(process.env.STUCK_MS || 10 * 60_000);
 
 function noteEvent(s) {
   s.lastEventAt = Date.now();
@@ -1742,6 +1758,41 @@ function noteEvent(s) {
   // and a stream that is busy while the CRM sees nothing is a filter bug, not
   // a connection one. Two very different mornings of work.
   s.eventCount = (s.eventCount ?? 0) + 1;
+}
+
+/**
+ * A SESSION THAT HAS FALLEN OFF WHATSAPP AND IS NOT COMING BACK.
+ *
+ * Every reconnect path here schedules its own retry, so a stuck session should
+ * be impossible — and yet one sat disconnected for fourteen hours with the
+ * process alive and answering HTTP. A timer that was cleared and never
+ * re-armed, a retry that threw before it could schedule the next, a backoff
+ * that walked to its ceiling: any of them ends here, and none of them leaves a
+ * trace.
+ *
+ * So there is one check that does not trust any of that. If the socket has been
+ * anything other than connected for ten minutes, and it is not waiting for a
+ * human to scan a QR and has not been logged out, it is rebuilt. Logged out is
+ * excluded deliberately: reconnecting a dead login in a loop is what gets a
+ * number banned, and it needs a person with the rep's phone, not a retry.
+ */
+function checkStuck(s) {
+  if (s.dead || !s.observeOnly || s.starting) return;
+  if (s.state.status === "connected") { s.notConnectedSince = null; return; }
+  // Waiting on a human. Retrying does not help and costs a fresh QR.
+  if (s.state.status === "qr" || s.state.status === "logged_out") {
+    s.notConnectedSince = null;
+    return;
+  }
+  // Tracked here rather than at every place status is assigned, so no future
+  // branch can forget to stamp it and quietly opt itself out of recovery.
+  if (!s.notConnectedSince) { s.notConnectedSince = Date.now(); return; }
+  const since = Date.now() - s.notConnectedSince;
+  if (since < STUCK_MS) return;
+  log.warn({ id: s.id, status: s.state.status, stuckMinutes: Math.round(since / 60000) },
+    "not connected for a long time and nothing is retrying — rebuilding");
+  s.notConnectedSince = Date.now();
+  void start(s).catch((e) => log.error(e));
 }
 
 function checkStreamAlive(s) {
@@ -1759,7 +1810,19 @@ function checkStreamAlive(s) {
 async function sendHeartbeat(s) {
   if (s.dead || !s.observeOnly) return;
   if (!INGEST_URL || !INGEST_SECRET) return;
-  if (s.state.status !== "connected") return;
+
+  // IT USED TO STOP HERE WHEN THE SOCKET WAS NOT CONNECTED.
+  //
+  // `if (s.state.status !== "connected") return;` meant a session whose
+  // WhatsApp link had dropped sent NOTHING — which on the CRM side is
+  // indistinguishable from the whole box being dead. Fourteen hours were spent
+  // believing the process had been killed by the host; it was up the whole
+  // time, answering /health, with a socket that had fallen off WhatsApp and
+  // never come back.
+  //
+  // Silence is the one thing a health signal must never use to mean something.
+  // It reports whatever the state actually is, and the CRM decides what that
+  // deserves.
 
   // SAYING "I AM HERE" TO WHATSAPP, NOT ONLY TO THE CRM.
   //
@@ -1833,6 +1896,7 @@ function startHeartbeat(s) {
   s.heartbeatTimer = setInterval(() => {
     void sendHeartbeat(s);
     checkStreamAlive(s);
+    checkStuck(s);
   }, HEARTBEAT_MS);
 }
 
@@ -2199,7 +2263,31 @@ const server = http.createServer(async (req, res) => {
   // the bearer: "which build is running?" is the first question of every
   // debugging session and it should not need a secret to answer.
   if (url.pathname === "/health") {
-    return send(res, 200, { ok: true, sessions: sessions.size, worker_version: WORKER_VERSION });
+    // THE PROCESS BEING UP IS NOT THE SAME AS THE LINK BEING UP.
+    //
+    // This returned { ok, sessions, worker_version } — which answered 200 with
+    // "sessions: 1" while that one session had been disconnected from WhatsApp
+    // for fourteen hours. The only unauthenticated view of this worker was
+    // therefore reassuring and wrong, and the CRM, which cannot reach the
+    // bearer-protected /status, had nothing better to go on.
+    //
+    // Counts by state, and the last error. No rep id, no phone number, nothing
+    // that identifies a person — this route has no bearer on purpose so it can
+    // be pinged, and it must stay safe to leave open.
+    const states = {};
+    let lastError = null;
+    for (const s of sessions.values()) {
+      const k = s.state.status || "unknown";
+      states[k] = (states[k] ?? 0) + 1;
+      if (s.state.lastError) lastError = s.state.lastError;
+    }
+    return send(res, 200, {
+      ok: true,
+      sessions: sessions.size,
+      states,
+      last_error: lastError,
+      worker_version: WORKER_VERSION,
+    });
   }
 
   const bearer = (req.headers.authorization || "").replace(/^Bearer\s+/i, "")

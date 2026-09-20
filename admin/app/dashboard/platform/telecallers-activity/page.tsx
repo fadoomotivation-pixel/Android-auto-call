@@ -293,10 +293,12 @@ export default async function TelecallerActivityPage({
     // minted here — after the RPC above has already enforced super-admin.
     const paths = msgs.map((x) => x.media_path).filter((p): p is string => Boolean(p));
     if (paths.length) {
-      const { data: signed } = await supabase.storage
+      const { data: signed, error: sErr } = await supabase.storage
         .from("wa-media").createSignedUrls(paths, 60 * 60);
+      if (sErr) rpcErrors.push(`attachments could not be opened: ${sErr.message}`);
       for (const s of signed ?? []) {
         if (s.path && s.signedUrl) mediaUrl.set(s.path, s.signedUrl);
+        else if (s.error) rpcErrors.push(`attachment ${s.path ?? ""}: ${s.error}`);
       }
     }
   }
@@ -324,8 +326,21 @@ export default async function TelecallerActivityPage({
     const paths = thread.map((x) => x.media_path).filter((p): p is string => Boolean(p));
     const purl = new Map<string, string>();
     if (paths.length) {
-      const { data: signed } = await supabase.storage.from("wa-media").createSignedUrls(paths, 3600);
-      for (const s of signed ?? []) if (s.path && s.signedUrl) purl.set(s.path, s.signedUrl);
+      // THE ERROR HERE WAS BEING DROPPED, AND IT WAS THE WHOLE STORY.
+      //
+      // createSignedUrls runs as the signed-in user, against storage.objects
+      // RLS — and wa-media had no policy at all, so every request failed. The
+      // page then rendered "the file was not saved" over a file that was
+      // sitting in the bucket, one green "1/1 downloaded" line above it.
+      // Discarding the error is what made a permissions problem look like a
+      // download problem for as long as it did.
+      const { data: signed, error: sErr } = await supabase.storage
+        .from("wa-media").createSignedUrls(paths, 3600);
+      if (sErr) rpcErrors.push(`attachments could not be opened: ${sErr.message}`);
+      for (const s of signed ?? []) {
+        if (s.path && s.signedUrl) purl.set(s.path, s.signedUrl);
+        else if (s.error) rpcErrors.push(`attachment ${s.path ?? ""}: ${s.error}`);
+      }
     }
     const named = thread.find((t) => t.peer_name)?.peer_name ?? null;
     const ordered = [...thread].reverse();
@@ -350,6 +365,11 @@ export default async function TelecallerActivityPage({
           conversations={conversations}
           activePeer={peer}
           baseHref={`/dashboard/platform/telecallers-activity?rep=${current.rep_id}&days=${days}`}
+          repId={current.rep_id}
+          repName={current.rep_name || "Rep"}
+          companyName={current.company_name}
+          days={days}
+          captureAction={captureLead}
         >
         {/* The conversation header, the way a chat app puts it: who, their
             number, and how much of it there is — pinned above the scroll so it
@@ -667,6 +687,37 @@ export default async function TelecallerActivityPage({
             WhatsApp in their other hand; matching that layout is what makes a
             six-month thread readable in one scroll. Search and the filters are
             instant because all the rows are already here. */}
+        {/* A WATCHER THAT IS NOT RUNNING, SAID LOUDLY.
+            The worker has stopped twice in twenty-six hours — five hours once,
+            fourteen the next — and through both outages wa_rep_sessions.status
+            still read "connected", because nothing writes that column when a
+            process simply stops. Every screen was confidently wrong, and the
+            founder found out by noticing a video he had sent was missing from a
+            chat.
+            The watchdog now flips it and says how long (migration 0202). This
+            is where that lands: above the conversations, in red, before anyone
+            starts wondering why a rep has gone quiet. A silent capture must
+            never be mistaken for a silent rep. */}
+        {current.wa_watch !== "ok" && (
+          <div className="card" style={{
+            marginBottom: 16, padding: 14,
+            background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.45)",
+          }}>
+            <strong style={{ color: "#ef4444" }}>
+              {current.wa_watch === "none"
+                ? "⚠️ This telecaller's WhatsApp is not connected"
+                : "⚠️ Nothing is being captured right now"}
+            </strong>
+            <p className="subtitle" style={{ marginTop: 6, marginBottom: 0 }}>
+              {current.wa_watch === "none"
+                ? "No WhatsApp has been linked for this rep, so none of their messages reach the CRM."
+                : "The watcher has stopped reporting. Everything below is what was captured BEFORE it "
+                  + "stopped — anything sent since is not here and will arrive only once it is running "
+                  + "again. This is not the rep going quiet."}
+            </p>
+          </div>
+        )}
+
         {/* THE ONE THING THAT DISTINGUISHES A QUIET REP FROM A BROKEN LINK.
             Messages that arrived and could not be decrypted used to be dropped
             in silence, so a rep whose every chat was failing looked exactly
@@ -709,6 +760,11 @@ export default async function TelecallerActivityPage({
               conversations={conversations}
               activePeer=""
               baseHref={`/dashboard/platform/telecallers-activity?rep=${current.rep_id}&days=${days}`}
+              repId={current.rep_id}
+              repName={current.rep_name || "Rep"}
+              companyName={current.company_name}
+              days={days}
+              captureAction={captureLead}
             >
               <div style={{
                 height: "100%", display: "grid", placeItems: "center",
