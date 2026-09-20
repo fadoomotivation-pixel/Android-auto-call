@@ -28,8 +28,21 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # packages: '' ON PURPOSE.
+      #
+      # This action installs `tools platform-tools` by default, and Google has
+      # REMOVED the obsolete `tools` package from the SDK repository. So
+      # `sdkmanager tools` now exits 1, the action throws, and the build dies
+      # in nineteen seconds having never run Gradle — a red tick that looks
+      # exactly like a compile error and is nothing of the kind.
+      #
+      # Nothing was lost by dropping it: the step below already installs the
+      # three packages this build actually uses, and has since the workflow
+      # was written.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: ""
 
       - name: Install SDK packages
         run: |
