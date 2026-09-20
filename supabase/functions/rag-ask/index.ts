@@ -85,14 +85,14 @@ async function answerWithGroq(sys: string, q: string): Promise<Gen | null> {
       method: "POST",
       headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: 0.3, max_tokens: 400,
+        model: (Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b"), temperature: 0.3, max_tokens: 400,
         messages: [{ role: "system", content: sys }, { role: "user", content: q }],
       }),
     });
     const j = await r.json();
     const answer: string = j.choices?.[0]?.message?.content?.trim() ?? "";
     if (!answer) return null;
-    return { answer, reasoning: "", engine: "groq", model: "llama-3.3-70b-versatile" };
+    return { answer, reasoning: "", engine: "groq", model: (Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b") };
   } catch (_e) {
     return null;
   }

@@ -129,7 +129,7 @@ export async function summarizeAndStore(
     const ch = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST", headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: 0.3,
+        model: (Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b"), temperature: 0.3,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },

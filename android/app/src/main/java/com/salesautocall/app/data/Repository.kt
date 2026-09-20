@@ -1347,7 +1347,8 @@ object Repository {
         runCatching {
             client.from("v_lead_workstate").select(
                 columns = io.github.jan.supabase.postgrest.query.Columns.raw(
-                    "contact_id, action_state, due_at, last_call_at, last_call_seconds, calls_total, waiting_since",
+                    "contact_id, action_state, due_at, last_call_at, last_call_seconds, calls_total, waiting_since, " +
+                        "promise_due_since, promise_text",
                 )
             ) {
                 filter { eq("salesperson_id", salespersonId) }

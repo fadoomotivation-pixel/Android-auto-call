@@ -98,7 +98,7 @@ async function summarizeMp3(admin: SupabaseClient, callId: string, mp3: Uint8Arr
     const ch = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST", headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: 0.3, response_format: { type: "json_object" },
+        model: (Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b"), temperature: 0.3, response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYS },
           { role: "user", content: `The call took place at: ${callIst} (IST, India).\n\nCall transcript:\n\n${transcript.slice(0, 12000)}` },

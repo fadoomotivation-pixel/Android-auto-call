@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature: isRoleplay ? 0.7 : 0.4, max_tokens: 500,
+        model: (Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b"), temperature: isRoleplay ? 0.7 : 0.4, max_tokens: 500,
         messages: [{ role: "system", content: sys }, ...history.map((m) => ({
           role: m.role === "assistant" ? "assistant" : "user", content: String(m.content ?? "").slice(0, 4000),
         }))],

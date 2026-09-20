@@ -133,7 +133,7 @@ async function groqJson(system: string, user: string, temperature = 0.4): Promis
       method: "POST",
       headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", temperature, response_format: { type: "json_object" },
+        model: (Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b"), temperature, response_format: { type: "json_object" },
         messages: [{ role: "system", content: system }, { role: "user", content: user }],
       }),
     });
