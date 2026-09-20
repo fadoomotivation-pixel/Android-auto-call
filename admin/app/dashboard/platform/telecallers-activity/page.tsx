@@ -365,6 +365,11 @@ export default async function TelecallerActivityPage({
           conversations={conversations}
           activePeer={peer}
           baseHref={`/dashboard/platform/telecallers-activity?rep=${current.rep_id}&days=${days}`}
+          repId={current.rep_id}
+          repName={current.rep_name || "Rep"}
+          companyName={current.company_name}
+          days={days}
+          captureAction={captureLead}
         >
         {/* The conversation header, the way a chat app puts it: who, their
             number, and how much of it there is — pinned above the scroll so it
@@ -755,6 +760,11 @@ export default async function TelecallerActivityPage({
               conversations={conversations}
               activePeer=""
               baseHref={`/dashboard/platform/telecallers-activity?rep=${current.rep_id}&days=${days}`}
+              repId={current.rep_id}
+              repName={current.rep_name || "Rep"}
+              companyName={current.company_name}
+              days={days}
+              captureAction={captureLead}
             >
               <div style={{
                 height: "100%", display: "grid", placeItems: "center",

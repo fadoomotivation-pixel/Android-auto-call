@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * A WhatsApp conversation, rendered like WhatsApp.
  *
