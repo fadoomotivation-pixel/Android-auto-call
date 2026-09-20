@@ -99,6 +99,16 @@ export type RepPulse = {
   waWaiting: number;
   /** The one who has waited longest, for the report to name. */
   waWaitingWorst: { name: string; minutes: number } | null;
+  /** People this rep phones AND messages who are not in the CRM at all.
+   *
+   *  Not a measure of the day and not a criticism: it is the pipeline that
+   *  currently lives only on her handset, and it walks out of the door with
+   *  her. The founder needs the number; the rep needs it because every one of
+   *  these is work she does that counts for nothing in her own figures. */
+  waUncaptured: number;
+  /** The likeliest of them, for the report to name one instead of printing a
+   *  bare count nobody acts on. */
+  waUncapturedTop: string | null;
   /** Buyer messages today that read as ready-to-move / about-to-walk, from a
    *  plain keyword read of their own WhatsApp text — migration 0175. Zero for
    *  a rep with no observer, same as every other WhatsApp field here. */
@@ -232,6 +242,7 @@ export async function buildCompany(
     waSessions,
     signals,
     signalHits,
+    waUncaptured,
   ] = await Promise.all([
     admin.from("profiles")
       .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson"),
@@ -327,6 +338,18 @@ export async function buildCompany(
     // recent hit per rep per signal per day (view does the ranking).
     admin.from("v_wa_signal_hits").select("salesperson_id, signal, lead_name, body")
       .eq("company_id", companyId).eq("day_ist", date).eq("rn", 1).eq("signal", "risk"),
+    // THE PIPELINE THAT LIVES ON THE REP'S PHONE.
+    //
+    // People she both PHONED and exchanged WhatsApp messages with, who are not
+    // in the CRM at all. Not day-scoped — this is a standing debt, not an
+    // event, and it only goes down when somebody writes one of them down.
+    //
+    // Already shortlisted by the view: groups and hidden numbers out, a reply
+    // from them required, and ranked so buyers come before colleagues. On the
+    // first rep it measured, 146 uncaptured people became a list of 41.
+    admin.from("v_wa_uncaptured_leads")
+      .select("salesperson_id, wa_name, score, name_looks_like_a_lead")
+      .eq("company_id", companyId).order("score", { ascending: false }).limit(2000),
   ]);
 
   const repList = reps ?? [];
@@ -345,6 +368,7 @@ export async function buildCompany(
         voiceNotes: [], moves: [], siteVisits: [], visitsArrived: [], followUps: 0, hotLeads: 0,
         waMessages: 0, waLeads: 0, waDetails: 0, waReplies: 0, waWatch: "none",
         waReplyMins: null, waWaiting: 0, waWaitingWorst: null,
+        waUncaptured: 0, waUncapturedTop: null,
         waHot: 0, waRisk: 0, waRiskHit: null,
         topLeads: [], noConnect: [], nextSteps: [], visitsFixed: 0, bookings: 0,
         revenue: 0, aiUpdates: [], callsTrusted: true, syncedAt: null,
@@ -389,6 +413,18 @@ export async function buildCompany(
     const mins = Number(a.waiting_minutes ?? 0);
     if (!r.waWaitingWorst || mins > r.waWaitingWorst.minutes) {
       r.waWaitingWorst = { name: String(a.lead_name ?? "a buyer"), minutes: mins };
+    }
+  }
+
+  // Highest score first from the query, so the first one seen per rep is the
+  // one worth naming.
+  for (const u of (waUncaptured.data ?? []) as Record<string, unknown>[]) {
+    const r = rep(String(u.salesperson_id ?? ""));
+    if (!r) continue;
+    r.waUncaptured += 1;
+    if (!r.waUncapturedTop) {
+      const nm = typeof u.wa_name === "string" ? u.wa_name.trim() : "";
+      if (nm) r.waUncapturedTop = nm;
     }
   }
 
@@ -851,6 +887,42 @@ function waWaitingLine(r: {
   ];
 }
 
+/**
+ * THE PIPELINE THAT IS NOT IN THE CRM.
+ *
+ * Every other line in this report is about leads. This one is about the people
+ * who are NOT leads and plainly should be: the rep rang them, they wrote back,
+ * and the company has no record that they exist. On the first rep measured, 70
+ * of her 216 WhatsApp relationships were in the CRM. The other 146 were on her
+ * handset and nowhere else, and would have left with her.
+ *
+ * WRITTEN DIFFERENTLY FOR THE TWO PEOPLE WHO READ IT, on purpose.
+ *
+ * To the founder it is a leak, and a number that should be going down.
+ *
+ * To the rep it must be worth her time or it will not happen — so it is put as
+ * what she gets: a callback clock, the history on one page, and work that
+ * currently counts for nothing in her own figures starting to count. Her list
+ * showed "Sanju Kumawat, Asso. 26-06" and "Satinder Kumar, Balaji, 17-07" —
+ * she is already filing these as leads by hand, in her own address book,
+ * because the CRM was not holding them.
+ *
+ * Never phrased as an accusation. A rep who reads this as "you did something
+ * wrong" stops reading the Pulse, and the Pulse is the only thing she reads.
+ */
+function waUncapturedLine(r: {
+  waUncaptured: number; waUncapturedTop: string | null;
+}, forRep: boolean): string[] {
+  if (!r.waUncaptured) return [];
+  const n = r.waUncaptured;
+  const who = r.waUncapturedTop ? ` — like ${r.waUncapturedTop}` : "";
+  return forRep
+    ? [`• 💼 ${n} ${n === 1 ? "person you talk to is" : "people you talk to are"} not in the CRM${who}.` +
+       ` Add them and you get the callback reminders and the whole chat on one page.`]
+    : [`• 💼 ${n} ${n === 1 ? "number" : "numbers"} they ring AND message are not in the CRM${who}.` +
+       ` That pipeline is on the handset, not in the company.`];
+}
+
 /** A quote that fits one line. Cut, not wrapped — a report line that spills
  *  onto a second line is the one a founder's thumb skips past. */
 function quote(text: string, max = 70): string {
@@ -1131,7 +1203,13 @@ export function repText(
     if (!waIdleWarn) {
       const waiting = waWaitingLine(r);
       const signal = waSignalLine(r);
-      if (waiting.length || signal.length) L.push("", ...waiting, ...signal);
+      // A quiet day is the best day to write down the people you already talk
+      // to — and the rep most likely to have an uncaptured pipeline is the one
+      // whose work keeps landing outside the CRM.
+      const uncap = waUncapturedLine(r, true);
+      if (waiting.length || signal.length || uncap.length) {
+        L.push("", ...waiting, ...signal, ...uncap);
+      }
     }
     L.push("", PULSE_FOOTER);
     return L.join("\n");
@@ -1149,7 +1227,7 @@ export function repText(
   // Printed even when they sent nothing today: a buyer waiting since yesterday
   // is MORE urgent, not less, and gating it on today's activity would hide
   // exactly the rep who has stopped answering.
-  if (!waWarn) L.push(...waWaitingLine(r), ...waSignalLine(r));
+  if (!waWarn) L.push(...waWaitingLine(r), ...waSignalLine(r), ...waUncapturedLine(r, true));
   const stale = staleNote(r);
   if (stale) L.push(stale);
   const offCrm = showOffCrm ? offCrmLine(r) : null;
@@ -1237,6 +1315,29 @@ export function pulseText(
     L.push(`• 🔴 ${total} buyer${total === 1 ? "" : "s"} waiting for a WhatsApp reply:`);
     for (const r of waitingReps) {
       L.push(`   ${r.name} — ${r.waWaiting} (longest ${humanMins(r.waWaitingWorst!.minutes)})`);
+    }
+  }
+
+  // THE PIPELINE THAT IS NOT IN THE CRM, NAMED BY REP.
+  //
+  // Same treatment as the two lines above and for the same reason: a total
+  // tells the founder there is a leak, the names make it a conversation. This
+  // one is different in kind though — every other line here is about today.
+  // This is a standing balance, and the only thing that moves it is somebody
+  // writing a buyer down.
+  //
+  // Deliberately last of the three, and deliberately not phrased as a failing.
+  // The rep is not hiding these; the CRM simply never knew about them, and the
+  // same number appears in her own Pulse as something she gains by fixing.
+  const uncapReps = p.reps
+    .filter((r) => r.waUncaptured > 0 && r.waWatch !== "stale")
+    .sort((a, b) => b.waUncaptured - a.waUncaptured);
+  if (uncapReps.length) {
+    const total = uncapReps.reduce((n, r) => n + r.waUncaptured, 0);
+    L.push(`• 💼 ${total} ${total === 1 ? "person" : "people"} the team rings AND messages are not in the CRM:`);
+    for (const r of uncapReps) {
+      const who = r.waUncapturedTop ? ` (e.g. ${r.waUncapturedTop})` : "";
+      L.push(`   ${r.name} — ${r.waUncaptured}${who}`);
     }
   }
 
