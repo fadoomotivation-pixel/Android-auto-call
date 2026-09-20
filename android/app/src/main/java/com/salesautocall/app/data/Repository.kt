@@ -995,27 +995,68 @@ object Repository {
      * assistant-chat RAG brain (company-isolated, Groq — no extra key). Returns
      * the message text, or null.
      */
-    suspend fun draftFollowUp(contact: Contact, purpose: String = "follow_up", speaksAs: String? = null): String? {
-        // RAG v14 — WhatsApp Smart Templates. Each purpose steers the same
-        // company-grounded brain to a different ready-to-send message.
-        val goal = when (purpose) {
-            "intro" -> "a first-touch introduction right after this enquiry: introduce yourself and the project warmly, and ask for a good time to talk"
-            "details" -> "share the project details / brochure highlights the customer wanted (key USPs, configuration, location)"
-            "price" -> "share the current price and any live offer or payment scheme for the project"
-            "site_visit" -> "invite the customer for a site visit and propose choosing a day and time"
-            "festive" -> "a short, warm greeting that keeps the relationship alive — no hard selling"
-            else -> "a gentle follow-up after your last conversation, nudging the next step"
+    /**
+     * ONE follow-up message for ONE buyer, and the app finds out if it worked.
+     *
+     * The old version of this took a purpose the rep picked off a chip row —
+     * intro / details / price / site_visit / festive — and pasted it into a
+     * hand-written sentence. It had never read the recording, never read the
+     * WhatsApp thread, did not know what she had promised this person, and had
+     * no idea whether a single message it ever wrote got a reply. So it said
+     * the same polite thing to a man waiting for a floor plan and to a woman
+     * who had said the rate was too high, and on day four it said it again.
+     *
+     * The chips are gone deliberately. Choosing the angle WAS the guesswork;
+     * the server now picks it from lead_memory, the open promises, the thread
+     * and what has actually been getting replies in this company — and logs
+     * the choice so it can be judged later. Keeping a manual path beside it
+     * would have left half the data blind.
+     *
+     * [verdict] is "call_instead" when four messages in a fortnight have gone
+     * unanswered. That is not an error and it is not nothing: it is the app
+     * telling her to stop typing and ring them.
+     */
+    data class SmartDraft(
+        val verdict: String,
+        val draftId: String? = null,
+        val angle: String? = null,
+        val body: String? = null,
+        /** One line: why THIS message. She is allowed to disagree with it. */
+        val reason: String? = null,
+        val sent14d: Int = 0,
+    )
+
+    suspend fun smartDraft(contactId: String): SmartDraft? {
+        val resp = client.functions.invoke(
+            "follow-up-draft",
+            buildJsonObject { put("contact_id", contactId) },
+        )
+        val o = runCatching { resp.body<JsonObject>() }.getOrNull() ?: return null
+        if (o["ok"]?.jsonPrimitive?.booleanOrNull != true) return null
+        val verdict = o["verdict"]?.jsonPrimitive?.contentOrNull ?: "draft"
+        return SmartDraft(
+            verdict = verdict,
+            draftId = o["draft_id"]?.jsonPrimitive?.contentOrNull,
+            angle = o["angle"]?.jsonPrimitive?.contentOrNull,
+            body = o["body"]?.jsonPrimitive?.contentOrNull,
+            reason = o["reason"]?.jsonPrimitive?.contentOrNull,
+            sent14d = o["sent_14d"]?.jsonPrimitive?.intOrNull ?: 0,
+        )
+    }
+
+    /**
+     * What she did with it. "opened" means the WhatsApp chat opened with this
+     * text in it — NOT that it was sent. Whether it was really sent is decided
+     * by the observer watching her own number, because an app that marks its
+     * own homework learns nothing.
+     */
+    suspend fun markDraft(draftId: String, action: String) {
+        runCatching {
+            client.functions.invoke(
+                "follow-up-draft",
+                buildJsonObject { put("draft_id", draftId); put("action", action) },
+            )
         }
-        val prompt = buildString {
-            append("Write a short, ready-to-send WhatsApp message to this lead. Purpose: ").append(goal).append(".\n")
-            append("Warm and professional simple Indian English, the way an Indian property advisor actually writes on WhatsApp. ")
-            append("Address the customer respectfully with 'aap' — never tu/tum. Keep it to 2-4 short lines, WhatsApp-friendly (one or two emojis are fine). ")
-            append(voiceRule(speaksAs))
-            append("Ground it in our company's real facts (a price, an offer, a project USP, or the next step) — ")
-            append("quote a real fact if we have it; never invent a price. ")
-            append("End by nudging one clear next step. No preamble — just the message to send.")
-        }
-        return assistantChat(listOf(ChatMsg("user", prompt)), lead = contact)
     }
 
     /** RAG v13 — one "Second Chance" pick: a dead lead worth calling again + why + the re-opening line. */
