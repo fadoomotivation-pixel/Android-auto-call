@@ -209,6 +209,11 @@ data class LeadWork(
     @SerialName("last_call_at") val lastCallAt: String? = null,
     @SerialName("last_call_seconds") val lastCallSeconds: Int = 0,
     @SerialName("calls_total") val callsTotal: Int = 0,
+    /** Set when the buyer sent the last WhatsApp message and nobody has
+     *  answered — not a reply, not a call. It is WHY this lead is in Call now,
+     *  and a lead that moves without saying why is the thing this app is not
+     *  allowed to do. Null for every other lead. */
+    @SerialName("waiting_since") val waitingSince: String? = null,
 )
 
 /** A company project's pinned location, used to geo-fence site-visit arrivals. */
