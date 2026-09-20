@@ -167,6 +167,14 @@ export type CompanyPulse = {
     visitsFixed: number; bookings: number; revenue: number; hotLeads: number;
   };
   reps: RepPulse[];
+  /** What is actually stopping this company's deals, read out of what buyers
+   *  said on calls and WhatsApp — not out of a dropdown a rep picked.
+   *
+   *  Company-wide and never per rep, on purpose. An objection that kills deals
+   *  is a pricing or product fact; attaching it to a name turns the one honest
+   *  signal here into a performance review, and then reps stop letting buyers
+   *  finish the sentence. */
+  objections: { code: string; leads: number; lost: number; stalled: number; example: string | null }[];
 };
 
 /**
@@ -243,6 +251,7 @@ export async function buildCompany(
     signals,
     signalHits,
     waUncaptured,
+    objections,
   ] = await Promise.all([
     admin.from("profiles")
       .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson"),
@@ -350,6 +359,18 @@ export async function buildCompany(
     admin.from("v_wa_uncaptured_leads")
       .select("salesperson_id, wa_name, score, name_looks_like_a_lead")
       .eq("company_id", companyId).order("score", { ascending: false }).limit(2000),
+    // WHY WE ARE LOSING, COUNTED.
+    //
+    // Read out of what buyers actually said on calls and WhatsApp, not out of
+    // a dropdown a rep picked at the end of a call. This company has 594 real
+    // recorded conversations and zero bookings, and until now the only answer
+    // to "why" was whoever spoke loudest in the morning meeting.
+    //
+    // Company-wide, not per rep, and on purpose: an objection that kills
+    // deals is a pricing or product fact, not a performance review.
+    admin.from("v_company_objections")
+      .select("objection_code, leads, already_lost, stalled, example")
+      .eq("company_id", companyId),
   ]);
 
   const repList = reps ?? [];
@@ -755,7 +776,21 @@ export async function buildCompany(
     visitsFixed: 0, bookings: 0, revenue: 0, hotLeads: 0,
   });
 
-  return { date, totals, reps: pulses };
+  // Biggest first, and only the ones that actually cost deals — an objection
+  // raised once and closed anyway is noise in a report a founder reads on a
+  // phone at 7pm.
+  const objectionRows = ((objections.data ?? []) as Record<string, unknown>[])
+    .map((o) => ({
+      code: String(o.objection_code ?? ""),
+      leads: Number(o.leads ?? 0),
+      lost: Number(o.already_lost ?? 0),
+      stalled: Number(o.stalled ?? 0),
+      example: typeof o.example === "string" ? o.example : null,
+    }))
+    .filter((o) => o.code && o.lost + o.stalled > 0)
+    .sort((a, b) => (b.lost + b.stalled) - (a.lost + a.stalled));
+
+  return { date, totals, reps: pulses, objections: objectionRows };
 }
 
 /**
@@ -922,6 +957,20 @@ function waUncapturedLine(r: {
     : [`• 💼 ${n} ${n === 1 ? "number" : "numbers"} they ring AND message are not in the CRM${who}.` +
        ` That pipeline is on the handset, not in the company.`];
 }
+
+/** The countable objection codes, in the words a founder uses. The codes are
+ *  fixed so they can be counted; these are what gets printed. */
+const OBJECTION_LABEL: Record<string, string> = {
+  price: "Rate too high",
+  loan: "Loan / finance",
+  location: "Location",
+  size: "Size or layout",
+  timing: "Not buying yet",
+  family: "Family decision pending",
+  competitor: "Went elsewhere",
+  not_serious: "Never a real buyer",
+  other: "Something else",
+};
 
 /** A quote that fits one line. Cut, not wrapped — a report line that spills
  *  onto a second line is the one a founder's thumb skips past. */
@@ -1338,6 +1387,33 @@ export function pulseText(
     for (const r of uncapReps) {
       const who = r.waUncapturedTop ? ` (e.g. ${r.waUncapturedTop})` : "";
       L.push(`   ${r.name} — ${r.waUncaptured}${who}`);
+    }
+  }
+
+  // WHY DEALS ARE DYING, FROM WHAT BUYERS ACTUALLY SAID.
+  //
+  // Every other line in this report is about activity. This is the only one
+  // about the PRODUCT — and it is the question a founder actually has. This
+  // company has 594 recorded conversations and zero bookings; until now the
+  // answer to "why" was whoever spoke loudest in the morning meeting.
+  //
+  // Read out of call transcripts and WhatsApp together, because a buyer says
+  // the polite version on the phone and the real one in a message at 11pm.
+  // Counted, not quoted at random: three objections with numbers beats twenty
+  // anecdotes. One example is carried so the founder can hear it in the
+  // buyer's own words rather than as a category.
+  //
+  // Never broken down by rep. An objection that kills deals is a pricing or
+  // product fact; put a name on it and it becomes a performance review, and
+  // then reps stop letting buyers finish the sentence.
+  if (p.objections.length) {
+    const top = p.objections.slice(0, 3);
+    const total = p.objections.reduce((n, o) => n + o.lost + o.stalled, 0);
+    L.push("", `🧱 Why deals are stopping (${total} lead${total === 1 ? "" : "s"}, from what buyers said)`);
+    for (const o of top) {
+      const n = o.lost + o.stalled;
+      const eg = o.example ? ` — "${quote(o.example, 60)}"` : "";
+      L.push(`• ${OBJECTION_LABEL[o.code] ?? o.code}: ${n}${eg}`);
     }
   }
 

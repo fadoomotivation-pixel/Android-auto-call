@@ -36,6 +36,10 @@ const SYSTEM_PROMPT =
   "form, e.g. 'Visit ho chuki — aaj close karein'.\n" +
   "opener: 1-2 short natural lines in simple Indian English the rep will SAY to the customer. ALWAYS " +
   "address the customer with respectful 'aap' — never tu/tum.\n" +
+  "USE where_we_left_it WHEN IT IS THERE. It is the distilled truth of what was actually said on the calls and " +
+  "on WhatsApp, and an opener built from it beats anything built from the record. what_stopped_them is the " +
+  "objection the buyer raised in their own words — answer it in the opener rather than talking around it. " +
+  "Never contradict either, and never invent one when it is absent.\n" +
   "The opener MUST be SPECIFIC to THIS lead and PICK UP THE THREAD — use the lead's " +
   "NAME, and reference their last_call / notes / stage / budget (e.g. 'pichhli baar " +
   "aapne 2BHK ke baare me poochha tha', 'aapki site visit ho chuki hai'), then drive " +
@@ -77,6 +81,36 @@ Deno.serve(async (req) => {
     if (c.contact_id && !latestSummary.has(c.contact_id)) latestSummary.set(c.contact_id, c.summary);
   }
 
+  // WHAT WAS ACTUALLY SAID — CALLS AND WHATSAPP, DISTILLED ONCE.
+  //
+  // The prompt below has always told the model to "pick up the thread" and
+  // "reference the last call". It was being asked to do that with a timestamp,
+  // the rep's notes, and a call summary that on a dead lead reads "no
+  // conversation took place". It had never seen a transcript, and it had never
+  // seen a single WhatsApp message — which is where an Indian real-estate
+  // buyer says the real thing ("rate thoda zyada lag raha hai" gets typed at
+  // 11pm, never said on the phone).
+  //
+  // lead_memory holds one distilled line per lead, built from both channels by
+  // the hourly harvest (migration 0209). Reading it here costs one indexed
+  // query and no extra tokens at pick time, and it is the difference between
+  // an opener that says "following up sir" and one that says "Balaji me 2BHK
+  // dekha tha, rate pe ruke the — maine manager se baat kar li hai".
+  const memory = new Map<string, { thread: string; wants: string; blocker: string }>();
+  {
+    const { data: mem } = await u.from("lead_memory")
+      .select("contact_id, where_we_left_it, buyer_wants, objection")
+      .in("contact_id", ids);
+    for (const m of mem ?? []) {
+      if (!m.contact_id) continue;
+      memory.set(m.contact_id, {
+        thread: String(m.where_we_left_it ?? ""),
+        wants: String(m.buyer_wants ?? ""),
+        blocker: String(m.objection ?? ""),
+      });
+    }
+  }
+
   // Company facts (RAG, ownership-guarded + shared global brain) so openers can
   // name a real project / price / offer instead of being generic.
   let facts: string[] = [];
@@ -106,6 +140,13 @@ Deno.serve(async (req) => {
     age_days: l.created_at ? Math.round((now - new Date(l.created_at).getTime()) / 86400000) : null,
     notes: (l.notes ?? "").slice(0, 200),
     last_call: (latestSummary.get(l.id) ?? "").slice(0, 300),
+    // The three that come from the conversation itself rather than from the
+    // shape of the record. Omitted entirely when unknown — an empty key
+    // invites the model to fill it, and a made-up "where we left it" is a
+    // sentence the rep will say out loud to a real buyer.
+    ...(memory.get(l.id)?.thread ? { where_we_left_it: memory.get(l.id)!.thread } : {}),
+    ...(memory.get(l.id)?.wants ? { buyer_wants: memory.get(l.id)!.wants } : {}),
+    ...(memory.get(l.id)?.blocker ? { what_stopped_them: memory.get(l.id)!.blocker } : {}),
   }));
 
   const userMsg =
