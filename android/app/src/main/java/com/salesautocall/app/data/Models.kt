@@ -229,6 +229,15 @@ data class LeadWork(
      *  instead of the category. A lead that moves without saying why is the
      *  thing this app is not allowed to do. */
     @SerialName("promise_text") val promiseText: String? = null,
+    /** The LONGEST anyone has ever been on the phone with this person — not
+     *  the last call, ever. Zero means nobody has actually spoken to them,
+     *  however many times the number has been rung.
+     *
+     *  last_call_seconds could never answer that: a buyer who talked for six
+     *  minutes in August and then missed four rings in September looked
+     *  exactly like a number that has never once been answered, so the app
+     *  treated them the same and put both in tomorrow's list by age. */
+    @SerialName("best_call_seconds") val bestCallSeconds: Int = 0,
 )
 
 /** A company project's pinned location, used to geo-fence site-visit arrivals. */

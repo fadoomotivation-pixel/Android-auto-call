@@ -4198,12 +4198,15 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         all.map { FuAt(it, instantMillis(it.dueAt) ?: Long.MAX_VALUE, dayLabel(it.dueAt)) }
     }
     val leadById = remember(app.leads) { app.leads.mapNotNull { l -> l.id?.let { it to l } }.toMap() }
+    // Why each lead is really in Call now — a broken promise, or a buyer left
+    // waiting. Already loaded for the Leads list; this screen never read it.
+    val workByLead = app.workByLead
 
     // Bucketed in ONE pass, and only when the list or the minute actually
     // changes. `now` is a key because these are clock questions — that is the
     // whole point of the tick — but the answer is computed once per tick, not
     // once per frame.
-    val buckets = remember(parsed, now) {
+    val buckets = remember(parsed, now, workByLead) {
         val toCallL = ArrayList<FuAt>(); val laterL = ArrayList<FuAt>()
         val tomorrowL = ArrayList<FuAt>(); val weekL = ArrayList<FuAt>()
         val overdueL = ArrayList<FuAt>()
@@ -4227,8 +4230,70 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
             // inside a 7-day list.
             if (x.day == "Tomorrow") tomorrowL.add(x)
         }
+        // WHO IS WAITING ON YOU, THEN OLDEST.
+        //
+        // "Oldest first" was honest when every row in Call now was a callback
+        // a rep had actually promised. It is not honest now. 154 of these were
+        // booked by the app itself — "No call time was set, so we booked one
+        // for 11 AM" — and they are all 43 days old, so sorting by age puts
+        // the app's own invented callbacks above a buyer who messaged this
+        // morning and a floor plan promised out loud last week.
+        //
+        // Five tiers, and only for the Call now list:
+        //   0  the buyer wrote and nobody answered  — they acted, unprompted
+        //   1  you promised something and it is not done
+        //   2  someone has actually spoken to them  — warmest first
+        //   3  rung fewer than four times, never answered — a fair shot
+        //   4  four or more tries, never once answered
+        //
+        // Buyer above promise deliberately: a person who messaged you outranks
+        // a note about yourself. It is the same order the lead row already
+        // uses, and two screens disagreeing about what matters is worse than
+        // either order being wrong.
+        //
+        // The other tabs stay purely chronological — they are diary questions
+        // ("kal kisko karna hai"), not "what do I do next".
+        val rank = { x: FuAt ->
+            val w = x.f.contactId?.let { workByLead[it] }
+            when {
+                w?.waitingSince != null -> 0
+                w?.promiseDueSince != null -> 1
+                // SOMEONE HAS ACTUALLY SPOKEN TO THIS PERSON BEFORE.
+                //
+                // best_call_seconds is the longest call ever on this lead, not
+                // the last one (migration 0215). Of Ankita's 320 due leads, 236
+                // have a real conversation somewhere in their history and 52
+                // have never been answered in four or more tries — one number
+                // has been rung seventy-nine times. Sorting by age treated all
+                // three the same.
+                (w?.bestCallSeconds ?: 0) >= 30 -> 2
+                // Rung a few times, never answered. Still worth a fair shot.
+                (w?.callsTotal ?: 0) < 4 -> 3
+                // Four or more tries and not one answer. Kept in the list —
+                // hiding a lead is the founder's call, not the app's — but it
+                // stops outranking a buyer she spoke to last week.
+                else -> 4
+            }
+        }
         val byTime = compareBy<FuAt> { it.ms }
-        listOf(toCallL, laterL, tomorrowL, weekL).forEach { it.sortWith(byTime) }
+        // EACH KEY COMPUTED ONCE, NOT ONCE PER COMPARISON.
+        //
+        // The comment thirty lines above this one is about exactly this trap:
+        // a comparator that does real work runs O(n log n) times, and this one
+        // would do a map lookup and an ISO parse on every call. 320 rows is a
+        // few thousand of each, on a mid-range phone, on every tick.
+        //
+        // Inside "ever talked", the WARMEST first: the person she spoke to
+        // last week before the one she spoke to in July. Everywhere else,
+        // oldest first, which is the fair order when nothing else is known.
+        val keyed = toCallL.map { x ->
+            val t = rank(x)
+            val w = x.f.contactId?.let { workByLead[it] }
+            Triple(x, t, if (t == 2) -(instantMillis(w?.lastCallAt) ?: 0L) else x.ms)
+        }.sortedWith(compareBy({ it.second }, { it.third }))
+        toCallL.clear()
+        keyed.forEach { toCallL.add(it.first) }
+        listOf(laterL, tomorrowL, weekL).forEach { it.sortWith(byTime) }
         listOf(toCallL, laterL, tomorrowL, weekL, overdueL)
     }
     val toCall = buckets[0].map { it.f }
@@ -4284,7 +4349,8 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val blurb = if (query.isNotBlank()) {
         "${shown.size} found across every list — clear the search to go back to the tabs."
     } else when (filter) {
-        "tocall" -> "Their time has come — oldest first. Call these now."
+        "tocall" -> "Waiting on you first, then people you have actually spoken to. " +
+            "Numbers that never pick up are at the bottom."
         "later" -> "Booked for later today. Nothing to do yet."
         "tomorrow" -> "Booked for tomorrow. These move into Call now on their own, at their time."
         "week" -> "Coming up in the next 7 days."
@@ -4444,6 +4510,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     onDone = { f.id?.let { vm.completeFollowUp(it) } },
                     onOpen = if (cid == null) null else fun() { vm.openLeadDetail(cid) },
                     needsUpdate = cid != null && app.pendingUpdates.any { it.contactId == cid },
+                    work = cid?.let { workByLead[it] },
                 )
             }
         }
@@ -4530,6 +4597,9 @@ private fun FollowUpCard(
     /** Opens this callback's lead. Null when the row isn't linked to one. */
     onOpen: (() -> Unit)? = null,
     needsUpdate: Boolean = false,
+    /** Why this lead is really in Call now — a buyer left waiting, or a
+     *  promise made on a recorded call and not kept. Null for most rows. */
+    work: LeadWork? = null,
 ) {
     // FIVE BUTTONS WAS THE PROBLEM.
     //
@@ -4545,7 +4615,21 @@ private fun FollowUpCard(
     val overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= now
     val jade = AppColors.Indigo
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val accent = if (overdue) Red else jade
+    // "OVERDUE 43D" IS AN ACCUSATION THE APP EARNED ITSELF.
+    //
+    // On 154 of these rows nobody ever agreed a time. `book_callback_if_missing`
+    // invented 11 AM (migration 0166) and the card has been shouting that the
+    // rep is six weeks late for a promise she never made. When every row is
+    // red, red stops meaning anything — the exact way "Follow-up 107" stopped
+    // being believed.
+    //
+    // So red is kept for what a person is actually owed: a buyer waiting, an
+    // unkept promise, or a callback the rep or the AI really booked. An
+    // app-invented one goes grey and says what it is — an old lead, not a
+    // broken commitment.
+    val appInvented = (f.note ?: "").trim() == AUTO_CALLBACK_NOTE &&
+        work?.waitingSince == null && work?.promiseDueSince == null
+    val accent = if (overdue && !appInvented) Red else if (overdue) muted else jade
     val who = f.name?.takeIf { it.isNotBlank() } ?: prettyPhone(f.phone)
 
     Column(
@@ -4579,7 +4663,10 @@ private fun FollowUpCard(
             }
             Spacer(Modifier.width(Space.s))
             Column(horizontalAlignment = Alignment.End) {
-                StatusTag(relativeDue(f.dueAt), StatusTone(accent, accent.copy(alpha = 0.12f)))
+                StatusTag(
+                    if (appInvented && overdue) "Not called ${agoLabel(f.dueAt)}" else relativeDue(f.dueAt),
+                    StatusTone(accent, accent.copy(alpha = 0.12f)),
+                )
                 Spacer(Modifier.height(Space.xxs))
                 Text("${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}", style = AppType.tag,
                     color = AppColors.TextTertiary, maxLines = 1)
@@ -4606,8 +4693,40 @@ private fun FollowUpCard(
                 .background(AppColors.SurfaceMuted)
                 .padding(horizontal = Space.m, vertical = Space.s),
         ) {
-            Text(whyThisCallback(f), style = AppType.meta, color = AppColors.TextSecondary, maxLines = 3,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            // THE REAL REASON WINS OVER THE APP'S OWN NOTE.
+            //
+            // Sorting these rows to the top without saying why would be the
+            // worst of both: a rep who cannot see the rule assumes the list is
+            // random again. So when there IS a real reason, it replaces
+            // "No call time was set, so we booked one for 11 AM" — which on
+            // these rows was never true anyway.
+            // Pulled into locals rather than tested through the safe call
+            // inline: a local val is smart-cast with no !! and this line is
+            // read far more often than it is written.
+            val waiting = work?.waitingSince
+            val owedSince = work?.promiseDueSince
+            val owedWhat = work?.promiseText
+            val realWhy: Pair<String, Color>? = when {
+                waiting != null -> "💬 They wrote ${agoLabel(waiting)} — no reply yet" to Red
+                owedSince != null && !owedWhat.isNullOrBlank() ->
+                    "🤝 You said: $owedWhat · ${agoLabel(owedSince)}" to Red
+                // SAY IT, DO NOT JUST RANK IT.
+                //
+                // A row that quietly sinks to the bottom teaches a rep nothing
+                // and reads as the list being random again. This one tells her
+                // what she is looking at, so skipping it is her decision and
+                // not the app's secret.
+                (work?.bestCallSeconds ?: 1) == 0 && (work?.callsTotal ?: 0) >= 4 ->
+                    "📵 Rung ${work?.callsTotal} times — never picked up" to muted
+                else -> null
+            }
+            Text(
+                realWhy?.first ?: whyThisCallback(f),
+                style = AppType.meta,
+                color = realWhy?.second ?: AppColors.TextSecondary,
+                maxLines = 3,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
         }
         Spacer(Modifier.height(9.dp))
         // Update REPLACES the old "Done".
