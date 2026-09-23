@@ -1,5 +1,21 @@
 // Streams a recording back to an authorised listener (RLS on call_logs:
-// telecaller = own, admin = company, super = all). For cloud-telephony calls
+// telecaller = own, admin = company, super = all).
+//
+// EXCEPT ON A PHONE, WHERE ONLY THE TELECALLER WHO MADE THE CALL MAY HEAR IT.
+//
+// The RLS above is right for callproai.in — a founder reviewing calls on a
+// machine they control — and wrong for a handset. A phone gets left on a desk,
+// handed to a colleague, taken home. A OnePlus signed in with an admin account
+// was two taps from every recorded conversation in the company.
+//
+// The app therefore sends surface:"android", and on that surface this refuses
+// anyone but the call's own rep. It is a second lock on a door the app already
+// bolts client-side (AudioPlayer will not even build a player for someone
+// else's call) — not a cryptographic boundary, since the field can simply be
+// left out by anything that is not the app. Its job is to stop a FUTURE screen
+// quietly inheriting a yes, and it does that.
+//
+// For cloud-telephony calls
 // (CallerDesk) the audio lives at an external recording_url, so we proxy those
 // bytes directly; otherwise we read from the company's Drive if it has one,
 // else the platform (super-admin) Drive.
@@ -46,12 +62,18 @@ Deno.serve(async (req) => {
   const { data: ud } = await u.auth.getUser();
   if (!ud?.user) return err({ ok: false, error: "Unauthorized" }, 401);
 
-  const { call_log_id } = await req.json().catch(() => ({}));
+  const { call_log_id, surface } = await req.json().catch(() => ({}));
   if (!call_log_id) return err({ ok: false, error: "missing call_log_id" });
 
-  const { data: row } = await u.from("call_logs").select("company_id, recording_path, recording_url, recording_status, recording_source").eq("id", call_log_id).maybeSingle();
+  const { data: row } = await u.from("call_logs").select("company_id, salesperson_id, recording_path, recording_url, recording_status, recording_source").eq("id", call_log_id).maybeSingle();
   if (!row || row.recording_status !== "ready" || (!row.recording_path && !row.recording_url)) {
     return err({ ok: false, error: "not available" }, 404);
+  }
+
+  // On a handset, one person hears a recording: the rep who made the call.
+  // Admins and the platform owner included — they have the web for that.
+  if (surface === "android" && row.salesperson_id !== ud.user.id) {
+    return err({ ok: false, error: "Recording opens only for the telecaller who made this call." }, 403);
   }
   const contentType = row.recording_source === "sim" ? "audio/mp4" : "audio/wav";
 
