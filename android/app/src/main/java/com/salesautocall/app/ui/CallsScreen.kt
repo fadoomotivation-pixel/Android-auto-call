@@ -578,6 +578,7 @@ private fun CallRow(
             AudioPlayer(
                 callLogId = c.id!!,
                 callOwnerId = c.salespersonId,
+                offCrm = c.offCrm,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }

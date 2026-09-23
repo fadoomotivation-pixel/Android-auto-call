@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
   const { call_log_id, surface } = await req.json().catch(() => ({}));
   if (!call_log_id) return err({ ok: false, error: "missing call_log_id" });
 
-  const { data: row } = await u.from("call_logs").select("company_id, salesperson_id, recording_path, recording_url, recording_status, recording_source").eq("id", call_log_id).maybeSingle();
+  const { data: row } = await u.from("call_logs").select("company_id, salesperson_id, off_crm, recording_path, recording_url, recording_status, recording_source").eq("id", call_log_id).maybeSingle();
   if (!row || row.recording_status !== "ready" || (!row.recording_path && !row.recording_url)) {
     return err({ ok: false, error: "not available" }, 404);
   }
@@ -74,6 +74,21 @@ Deno.serve(async (req) => {
   // Admins and the platform owner included — they have the web for that.
   if (surface === "android" && row.salesperson_id !== ud.user.id) {
     return err({ ok: false, error: "Recording opens only for the telecaller who made this call." }, 403);
+  }
+
+  // AND AN OFF-CRM RECORDING NEVER LEAVES FOR A PHONE, WHOEVER IS ASKING.
+  //
+  // record-all-calls captures everything the handset dials, so most of a rep's
+  // call log is her own life: family, friends, the doctor. That audio is
+  // super-admin only and it is reviewed on the web.
+  //
+  // It is also the only thing that would have caught the real incident: the
+  // founder signed into a rep's account on his own phone and his personal
+  // calls uploaded into her app with audio. Those rows ARE hers by
+  // salesperson_id, so the ownership test above waves them through. Being
+  // off-CRM is what gives them away.
+  if (surface === "android" && row.off_crm === true) {
+    return err({ ok: false, error: "This number is not a lead — its recording does not open in the app." }, 403);
   }
   const contentType = row.recording_source === "sim" ? "audio/mp4" : "audio/wav";
 
