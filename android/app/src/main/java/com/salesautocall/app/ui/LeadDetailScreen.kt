@@ -2037,7 +2037,7 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
             // NOT MY CALL, NOT MY RECORDING — and say so instead of offering a
             // Play button that will only refuse. AudioPlayer enforces the same
             // rule again; this is here so the rep is never invited to tap it.
-            val mineToHear = Repository.currentUserId()
+            val mineToHear = !call.offCrm && Repository.currentUserId()
                 ?.takeIf { it.isNotBlank() } == call.salespersonId
             when {
                 !mineToHear -> {
@@ -2050,6 +2050,7 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
                 playing -> AudioPlayer(
                     callLogId = call.id,
                     callOwnerId = call.salespersonId,
+                    offCrm = call.offCrm,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 else -> {
