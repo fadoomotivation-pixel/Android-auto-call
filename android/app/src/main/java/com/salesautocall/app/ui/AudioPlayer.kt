@@ -29,14 +29,53 @@ import com.salesautocall.app.data.Repository
 import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 
+/**
+ * A CALL RECORDING PLAYS FOR ONE PERSON: THE TELECALLER WHO MADE THE CALL.
+ *
+ * The database has always allowed more than that — an admin can read every
+ * call_log in their company and the platform owner can read all of them, which
+ * is right for the web dashboard and wrong for a handset. A phone gets left on
+ * a desk, handed to a colleague, taken home. A OnePlus signed in with an admin
+ * account was two taps away from every recorded conversation in the company.
+ *
+ * So the phone draws a tighter line than the database does. [callOwnerId] is
+ * the salesperson_id of the call, and it is REQUIRED — not defaulted — because
+ * the next screen that wants to play a recording must be made to answer the
+ * question rather than quietly inherit a yes.
+ *
+ * The web is untouched: callproai.in is where a founder reviews calls, behind
+ * a login on a machine they control.
+ */
 @OptIn(UnstableApi::class)
 @Composable
 fun AudioPlayer(
     callLogId: String,
+    /** salesperson_id of the call. Only this person hears it on a phone. */
+    callOwnerId: String?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Checked BEFORE the player is built, so a recording the listener may not
+    // hear is never even requested from the server.
+    val mine = remember(callOwnerId) {
+        val me = Repository.currentUserId()
+        !me.isNullOrBlank() && me == callOwnerId
+    }
+    if (!mine) {
+        Row(
+            modifier.padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "🔒 Recording only opens for the telecaller who made this call.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
 
     var isPlaying by remember { mutableStateOf(false) }
     var currentPosition by remember { mutableStateOf(0L) }
@@ -58,7 +97,10 @@ fun AudioPlayer(
                 val resolvingFactory = ResolvingDataSource.Factory(baseFactory, ResolvingDataSource.Resolver { dataSpec ->
                     dataSpec.buildUpon()
                         .setHttpMethod(DataSpec.HTTP_METHOD_POST)
-                        .setHttpBody("""{"call_log_id":"$callLogId"}""".toByteArray())
+                        // surface:"android" tells the server this is a handset,
+                        // where only the call's own rep may listen. See the
+                        // header of supabase/functions/recording-url.
+                        .setHttpBody("""{"call_log_id":"$callLogId","surface":"android"}""".toByteArray())
                         .setHttpRequestHeaders(mapOf("Authorization" to "Bearer $token"))
                         .build()
                 })

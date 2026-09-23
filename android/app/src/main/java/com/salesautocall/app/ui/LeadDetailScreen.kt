@@ -79,6 +79,7 @@ import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.LeadStage
+import com.salesautocall.app.data.Repository
 import com.salesautocall.app.data.Wada
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
@@ -2033,11 +2034,29 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
             call.startedAt?.let { Text(it.take(16).replace('T', ' '), style = MaterialTheme.typography.labelSmall, color = SubInk) }
         }
         if (call.recordingStatus == "ready" && call.id != null) {
-            if (playing) AudioPlayer(callLogId = call.id, modifier = Modifier.fillMaxWidth())
-            else {
-                Spacer(Modifier.height(6.dp))
-                Box(Modifier.clip(RoundedCornerShape(50)).background(IndigoL.copy(alpha = 0.12f)).clickable { onPlay() }.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    Text("▶ Play recording", style = MaterialTheme.typography.labelMedium, color = IndigoL)
+            // NOT MY CALL, NOT MY RECORDING — and say so instead of offering a
+            // Play button that will only refuse. AudioPlayer enforces the same
+            // rule again; this is here so the rep is never invited to tap it.
+            val mineToHear = Repository.currentUserId()
+                ?.takeIf { it.isNotBlank() } == call.salespersonId
+            when {
+                !mineToHear -> {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "🔒 Recording opens only for the telecaller who made this call",
+                        style = MaterialTheme.typography.labelMedium, color = SubInk,
+                    )
+                }
+                playing -> AudioPlayer(
+                    callLogId = call.id,
+                    callOwnerId = call.salespersonId,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                else -> {
+                    Spacer(Modifier.height(6.dp))
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(IndigoL.copy(alpha = 0.12f)).clickable { onPlay() }.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                        Text("▶ Play recording", style = MaterialTheme.typography.labelMedium, color = IndigoL)
+                    }
                 }
             }
         }

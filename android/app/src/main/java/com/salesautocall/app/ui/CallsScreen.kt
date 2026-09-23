@@ -575,7 +575,11 @@ private fun CallRow(
         }
 
         if (playing && c.id != null) {
-            AudioPlayer(callLogId = c.id!!, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            AudioPlayer(
+                callLogId = c.id!!,
+                callOwnerId = c.salespersonId,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
         }
         // ONE AI surface per call, not two stacked strangers.
         //

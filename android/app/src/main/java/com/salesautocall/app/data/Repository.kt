@@ -665,11 +665,20 @@ object Repository {
             ?: runCatching { Instant.parse(it).toEpochMilli() }.getOrNull()
     }
 
-    /** Downloads a recording's audio bytes (RLS-gated) for in-app playback. */
+    /**
+     * Downloads a recording's audio bytes for in-app playback.
+     *
+     * surface:"android" is not decoration — it tells the server this is a
+     * handset, where only the telecaller who made the call may hear it, admins
+     * and the platform owner included. The web keeps the wider RLS view.
+     */
     suspend fun fetchRecording(callLogId: String): ByteArray? {
         val resp = client.functions.invoke(
             function = "recording-url",
-            body = buildJsonObject { put("call_log_id", callLogId) },
+            body = buildJsonObject {
+                put("call_log_id", callLogId)
+                put("surface", "android")
+            },
         )
         if (resp.status.value !in 200..299) return null
         return runCatching { resp.body<ByteArray>() }.getOrNull()
