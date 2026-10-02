@@ -756,6 +756,38 @@ export default async function TelecallerActivityPage({
               Everyone this telecaller has messaged on the linked WhatsApp — leads and
               non-leads, all time, newest first. <strong>Pick one to read it.</strong>
             </p>
+            {/* HOW OLD IS THE NEWEST THING HERE.
+                WhatsApp logged this rep's session out on 25 September. The red
+                banner above says so — and it was scrolled straight past,
+                because what the eye lands on is this list, and this list looks
+                completely healthy: 293 conversations, names, photos, counts.
+                Nothing on it says the newest row is six days old. The founder's
+                words were "connected dikha raha hai or yaha chat nahi hai",
+                and both halves were true at once.
+                A date cannot be scrolled past when it is attached to the thing
+                being read. Silent beyond a day is stated in red, with the age,
+                right where the eye already is. */}
+            {(() => {
+              const newest = conversations.reduce<string | null>(
+                (m, c) => (!m || c.last_at > m ? c.last_at : m), null);
+              if (!newest) return null;
+              const hours = (Date.now() - new Date(newest).getTime()) / 3600_000;
+              const when = new Date(newest).toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata", day: "numeric", month: "short",
+                hour: "2-digit", minute: "2-digit",
+              });
+              return (
+                <p style={{
+                  marginTop: -4, marginBottom: 12, fontSize: 13,
+                  color: hours >= 24 ? "#ef4444" : "#8696a0",
+                  fontWeight: hours >= 24 ? 600 : 400,
+                }}>
+                  {hours >= 24
+                    ? `⛔ Newest message captured: ${when} — ${ago(newest)}. Nothing has arrived since, so this list is history, not today.`
+                    : `Newest message captured: ${when} (${ago(newest)}).`}
+                </p>
+              );
+            })()}
             <WaInbox
               conversations={conversations}
               activePeer=""
