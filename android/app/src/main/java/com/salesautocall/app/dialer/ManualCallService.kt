@@ -160,8 +160,22 @@ class ManualCallService : Service() {
                 if (logId != null && recordingPath != null) {
                     val f = File(recordingPath)
                     if (f.exists() && f.length() > 0) {
-                        runCatching { Repository.uploadRecording(logId, "sim", durationSec, f.readBytes()) }
-                        runCatching { f.delete() }
+                        // DELETE ONLY WHAT WAS ACTUALLY DELIVERED.
+                        //
+                        // runCatching swallowed the upload failure and the next
+                        // line deleted the file anyway, so a failed upload —
+                        // no signal, an expired token, a 502 from Drive —
+                        // destroyed the only copy of a customer conversation.
+                        // Nothing anywhere recorded that it had happened.
+                        //
+                        // Kept on disk instead: the recording sweep picks up
+                        // orphaned files later and attaches them to the call.
+                        // A file left behind costs a few megabytes of cache; a
+                        // file deleted costs the conversation.
+                        val sent = runCatching {
+                            Repository.uploadRecording(logId, "sim", durationSec, f.readBytes())
+                        }.isSuccess
+                        if (sent) runCatching { f.delete() }
                     }
                 }
             }

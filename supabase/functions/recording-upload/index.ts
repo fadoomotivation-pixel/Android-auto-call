@@ -42,6 +42,94 @@ function sniffAudio(b: Uint8Array, source: string): [string, string] {
   if (b.length >= 2 && b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return ["mp3", "audio/mpeg"]; // MPEG frame sync
   return source === "sim" ? ["m4a", "audio/mp4"] : ["wav", "audio/wav"];
 }
+/**
+ * HOW LONG THE AUDIO ACTUALLY IS — measured from the bytes, not believed.
+ *
+ * A 4m52s call showed "0:01 / 0:01" in the player and the founder reasonably
+ * asked why the recording was one second. Nothing in this platform could
+ * answer him, because nothing had ever looked:
+ *
+ *   duration_seconds   the phone's CALL log — how long the two people talked
+ *   recording_seconds  the x-duration header, which is a COPY of that same
+ *                      number. It has never described the audio at all.
+ *
+ * So a stub file and a perfect one are indistinguishable in the database, and
+ * both read "4m 52s" in the admin table. The table was not lying on purpose;
+ * it had nothing else to print.
+ *
+ * This reads the real length out of the container. It is cheap — a few header
+ * boxes, no decoding — and it is the only number here that is evidence.
+ *
+ * THE MISSING moov IS THE WHOLE DIAGNOSIS. An MPEG-4 file keeps its duration
+ * in a `moov` box that MediaRecorder writes LAST, on stop(). A file that was
+ * cut off before that — a killed service, a stop() that threw, an upload that
+ * read the file while the recorder still had it open — has audio in it and no
+ * moov. Players cannot find a duration, so they print a second; Whisper cannot
+ * decode it, so the transcript comes back empty. Both symptoms, one cause, and
+ * it is detectable in twenty bytes.
+ */
+type AudioFacts = { seconds: number | null; complete: boolean; note: string | null };
+
+function readU32(b: Uint8Array, i: number): number {
+  return ((b[i] << 24) >>> 0) + (b[i + 1] << 16) + (b[i + 2] << 8) + b[i + 3];
+}
+
+function measureAudio(b: Uint8Array, ext: string): AudioFacts {
+  const ascii = (i: number, s: string) => s.split("").every((ch, k) => b[i + k] === ch.charCodeAt(0));
+
+  if (ext === "m4a") {
+    // Walk the top-level boxes looking for moov → mvhd.
+    let i = 0;
+    let sawMdat = false;
+    while (i + 8 <= b.length) {
+      const size = readU32(b, i);
+      const type = String.fromCharCode(b[i + 4], b[i + 5], b[i + 6], b[i + 7]);
+      if (type === "mdat") sawMdat = true;
+      if (type === "moov") {
+        // mvhd is the first child in every file MediaRecorder writes, but scan
+        // rather than assume — a scan costs nothing and assumptions cost days.
+        const end = size === 0 ? b.length : Math.min(i + size, b.length);
+        for (let j = i + 8; j + 20 <= end; j++) {
+          if (!ascii(j, "mvhd")) continue;
+          const version = b[j + 4];
+          const ts = version === 1 ? readU32(b, j + 24) : readU32(b, j + 16);
+          const dur = version === 1 ? readU32(b, j + 32) : readU32(b, j + 20);
+          if (ts > 0 && dur > 0) return { seconds: Math.round(dur / ts), complete: true, note: null };
+          return { seconds: 0, complete: true, note: "mp4 header says zero length" };
+        }
+        return { seconds: null, complete: true, note: "moov present but unreadable" };
+      }
+      if (size < 8) break;      // malformed; stop rather than loop forever
+      i += size;
+    }
+    return {
+      seconds: null,
+      complete: false,
+      note: sawMdat
+        ? "UNFINISHED mp4 — audio present but no moov box, so nothing can play or transcribe it"
+        : "not a readable mp4",
+    };
+  }
+
+  if (ext === "wav" && b.length >= 44) {
+    // byteRate lives at offset 28 of the canonical fmt chunk, little-endian.
+    const byteRate = b[28] + (b[29] << 8) + (b[30] << 16) + (b[31] << 24);
+    if (byteRate > 0) return { seconds: Math.round((b.length - 44) / byteRate), complete: true, note: null };
+  }
+
+  if (ext === "amr") {
+    // AMR-NB at 12.2 kbit/s: 32-byte frames, 20 ms each. The recorders here use
+    // one mode throughout a file, so frame count × 20 ms is close enough to tell
+    // one second from five minutes, which is the only question being asked.
+    const frames = Math.max(0, Math.floor((b.length - 6) / 32));
+    if (frames > 0) return { seconds: Math.round(frames * 0.02), complete: true, note: null };
+  }
+
+  // MP3 and anything else: no cheap exact answer, and a wrong number would be
+  // worse than none. Left null on purpose.
+  return { seconds: null, complete: true, note: null };
+}
+
 const G_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID") ?? "";
 const G_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "";
 
@@ -136,6 +224,11 @@ Deno.serve(async (req) => {
     // transcribe (it chooses its decoder from the file extension we give it).
     const [ext, mime] = sniffAudio(bytes, source);
 
+    // Measured before anything is stored, so the answer exists even if Drive
+    // later misbehaves. See measureAudio: this is the only number here that
+    // describes the AUDIO rather than the call.
+    const facts = measureAudio(bytes, ext);
+
     // Prefer Drive if configured; otherwise (or on Drive failure) store the
     // recording in Supabase Storage. recording_path carries an "sb://" prefix for
     // storage objects so recording-url knows where to read from; a bare id is Drive.
@@ -155,7 +248,24 @@ Deno.serve(async (req) => {
     }
 
     // Clear any prior error from a retried call.
-    await admin.from("call_logs").update({ recording_path: recordingPath, recording_status: "ready", recording_seconds: duration, recording_source: source, recording_error: null }).eq("id", callId);
+    // recording_seconds stays as it was — the phone's call length — because
+    // other screens already read it and changing its meaning silently would be
+    // its own bug. audio_seconds is the new, honest column (migration 0216).
+    //
+    // An unfinished container is recorded as an ERROR even though the upload
+    // itself worked. It is the truest thing we know about the file: it cannot
+    // be played and it cannot be transcribed, and saying "ready" about it is
+    // how a four-minute call came to show one second with nobody able to
+    // explain why.
+    await admin.from("call_logs").update({
+      recording_path: recordingPath,
+      recording_status: "ready",
+      recording_seconds: duration,
+      recording_source: source,
+      audio_seconds: facts.seconds,
+      audio_complete: facts.complete,
+      recording_error: facts.complete ? null : facts.note,
+    }).eq("id", callId);
 
     // Fire-and-forget AI summary so the admin gets it automatically. Reuses the
     // bytes already in memory (no second download) and runs in the background so

@@ -293,7 +293,36 @@ export default async function RecordingsPage({
                   <td title={c.direction === "incoming" ? "Lead called the telecaller" : "Telecaller dialled the lead"}>
                     {c.direction === "incoming" ? "↙ In" : "↗ Out"}
                   </td>
-                  <td>{fmt(c.recording_seconds)}</td>
+                  {/* THE CALL'S LENGTH AND THE RECORDING'S LENGTH ARE NOT THE
+                      SAME NUMBER, and this column printed only the first.
+
+                      recording_seconds is a copy of the phone's call log — it
+                      has never described the audio. So a four-minute call whose
+                      file holds one second of sound read "4m 52s" here, played
+                      as 0:01, and nobody could explain the gap. I read this
+                      column myself while diagnosing it and drew the wrong
+                      conclusion.
+
+                      audio_seconds is measured from the file's own header at
+                      upload (migration 0216). When it disagrees with the call,
+                      both are shown and the shortfall is named. Older rows have
+                      no measurement and are left exactly as they were rather
+                      than guessed at. */}
+                  <td>
+                    {fmt(c.recording_seconds)}
+                    {c.audio_complete === false ? (
+                      <div style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>
+                        ⚠️ file unfinished — cannot play or transcribe
+                      </div>
+                    ) : typeof c.audio_seconds === "number"
+                      && c.recording_seconds != null
+                      && c.recording_seconds > 30
+                      && c.audio_seconds < c.recording_seconds * 0.8 ? (
+                      <div style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>
+                        ⚠️ only {fmt(c.audio_seconds)} of audio
+                      </div>
+                    ) : null}
+                  </td>
                   <td>
                     <RecordingPlayer callId={c.id} canDelete={canDelete} />
                   </td>
