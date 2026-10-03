@@ -64,6 +64,12 @@ export interface CallLog {
   created_at: string;
   recording_status: string;
   recording_seconds: number | null;
+  /** Length of the recording file, read from its own header at upload.
+   *  Null on older rows and when the format has no cheap exact answer.
+   *  Distinct from recording_seconds, which copies the phone's call length. */
+  audio_seconds: number | null;
+  /** False when the uploaded container is unfinished and cannot be played. */
+  audio_complete: boolean | null;
   recording_source: string | null;
   off_crm: boolean;
   summary: string | null;
