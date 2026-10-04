@@ -102,7 +102,7 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
       )}
 
       {companyId && (
-        <>
+        <div id="telecaller-whatsapp">
           <Section label="👥 Telecaller watchers" hint="Check daily. Each rep's own WhatsApp, read-only — see who's connected and what came in." />
           <TelecallerWhatsApp
             companyId={companyId}
@@ -110,7 +110,7 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
             reps={members ?? []}
             isSuper={isSuper}
           />
-        </>
+        </div>
       )}
 
       <Section label="💬 Team inbox" hint="Every conversation on the company's own WhatsApp number." />
