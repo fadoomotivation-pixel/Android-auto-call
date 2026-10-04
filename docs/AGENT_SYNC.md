@@ -139,6 +139,29 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-10-04 — view fix (pending site visits were counting a prompt kind the app cannot write)
+- WHAT: `v_pending_site_visit_outcomes` counted `rep_prompts.kind = 'site_visit'`
+  for `times_asked` and `needs_manager` (`times_asked >= 2`). 0127 only allows
+  `visit_check`, `callback_check`, `day_review`, and the app writes
+  `visit_check`. Measured the same day: 0 `site_visit` rows, 33 `visit_check`,
+  15 of 23 pending leads already asked, 0 `answer = 'not_yet'` (the presses
+  were dismissals). Migration `0218_a_visit_check_counts_as_asking.sql`
+  counts `visit_check` for `times_asked` and sets `needs_manager` only from
+  two `not_yet` answers. Dismissals stay in `times_asked` and do not flip
+  the flag — `assistantDismiss` and the 0127 column comment both say a
+  dismissal is counted, never punished. Column names, types and order are
+  unchanged. Numbered 0218 because PR #484 already uses 0217 for
+  `v_lead_workstate`; the two replace different views and this one can be
+  applied on its own. Not applied; no scheduler; no Android change.
+- FILES: `supabase/migrations/0218_a_visit_check_counts_as_asking.sql`.
+- WHY: the Action Center and the Pulse were reading "never asked" on visits
+  the phone had already asked about.
+- BUILD: supabase SQL only. Do not apply from CI — founder applies by hand.
+- NEXT/NOTE: after it is applied, the 4 Oct rows should read times_asked
+  0×8, 1×6, 2×5, 3×4, and needs_manager still false on all 23. Readers are
+  `admin/app/dashboard/actions/page.tsx` and `pulse.ts` (PR #486); both
+  select these columns by name.
+
 ### 2026-07-19 — Claude Code (recordings hardening + super-admin HQ/Leads + selfie-less check-in)
 - **Migrations 0083–0085 applied live + committed.** Next number is **0086**.
   - `0083`: a call linked to a lead now clears `off_crm` (linked ⇒ CRM, never
