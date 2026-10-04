@@ -4266,6 +4266,15 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 // have never been answered in four or more tries — one number
                 // has been rung seventy-nine times. Sorting by age treated all
                 // three the same.
+                //
+                // 30 MUST MATCH MIGRATION 0217.
+                //
+                // An accepted WhatsApp call has no duration, so
+                // 0217_a_whatsapp_call_counts_as_contact.sql raises
+                // best_call_seconds to exactly 30 to mean "someone spoke".
+                // This threshold and that sentinel have to change together.
+                // Move the phone to 45 and leave the sentinel at 30, and the
+                // buyer who picked up on WhatsApp falls back into tier 4.
                 (w?.bestCallSeconds ?: 0) >= 30 -> 2
                 // Rung a few times, never answered. Still worth a fair shot.
                 (w?.callsTotal ?: 0) < 4 -> 3

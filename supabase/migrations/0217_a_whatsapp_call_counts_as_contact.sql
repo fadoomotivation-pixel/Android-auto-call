@@ -35,6 +35,16 @@
 -- half a minute. last_call_at, last_call_seconds and calls_total stay the
 -- SIM call, so the last-call line does not invent a length either.
 --
+-- THE 30 AND THE KOTLIN THRESHOLD MUST CHANGE TOGETHER.
+--
+-- 30 is not a measured length. It is the same number the installed app uses
+-- as its tier-2 test: `(w?.bestCallSeconds ?: 0) >= 30` in
+-- TelecallerScreens.kt. Raising one without the other splits the list. If
+-- this sentinel becomes 45 and the phone still says >= 30, an accepted
+-- WhatsApp call still counts and the comment is the only thing that lied.
+-- If the phone's bar becomes 45 and this sentinel stays 30, that buyer falls
+-- straight back into "never answered". Change both, or neither.
+--
 -- The value is computed outside the call_logs lateral. That lateral returns
 -- no row when the SIM has never rung, and a WhatsApp-only conversation would
 -- otherwise stay null and keep reading as "never spoken".
@@ -74,8 +84,10 @@ create or replace view public.v_lead_workstate as
     a.waiting_since,
     a.promise_due_since,
     a.promise_text,
-    -- SIM conversation, or 30 once a WhatsApp call was accepted. 30 is the
-    -- phone's existing "someone spoke" bar, not a measured WhatsApp length.
+    -- SIM conversation, or 30 once a WhatsApp call was accepted. 30 is not a
+    -- measured WhatsApp length. It is the Kotlin tier-2 threshold
+    -- (bestCallSeconds >= 30 in TelecallerScreens.kt). The sentinel and that
+    -- threshold must change together.
     greatest(
       coalesce(lc.best_call_seconds, 0),
       case
@@ -106,4 +118,4 @@ create or replace view public.v_lead_workstate as
        limit 1) lc on true;
 
 comment on view public.v_lead_workstate is
-  'One row per lead with everything a rep''s phone needs to decide what to do next. best_call_seconds is the longest SIM conversation, raised to 30 when a WhatsApp call was accepted (status = accept). 30 is the phone''s own bar for "someone has spoken", not a measured WhatsApp duration. A ring, a reject, a timeout or a terminate does not count.';
+  'One row per lead with everything a rep''s phone needs to decide what to do next. best_call_seconds is the longest SIM conversation, raised to 30 when a WhatsApp call was accepted (status = accept). 30 is not a measured WhatsApp duration: it is the same number as the Kotlin tier-2 test, bestCallSeconds >= 30 in TelecallerScreens.kt. The sentinel and that threshold must change together — moving one without the other puts an accepted WhatsApp call back under "never answered", or leaves the two definitions describing different things. A ring, a reject, a timeout or a terminate does not count.';
