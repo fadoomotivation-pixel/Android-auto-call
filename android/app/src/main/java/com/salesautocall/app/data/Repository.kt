@@ -1899,14 +1899,14 @@ object Repository {
             updates["budget"] = wada.budget
         }
         val factLine = buildString {
-            wada.preferences?.let { append("Chahiye: $it") }
+            wada.preferences?.let { append("Wants: $it") }
             if (wada.objections.isNotEmpty()) {
                 if (isNotEmpty()) append(" · ")
-                append("Atka: ${wada.objections.joinToString(", ")}")
+                append("Stuck on: ${wada.objections.joinToString(", ")}")
             }
             wada.timeline?.let {
                 if (isNotEmpty()) append(" · ")
-                append("Kab tak: $it")
+                append("By when: $it")
             }
         }
         if (factLine.isNotBlank()) {

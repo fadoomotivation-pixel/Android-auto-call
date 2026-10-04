@@ -35,20 +35,20 @@ function istTime(iso: string): string {
 }
 
 const QUOTE_THEMES = [
-  "follow-up discipline — paisa follow-up me hai",
-  "pehle 30 seconds me trust banana",
-  "customer ki sunna, apni script nahi thopna",
-  "objection ko opportunity banana (budget/location/price)",
-  "site visit fix karna hi asli jeet hai",
-  "rejection se bounce-back — agla call naya mauka",
-  "urgency banana bina pushy lage",
-  "WhatsApp follow-up ka smart use",
-  "din ke pehle 2 ghante sabse productive",
-  "hot lead ko kabhi kal pe mat chhodo",
-  "notes likhne wala telecaller hamesha jeetta hai",
-  "awaaz me muskaan — customer ko sunai deti hai",
-  "chhote commitments se bada sauda (micro-yes)",
-  "consistency beats talent — roz ke 50 dials",
+  "follow-up discipline — the money is in the follow-up",
+  "build trust in the first 30 seconds",
+  "listen to the customer, don't push your script",
+  "turn an objection into a chance (budget, location, price)",
+  "fixing a site visit is the real win",
+  "bounce back from a no — the next call is a new chance",
+  "create urgency without sounding pushy",
+  "use WhatsApp follow-up well",
+  "the first 2 hours of the day are the most productive",
+  "never leave a hot lead for tomorrow",
+  "the telecaller who writes notes is the one who wins",
+  "a smile in your voice — the customer can hear it",
+  "small yeses lead to a big deal",
+  "consistency beats talent — 50 dials a day",
 ];
 
 Deno.serve(async (req) => {
@@ -95,16 +95,16 @@ Deno.serve(async (req) => {
       const parts: string[] = [];
       if (fus.length) {
         const first = fus[0];
-        parts.push(`${fus.length} callback${fus.length > 1 ? "s" : ""} (pehla: ${first.name ?? first.phone}, ${istTime(first.due_at)})`);
+        parts.push(`${fus.length} callback${fus.length > 1 ? "s" : ""} (first: ${first.name ?? first.phone}, ${istTime(first.due_at)})`);
       }
       if (svs.length) parts.push(`${svs.length} site visit — ${svs.map((s) => s.name ?? s.phone).join(", ")}`);
-      if (overdue) parts.push(`${overdue} overdue follow-up${overdue > 1 ? "s" : ""} clear karo`);
+      if (overdue) parts.push(`${overdue} overdue follow-up${overdue > 1 ? "s" : ""} to clear`);
       if (hotN) parts.push(`${hotN} hot lead${hotN > 1 ? "s" : ""} ready`);
       const body = parts.length
-        ? `Aaj: ${parts.join(" · ")}`
-        : "Board clean hai — aaj naye leads pe dial start karo 🚀";
+        ? `Today: ${parts.join(" · ")}`
+        : "Board is clear. Start dialling new leads today. 🚀";
       // Tap → straight to the Leads page (open_tab deep-link).
-      await push(rep.id, "☀️ Aaj ka plan", body, "agenda", { open_tab: "leads" });
+      await push(rep.id, "☀️ Today's plan", body, "agenda", { open_tab: "leads" });
       sent++;
     }
   } else if (task === "guard") {
@@ -116,11 +116,11 @@ Deno.serve(async (req) => {
         .order("updated_at", { ascending: true }).limit(25);
       if (!stale?.length) continue;
       const names = stale.slice(0, 3).map((c) => c.name ?? c.phone).join(", ");
-      const more = stale.length > 3 ? ` +${stale.length - 3} aur` : "";
+      const more = stale.length > 3 ? ` +${stale.length - 3} more` : "";
       await push(
         rep.id,
-        "🕳️ Bhoole hue leads",
-        `${stale.length} interested lead${stale.length > 1 ? "s" : ""} ko 3+ din se touch nahi kiya: ${names}${more}. Aaj call karo — warm lead thanda ho jata hai.`,
+        "🕳️ Forgotten leads",
+        `${stale.length} interested lead${stale.length > 1 ? "s" : ""} not touched for 3+ days: ${names}${more}. Call them today. A warm lead goes cold.`,
         "followups",
         { open_tab: "leads" },
       );
@@ -149,14 +149,14 @@ Deno.serve(async (req) => {
                 "energetic — something they can USE on the very next call. No hashtags, no " +
                 "surrounding quote marks, no emojis, no preamble. Never repeat standard clichés.",
             },
-            { role: "user", content: `Theme: ${theme}. Aaj ka funda likho.` },
+            { role: "user", content: `Theme: ${theme}. Write today's tip in simple English.` },
           ],
         }),
       });
       const chj = await ch.json();
       const quote: string = (chj.choices?.[0]?.message?.content ?? "").trim();
       if (!quote) continue;
-      await push(rep.id, "💡 Aaj ka funda", quote.slice(0, 220), "quotes");
+      await push(rep.id, "💡 Today's tip", quote.slice(0, 220), "quotes");
       sent++;
     }
   } else {

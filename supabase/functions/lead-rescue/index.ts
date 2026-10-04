@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
       if (sent) {
         await admin.from("lead_activities").insert({
           company_id: pol.company_id, contact_id: c.id, actor_name: "AI Assistant", type: "update",
-          detail: `Auto first-reply: ${waited} min tak call nahi hui, isliye customer ko aapke naam se WhatsApp bhej diya — lead aapke paas hi hai, ab call kar lijiye.`,
+          detail: `Auto first reply: no call for ${waited} min, so a WhatsApp went out in your name. The lead is still yours. Call now.`,
         });
         replied++;
         done.push({ contact: c.id, waited_min: waited });
@@ -168,8 +168,8 @@ Deno.serve(async (req) => {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE}` },
           body: JSON.stringify({
             user_ids: notify,
-            title: sent ? "💬 Customer ko hold kar liya — ab call kijiye" : "⏱️ Lead abhi tak uncalled",
-            body: `${c.name || c.phone}: ${waited} min se koi call nahi${sent ? ". WhatsApp bhej diya hai, lead aapke paas hi hai." : "."}`,
+            title: sent ? "💬 Customer is on hold. Call now." : "⏱️ Lead still not called",
+            body: `${c.name || c.phone}: no call for ${waited} min${sent ? ". A WhatsApp was sent. The lead is still yours." : "."}`,
             channel: "hot_leads",
           }),
         }).catch(() => {});

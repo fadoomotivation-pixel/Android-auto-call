@@ -23,52 +23,52 @@ interface Row {
  */
 const FLAGS: Record<string, { title: string; why: string; innocent: string; action: string; tone: string }> = {
   talked_no_outcome: {
-    title: "Baat hui, par kuch likha nahi",
-    why: "Ek minute se lambi baat hui aur lead pe koi outcome, note ya voice note nahi. Baaki sabko lead 'chhui hi nahi' dikhti hai.",
-    innocent: "Jaldbaazi me prompt skip kar diya — sabse aam wajah.",
-    action: "Us call ki recording sun lein, phir rep se poochhein ki kya baat hui thi.",
+    title: "Talked, but nothing written",
+    why: "The call was longer than a minute, and the lead has no outcome, note, or voice note. To everyone else, the lead looks untouched.",
+    innocent: "They skipped the prompt in a hurry. This is the most common reason.",
+    action: "Listen to that call's recording. Then ask the rep what was said.",
     tone: "#f59e0b",
   },
   long_call_then_dead: {
-    title: "Lambi baat, phir 'not interested'",
-    why: "2+ minute baat hui aur usi din lead ko not interested / lost / DNC kar diya gaya.",
-    innocent: "Customer ne sach me mana kar diya — aksar yahi hota hai.",
-    action: "Recording sunein. Agar customer interested lag raha tha, to lead wapas khol dein.",
+    title: "Long talk, then 'not interested'",
+    why: "The call was 2+ minutes, and the same day the lead was marked not interested, lost, or DNC.",
+    innocent: "The customer really said no. That is often what happened.",
+    action: "Listen to the recording. If the customer sounded interested, open the lead again.",
     tone: "#ef4444",
   },
   callback_never_dialled: {
-    title: "Promise kiya callback, call hui hi nahi",
-    why: "Rep ne callback ka time diya, wo time 12 ghante se zyada nikal gaya, aur call log me us lead pe uske baad ek bhi call nahi hai. Ye call log se saabit hota hai — ismein 'bhool gaye' wala shak nahi hai.",
-    innocent: "Lead ne khud pehle call kar liya ho, ya rep ne apne personal number se ki ho (wo CRM me nahi aati).",
-    action: "Rep se poochhein ki in leads ka kya hua, aur aaj hi inhe list ke upar laga dein — customer intezaar kar raha hai.",
+    title: "Promised a callback, then never called",
+    why: "The rep set a callback time. That time passed more than 12 hours ago. The call log shows no call to that lead after it. The call log proves this. It is not a guess that they forgot.",
+    innocent: "The lead may have called first, or the rep may have used a personal number. Personal calls do not enter the CRM.",
+    action: "Ask the rep what happened to these leads, and put them at the top of the list today. The customer is waiting.",
     tone: "#ef4444",
   },
   visit_unverified: {
-    title: "Site visit likhi, GPS ne confirm nahi ki",
-    why: "Visit CRM me darj hai par rep ki location project se match nahi hui.",
-    innocent: "Project ki location pin set nahi hai, ya site pe network nahi tha.",
-    action: "Pehle Buyer Projects me us project ka location pin check karein, phir rep se poochhein.",
+    title: "Site visit written, GPS did not confirm it",
+    why: "The visit is in the CRM, but the rep's location did not match the project.",
+    innocent: "The project's location pin is not set, or there was no network at the site.",
+    action: "First check the project's location pin in Buyer Projects. Then ask the rep.",
     tone: "#ef4444",
   },
   missing_recording: {
-    title: "Lambi calls jinki recording nahi mili",
-    why: "Isi rep ki baaki calls record ho rahi hain, par ye lambi calls nahi.",
-    innocent: "Recorder ne beech me file miss kar di — ye aam baat hai.",
-    action: "Phone Health page dekhein. Agar wahan sab theek hai to ye calls poochhne layak hain.",
+    title: "Long calls with no recording",
+    why: "This rep's other calls are being recorded. These long calls are not.",
+    innocent: "The recorder missed the file partway through. This happens.",
+    action: "Open the Phone Health page. If everything looks fine there, these calls are worth asking about.",
     tone: "#f59e0b",
   },
   offcrm_repeat: {
-    title: "CRM se bahar ke ek number pe baar-baar lambi calls",
-    why: "Ek hi non-CRM number pe 3+ calls aur kul 5+ minute — jaise usse lead ki tarah kaam kiya ja raha ho.",
-    innocent: "Ghar ka, manager ka, ya vendor ka number ho sakta hai.",
-    action: "Number dekhein. Agar wo customer nikla to lead CRM me daalwayein.",
+    title: "Repeated long calls to one number outside the CRM",
+    why: "3+ calls to the same non-CRM number, and 5+ minutes in total. It looks like they treated that number as a lead.",
+    innocent: "It may be a home number, a manager, or a vendor.",
+    action: "Look at the number. If it is a customer, add the lead to the CRM.",
     tone: "#ef4444",
   },
   booked_without_calls: {
-    title: "Booking, par CRM me ek bhi call nahi",
-    why: "Lead booked/token tak pahunchi lekin uski koi call history hi nahi hai.",
-    innocent: "Deal walk-in ya kisi aur ke reference se hui ho sakti hai.",
-    action: "Poochhein ki baat kahan hui — agar personal number se hui to wo CRM ke bahar chala gaya.",
+    title: "Booked, but no call in the CRM",
+    why: "The lead reached booked or token, but there is no call history.",
+    innocent: "The deal may have been a walk-in, or a referral from someone else.",
+    action: "Ask where the conversation happened. If it was on a personal number, it stayed outside the CRM.",
     tone: "#ef4444",
   },
 };
@@ -129,7 +129,7 @@ export function IntegrityBoard({ isSuper }: { isSuper: boolean }) {
       {err && <div className="error" style={{ marginBottom: 10 }}>{err}</div>}
       {!rows && <div className="empty">Checking…</div>}
       {rows && byRep.length === 0 && (
-        <div className="empty">Is window me kuch bhi poochhne layak nahi mila. 👍</div>
+        <div className="empty">Nothing in this window is worth a question. 👍</div>
       )}
 
       {byRep.map((rep) => (
@@ -138,7 +138,7 @@ export function IntegrityBoard({ isSuper }: { isSuper: boolean }) {
             <strong style={{ color: "#fff", fontSize: 16 }}>{rep.name}</strong>
             {isSuper && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>· {rep.company}</span>}
             <span style={{ marginLeft: "auto", fontSize: 12.5, color: "var(--muted)" }}>
-              {rep.flags.length} cheez dekhne layak
+              {rep.flags.length} things worth a look
             </span>
           </div>
 
@@ -155,15 +155,15 @@ export function IntegrityBoard({ isSuper }: { isSuper: boolean }) {
                     }}>{f.n}</span>
                     <strong style={{ color: "#fff", fontSize: 14 }}>{meta.title}</strong>
                     <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: "auto" }}>
-                      aakhri: {ist(f.last_at)}
+                      last: {ist(f.last_at)}
                     </span>
                   </div>
                   <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4, lineHeight: 1.55 }}>
                     {meta.why}
-                    {f.sample && <> <span style={{ color: "var(--text)" }}>Jaise: <strong>{f.sample}</strong>.</span></>}
+                    {f.sample && <> <span style={{ color: "var(--text)" }}>For example: <strong>{f.sample}</strong>.</span></>}
                   </div>
                   <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.55 }}>
-                    🤔 Ho sakta hai: {meta.innocent}
+                    🤔 Could be: {meta.innocent}
                   </div>
                   <div style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.55, color: "#22c55e" }}>
                     ✅ {meta.action}
@@ -176,19 +176,19 @@ export function IntegrityBoard({ isSuper }: { isSuper: boolean }) {
       ))}
 
       <div style={{ ...card, borderColor: "rgba(255,255,255,0.08)" }}>
-        <strong style={{ color: "#fff", fontSize: 14.5 }}>Ise kaise padhein</strong>
+        <strong style={{ color: "#fff", fontSize: 14.5 }}>How to read this</strong>
         <p className="subtitle" style={{ margin: "6px 0 0", lineHeight: 1.65 }}>
-          Yahan har cheez ek <strong>sawaal</strong> hai, <strong>saboot nahi</strong>. Har flag ki ek seedhi-saadi
-          wajah bhi ho sakti hai — recorder ne file miss kar di, customer ne sach me mana kar diya, site pe network
-          nahi tha. Isliye har flag ke saath uski nirdosh wajah bhi likhi hai, aur pehla kadam hamesha
-          <strong> recording sunna ya rep se baat karna</strong> hai — ilzaam lagana nahi. Ek achhe rep pe shak karke
-          use khona, cheating se zyada mehnga padta hai.
+          Every item here is a <strong>question</strong>, not <strong>proof</strong>. Each flag can have a simple
+          reason. The recorder missed a file. The customer really said no. There was no network at the site.
+          That is why each flag includes an innocent reason. The first step is always to
+          <strong> listen to the recording or talk to the rep</strong>. Do not accuse. Losing a good rep to suspicion
+          costs more than cheating does.
         </p>
         <p className="subtitle" style={{ margin: "10px 0 0", lineHeight: 1.65 }}>
-          <strong>Jo ye nahi dekh sakta:</strong> rep ki <strong>personal WhatsApp</strong> chats. App sirf WhatsApp
-          kholta hai, padhta nahi. Customer ki chat tabhi dikhegi jab wo <strong>company ke WhatsApp number
-          (Cloud API)</strong> se ho — wo WhatsApp page pe connect karna padta hai, aur abhi kisi company ka nahi hua
-          hai. Chat dikhni shuru karni hai to sabse pehla kadam wahi hai.
+          <strong>What this cannot see:</strong> a rep&apos;s <strong>personal WhatsApp</strong> chats. The app only opens WhatsApp.
+          It does not read it. A customer&apos;s chat shows up only when it goes through the <strong>company&apos;s WhatsApp number
+          (Cloud API)</strong>. That has to be connected on the WhatsApp page, and no company has done that yet.
+          If you want chats to start showing, that is the first step.
         </p>
       </div>
     </>

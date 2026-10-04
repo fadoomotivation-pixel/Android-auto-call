@@ -188,7 +188,7 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
           <div className="split-2">
             {/* Deal killers */}
             <div className="card">
-              <div className="label">☠️ Deal killers — kyun mar rahi hain leads</div>
+              <div className="label">☠️ Deal killers — why leads die</div>
               {(report.objections ?? []).map((o, i) => (
                 <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -205,7 +205,7 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
 
             {/* Demand map */}
             <div className="card">
-              <div className="label">📈 Demand — buyers kya maang rahe hain</div>
+              <div className="label">📈 Demand — what buyers are asking for</div>
               {(report.demand ?? []).map((d, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
                   <span style={{ color: "#fff" }}>{d.what}</span>
@@ -214,7 +214,7 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
               ))}
               {(report.winning ?? []).length > 0 && (
                 <>
-                  <div className="label" style={{ marginTop: 18 }}>🏆 Winning calls me common</div>
+                  <div className="label" style={{ marginTop: 18 }}>🏆 Common on winning calls</div>
                   {(report.winning ?? []).map((w, i) => (
                     <div key={i} style={{ padding: "6px 0", fontSize: 14, color: "var(--muted)" }}>• {w}</div>
                   ))}
@@ -224,14 +224,14 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
           </div>
 
           {/* Recoverable gold */}
-          <h3 className="section-h">💰 Recoverable gold — ye leads wapas jeeti ja sakti hain</h3>
+          <h3 className="section-h">💰 Recoverable gold — these leads can still be won</h3>
           {(report.gold ?? []).length === 0 ? (
             <div className="empty">AI found no confidently recoverable leads in this window.</div>
           ) : (
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Lead</th><th>Phone</th><th>Kyun winnable</th><th>Opening line (bol ke dekho)</th></tr>
+                  <tr><th>Lead</th><th>Phone</th><th>Why it can be won</th><th>Opening line (say this)</th></tr>
                 </thead>
                 <tbody>
                   {(report.gold ?? []).map((g, i) => (
@@ -250,7 +250,7 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
           {/* This week's moves */}
           {(report.advice ?? []).length > 0 && (
             <div className="card" style={{ marginTop: 20 }}>
-              <div className="label">🎯 Owner ke liye is hafte ke 3 moves</div>
+              <div className="label">🎯 This week&apos;s 3 moves for the owner</div>
               {(report.advice ?? []).map((a, i) => (
                 <div key={i} style={{ padding: "6px 0", color: "#fff", fontSize: 14 }}>{i + 1}. {a}</div>
               ))}

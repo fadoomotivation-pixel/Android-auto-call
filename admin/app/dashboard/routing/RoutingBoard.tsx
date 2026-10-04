@@ -109,7 +109,7 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
 
   async function setOffice(p: Policy, text: string) {
     const c = parseCoords(text);
-    if (!c) { setErr("Coordinates samajh nahi aaye. Google Maps me office pe long-press karke jo number aata hai (jaise 28.6139, 77.2090) wo paste karein."); return; }
+    if (!c) { setErr("Could not read those coordinates. In Google Maps, press and hold the office. Paste the numbers that appear (for example 28.6139, 77.2090)."); return; }
     await savePolicy(p, { office_lat: c.lat, office_lng: c.lng });
     setPin((s) => ({ ...s, [p.company_id]: "" }));
   }
@@ -124,8 +124,8 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
     const d = data as { assigned?: number; note?: string; per_rep?: Record<string, number> };
     setMsg(
       d?.assigned
-        ? `${d.assigned} leads baant di — ${Object.entries(d.per_rep ?? {}).map(([n, k]) => `${n}: ${k}`).join(", ")}`
-        : d?.note ?? "Kuch baantne layak nahi mila.",
+        ? `${d.assigned} leads handed out — ${Object.entries(d.per_rep ?? {}).map(([n, k]) => `${n}: ${k}`).join(", ")}`
+        : d?.note ?? "Nothing ready to hand out.",
     );
     await load();
   }
@@ -161,7 +161,7 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <strong style={{ color: "#fff", fontSize: 16 }}>{name}</strong>
               <span style={label}>
-                {onShift}/{reps.length} on shift · {ready} lead le sakte hain
+                {onShift}/{reps.length} on shift · {ready} can take a lead
               </span>
               <span style={{ marginLeft: "auto", fontSize: 13, color: pool > 0 ? "#f59e0b" : "var(--muted)", fontWeight: pool > 0 ? 700 : 400 }}>
                 {pool} leads waiting
@@ -191,7 +191,7 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
                   onClick={() => savePolicy(p, { enforce_geofence: !p.enforce_geofence })}>
                   {p.enforce_geofence ? "ON" : "OFF"}
                 </button>
-                <span style={label}>Check-in office ke andar ho</span>
+                <span style={label}>Check-in must be inside the office</span>
               </div>
 
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -212,7 +212,7 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
                   <strong style={{ color: "#fff", fontSize: 13 }}>
                     {p.office_lat != null && p.office_lng != null
                       ? `${p.office_lat.toFixed(5)}, ${p.office_lng.toFixed(5)}`
-                      : "not set — fence abhi kaam nahi kar raha"}
+                      : "not set — the fence is not working yet"}
                   </strong>
                   <span style={label}>within</span>
                   <select value={p.radius_m} disabled={busy === p.company_id}
@@ -232,7 +232,7 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
                     onClick={() => setOffice(p, pin[p.company_id] ?? "")}>Set office</button>
                 </div>
                 <div style={{ ...label, marginTop: 6 }}>
-                  Google Maps kholein → office pe der tak dabayein → neeche jo numbers aayein wo copy karke yahan paste kar dein.
+                  Open Google Maps. Press and hold the office. Copy the numbers at the bottom and paste them here.
                 </div>
               </div>
             )}
@@ -258,9 +258,9 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
                         {r.geo_ok === true && r.distance_m != null && <> · {r.distance_m} m from office ✓</>}
                       </span>
                       <span style={{ ...label, marginLeft: "auto" }}>
-                        aaj {r.assigned_today} mili · {r.backlog} untouched ·{" "}
+                        today {r.assigned_today} assigned · {r.backlog} untouched ·{" "}
                         <strong style={{ color: r.capacity > 0 ? "#10b981" : "#f59e0b" }}>
-                          {r.capacity > 0 ? `${r.capacity} aur le sakti/sakta hai` : "full — agle ko jayegi"}
+                          {r.capacity > 0 ? `${r.capacity} more they can take` : "full — the next one goes to someone else"}
                         </strong>
                       </span>
                     </div>
@@ -273,7 +273,7 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
               <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
                 <button className="link" disabled={busy === p.company_id}
                   onClick={() => distributeNow(p.company_id, false)}>
-                  Distribute now (rules ke saath)
+                  Distribute now (with the rules)
                 </button>
                 <button className="link" disabled={busy === p.company_id}
                   onClick={() => distributeNow(p.company_id, true)}
@@ -287,12 +287,12 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
       })}
 
       <p className="subtitle" style={{ marginTop: 14, lineHeight: 1.6 }}>
-        <strong>Kaise chalta hai:</strong> raat 3 baje aayi lead kisi ko nahi jaati — wo waiting pool me rukti hai.
-        Jaise hi koi telecaller office ke andar se check-in karta hai, uske hisse ki leads turant chali jaati hain,
-        ek-ek karke bari-bari (round robin). Jiske paas pehle se {"{"}limit{"}"} se zyada bina chhui &quot;new&quot; leads
-        padi hain, use nayi lead nahi jaati — wo agle ke paas chali jaati hai. Facebook, website form aur webhook —
-        sab ek hi rule se guzarte hain.
-        {isSuper && " Super admin har company ke liye ye alag-alag set kar sakta hai."}
+        <strong>How it works:</strong> A lead that arrives at 3 AM goes to nobody. It waits in the pool.
+        When a telecaller checks in from inside the office, their share of leads goes out at once,
+        one by one, in turn (round robin). If someone already has more untouched &quot;new&quot; leads than the {"{"}limit{"}"},
+        they get no new lead. It goes to the next person. Facebook, website forms, and webhooks
+        all follow this one rule.
+        {isSuper && " A super admin can set this separately for each company."}
       </p>
     </>
   );

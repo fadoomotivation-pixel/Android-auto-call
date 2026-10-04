@@ -180,9 +180,9 @@ export async function summarizeAndStore(
                 .eq("id", contact.id).is("budget", null);
             }
             const factLine = [
-              wada.preferences ? `Chahiye: ${wada.preferences}` : null,
-              wada.objections.length ? `Atka: ${wada.objections.join(", ")}` : null,
-              wada.timeline ? `Kab tak: ${wada.timeline}` : null,
+              wada.preferences ? `Wants: ${wada.preferences}` : null,
+              wada.objections.length ? `Stuck on: ${wada.objections.join(", ")}` : null,
+              wada.timeline ? `By when: ${wada.timeline}` : null,
             ].filter(Boolean).join(" · ");
             if (factLine) {
               // Atomic + dedup-safe append (migration 0078) — concurrent writers
@@ -195,7 +195,7 @@ export async function summarizeAndStore(
               // call started (the rep, the post-call sheet or the voice-note AI
               // owns the newer plan; a moved follow-up keeps its old created_at,
               // so the LAST TOUCH — updated_at — is what decides).
-              const note = wada.promise_note ?? "Wada — call pe promise kiya tha";
+              const note = wada.promise_note ?? "Promise made on the call";
               const { data: existing } = await admin.from("follow_ups")
                 .select("id, created_at, updated_at").eq("contact_id", contact.id).eq("status", "pending")
                 .order("created_at", { ascending: false }).limit(1).maybeSingle();

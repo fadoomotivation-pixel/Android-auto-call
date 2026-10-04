@@ -1106,7 +1106,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                         Column(Modifier.weight(1f)) {
                             Text("Calling Score", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Text("AI ne aapki ${app.callingScoreCount} call${if (app.callingScoreCount == 1) "" else "s"} suni",
+                            Text("AI listened to your ${app.callingScoreCount} call${if (app.callingScoreCount == 1) "" else "s"}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f))
                         }

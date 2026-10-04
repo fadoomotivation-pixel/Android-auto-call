@@ -79,7 +79,7 @@ const COACH_SYSTEM =
   "good = what the rep genuinely did well on THIS call, in warm simple Indian English, 1-2 short sentences — always motivating. " +
   "improve = the ONE most useful thing to do better next time, same simple English style. " +
   "IMPORTANT: if the call was genuinely good (rating >= 4) and there is no real, useful improvement, set improve to \"\" (empty) — do NOT invent a suggestion just to fill it; a rep who did well should only be motivated, not confused. Only give improve when it truly helps. Never a list. " +
-  "If company playbook facts are provided, ground the improve tip in them (exact price / offer / rebuttal ka reference do). Be specific to the transcript. NEVER invent details.";
+  "If company playbook facts are provided, ground the improve tip in them (quote the exact price, offer, or rebuttal). Be specific to the transcript. NEVER invent details.";
 
 /** Generate + store coaching for one call. Returns true when a row was written. */
 async function coachOneCall(
@@ -216,7 +216,7 @@ Deno.serve(async (req) => {
       company_id: company, salesperson_id: uid,
       question: question.slice(0, 2000), answer, contact_id: contactId,
     }).catch(() => {});
-    return json({ ok: true, answer: answer ?? "Abhi jawab nahi bana paaya — ek baar phir poochhiye." });
+    return json({ ok: true, answer: answer ?? "Couldn't write an answer just now. Ask once more." });
   }
 
   // ---------- LEAD mode: rating + guidance for ONE lead's last real call ----
@@ -342,7 +342,7 @@ Deno.serve(async (req) => {
       if (priorities.length >= 2) break;
       priorities.push({
         lead: String(c.name ?? c.phone ?? "lead"),
-        why: "Site visit ho chuki hai — feedback lena sabse zaroori hai.",
+        why: "Site visit is done. Getting their feedback comes first.",
       });
     }
     for (const f of due ?? []) {
@@ -352,7 +352,7 @@ Deno.serve(async (req) => {
       const at = new Date(String(f.due_at)).toLocaleTimeString("en-IN", {
         timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit", hour12: true,
       });
-      priorities.push({ lead, why: `Callback ${at} — aapne time diya tha.` });
+      priorities.push({ lead, why: `Callback at ${at} — you set this time.` });
     }
 
     // Best and worst call of the day — a sort, not a second AI pass.
@@ -409,8 +409,8 @@ Deno.serve(async (req) => {
         "Base each one on the actual summaries, never on the counts — the numbers are already printed " +
         "on the card above your text.\n" +
         "improve.pattern = the ONE habit across today's calls that cost them deals, named plainly " +
-        "(\"9 customers ne kaha baad mein baat karte hain — aap next date confirm kiye bina call end " +
-        "kar dete hain\"). Look for what REPEATS; one bad call is not a pattern.\n" +
+        "(\"9 customers said they would talk later — you ended the call without confirming the next date\"). " +
+        "Look for what REPEATS; one bad call is not a pattern.\n" +
         "improve.say = the exact sentence to say instead, ready to speak, in simple Indian English. Not advice — " +
         "the words.\n" +
         "If today shows no real repeated weakness, set improve to null. A rep who did well should be " +
@@ -533,18 +533,18 @@ Deno.serve(async (req) => {
         brief = {
           slot,
           content: slot === "morning"
-            ? "Kal koi call log nahi hui. Aaj fresh shuruaat karte hain — pehle 2 ghante me 10 calls ka target rakhiye! 💪"
-            : "Aaj abhi tak koi call log nahi hui. Din khatam hone se pehle kuch follow-ups nipta lijiye! 📞",
+            ? "No calls were logged yesterday. Start fresh today. Make 10 calls in the first 2 hours. 💪"
+            : "No calls logged yet today. Finish a few follow-ups before the day ends. 📞",
         };
       } else if (!spent) {
         spent = true;
-        const label = slot === "morning" ? "KAL (yesterday)" : "AAJ (today, so far)";
+        const label = slot === "morning" ? "YESTERDAY" : "TODAY (so far)";
         const out = await groqJson(
           "You are a supportive real-estate sales coach writing a mini day-review for a telecaller. " +
           "The input summaries may be in Hindi, English or Hinglish — understand all three. " +
           'Reply ONLY as JSON {"content": string}. content = 3-4 short lines in simple Indian English: ' +
-          "(1) ek line me din ka scorecard, (2) sabse important baat / best moment from the summaries, " +
-          "(3) ek concrete focus for next. Max ~70 words, emojis welcome, never scolding, never generic. NEVER invent details.",
+          "(1) one line for the day's scorecard, (2) the most important point or best moment from the summaries, " +
+          "(3) one concrete focus for next. Max ~70 words, emojis welcome, never scolding, never generic. NEVER invent details.",
           `${label} for ${prof.full_name ?? "the rep"}:\n` +
           `Calls: ${total}, real conversations (>=30s): ${connected}, talk time: ${talkMin} min.\n` +
           `Call summaries:\n${callSummaries.map((s) => `- ${s}`).join("\n") || "(none)"}\n` +

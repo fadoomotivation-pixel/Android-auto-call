@@ -119,7 +119,7 @@ export default function CompanyBranding({
                     spellCheck={false}
                     style={{ width: 110, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border, #333)", background: "rgba(255,255,255,0.03)", color: "var(--text)", fontFamily: "monospace" }}
                   />
-                  <span className="subtitle" style={{ fontSize: 12 }}>Reps ki app isi rang me dikhegi</span>
+                  <span className="subtitle" style={{ fontSize: 12 }}>Reps will see the app in this colour.</span>
                 </div>
               )}
 

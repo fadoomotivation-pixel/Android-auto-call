@@ -33,7 +33,7 @@ const SYSTEM_PROMPT =
   'JSON: {"picks":[{"id": string, "reason": string, "opener": string}]} — at most 5 ' +
   "picks, ids exactly as given, best first.\n" +
   "reason: max ~8 words, simple Indian English, for the rep — respectful in tone " +
-  "form, e.g. 'Visit ho chuki — aaj close karein'.\n" +
+  "form, e.g. 'Visit is done — close it today'.\n" +
   "opener: 1-2 short natural lines in simple Indian English the rep will SAY to the customer. ALWAYS " +
   "address the customer with respectful 'aap' — never tu/tum.\n" +
   "USE where_we_left_it WHEN IT IS THERE. It is the distilled truth of what was actually said on the calls and " +

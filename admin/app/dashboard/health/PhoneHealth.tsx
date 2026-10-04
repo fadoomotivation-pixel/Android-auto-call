@@ -64,45 +64,46 @@ function verdict(r: Row): { title: string; why: string; fix: string | null } {
   switch (r.state) {
     case "no_calllog_permission":
       return {
-        title: "Incoming aur missed calls CRM me nahi aa rahi",
-        why: `${r.outgoing} outgoing calls aayi hain, par is phone se ek bhi incoming, missed ya off-CRM call kabhi nahi aayi. Outgoing call app khud likhti hai — baaki sab phone ki "Call logs" permission se aati hain. Wo permission band lag rahi hai.`,
-        fix: `${rep} ke phone me: Settings → Apps → Call Pro AI → Permissions → Call logs → Allow. Phir app ek baar kholein. App update ki zaroorat nahi — 15 minute me calls apne aap aane lagengi.`,
+        title: "Incoming and missed calls are not reaching the CRM",
+        why: `${r.outgoing} outgoing calls came in, but this phone has never sent an incoming, missed, or off-CRM call. The app writes outgoing calls itself. The rest come from the phone's Call logs permission. That permission looks turned off.`,
+        fix: `On ${rep}'s phone: Settings → Apps → Call Pro AI → Permissions → Call logs → Allow. Then open the app once. No app update is needed. Calls start arriving on their own within 15 minutes.`,
       };
     case "sync_stale": {
       const d = daysAgo(r.last_sync_row_at);
+      const forDays = d == null ? "some days" : d === 1 ? "1 day" : `${d} days`;
       return {
-        title: `Call sync ${d ?? "kuch"} din se band hai`,
-        why: `Pehle is phone se incoming/off-CRM calls aa rahi thi (aakhri ${ist(r.last_sync_row_at)}), lekin rep abhi bhi call kar raha hai aur tab se ek bhi nahi aayi. Aam wajah: battery optimisation ne background sync band kar diya, ya permission reset ho gayi.`,
-        fix: `${rep} ke phone me: Settings → Apps → Call Pro AI → Battery → Unrestricted, aur Permissions → Call logs → Allow. Phir app ek baar kholein.`,
+        title: `Call sync has been off for ${forDays}`,
+        why: `This phone used to send incoming and off-CRM calls (last one ${ist(r.last_sync_row_at)}). The rep is still making calls, and none have arrived since. Usual reason: battery optimisation stopped background sync, or the permission was reset.`,
+        fix: `On ${rep}'s phone: Settings → Apps → Call Pro AI → Battery → Unrestricted, and Permissions → Call logs → Allow. Then open the app once.`,
       };
     }
     case "offcrm_disabled":
       return {
-        title: "Off-CRM calls aur unki recording nahi aayengi",
-        why: `Is company ka "har call record karo" band hai. Jo number CRM me lead nahi hai, uski call aur recording kabhi upload nahi hogi — chahe rep sab kuch sahi kar raha ho.`,
+        title: "Off-CRM calls and their recordings will not arrive",
+        why: `This company's "Record ALL calls" is off. A number that is not a CRM lead will never have its call or recording uploaded, even if the rep does everything right.`,
         fix: null, // fixed by the company toggle below, not by the rep
       };
     case "no_recordings":
       return {
-        title: "Calls aa rahi hain, recording nahi",
-        why: `${r.connected} calls connect hui, par sirf ${r.recordings_ready} ki recording mili. Phone ka recorder band hai ya app me recording folder select nahi hua.`,
-        fix: `${rep} ke phone me: app → Recordings → "Recording folder" select karwayein (phone ke call recorder ka folder), aur phone dialer me call recording ON rakhein.`,
+        title: "Calls are arriving, recordings are not",
+        why: `${r.connected} calls connected, but only ${r.recordings_ready} have a recording. The phone's recorder is off, or the recording folder is not selected in the app.`,
+        fix: `On ${rep}'s phone: app → Recordings → select the "Recording folder" (the phone call recorder's folder), and turn call recording ON in the phone dialer.`,
       };
     case "idle":
       return {
-        title: "Abhi tak koi call nahi",
+        title: "No calls yet",
         why: r.app_last_seen
-          ? `App chal rahi hai (aakhri baar ${ist(r.app_last_seen)}), par is window me ek bhi call nahi hui.`
-          : "App is account se kabhi login nahi hui.",
+          ? `The app is running (last seen ${ist(r.app_last_seen)}), but there was no call in this window.`
+          : "This account has never logged in on the app.",
         fix: null,
       };
     default:
       return {
-        title: "Sab theek chal raha hai",
+        title: "Everything looks fine",
         // No off-CRM count in the verdict sentence. It is super-admin-only
         // information and this line is read by every company admin; the number
         // itself is on the stat row above, where it is properly gated.
-        why: `${r.calls} calls, ${r.incoming} incoming, ${r.recordings_ready} recordings. Phone CRM ko sahi feed kar raha hai.`,
+        why: `${r.calls} calls, ${r.incoming} incoming, ${r.recordings_ready} recordings. The phone is feeding the CRM correctly.`,
         fix: null,
       };
   }
