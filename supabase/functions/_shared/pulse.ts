@@ -207,6 +207,13 @@ export type CompanyPulse = {
    *  not appear. A founder shown "100% reply rate" off one message will plan
    *  a quarter around a coincidence. */
   angles: { angle: string; sent: number; replied: number; rate: number }[];
+  /** Why a recorded site visit did not become a booking. Company-wide.
+   *  From v_site_visit_intelligence (0131). A handful of rows is not a reason. */
+  visitReasons: { outcome: string; visits: number }[];
+  /** Past site visits with no outcome written. One row per lead, with the
+   *  rep's name. needs_manager is the view's own flag — listed, never the
+   *  only rows we show. */
+  pendingVisits: { rep: string; lead: string; daysWaiting: number | null; needsManager: boolean }[];
 };
 
 /**
@@ -287,6 +294,8 @@ export async function buildCompany(
     openPromises,
     promiseTotals,
     angleStats,
+    visitIntel,
+    pendingVisits,
   ] = await Promise.all([
     admin.from("profiles")
       .select("id, full_name").eq("company_id", companyId).eq("role", "salesperson"),
@@ -432,6 +441,31 @@ export async function buildCompany(
     admin.from("v_company_angle_performance")
       .select("angle, sent, replied, reply_rate")
       .eq("company_id", companyId).not("reply_rate", "is", null),
+    // WHY A SITE VISIT DID NOT HAPPEN, company-wide.
+    //
+    // Migration 0131. One row per outcome, never per rep — a reason that
+    // kills visits is a product fact, same rule as the objections above.
+    // share_pct is intentionally not selected. Two visits at 100% is a
+    // costume, not a finding, and the text below refuses to wear it.
+    admin.from("v_site_visit_intelligence")
+      .select("outcome, visits")
+      .eq("company_id", companyId),
+    // VISITS WHOSE DAY HAS GONE AND NOBODY WROTE WHAT HAPPENED.
+    //
+    // The view already keeps these to one company per row. Filter again
+    // anyway: the service role can see every tenant, and a founder's
+    // WhatsApp must not.
+    //
+    // needs_manager is read and shown. It is not a gate. On 4 Oct 2026 the
+    // flag was false on all 23 rows because the view counts
+    // rep_prompts.kind = 'site_visit', and the app only writes
+    // 'visit_check' (0127). Hiding the list behind that flag would print
+    // nothing about visits that are 90 days old.
+    admin.from("v_pending_site_visit_outcomes")
+      .select("name, phone, telecaller, days_waiting, needs_manager")
+      .eq("company_id", companyId)
+      .order("days_waiting", { ascending: false })
+      .limit(80),
   ]);
 
   const repList = reps ?? [];
@@ -895,7 +929,38 @@ export async function buildCompany(
     .filter((a) => a.angle && a.sent >= 5)
     .sort((a, b) => b.rate - a.rate);
 
-  return { date, totals, reps: pulses, objections: objectionRows, promises: promiseRows, angles: angleRows };
+  const visitReasonRows = ((visitIntel.data ?? []) as Record<string, unknown>[])
+    .map((o) => ({
+      outcome: String(o.outcome ?? "").trim(),
+      visits: finiteCount(o.visits),
+    }))
+    .filter((o) => o.outcome && o.visits > 0);
+
+  const pendingVisitRows = ((pendingVisits.data ?? []) as Record<string, unknown>[])
+    .map((r) => {
+      const name = typeof r.name === "string" ? r.name.trim() : "";
+      const phone = typeof r.phone === "string" ? r.phone.trim() : "";
+      const days = r.days_waiting == null ? null : finiteCount(r.days_waiting);
+      return {
+        rep: typeof r.telecaller === "string" ? r.telecaller.trim() : "",
+        lead: name || phone,
+        daysWaiting: days != null && days >= 0 ? Math.floor(days) : null,
+        needsManager: r.needs_manager === true,
+      };
+    })
+    .filter((r) => r.lead);
+
+  return {
+    date, totals, reps: pulses, objections: objectionRows, promises: promiseRows, angles: angleRows,
+    visitReasons: visitReasonRows, pendingVisits: pendingVisitRows,
+  };
+}
+
+/** A count from PostgREST. Numeric columns arrive as strings. Anything that
+ *  is not a real number becomes 0, and the caller decides whether 0 prints. */
+function finiteCount(v: unknown): number {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  return Number.isFinite(n) ? n : 0;
 }
 
 /**
@@ -1132,6 +1197,102 @@ const OBJECTION_LABEL: Record<string, string> = {
   not_serious: "Never a real buyer",
   other: "Something else",
 };
+
+// SITE_VISIT_BLOCKS_START
+// Plain JavaScript on purpose: supabase/tests/pulse-site-visit.test.mjs
+// lifts this block out and runs it. Do not add type annotations here.
+//
+// Five is the same bar as a reply rate in this file. Below that, a reason
+// is a coincidence wearing a label. Two visits, both "not reachable", must
+// not read as the reason site visits fail.
+const VISIT_REASON_MIN = 5;
+const VISIT_REASON_LABEL = {
+  thinking: "Still thinking",
+  follow_up: "Needs another call",
+  price: "Rate too high",
+  location: "Wrong location",
+  family: "Family has to decide",
+  finance: "Loan or money",
+  competitor: "Chose another project",
+  trust: "Did not trust it",
+  no_show: "Did not come",
+  cancelled: "Cancelled",
+  rescheduled: "Moved the date",
+  not_reachable: "Could not reach them",
+  other: "Something else",
+};
+
+function siteVisitReasonLines(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  let total = 0;
+  const parsed = [];
+  for (const r of list) {
+    const outcome = String((r && r.outcome) || "").trim();
+    const visits = Number(r && r.visits);
+    if (!outcome || !Number.isFinite(visits) || visits <= 0) continue;
+    total += visits;
+    parsed.push({ outcome, visits });
+  }
+  if (total <= 0) return [];
+  if (total < VISIT_REASON_MIN) {
+    const noun = total === 1 ? "outcome is" : "outcomes are";
+    return [
+      "",
+      "📍 Why site visits don't happen",
+      `Only ${total} ${noun} written down. Too few to say why.`,
+    ];
+  }
+  const reasons = parsed
+    .filter((r) => r.outcome !== "booked")
+    .sort((a, b) => b.visits - a.visits);
+  if (!reasons.length) {
+    return [
+      "",
+      "📍 Site visit outcomes",
+      `${total} written down. Every one of them booked.`,
+    ];
+  }
+  const lines = ["", `📍 Why site visits don't happen (${total} written down)`];
+  for (const r of reasons.slice(0, 3)) {
+    const label = VISIT_REASON_LABEL[r.outcome] || String(r.outcome).replaceAll("_", " ");
+    lines.push(`• ${label}: ${r.visits}`);
+  }
+  return lines;
+}
+
+function pendingVisitLines(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const named = [];
+  for (const r of list) {
+    const lead = String((r && r.lead) || "").trim();
+    if (!lead) continue;
+    const rep = String((r && r.rep) || "").trim() || "No rep assigned";
+    // null is not zero. A missing day must not print as "under a day".
+    const raw = r ? r.daysWaiting : null;
+    const days = raw == null || raw === "" ? NaN : Number(raw);
+    named.push({
+      lead,
+      rep,
+      days: Number.isFinite(days) && days >= 0 ? Math.floor(days) : null,
+      needsManager: !!(r && r.needsManager),
+    });
+  }
+  if (!named.length) return [];
+  named.sort((a, b) => (b.days ?? -1) - (a.days ?? -1));
+  const lines = ["", `📍 Visits overdue, no outcome written (${named.length})`];
+  for (const r of named) {
+    const wait = r.days == null
+      ? ""
+      : r.days === 0
+      ? " · under a day"
+      : ` · ${r.days} day${r.days === 1 ? "" : "s"}`;
+    const flag = r.needsManager ? " · needs a manager" : "";
+    lines.push(`• ${r.rep} — ${r.lead}${wait}${flag}`);
+  }
+  if (named.length >= 80) lines.push("List stopped at 80. There may be more.");
+  return lines;
+}
+// SITE_VISIT_BLOCKS_END
 
 /** A quote that fits one line. Cut, not wrapped — a report line that spills
  *  onto a second line is the one a founder's thumb skips past. */
@@ -1586,6 +1747,13 @@ export function pulseText(
       L.push(`• ${OBJECTION_LABEL[o.code] ?? o.code}: ${n}${eg}`);
     }
   }
+
+  // Same shape as the block above, and the same rule: company-wide, never
+  // split by rep. A thin sample says how thin it is and then stops.
+  L.push(...siteVisitReasonLines(p.visitReasons));
+  // Every overdue visit with no outcome, named. needs_manager is a mark on
+  // the line when the view sets it, not a filter that hides the rest.
+  L.push(...pendingVisitLines(p.pendingVisits));
 
   // THE GAP BETWEEN "THEY SAID YES" AND "THEY CAME".
   //
