@@ -143,6 +143,24 @@ export interface SalespersonStats {
   last_call_at: string | null;
 }
 
+/**
+ * One rep's read-only WhatsApp capture session (`wa_rep_sessions`).
+ *
+ * `link_ok_at` is deliberately not a field here. On 4 Oct 2026 the only live
+ * row was status `disconnected` ("WhatsApp logged this session out"), the last
+ * captured message was 26 Sep 05:14 IST, and `last_seen_at` was 29 Sep 19:31 IST,
+ * while `link_ok_at` had been refreshed at 16:14 IST the same afternoon. That
+ * column means the worker process answered, not that capture is working.
+ * Reading it as health is how a dead session looks fine.
+ */
+export interface WaRepSession {
+  salesperson_id: string;
+  company_id: string;
+  status: string;
+  last_seen_at: string | null;
+  last_error: string | null;
+}
+
 export interface Attendance {
   id: string;
   company_id: string;

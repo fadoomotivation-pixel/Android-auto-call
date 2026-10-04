@@ -37,6 +37,22 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-04 — Cursor (dead WhatsApp capture banner)
+
+- WHAT: Admin dashboard layout shows a sticky banner when any `wa_rep_sessions`
+  row is disconnected, logged out, waiting for a QR, or `offline` (the watchdog).
+  It names the rep, the last captured message, and `last_seen_at`. It does not
+  read `link_ok_at` — on 4 Oct that column was refreshed at 16:14 IST while
+  Fanbe/Ankita stayed `disconnected` and the last message was 26 Sep 05:14 IST.
+  Super admin is unscoped (RLS), so the banner is cross-company. No alert is
+  sent: not `founder_alerts`, not Baileys.
+- FILES: `admin/app/dashboard/layout.tsx`, `CaptureOutageBanner.tsx`,
+  `admin/lib/capture-health.ts`, `admin/lib/types.ts` (`WaRepSession`),
+  `admin/app/dashboard/whatsapp/page.tsx` (anchor only), `admin/app/globals.css`.
+- WHY: The 25 Sep logout was visible as `status = disconnected` and nobody was
+  told for six days.
+- BUILD: admin `tsc`. No migration, no edge function, no Android.
+
 ## 2026-07-23 — Claude Code (Objection Buster in the floating coach)
 
 - Finished the interrupted "Objection Buster" upgrade (the other session hit its
