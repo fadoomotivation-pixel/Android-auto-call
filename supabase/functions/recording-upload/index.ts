@@ -99,8 +99,14 @@ function measureAudio(b: Uint8Array, ext: string): AudioFacts {
         }
         return { seconds: null, complete: true, note: "moov present but unreadable" };
       }
-      if (size < 8) break;      // malformed; stop rather than loop forever
-      i += size;
+      // Box sizes have three legal shapes and only one of them is a plain
+      // number. 0 means "runs to end of file"; 1 means a 64-bit largesize
+      // follows the type. Treating either as malformed aborts the walk before
+      // moov is reached and reports a perfectly good file as unfinished.
+      if (size === 0) break;
+      const step = size === 1 ? readU32(b, i + 12) : size;   // low 32 bits is plenty
+      if (step < 8) break;      // genuinely malformed; stop rather than loop forever
+      i += step;
     }
     return {
       seconds: null,
@@ -125,9 +131,82 @@ function measureAudio(b: Uint8Array, ext: string): AudioFacts {
     if (frames > 0) return { seconds: Math.round(frames * 0.02), complete: true, note: null };
   }
 
-  // MP3 and anything else: no cheap exact answer, and a wrong number would be
-  // worse than none. Left null on purpose.
+  if (ext === "mp3") return measureMp3(b);
+
+  // Anything else: no cheap exact answer, and a wrong number would be worse
+  // than none.
   return { seconds: null, complete: true, note: null };
+}
+
+/**
+ * MP3 LENGTH — and a note on why this exists.
+ *
+ * The first version of measureAudio returned null here, with the comment "no
+ * cheap exact answer... left null on purpose". That decision quietly made the
+ * whole column useless: 69 recordings arrived measured, every one of them
+ * audio_complete true and audio_seconds NULL, because the files these phones
+ * actually produce are MP3 — either from the OEM recorder or from the AMR→MP3
+ * conversion. An agent re-measuring production found the column empty and
+ * reasonably guessed the code had never deployed. It had. It was just
+ * declining to answer the one question it was built for.
+ *
+ * There IS a cheap exact answer, two of them in fact:
+ *   · a Xing/Info header carries the frame count, which gives exact duration
+ *   · failing that, CBR duration is (bytes × 8) ÷ bitrate, read off frame one
+ */
+const MP3_BITRATE_V1 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+const MP3_BITRATE_V2 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+const MP3_RATE_V1 = [44100, 48000, 32000];
+const MP3_RATE_V2 = [22050, 24000, 16000];
+const MP3_RATE_V25 = [11025, 12000, 8000];
+
+function measureMp3(b: Uint8Array): AudioFacts {
+  // ID3v2 sits in front of the audio and its size is syncsafe (7 bits a byte).
+  let start = 0;
+  if (b.length > 10 && b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) {
+    start = 10 + (((b[6] & 0x7f) << 21) | ((b[7] & 0x7f) << 14) | ((b[8] & 0x7f) << 7) | (b[9] & 0x7f));
+  }
+
+  // First frame sync. Scanning a little way in costs nothing and survives a
+  // byte or two of junk between the tag and the audio.
+  let f = -1;
+  for (let i = start; i < Math.min(b.length - 4, start + 8192); i++) {
+    if (b[i] === 0xff && (b[i + 1] & 0xe0) === 0xe0) { f = i; break; }
+  }
+  if (f < 0) return { seconds: null, complete: true, note: "mp3 with no frame sync" };
+
+  const verBits = (b[f + 1] >> 3) & 0x03;          // 3 = MPEG1, 2 = MPEG2, 0 = MPEG2.5
+  const rateIdx = (b[f + 2] >> 2) & 0x03;
+  const brIdx = (b[f + 2] >> 4) & 0x0f;
+  if (rateIdx === 3 || brIdx === 0 || brIdx === 15) {
+    return { seconds: null, complete: true, note: "mp3 header not readable" };
+  }
+
+  const isV1 = verBits === 3;
+  const rate = (verBits === 3 ? MP3_RATE_V1 : verBits === 2 ? MP3_RATE_V2 : MP3_RATE_V25)[rateIdx];
+  const kbps = (isV1 ? MP3_BITRATE_V1 : MP3_BITRATE_V2)[brIdx];
+  const samplesPerFrame = isV1 ? 1152 : 576;
+  if (!rate || !kbps) return { seconds: null, complete: true, note: "mp3 header not readable" };
+
+  // Xing/Info, when the encoder wrote one, is the exact answer. Its offset
+  // from the frame header depends on version and channel mode.
+  const mono = ((b[f + 3] >> 6) & 0x03) === 3;
+  const xing = f + 4 + (isV1 ? (mono ? 17 : 32) : (mono ? 9 : 17));
+  const tag = (i: number, t: string) => t.split("").every((ch, k) => b[i + k] === ch.charCodeAt(0));
+  if (xing + 12 < b.length && (tag(xing, "Xing") || tag(xing, "Info"))) {
+    const flags = readU32(b, xing + 4);
+    if (flags & 1) {
+      const frames = readU32(b, xing + 8);
+      if (frames > 0) {
+        return { seconds: Math.round((frames * samplesPerFrame) / rate), complete: true, note: null };
+      }
+    }
+  }
+
+  // Constant bitrate: bytes × 8 ÷ bits-per-second.
+  const audioBytes = b.length - f;
+  if (audioBytes <= 0) return { seconds: null, complete: true, note: "mp3 with no audio after the header" };
+  return { seconds: Math.round((audioBytes * 8) / (kbps * 1000)), complete: true, note: null };
 }
 
 const G_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID") ?? "";
