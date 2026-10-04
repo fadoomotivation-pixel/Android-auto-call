@@ -3690,90 +3690,13 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                         }
                         Spacer(Modifier.height(10.dp))
                     }
-                    // Temperature (optional, one tap) — call hot leads back first.
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TEMPERATURES.forEach { (key, label) ->
-                            val on = temp == key
-                            // Unselected is a hairline on white, not a filled
-                            // grey slab. Three filled slabs above three more
-                            // filled slabs is what made this sheet read as a
-                            // pile of buttons rather than a question.
-                            Box(
-                                Modifier.weight(1f).clip(RoundedCornerShape(50))
-                                    .background(if (on) AppColors.Indigo else AppColors.Surface)
-                                    .border(1.dp, if (on) AppColors.Indigo else AppColors.Border, RoundedCornerShape(50))
-                                    .clickable { temp = if (on) null else key }.padding(vertical = 9.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(label, color = if (on) AppColors.OnIndigo else AppColors.TextPrimary,
-                                    style = AppType.label, maxLines = 1)
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(note, { note = it }, label = { Text("Add a note (optional)") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(8.dp))
-                    // Third way to answer the prompt: just say it. Fastest of all
-                    // between two calls, and it counts exactly like a status pick.
-                    if (app.voiceRecording) {
-                        // NO COUNTDOWN. The button said "Recording… 3", then 2,
-                        // then 1, and stayed dead until three seconds had passed.
-                        // Two things wrong with that. It reads as a LIMIT — three
-                        // seconds left to speak — which is the opposite of what it
-                        // meant. And it locked the one control on screen while the
-                        // rep was already talking, which is how a screen teaches
-                        // someone that it is not listening.
-                        //
-                        // The lockout was a second fix for a problem already
-                        // fixed: Stop used to land exactly where Record had been,
-                        // so the reflex "did that register?" tap ended the take.
-                        // Cancel sits in that spot now, so the stray tap cancels
-                        // — nothing saved, no harm — and Stop is somewhere the
-                        // finger isn't. The 3-second minimum still exists where it
-                        // belongs, in finishVoiceNote(), which says "Too short to
-                        // save" and leaves the sheet open.
-                        //
-                        // What the rep sees instead is the take growing: 0:01,
-                        // 0:02, 0:03. Elapsed time is the one thing they actually
-                        // want to know while speaking.
-                        var secs by remember { mutableStateOf(0) }
-                        LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(1000); secs++ } }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            DispoButton("Cancel", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { vm.cancelVoiceNote() }
-                            DispoButton(
-                                "⏹  Stop & save  %d:%02d".format(secs / 60, secs % 60),
-                                Green.copy(alpha = 0.16f), Green, Modifier.weight(1f),
-                            ) { vm.finishPostCallVoiceNote() }
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "🔴 Recording — say what the customer told you.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Red,
-                        )
-                    } else {
-                        // An outline, not a filled indigo slab. This is the
-                        // optional third way to answer; it was the biggest,
-                        // loudest control on the sheet and sat above the
-                        // question it was optional for.
-                        Row(
-                            Modifier.fillMaxWidth().heightIn(min = 46.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(AppColors.Surface)
-                                .border(1.dp, AppColors.Border, RoundedCornerShape(12.dp))
-                                .clickable { vm.startVoiceNote() }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            Text("🎤", fontSize = 13.sp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Record voice note", style = AppType.label, color = AppColors.Indigo, maxLines = 1)
-                        }
-                    }
-
-                    Spacer(Modifier.height(14.dp))
+                    // THE QUESTION COMES FIRST. Temperature, the note and the
+                    // voice note used to sit above it, so the thing the sheet
+                    // exists to ask — where is this lead now — was the part you
+                    // scrolled to. Those three are optional and stay on this
+                    // same sheet, under the tiles. No second popup: a post-call
+                    // modal cannot open in time, and this sheet is the one
+                    // place the answer is recorded.
                     // THE THREE ANSWERS THAT WERE UNREACHABLE FROM HERE.
                     //
                     // After a real call the app knows whether it connected, so it
@@ -3872,7 +3795,7 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                             Triple("Call back later", AppColors.Indigo, { scheduleFor = "callback" }),
                         )
                     }
-                    choices.chunked(2).forEach { pair ->
+                        choices.chunked(2).forEach { pair ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             pair.forEach { (label, color, onTap) ->
                                 OutcomeTile(label, color, Modifier.weight(1f), onTap)
@@ -3881,6 +3804,94 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                             if (pair.size == 1) Spacer(Modifier.weight(1f))
                         }
                         Spacer(Modifier.height(8.dp))
+                    }
+
+                    // Optional, and under the stage on purpose. A tap on a tile
+                    // above already carries whatever is filled in here.
+                    Spacer(Modifier.height(6.dp))
+                    SheetSectionLabel(
+                        "OPTIONAL",
+                        "Hot, warm or cold, a note, or say it. The stage above is what moves the lead.",
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TEMPERATURES.forEach { (key, label) ->
+                            val on = temp == key
+                            // Unselected is a hairline on white, not a filled
+                            // grey slab. Three filled slabs read as a pile of
+                            // buttons rather than a question you can skip.
+                            Box(
+                                Modifier.weight(1f).clip(RoundedCornerShape(50))
+                                    .background(if (on) AppColors.Indigo else AppColors.Surface)
+                                    .border(1.dp, if (on) AppColors.Indigo else AppColors.Border, RoundedCornerShape(50))
+                                    .clickable { temp = if (on) null else key }.padding(vertical = 9.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(label, color = if (on) AppColors.OnIndigo else AppColors.TextPrimary,
+                                    style = AppType.label, maxLines = 1)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(note, { note = it }, label = { Text("Add a note (optional)") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    // Third way to answer: just say it. It still counts as a
+                    // status pick, and it lives under the stage question
+                    // because it is optional.
+                    if (app.voiceRecording) {
+                        // NO COUNTDOWN. The button said "Recording… 3", then 2,
+                        // then 1, and stayed dead until three seconds had passed.
+                        // Two things wrong with that. It reads as a LIMIT — three
+                        // seconds left to speak — which is the opposite of what it
+                        // meant. And it locked the one control on screen while the
+                        // rep was already talking, which is how a screen teaches
+                        // someone that it is not listening.
+                        //
+                        // The lockout was a second fix for a problem already
+                        // fixed: Stop used to land exactly where Record had been,
+                        // so the reflex "did that register?" tap ended the take.
+                        // Cancel sits in that spot now, so the stray tap cancels
+                        // — nothing saved, no harm — and Stop is somewhere the
+                        // finger isn't. The 3-second minimum still exists where it
+                        // belongs, in finishVoiceNote(), which says "Too short to
+                        // save" and leaves the sheet open.
+                        //
+                        // What the rep sees instead is the take growing: 0:01,
+                        // 0:02, 0:03. Elapsed time is the one thing they actually
+                        // want to know while speaking.
+                        var secs by remember { mutableStateOf(0) }
+                        LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(1000); secs++ } }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            DispoButton("Cancel", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { vm.cancelVoiceNote() }
+                            DispoButton(
+                                "⏹  Stop & save  %d:%02d".format(secs / 60, secs % 60),
+                                Green.copy(alpha = 0.16f), Green, Modifier.weight(1f),
+                            ) { vm.finishPostCallVoiceNote() }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "🔴 Recording — say what the customer told you.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Red,
+                        )
+                    } else {
+                        // An outline, not a filled indigo slab. This is the
+                        // optional third way to answer, so it stays quiet and
+                        // sits under the stage question.
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 46.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AppColors.Surface)
+                                .border(1.dp, AppColors.Border, RoundedCornerShape(12.dp))
+                                .clickable { vm.startVoiceNote() }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            Text("🎤", fontSize = 13.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Record voice note", style = AppType.label, color = AppColors.Indigo, maxLines = 1)
+                        }
                     }
                 }
             } else {
@@ -4266,6 +4277,15 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 // have never been answered in four or more tries — one number
                 // has been rung seventy-nine times. Sorting by age treated all
                 // three the same.
+                //
+                // 30 MUST MATCH MIGRATION 0217.
+                //
+                // An accepted WhatsApp call has no duration, so
+                // 0217_a_whatsapp_call_counts_as_contact.sql raises
+                // best_call_seconds to exactly 30 to mean "someone spoke".
+                // This threshold and that sentinel have to change together.
+                // Move the phone to 45 and leave the sentinel at 30, and the
+                // buyer who picked up on WhatsApp falls back into tier 4.
                 (w?.bestCallSeconds ?: 0) >= 30 -> 2
                 // Rung a few times, never answered. Still worth a fair shot.
                 (w?.callsTotal ?: 0) < 4 -> 3
@@ -4427,10 +4447,18 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // what is on screen, and "Call all 24 due" sitting above two search
         // results is a button that does something other than what the rep is
         // looking at.
-        if (query.isBlank() && (dueContacts.isNotEmpty() || overdueStrict.isNotEmpty())) {
+        //
+        // "Call all" dials dueContacts — the Call now list — so it is shown
+        // only while that chip is selected. On Tomorrow, Later today, This
+        // week and All it was a button that rang a different list from the
+        // one on screen. The chip itself is unchanged: no new tab, and no
+        // extra total beside the count it already carries.
+        val showCallAll = query.isBlank() && filter == "tocall" && dueContacts.isNotEmpty()
+        val showMoveOverdue = query.isBlank() && overdueStrict.isNotEmpty()
+        if (showCallAll || showMoveOverdue) {
             item {
                 Column {
-                    if (dueContacts.isNotEmpty()) {
+                    if (showCallAll) {
                         Row(
                             Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.primary)
@@ -4446,8 +4474,8 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                                 fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                     }
-                    if (overdueStrict.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
+                    if (showMoveOverdue) {
+                        if (showCallAll) Spacer(Modifier.height(8.dp))
                         // A BUTTON THAT LOOKS LIKE A BUTTON.
                         //
                         // This was loose red prose with a tap target hidden on
