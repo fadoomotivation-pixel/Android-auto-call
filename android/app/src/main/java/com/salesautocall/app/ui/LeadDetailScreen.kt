@@ -8,7 +8,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,7 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -1818,38 +1816,50 @@ private fun LeadActionBar(
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
                     Spacer(Modifier.height(7.dp))
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        if (askNext) {
-                            BarChip("Tomorrow 11 AM", IndigoL) {
+                    // Two across, same as the Update sheet. Five chips in one
+                    // scrolling row hid the last ones past the edge of the
+                    // phone. Every answer is on screen, and each tap target is
+                    // half the row — a thumb can hit it without scrolling.
+                    val chips: List<Triple<String, Color, () -> Unit>> = when {
+                        askNext -> listOf(
+                            Triple("Tomorrow 11 AM", IndigoL, {
                                 dismissed = true; askNext = false
                                 onQuickCallback(
                                     java.time.ZonedDateTime.now().plusDays(1)
                                         .withHour(11).withMinute(0).withSecond(0)
                                         .toInstant().toEpochMilli(),
                                 )
-                            }
-                            BarChip("Pick a time", IndigoL) { dismissed = true; askNext = false; onBookCallback() }
-                            BarChip("🏠 Book visit", PurpleL) { dismissed = true; askNext = false; onBookVisit() }
-                            BarChip("No next step", SubInk) { dismissed = true; askNext = false }
-                        } else if (pending?.connected == false) {
+                            }),
+                            Triple("Pick a time", IndigoL, { dismissed = true; askNext = false; onBookCallback() }),
+                            Triple("🏠 Book visit", PurpleL, { dismissed = true; askNext = false; onBookVisit() }),
+                            Triple("No next step", SubInk, { dismissed = true; askNext = false }),
+                        )
+                        pending?.connected == false -> listOf(
                             // A call that never connected has no funnel stage to
                             // pick, so it is not offered one — the same rule the
-                            // post-call popup follows. These two book their own
+                            // post-call sheet follows. These two book their own
                             // retry, which is why neither leads to the next step.
-                            BarChip("📵 No answer", RedL) { onOutcome("no_answer") }
-                            BarChip("⏳ Busy", AmberL) { onOutcome("busy") }
-                            BarChip("✖️ Wrong number", RedL) { onOutcome("invalid") }
-                            BarChip("↻ Call back", IndigoL) { dismissed = true; onBookCallback() }
-                        } else {
-                            BarChip("✓ Connected", GreenL) { onOutcome("called"); askNext = true }
-                            BarChip("⭐ Interested", GreenL) { onOutcome("interested"); askNext = true }
-                            BarChip("🏠 Site visit", PurpleL) { dismissed = true; onBookVisit() }
-                            BarChip("❌ Not interested", SubInk) { onOutcome("not_interested") }
-                            BarChip("✖️ Wrong number", RedL) { onOutcome("invalid") }
+                            Triple("📵 No answer", RedL, { onOutcome("no_answer") }),
+                            Triple("⏳ Busy", AmberL, { onOutcome("busy") }),
+                            Triple("✖️ Wrong number", RedL, { onOutcome("invalid") }),
+                            Triple("↻ Call back", IndigoL, { dismissed = true; onBookCallback() }),
+                        )
+                        else -> listOf(
+                            Triple("✓ Connected", GreenL, { onOutcome("called"); askNext = true }),
+                            Triple("⭐ Interested", GreenL, { onOutcome("interested"); askNext = true }),
+                            Triple("🏠 Site visit", PurpleL, { dismissed = true; onBookVisit() }),
+                            Triple("❌ Not interested", SubInk, { onOutcome("not_interested") }),
+                            Triple("✖️ Wrong number", RedL, { onOutcome("invalid") }),
+                        )
+                    }
+                    chips.chunked(2).forEach { pair ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            pair.forEach { (label, tint, onTap) ->
+                                BarChip(label, tint, Modifier.weight(1f), onTap)
+                            }
+                            if (pair.size == 1) Spacer(Modifier.weight(1f))
                         }
+                        Spacer(Modifier.height(6.dp))
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -1892,18 +1902,28 @@ private fun LeadActionBar(
     }
 }
 
-/** One pill in the outcome strip. Small, tinted, single line — a row of these
- *  has to stay under about 34dp or the bar stops being a bar. */
+/** One answer in the outcome strip. Two share a row, so the whole set is on
+ *  screen. The cell is the tap target — half the width, tall enough for a thumb. */
 @Composable
-private fun BarChip(label: String, tint: Color, onClick: () -> Unit) {
+private fun BarChip(label: String, tint: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
-        Modifier.clip(RoundedCornerShape(9.dp))
+        modifier
+            .heightIn(min = 36.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(9.dp))
             .background(tint.copy(alpha = 0.12f))
             .clickable { onClick() }
-            .padding(horizontal = 11.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = AppType.tag, color = tint, maxLines = 1)
+        Text(
+            label,
+            style = AppType.tag,
+            color = tint,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

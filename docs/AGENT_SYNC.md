@@ -37,6 +37,16 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-04 — Cursor (four Android hygiene fixes, user asked)
+
+- WHAT: (1) Post-call sheet puts the stage tiles first; temperature, note and voice note stay on the same sheet underneath. (2) Lead outcome chips lay two across so all five show without a horizontal scroll. (3) "Call all N due" shows only on the Call now chip — it dials that list. No new tab, no extra count on the chip. (4) Coach button labels in AppRoot are simple English (New question, What did the customer say?, Get the reply, Say this, Ask).
+- FILES: `android/.../ui/TelecallerScreens.kt`, `android/.../ui/LeadDetailScreen.kt`, `android/.../ui/AppRoot.kt`.
+- WHY: One-hand use. The required question was below optional fields, five outcomes hid off the edge, and Call all rang Call now from every follow-up chip. UI chrome is English; buyer-facing message text is unchanged.
+- BUILD: `assembleStandardDebug` green locally. These do not move the 82-to-11 site-visit gap.
+- NEXT/NOTE: Compose UI touched because the user asked. No schema, no new popup, no fourth follow-up tab.
+
+---
+
 ## 2026-07-23 — Claude Code (Objection Buster in the floating coach)
 
 - Finished the interrupted "Objection Buster" upgrade (the other session hit its

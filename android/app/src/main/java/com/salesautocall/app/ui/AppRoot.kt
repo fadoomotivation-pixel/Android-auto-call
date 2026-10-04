@@ -1122,7 +1122,7 @@ private fun CoachSheet(
                 enabled = ask.isNotBlank() && !answerLoading,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (answerLoading) "Thinking…" else "Poochho →", fontWeight = FontWeight.Bold)
+                Text(if (answerLoading) "Thinking…" else "Ask →", fontWeight = FontWeight.Bold)
             }
             answer?.let { a ->
                 Spacer(Modifier.height(12.dp))
@@ -1138,7 +1138,7 @@ private fun CoachSheet(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { clipboard.setText(AnnotatedString(a.trim())) }) { Text("Copy") }
                             Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = onClearAnswer) { Text("Naya sawaal") }
+                            TextButton(onClick = onClearAnswer) { Text("New question") }
                         }
                     }
                 }
@@ -1175,7 +1175,7 @@ private fun CoachSheet(
                 value = objection,
                 onValueChange = onObjectionChange,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Customer ne kya kaha?") },
+                placeholder = { Text("What did the customer say?") },
                 maxLines = 3,
             )
             Spacer(Modifier.height(10.dp))
@@ -1184,14 +1184,14 @@ private fun CoachSheet(
                 enabled = objection.isNotBlank() && !rebuttalLoading,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (rebuttalLoading) "Thinking…" else "Jawab batao →", fontWeight = FontWeight.Bold)
+                Text(if (rebuttalLoading) "Thinking…" else "Get the reply →", fontWeight = FontWeight.Bold)
             }
             rebuttal?.let { r ->
                 Spacer(Modifier.height(12.dp))
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp)) {
                         Text(
-                            "YE BOLIYE 👇", style = MaterialTheme.typography.labelMedium,
+                            "Say this", style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
                         )
                         Spacer(Modifier.height(6.dp))
@@ -1200,7 +1200,7 @@ private fun CoachSheet(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { clipboard.setText(AnnotatedString(r.trim())) }) { Text("Copy") }
                             Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = onClearRebuttal) { Text("Naya sawaal") }
+                            TextButton(onClick = onClearRebuttal) { Text("New question") }
                         }
                     }
                 }
