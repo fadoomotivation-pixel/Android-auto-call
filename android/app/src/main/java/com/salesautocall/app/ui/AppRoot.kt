@@ -1104,7 +1104,7 @@ private fun CoachSheet(
             Spacer(Modifier.height(16.dp))
             Text("Ask the coach", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Koi bhi sawaal — pitch, price, follow-up, site visit tak kaise le jaayein. Coach guide karega.",
+                "Ask anything — pitch, price, follow-up, or how to get a site visit. The coach will guide you.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1113,7 +1113,7 @@ private fun CoachSheet(
                 value = ask,
                 onValueChange = onAskChange,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Jaise: is lead ko site visit tak kaise le jaaun?") },
+                placeholder = { Text("For example: how do I get this lead to a site visit?") },
                 maxLines = 4,
             )
             Spacer(Modifier.height(10.dp))
