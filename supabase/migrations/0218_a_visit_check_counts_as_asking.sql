@@ -75,6 +75,14 @@
 --     as a mark on the line, not as a filter
 -- No scheduler is added. The ask already lives in tickAssistant.
 --
+-- NUMBER
+--
+-- This file is 0218 because PR #484 already owns
+-- 0217_a_whatsapp_call_counts_as_contact.sql. That migration replaces
+-- v_lead_workstate and indexes wa_observed_calls. This one only replaces
+-- v_pending_site_visit_outcomes. Neither statement reads the other's
+-- objects, so this can be applied on its own, before or after 0217.
+--
 -- Not applied by this commit. The founder applies it by hand.
 -- applied by hand on <date>
 

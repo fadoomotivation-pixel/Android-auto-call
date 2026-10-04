@@ -129,13 +129,15 @@ service-bearer auth.
   `visit_check`, `callback_check`, `day_review`, and the app writes
   `visit_check`. Measured the same day: 0 `site_visit` rows, 33 `visit_check`,
   15 of 23 pending leads already asked, 0 `answer = 'not_yet'` (the presses
-  were dismissals). Migration `0217_a_visit_check_counts_as_asking.sql`
+  were dismissals). Migration `0218_a_visit_check_counts_as_asking.sql`
   counts `visit_check` for `times_asked` and sets `needs_manager` only from
   two `not_yet` answers. Dismissals stay in `times_asked` and do not flip
   the flag — `assistantDismiss` and the 0127 column comment both say a
   dismissal is counted, never punished. Column names, types and order are
-  unchanged. Not applied; no scheduler; no Android change.
-- FILES: `supabase/migrations/0217_a_visit_check_counts_as_asking.sql`.
+  unchanged. Numbered 0218 because PR #484 already uses 0217 for
+  `v_lead_workstate`; the two replace different views and this one can be
+  applied on its own. Not applied; no scheduler; no Android change.
+- FILES: `supabase/migrations/0218_a_visit_check_counts_as_asking.sql`.
 - WHY: the Action Center and the Pulse were reading "never asked" on visits
   the phone had already asked about.
 - BUILD: supabase SQL only. Do not apply from CI — founder applies by hand.
