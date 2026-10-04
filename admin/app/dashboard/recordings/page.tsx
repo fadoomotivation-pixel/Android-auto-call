@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { CallLog, Profile } from "@/lib/types";
 import { CallSummary } from "./CallSummary";
@@ -149,15 +148,8 @@ export default async function RecordingsPage({
     return s ? `?${s}` : "?";
   };
 
-  const chip = (active: boolean): CSSProperties => ({
-    padding: "4px 12px",
-    borderRadius: 999,
-    fontSize: 13,
-    textDecoration: "none",
-    border: "1px solid var(--border, #d8dce2)",
-    background: active ? "var(--accent, #4353B8)" : "transparent",
-    color: active ? "#fff" : "inherit",
-  });
+  const chip = (active: boolean, warn = false) =>
+    `chip${active ? " active" : ""}${warn ? " warn" : ""}`;
 
   return (
     <>
@@ -170,24 +162,22 @@ export default async function RecordingsPage({
       {company && <RecordingSetup companyId={company.id} enabled={company.recording_enabled} recordAll={company.record_all_calls} />}
 
       {/* Filter rail: date + direction as one-tap chips, rep/company/search as a form. */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0 4px" }}>
-        <a href={linkWith({ days: "" })} style={chip(!days)}>All time</a>
-        <a href={linkWith({ days: "1" })} style={chip(days === 1)}>Today</a>
-        <a href={linkWith({ days: "7" })} style={chip(days === 7)}>7 days</a>
-        <a href={linkWith({ days: "30" })} style={chip(days === 30)}>30 days</a>
-        <span style={{ opacity: 0.35 }}>|</span>
-        <a href={linkWith({ dir: "" })} style={chip(!dirFilter)}>All calls</a>
-        <a href={linkWith({ dir: "outgoing" })} style={chip(dirFilter === "outgoing")}>↗ Outgoing</a>
-        <a href={linkWith({ dir: "incoming" })} style={chip(dirFilter === "incoming")}>↙ Incoming</a>
-        <span style={{ opacity: 0.35 }}>|</span>
+      <div className="filters" style={{ margin: "4px 0 8px" }}>
+        <a href={linkWith({ days: "" })} className={chip(!days)}>All time</a>
+        <a href={linkWith({ days: "1" })} className={chip(days === 1)}>Today</a>
+        <a href={linkWith({ days: "7" })} className={chip(days === 7)}>7 days</a>
+        <a href={linkWith({ days: "30" })} className={chip(days === 30)}>30 days</a>
+        <a href={linkWith({ dir: "" })} className={chip(!dirFilter)}>All calls</a>
+        <a href={linkWith({ dir: "outgoing" })} className={chip(dirFilter === "outgoing")}>Outgoing</a>
+        <a href={linkWith({ dir: "incoming" })} className={chip(dirFilter === "incoming")}>Incoming</a>
         {isSuper && <>
-          <a href={linkWith({ kind: "" })} style={chip(!kindFilter)}>All numbers</a>
-          <a href={linkWith({ kind: "lead" })} style={chip(kindFilter === "lead")}>CRM leads</a>
-          <a href={linkWith({ kind: "offcrm" })} style={chip(kindFilter === "offcrm")}>⚠ Off-CRM</a>
+          <a href={linkWith({ kind: "" })} className={chip(!kindFilter)}>All numbers</a>
+          <a href={linkWith({ kind: "lead" })} className={chip(kindFilter === "lead")}>CRM leads</a>
+          <a href={linkWith({ kind: "offcrm" })} className={chip(kindFilter === "offcrm", true)}>⚠ Off-CRM</a>
         </>}
       </div>
 
-      <form method="get" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "8px 0" }}>
+      <form method="get" className="filters" style={{ margin: "8px 0" }}>
         {/* Preserve chip filters across form submits. */}
         {dirFilter && <input type="hidden" name="dir" value={dirFilter} />}
         {days ? <input type="hidden" name="days" value={days} /> : null}
@@ -211,10 +201,10 @@ export default async function RecordingsPage({
             ))}
         </select>
         <input name="q" defaultValue={searchParams.q || ""} placeholder="Search lead name or phone" />
-        <button type="submit">Apply</button>
+        <button className="primary" type="submit">Apply</button>
       </form>
 
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", margin: "4px 0 12px" }}>
+      <div className="metrics">
         <span><strong>{rows.length}</strong> recordings</span>
         <span><strong>{fmtLong(totalRecSecs)}</strong> total audio</span>
         <span><strong>{incomingCount}</strong> incoming call-backs</span>
@@ -222,19 +212,12 @@ export default async function RecordingsPage({
 
       {/* Telecaller activity rollup — who is actually on the phone. */}
       {repCards.length > 1 && !repFilter && (
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "0 0 16px" }}>
+        <div className="toolbar" style={{ margin: "0 0 16px" }}>
           {repCards.map(([id, r]) => (
             <a
               key={id}
               href={linkWith({ rep: id })}
-              style={{
-                textDecoration: "none",
-                color: "inherit",
-                border: "1px solid var(--border, #d8dce2)",
-                borderRadius: 12,
-                padding: "10px 14px",
-                minWidth: 150,
-              }}
+              className="card rep-card"
             >
               <div style={{ fontWeight: 600 }}>{r.name}</div>
               {isSuper && r.company && <div style={{ fontSize: 12, opacity: 0.6 }}>{r.company}</div>}
@@ -257,7 +240,7 @@ export default async function RecordingsPage({
       {rows.length === 0 ? (
         <div className="empty">No recordings match these filters yet.</div>
       ) : (
-        <div className="table-responsive">
+        <div className="table-wrap table-responsive">
           <table>
             <thead>
               <tr>
@@ -266,7 +249,7 @@ export default async function RecordingsPage({
                 <th>Telecaller</th>
                 <th>Lead</th>
                 <th>Dir</th>
-                <th>Length</th>
+                <th className="num">Length</th>
                 <th>Recording</th>
                 {canSummarize && <th>AI summary</th>}
               </tr>
@@ -308,17 +291,17 @@ export default async function RecordingsPage({
                       both are shown and the shortfall is named. Older rows have
                       no measurement and are left exactly as they were rather
                       than guessed at. */}
-                  <td>
+                  <td className="num">
                     {fmt(c.recording_seconds)}
                     {c.audio_complete === false ? (
-                      <div style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>
+                      <div className="warn-line">
                         ⚠️ file unfinished — cannot play or transcribe
                       </div>
                     ) : typeof c.audio_seconds === "number"
                       && c.recording_seconds != null
                       && c.recording_seconds > 30
                       && c.audio_seconds < c.recording_seconds * 0.8 ? (
-                      <div style={{ fontSize: 12, color: "#ef4444", fontWeight: 600 }}>
+                      <div className="warn-line">
                         ⚠️ only {fmt(c.audio_seconds)} of audio
                       </div>
                     ) : null}

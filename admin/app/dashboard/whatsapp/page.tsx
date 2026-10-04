@@ -18,14 +18,9 @@ const WEBHOOK_URL = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/whats
  */
 function Section({ label, hint }: { label: string; hint?: string }) {
   return (
-    <div style={{ marginTop: 28, marginBottom: 10 }}>
-      <div style={{
-        fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase",
-        color: "var(--muted)", fontWeight: 700,
-      }}>
-        {label}
-      </div>
-      {hint && <p className="subtitle" style={{ margin: "4px 0 0" }}>{hint}</p>}
+    <div className="kicker-block">
+      <div className="kicker">{label}</div>
+      {hint && <p className="subtitle">{hint}</p>}
     </div>
   );
 }
@@ -84,7 +79,7 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <h2>💬 WhatsApp</h2>
+      <h2>WhatsApp</h2>
       <p className="subtitle">
         All WhatsApp goes through one company number, so you see every conversation your team has with customers.
         Each telecaller sees only their own leads&apos; chats; you see everyone&apos;s.
@@ -96,14 +91,14 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
 
       {isSuper && (
         <>
-          <Section label="📡 Platform-wide" hint="Sends to founders across every company — not scoped to the company picker above." />
+          <Section label="Platform-wide" hint="Sends to founders across every company — not scoped to the company picker above." />
           <PlatformSender companies={companies} />
         </>
       )}
 
       {companyId && (
         <div id="telecaller-whatsapp">
-          <Section label="👥 Telecaller watchers" hint="Check daily. Each rep's own WhatsApp, read-only — see who's connected and what came in." />
+          <Section label="Telecaller watchers" hint="Check daily. Each rep's own WhatsApp, read-only — see who's connected and what came in." />
           <TelecallerWhatsApp
             companyId={companyId}
             companyName={companies.find((c) => c.id === companyId)?.name ?? null}
@@ -113,7 +108,7 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
         </div>
       )}
 
-      <Section label="💬 Team inbox" hint="Every conversation on the company's own WhatsApp number." />
+      <Section label="Team inbox" hint="Every conversation on the company's own WhatsApp number." />
       {rows.length === 0 ? (
         <div className="empty">No WhatsApp messages yet. Connect the number below, then messages appear here.</div>
       ) : (
@@ -126,7 +121,7 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
 
       {/* ── Set up once, then leave alone ── */}
 
-      <Section label="⚙️ Business number — set up once" hint="How customers message the company, and whether it's actually working." />
+      <Section label="Business number — set up once" hint="How customers message the company, and whether it's actually working." />
       <WhatsAppHealth isSuper={isSuper} companyId={companyId} />
 
       {companyId ? (

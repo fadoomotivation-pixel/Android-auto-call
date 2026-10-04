@@ -37,6 +37,35 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-04 — Cursor (admin visual polish, second pass)
+
+- WHAT: Pushed the admin shell further. Inter is bundled (SF first, then the
+  next/font face, then a sans-serif fallback so a missing variable cannot
+  fall through to Times). Frosted sticky title bar, macOS-style sidebar
+  (accent-tinted selection, collapse, account card, light/dark toggle),
+  larger stat numerals, roomier sticky tables, status pills, and the
+  capture-outage strip restyled as a tinted panel with an action button.
+  Same words, same numbers, same queries. Banner stays sticky and red.
+- FILES: `admin/app/globals.css`, `admin/app/layout.tsx`,
+  `admin/app/dashboard/Chrome.tsx`, `Sidebar.tsx`, `layout.tsx`,
+  `CaptureOutageBanner.tsx`, plus overview / leads / whatsapp / pulse chrome.
+- WHY: The first pass still read as a generic dark admin, and the review
+  screenshots rendered in a serif.
+- BUILD: admin `tsc` and `next build`. No migration, no edge function, no Android.
+
+## 2026-10-04 — Cursor (admin visual polish, no behaviour change)
+
+- WHAT: Admin shell only. Lifted the pure-black canvas to charcoal, one accent,
+  quieter sidebar selection, line icons in place of emoji, shared type scale,
+  spacing, cards, inputs, chips, tables, empty/error/loading. Hand-tuned
+  overview, leads, whatsapp, pulse, recordings. The dead-capture banner stays
+  sticky and red. No queries, copy meaning, company scope, Android, or migrations.
+- FILES: `admin/app/globals.css`, `admin/app/dashboard/Sidebar.tsx`,
+  `NavLink.tsx`, `icons.tsx`, and the five pages above (plus WhatsApp/Pulse
+  chrome components they render).
+- WHY: The dashboard read as a school project (emoji nav, black fill, blue pill).
+- BUILD: admin `tsc` and `next build`. No migration, no edge function, no Android.
+
 ## 2026-10-04 — Cursor (four Android hygiene fixes, user asked)
 
 - WHAT: (1) Post-call sheet puts the stage tiles first; temperature, note and voice note stay on the same sheet underneath. (2) Lead outcome chips lay two across so all five show without a horizontal scroll. (3) "Call all N due" shows only on the Call now chip — it dials that list. No new tab, no extra count on the chip. (4) Coach sheet chrome in AppRoot is simple English: buttons (New question, What did the customer say?, Get the reply, Say this, Ask) plus the grey line under Ask the coach and the example in the box. The coach's reply text is unchanged.

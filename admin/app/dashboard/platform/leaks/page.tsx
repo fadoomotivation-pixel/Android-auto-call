@@ -122,7 +122,7 @@ export default async function LeaksPage({
   if (current) {
     return (
       <>
-        <h2>🩸 {current.company_name.trim()}</h2>
+        <h2 className="keep-title">🩸 {current.company_name.trim()}</h2>
         <p className="subtitle">
           <a href="/dashboard/platform/leaks">← All companies</a> ·{" "}
           {current.at_risk} of {current.leads_total} leads going nowhere ({current.at_risk_pct}%)

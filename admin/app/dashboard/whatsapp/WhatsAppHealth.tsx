@@ -58,7 +58,7 @@ export function WhatsAppHealth({ isSuper, companyId }: { isSuper: boolean; compa
   // Check on open: the owner should see the truth without hunting for a button.
   useEffect(() => { void (isSuper ? runAll() : runOne()); }, [isSuper, runAll, runOne]);
 
-  const card: CSSProperties = { background: "var(--panel-grad, var(--panel))", border: "1px solid var(--border)", borderRadius: 18, padding: 20, marginBottom: 16 };
+  const card: CSSProperties = { marginBottom: 16 };
   const pill = (state: string): CSSProperties => ({
     fontSize: 11, fontWeight: 700, color: TONE[state] ?? "var(--muted)",
     border: `1px solid ${TONE[state] ?? "var(--border)"}`, borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap",
@@ -69,9 +69,9 @@ export function WhatsAppHealth({ isSuper, companyId }: { isSuper: boolean; compa
   const missing = all ? all.filter((c) => c.state === "not_set_up").length : 0;
 
   return (
-    <div style={card}>
+    <div className="card" style={card}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <strong style={{ color: "#fff", fontSize: 15 }}>🩺 Connection check</strong>
+        <strong style={{ color: "var(--text)", fontSize: 15 }}>Connection check</strong>
         {all && (
           <span style={{ fontSize: 13, color: "var(--muted)" }}>
             <span style={{ color: "#22c55e", fontWeight: 700 }}>{working} working</span>

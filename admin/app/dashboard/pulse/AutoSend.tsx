@@ -156,17 +156,16 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
   };
 
   return (
-    <div style={{ border: "1px solid rgba(37,211,102,0.3)", background: "rgba(37,211,102,0.05)", borderRadius: 12, padding: 14, marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <strong style={{ color: "#fff", fontSize: 14 }}>💬 Send this to WhatsApp automatically</strong>
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="toolbar">
+        <strong style={{ color: "var(--text)", fontSize: 15 }}>Send this to WhatsApp automatically</strong>
         <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
           {subs.length === 0
             ? `Add a number — the founder gets the whole team, a telecaller gets only their own day. Goes out on its own, every evening.`
             : `${subs.filter((s) => s.active).length} number${subs.filter((s) => s.active).length === 1 ? "" : "s"} getting ${companyName ? `${companyName}'s` : "this"} report daily.`}
         </span>
-        <button onClick={() => setOpen((o) => !o)}
-          style={{ marginLeft: "auto", fontSize: 12, padding: "5px 12px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.05)", color: "var(--text)", cursor: "pointer" }}>
-          {open ? "Cancel" : "+ Add number"}
+        <button className="link" onClick={() => setOpen((o) => !o)} style={{ marginLeft: "auto" }}>
+          {open ? "Cancel" : "Add number"}
         </button>
       </div>
 
@@ -178,9 +177,9 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
               type a rep's number, so the only way a rep saw their own report
               was a manager forwarding it by hand. */}
           <select value={who} onChange={(e) => setWho(e.target.value)} style={{ ...box, width: 190 }}>
-            <option value="">👑 Founder — whole team</option>
+            <option value="">Founder — whole team</option>
             {reps.map((r) => (
-              <option key={r.id} value={r.id}>👤 {r.full_name || "Telecaller"} — own report</option>
+              <option key={r.id} value={r.id}>{r.full_name || "Telecaller"} — own report</option>
             ))}
           </select>
           {!who && (
@@ -200,7 +199,7 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
       {subs.map((s) => (
         <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
           <span style={{ fontSize: 13, color: "var(--text)" }}>
-            <strong>{s.salesperson_id ? "👤" : "👑"} {s.label}</strong> · {s.phone}
+            <strong>{s.label}</strong> · {s.phone}
             <span style={{ color: "var(--muted)", fontSize: 12 }}>
               {" "}· {s.salesperson_id ? "own report" : "whole team"}
             </span>

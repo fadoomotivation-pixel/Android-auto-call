@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 /**
@@ -14,9 +16,13 @@ export function CompanyPicker({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-      <span style={{ fontSize: 13, color: "var(--muted)" }}>Company:</span>
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setSlot(document.getElementById("company-picker-slot"));
+  }, []);
+  const control = (
+    <div className="company-picker">
+      <span className="company-picker-label">Company</span>
       <select
         value={selected ?? ""}
         onChange={(e) => {
@@ -24,14 +30,12 @@ export function CompanyPicker({
           next.set("company", e.target.value);
           router.push(`${pathname}?${next.toString()}`);
         }}
-        style={{
-          padding: "8px 10px", borderRadius: 6, border: "1px solid var(--border)",
-          background: "var(--panel-2)", color: "var(--text)", minWidth: 220,
-        }}
       >
         {companies.length === 0 && <option value="">No companies</option>}
         {companies.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
       </select>
     </div>
   );
+  if (slot) return createPortal(control, slot);
+  return control;
 }

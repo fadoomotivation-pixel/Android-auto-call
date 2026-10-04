@@ -454,7 +454,7 @@ export function TelecallerWhatsApp({
   const unconnected = reps.filter((r) => !sessions.some((s) => s.salesperson_id === r.id));
 
   return (
-    <div className="card" style={{ marginTop: 28 }}>
+    <div className="card">
       {/* THE COMPANY, NAMED, ON THE CARD ITSELF.
           The picker that decides it is at the very top of a long page, so by
           the time you reach this table you cannot see which company you are
@@ -462,7 +462,7 @@ export function TelecallerWhatsApp({
           company's reps. Two controls, one of them off-screen, and no way to
           tell they were related. Naming it here is the whole fix. */}
       <h3 style={{ marginBottom: 4 }}>
-        📱 Telecaller WhatsApp{companyName ? ` · ${companyName.trim()}` : ""}
+        Telecaller WhatsApp{companyName ? ` · ${companyName.trim()}` : ""}
       </h3>
       <p className="subtitle" style={{ marginTop: 0 }}>
         Connect a telecaller&apos;s own WhatsApp so their messages to leads show up in the
@@ -480,7 +480,7 @@ export function TelecallerWhatsApp({
         <strong>Tell them both halves of that before they scan.</strong>
       </p>
 
-      {msg && <div className="empty" style={{ color: "#ef4444" }}>{msg}</div>}
+      {msg && <div className="error">{msg}</div>}
 
       {loading ? (
         <div className="empty">Loading…</div>
@@ -515,7 +515,8 @@ export function TelecallerWhatsApp({
                     {s.wa_number && <div className="subtitle" style={{ fontSize: 12 }}>{s.wa_number}</div>}
                   </td>
                   <td>
-                    <span style={{ color: HEALTH_TONE[health], fontWeight: 600 }}>
+                    <span className="status-pill" style={{ color: HEALTH_TONE[health] }}>
+                      <span className="status-dot" />
                       {HEALTH_LABEL[health]}
                     </span>
                     {/* SAY WHICH OF THE TWO FACTS IS BEING REPORTED.
