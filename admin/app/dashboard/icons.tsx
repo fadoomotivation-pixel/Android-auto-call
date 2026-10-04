@@ -5,7 +5,7 @@ export type IconName =
   | "chart" | "sliders" | "bell" | "route" | "chat" | "flag" | "link"
   | "library" | "building" | "spark" | "users" | "calendar" | "bot"
   | "download" | "radar" | "alert" | "pin" | "userPlus" | "contacts"
-  | "trending" | "cloud" | "pulse" | "shield" | "menu" | "close" | "rows";
+  | "trending" | "cloud" | "pulse" | "shield" | "menu" | "close" | "rows" | "panel";
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {
   return (
@@ -252,6 +252,13 @@ function glyph(name: IconName) {
           <path d="M4 7h16" />
           <path d="M4 12h16" />
           <path d="M4 17h16" />
+        </>
+      );
+    case "panel":
+      return (
+        <>
+          <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+          <path d="M9 4.5v15" />
         </>
       );
     case "menu":

@@ -241,19 +241,21 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
               receive the company it sits under. */}
           <AutoSend companyId={c.company_id} companyName={c.company_name} />
           {c.reps.length > 0 && (
-            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14, color: "var(--muted)", fontSize: 13 }}>
-              <span><strong style={{ color: "var(--text)" }}>{c.totals.calls}</strong> calls</span>
-              <span><strong style={{ color: "#22c55e" }}>{c.totals.connected}</strong> connected</span>
+            <>
               {/* The totals are a sum of what ARRIVED. With a phone missing they
                   are a floor, not a count. */}
               {c.reps.some((r) => r.callsTrusted === false) && (
-                <span style={{ color: "#fca5a5" }}>
+                <div className="warn-line" style={{ marginBottom: 12 }}>
                   ⚠️ incomplete — {c.reps.filter((r) => r.callsTrusted === false).map((r) => r.name).join(", ")} not reporting
-                </span>
+                </div>
               )}
-              <span><strong style={{ color: "#8b5cf6" }}>{c.totals.notes}</strong> voice notes</span>
-              <span><strong style={{ color: "#f59e0b" }}>{c.totals.visits}</strong> site visits</span>
-            </div>
+              <div className="cards" style={{ marginBottom: 14 }}>
+                <div className="card stat"><div className="label">Calls</div><div className="value">{c.totals.calls}</div></div>
+                <div className="card stat"><div className="label">Connected</div><div className="value" style={{ color: "#22c55e" }}>{c.totals.connected}</div></div>
+                <div className="card stat"><div className="label">Voice notes</div><div className="value" style={{ color: "#8b5cf6" }}>{c.totals.notes}</div></div>
+                <div className="card stat"><div className="label">Site visits</div><div className="value" style={{ color: "#f59e0b" }}>{c.totals.visits}</div></div>
+              </div>
+            </>
           )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>

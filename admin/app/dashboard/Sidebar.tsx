@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { NavLink } from "./NavLink";
 import { Icon } from "./icons";
 import type { Company, Profile } from "@/lib/types";
@@ -14,31 +14,68 @@ export function Sidebar({
   profile,
   company,
   email,
-  isSuper
+  isSuper,
+  mobileOpen = false,
+  onMobileOpen,
 }: {
   profile: Profile | null;
   company: Company | null;
   email: string | undefined;
   isSuper: boolean;
+  mobileOpen?: boolean;
+  onMobileOpen?: (open: boolean) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   // Every link repeated this test; it reads better named once.
   const admin = profile?.role === "admin" || isSuper;
+  const who = profile?.full_name ?? email ?? company?.name ?? "S";
+  const initial = who.trim().charAt(0).toUpperCase() || "S";
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("admin-sidebar") === "collapsed");
+    const stored = document.documentElement.getAttribute("data-theme");
+    if (stored === "light" || stored === "dark") setTheme(stored);
+  }, []);
+
+  function toggleCollapsed(event: MouseEvent) {
+    event.stopPropagation();
+    setCollapsed((value) => {
+      const next = !value;
+      localStorage.setItem("admin-sidebar", next ? "collapsed" : "open");
+      return next;
+    });
+  }
+
+  function toggleTheme(event: MouseEvent) {
+    event.stopPropagation();
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("admin-theme", next);
+  }
 
   return (
     <>
-      <div className="mobile-topbar">
-        <h1 style={{ margin: 0, fontSize: 17 }}>SalesAutoCall</h1>
-        <button
-          className="mobile-menu-btn"
-          aria-label={isOpen ? "Close menu" : "Open menu"}
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          <Icon name={isOpen ? "close" : "menu"} />
-        </button>
-      </div>
-      <aside className={`sidebar ${isOpen ? "mobile-open" : ""}`} onClick={() => setIsOpen(false)}>
-        <div className="brand">SalesAutoCall</div>
+      <aside
+        className={`sidebar${collapsed ? " is-collapsed" : ""}${mobileOpen ? " mobile-open" : ""}`}
+        onClick={() => onMobileOpen?.(false)}
+      >
+        <div className="brand-row">
+          <div className="brand">
+            <span className="brand-mark" aria-hidden>S</span>
+            <span className="brand-name">SalesAutoCall</span>
+          </div>
+          <button
+            type="button"
+            className="icon-btn collapse-btn"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={toggleCollapsed}
+          >
+            <Icon name={collapsed ? "menu" : "panel"} />
+          </button>
+        </div>
         {/* Twenty-eight flat links was the navigation problem — not the number
             of pages, the absence of any grouping. Five sections, ordered by how
             often a working day touches them: act, understand, configure, run
@@ -114,20 +151,49 @@ export function Sidebar({
         <div className="spacer" />
 
         <div className="nav-user">
-          <div className="nav-user-name">
-            {company?.name ?? "No company"}
+          <div className="avatar" aria-hidden>{initial}</div>
+          <div className="nav-user-copy">
+            <div className="nav-user-name">
+              {company?.name ?? "No company"}
+            </div>
+            <div className="nav-user-meta">
+              {profile?.full_name ?? email}
+            </div>
           </div>
-          <div className="nav-user-meta">
-            {profile?.full_name ?? email}
-          </div>
+          <button
+            type="button"
+            className="icon-btn theme-btn"
+            aria-label={theme === "light" ? "Use dark mode" : "Use light mode"}
+            title={theme === "light" ? "Use dark mode" : "Use light mode"}
+            onClick={toggleTheme}
+          >
+            {theme === "light" ? <MoonIcon /> : <SunIcon />}
+          </button>
         </div>
 
         <form action="/auth/signout" method="post">
-          <button className="link" type="submit">
-            Sign out
+          <button className="link" type="submit" title="Sign out">
+            <span>Sign out</span>
           </button>
         </form>
       </aside>
     </>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden>
+      <path d="M15.5 3.5a7.5 7.5 0 1 0 5 12.2A8 8 0 0 1 15.5 3.5Z" />
+    </svg>
   );
 }

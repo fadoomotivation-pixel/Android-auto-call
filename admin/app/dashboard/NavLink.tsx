@@ -8,7 +8,7 @@ export function NavLink({ href, label, icon }: { href: string; label: string; ic
   const pathname = usePathname();
   const active = pathname === href;
   return (
-    <Link href={href} className={active ? "active" : ""}>
+    <Link href={href} className={active ? "active" : ""} title={label}>
       {icon ? <Icon name={icon} className="nav-ico" /> : null}
       <span>{label}</span>
     </Link>

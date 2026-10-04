@@ -249,7 +249,7 @@ export default async function RecordingsPage({
                 <th>Telecaller</th>
                 <th>Lead</th>
                 <th>Dir</th>
-                <th>Length</th>
+                <th className="num">Length</th>
                 <th>Recording</th>
                 {canSummarize && <th>AI summary</th>}
               </tr>
@@ -291,7 +291,7 @@ export default async function RecordingsPage({
                       both are shown and the shortfall is named. Older rows have
                       no measurement and are left exactly as they were rather
                       than guessed at. */}
-                  <td>
+                  <td className="num">
                     {fmt(c.recording_seconds)}
                     {c.audio_complete === false ? (
                       <div className="warn-line">

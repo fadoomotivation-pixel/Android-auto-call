@@ -37,6 +37,22 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-04 — Cursor (admin visual polish, second pass)
+
+- WHAT: Pushed the admin shell further. Inter is bundled (SF first, then the
+  next/font face, then a sans-serif fallback so a missing variable cannot
+  fall through to Times). Frosted sticky title bar, macOS-style sidebar
+  (accent-tinted selection, collapse, account card, light/dark toggle),
+  larger stat numerals, roomier sticky tables, status pills, and the
+  capture-outage strip restyled as a tinted panel with an action button.
+  Same words, same numbers, same queries. Banner stays sticky and red.
+- FILES: `admin/app/globals.css`, `admin/app/layout.tsx`,
+  `admin/app/dashboard/Chrome.tsx`, `Sidebar.tsx`, `layout.tsx`,
+  `CaptureOutageBanner.tsx`, plus overview / leads / whatsapp / pulse chrome.
+- WHY: The first pass still read as a generic dark admin, and the review
+  screenshots rendered in a serif.
+- BUILD: admin `tsc` and `next build`. No migration, no edge function, no Android.
+
 ## 2026-10-04 — Cursor (admin visual polish, no behaviour change)
 
 - WHAT: Admin shell only. Lifted the pure-black canvas to charcoal, one accent,

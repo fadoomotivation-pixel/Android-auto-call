@@ -127,11 +127,11 @@ export default async function OverviewPage({
             <thead>
               <tr>
                 <th>Telecaller</th>
-                <th>New leads</th>
-                <th>Called</th>
-                <th>Median first call</th>
-                <th>Within 5 min</th>
-                <th>Uncalled now</th>
+                <th className="num">New leads</th>
+                <th className="num">Called</th>
+                <th className="num">Median first call</th>
+                <th className="num">Within 5 min</th>
+                <th className="num">Uncalled now</th>
               </tr>
             </thead>
             <tbody>
@@ -140,13 +140,13 @@ export default async function OverviewPage({
                 return (
                   <tr key={r.id} className="hover-row">
                     <td style={{ color: "var(--text)", fontWeight: 500 }}>{r.name}</td>
-                    <td>{r.leads_7d}</td>
-                    <td>{r.called_7d}</td>
-                    <td style={{ color: fast ? "var(--good)" : r.median_min > 60 ? "var(--bad)" : "var(--accent)", fontWeight: 600 }}>
+                    <td className="num">{r.leads_7d}</td>
+                    <td className="num">{r.called_7d}</td>
+                    <td className="num" style={{ color: fast ? "var(--good)" : r.median_min > 60 ? "var(--bad)" : "var(--accent)", fontWeight: 600 }}>
                       {fmtMinutes(r.median_min)}
                     </td>
-                    <td style={{ color: "var(--good)" }}>{r.within_5min}</td>
-                    <td style={{ color: r.breaching_now ? "var(--bad)" : "var(--muted)", fontWeight: r.breaching_now ? 700 : 400 }}>
+                    <td className="num" style={{ color: "var(--good)" }}>{r.within_5min}</td>
+                    <td className="num" style={{ color: r.breaching_now ? "var(--bad)" : "var(--muted)", fontWeight: r.breaching_now ? 700 : 400 }}>
                       {r.breaching_now || "—"}
                     </td>
                   </tr>
@@ -171,9 +171,9 @@ export default async function OverviewPage({
               <tr>
                 <th style={{ width: 48 }}>#</th>
                 <th>Telecaller</th>
-                <th>Calls</th>
-                <th>Connected</th>
-                <th>Connect rate</th>
+                <th className="num">Calls</th>
+                <th className="num">Connected</th>
+                <th className="num">Connect rate</th>
               </tr>
             </thead>
             <tbody>
@@ -181,9 +181,9 @@ export default async function OverviewPage({
                 <tr key={l.id} className="hover-row">
                   <td style={{ color: "var(--muted)" }}>{i + 1}</td>
                   <td style={{ color: "var(--text)", fontWeight: 500 }}>{l.name}</td>
-                  <td>{l.calls}</td>
-                  <td style={{ color: "var(--good)" }}>{l.connected}</td>
-                  <td style={{ color: "var(--accent)" }}>{connectRate(l.connected, l.calls)}%</td>
+                  <td className="num">{l.calls}</td>
+                  <td className="num" style={{ color: "var(--good)" }}>{l.connected}</td>
+                  <td className="num" style={{ color: "var(--accent)" }}>{connectRate(l.connected, l.calls)}%</td>
                 </tr>
               ))}
             </tbody>

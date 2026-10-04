@@ -179,7 +179,12 @@ function OutageClock({ row }: { row: DeadRow }) {
 function BannerShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="capture-outage" role="status">
-      {children}
+      <svg className="capture-outage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M12 4.5 3.8 19h16.4L12 4.5Z" />
+        <path d="M12 10v4" />
+        <path d="M12 16.5h.01" />
+      </svg>
+      <div className="capture-outage-copy">{children}</div>
     </div>
   );
 }

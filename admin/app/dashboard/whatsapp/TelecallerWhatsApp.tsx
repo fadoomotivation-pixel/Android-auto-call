@@ -515,7 +515,8 @@ export function TelecallerWhatsApp({
                     {s.wa_number && <div className="subtitle" style={{ fontSize: 12 }}>{s.wa_number}</div>}
                   </td>
                   <td>
-                    <span style={{ color: HEALTH_TONE[health], fontWeight: 600 }}>
+                    <span className="status-pill" style={{ color: HEALTH_TONE[health] }}>
+                      <span className="status-dot" />
                       {HEALTH_LABEL[health]}
                     </span>
                     {/* SAY WHICH OF THE TWO FACTS IS BEING REPORTED.

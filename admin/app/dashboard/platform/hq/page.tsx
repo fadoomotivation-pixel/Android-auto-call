@@ -160,7 +160,7 @@ export default async function PlatformHqPage({
 
   return (
     <>
-      <h2>🛰 Platform HQ {current ? `· ${current.company_name.trim()}` : ""}</h2>
+      <h2 className="keep-title">🛰 Platform HQ {current ? `· ${current.company_name.trim()}` : ""}</h2>
       <p className="subtitle">
         {current
           ? <><a href={`/dashboard/platform/hq${qs({ range })}`}>← All companies</a> · {rangeLabel} work and latest calls</>

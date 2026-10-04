@@ -529,7 +529,7 @@ export default async function TelecallerActivityPage({
     }
     return (
       <>
-        <h2>👥 {current.rep_name || "Telecaller"} · {current.company_name.trim()}</h2>
+        <h2 className="keep-title">👥 {current.rep_name || "Telecaller"} · {current.company_name.trim()}</h2>
         <p className="subtitle">
           <a href={`/dashboard/platform/telecallers-activity${qs({ days })}`}>← All telecallers</a>
           {" · "}{current.calls} calls, {fmtTalk(current.talk_seconds)} talk, {current.wa_messages} WhatsApp
