@@ -37,6 +37,19 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-04 — Cursor (admin visual polish, no behaviour change)
+
+- WHAT: Admin shell only. Lifted the pure-black canvas to charcoal, one accent,
+  quieter sidebar selection, line icons in place of emoji, shared type scale,
+  spacing, cards, inputs, chips, tables, empty/error/loading. Hand-tuned
+  overview, leads, whatsapp, pulse, recordings. The dead-capture banner stays
+  sticky and red. No queries, copy meaning, company scope, Android, or migrations.
+- FILES: `admin/app/globals.css`, `admin/app/dashboard/Sidebar.tsx`,
+  `NavLink.tsx`, `icons.tsx`, and the five pages above (plus WhatsApp/Pulse
+  chrome components they render).
+- WHY: The dashboard read as a school project (emoji nav, black fill, blue pill).
+- BUILD: admin `tsc` and `next build`. No migration, no edge function, no Android.
+
 ## 2026-10-04 — Cursor (dead WhatsApp capture banner)
 
 - WHAT: Admin dashboard layout shows a sticky banner when any `wa_rep_sessions`

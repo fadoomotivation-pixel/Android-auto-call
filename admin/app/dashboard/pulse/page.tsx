@@ -20,7 +20,7 @@ export default async function PulsePage({
 
   return (
     <>
-      <h2>🔔 Daily Pulse</h2>
+      <h2>Daily Pulse</h2>
       <p className="subtitle">
         <strong>What each telecaller did today.</strong> Built from their calls, voice notes and lead
         movements — short enough to forward to the owner as it is. Play any voice note to hear the rep

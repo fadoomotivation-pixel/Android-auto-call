@@ -554,23 +554,21 @@ export function LeadManager({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+    <div className="stack">
+      <div className="toolbar">
         <button
           className="primary"
-          style={{ width: "auto", padding: "9px 16px" }}
           onClick={() => setImportOpen(true)}
         >
-          ⬆ Import Leads
+          Import Leads
         </button>
         {isSuper && companies.length > 0 && (
           <select
             value={companyFilter}
             onChange={(e) => { setCompanyFilter(e.target.value); setAgentFilter(null); }}
             title="Filter the whole board to one company"
-            style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text)", outline: "none" }}
           >
-            <option value="">🏢 All companies</option>
+            <option value="">All companies</option>
             {companies.map(([id, name]) => (
               <option key={id} value={id}>{name}</option>
             ))}
@@ -580,14 +578,14 @@ export function LeadManager({
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-        <StatCard label="Unassigned" value={stats.unassigned} tone="#f59e0b" bg="rgba(245, 158, 11, 0.05)" />
-        <StatCard label="Assigned" value={stats.assigned} tone="#3b82f6" bg="rgba(59, 130, 246, 0.05)" />
-        <StatCard label="Total" value={stats.total} tone="#10b981" bg="rgba(16, 185, 129, 0.05)" />
+      <div className="cards" style={{ marginBottom: 0 }}>
+        <StatCard label="Unassigned" value={stats.unassigned} tone="var(--warn)" bg="rgba(245, 158, 11, 0.05)" />
+        <StatCard label="Assigned" value={stats.assigned} tone="var(--accent)" bg="rgba(59, 130, 246, 0.05)" />
+        <StatCard label="Total" value={stats.total} tone="var(--good)" bg="rgba(16, 185, 129, 0.05)" />
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 8 }}>
+      <div className="toolbar">
         <Tab active={tab === "unassigned"} onClick={() => { setTab("unassigned"); setAgentFilter(null); }}>
           Unassigned ({stats.unassigned})
         </Tab>
@@ -598,7 +596,7 @@ export function LeadManager({
 
       {/* Telecaller chips (assigned tab → filter) */}
       {tab === "assigned" && salespeople.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="toolbar">
           <Chip active={agentFilter === null} onClick={() => setAgentFilter(null)} label="All" count={stats.assigned} />
           {visibleReps.map((sp) => (
             <Chip key={sp.id} active={agentFilter === sp.id} onClick={() => setAgentFilter(sp.id)} label={labelOf(sp)} count={agentCounts[sp.id] ?? 0} />
@@ -612,21 +610,21 @@ export function LeadManager({
           several tabs at once on the phone. "Today" is a filter here, never a
           stage. */}
       <div>
-        <div style={{ fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>
+        <div className="kicker" style={{ marginBottom: 8 }}>
           What to do now
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="toolbar">
           <Chip active={actionFilter === ""} onClick={() => setActionFilter("")} label="Any" count={stats.total} />
           {ACTION_STATES.map((a) => (
             <button
               key={a.code}
               title={a.hint}
               onClick={() => setActionFilter(actionFilter === a.code ? "" : a.code)}
+              className="chip"
               style={{
-                fontSize: 12.5, padding: "5px 12px", borderRadius: 999, cursor: "pointer",
-                border: `1px solid ${actionFilter === a.code ? a.color : "var(--border)"}`,
-                background: actionFilter === a.code ? `${a.color}22` : "transparent",
-                color: actionFilter === a.code ? a.color : "var(--muted)",
+                borderColor: actionFilter === a.code ? a.color : undefined,
+                background: actionFilter === a.code ? `${a.color}22` : undefined,
+                color: actionFilter === a.code ? a.color : undefined,
               }}
             >
               {a.label}
@@ -643,10 +641,10 @@ export function LeadManager({
       {/* ── Where the deal is — the STAGE axis, from lead_stages ──
           Mutually exclusive and generated from the table, so these chips, the
           Android tabs and every report count the same leads. */}
-      <div style={{ fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)", marginTop: 4 }}>
+      <div className="kicker">
         Where the deal is
       </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div className="toolbar">
         <Chip active={stageFilter === ""} onClick={() => setStageFilter("")} label="All stages" count={stats.total} />
         {repStages(stages).filter((st) => (statusCounts[st.code] ?? 0) > 0 || stageFilter === st.code).map((st) => (
           <Chip key={st.code} active={stageFilter === st.code} onClick={() => setStageFilter(stageFilter === st.code ? "" : st.code)} label={st.label} count={statusCounts[st.code] ?? 0} />
@@ -654,16 +652,16 @@ export function LeadManager({
       </div>
 
       {/* Temperature filter */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div className="toolbar">
         {(["hot", "warm", "cold"] as const).map((t) => (
           <button
             key={t}
+            className="chip"
             onClick={() => setTempFilter(tempFilter === t ? "" : t)}
             style={{
-              fontSize: 12.5, padding: "5px 12px", borderRadius: 999, cursor: "pointer",
-              border: `1px solid ${tempFilter === t ? TEMP_META[t].color : "var(--border)"}`,
-              background: tempFilter === t ? TEMP_META[t].bg : "transparent",
-              color: tempFilter === t ? TEMP_META[t].color : "var(--muted)",
+              borderColor: tempFilter === t ? TEMP_META[t].color : undefined,
+              background: tempFilter === t ? TEMP_META[t].bg : undefined,
+              color: tempFilter === t ? TEMP_META[t].color : undefined,
             }}
           >
             {TEMP_META[t].label}
@@ -676,16 +674,15 @@ export function LeadManager({
         placeholder="Search by name or phone…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        style={{ padding: "12px 16px", borderRadius: 12, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", backdropFilter: "blur(12px)", outline: "none", transition: "border 0.2s" }}
       />
 
       {/* Assign bar */}
-      <div className="card" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", backdropFilter: "blur(12px)" }}>
+      <div className="card toolbar">
         <span style={{ fontWeight: 600 }}>Assign to:</span>
         <select
           value={assignTo}
           onChange={(e) => setAssignTo(e.target.value)}
-          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel)", color: "var(--text)", outline: "none" }}
+          style={{ width: "auto", minWidth: 180 }}
         >
           <option value="">Choose telecaller…</option>
           {visibleReps.map((sp) => (
@@ -717,42 +714,42 @@ export function LeadManager({
           <span style={{ fontWeight: asNew ? 600 : 400 }}>Give as a brand-new lead</span>
         </label>
 
-        <button className="primary" style={{ width: "auto", padding: "8px 14px" }} disabled={busy || !assignTo || selected.size === 0} onClick={assignSelected}>
+        <button className="primary" disabled={busy || !assignTo || selected.size === 0} onClick={assignSelected}>
           Assign selected ({selected.size})
         </button>
         {tab === "unassigned" && (
           <>
-            <button className="link" style={{ color: "var(--accent)" }} disabled={busy || !assignTo || stats.unassigned === 0} onClick={assignAllUnassigned}>
+            <button className="link" disabled={busy || !assignTo || stats.unassigned === 0} onClick={assignAllUnassigned}>
               Assign all unassigned ({stats.unassigned})
             </button>
-            <button className="link" style={{ color: "var(--success)" }} disabled={busy || stats.unassigned === 0} onClick={autoAssignByTerritory}>
-              ✨ Auto-assign by Territory
+            <button className="link" disabled={busy || stats.unassigned === 0} onClick={autoAssignByTerritory}>
+              Auto-assign by Territory
             </button>
-            <button className="link" style={{ color: "var(--accent)", fontWeight: 600 }} disabled={busy || stats.unassigned === 0} onClick={distributeFairly}>
-              ⚖️ Distribute equally
+            <button className="link" disabled={busy || stats.unassigned === 0} onClick={distributeFairly}>
+              Distribute equally
             </button>
           </>
         )}
         {tab === "assigned" && selected.size > 0 && (
-          <button className="link" style={{ color: "var(--muted)" }} disabled={busy} onClick={unassignSelected}>
+          <button className="link" disabled={busy} onClick={unassignSelected}>
             Unassign ({selected.size})
           </button>
         )}
         {selected.size > 0 && (
-          <button className="link" style={{ color: "#ef4444" }} disabled={busy} onClick={deleteSelected}>
-            🗑️ Delete ({selected.size})
+          <button className="link" style={{ color: "var(--bad)", borderColor: "rgba(255, 69, 58, 0.45)" }} disabled={busy} onClick={deleteSelected}>
+            Delete ({selected.size})
           </button>
         )}
       </div>
 
       {/* Quick select */}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+      <div className="toolbar" style={{ fontSize: 13 }}>
         <span style={{ color: "var(--muted)" }}>Quick select:</span>
         {[10, 25, 50].map((n) => (
-          <button key={n} className="link" style={{ color: "var(--accent)" }} onClick={() => quickSelect(n)} disabled={leads.length === 0}>☑ {n}</button>
+          <button key={n} className="link" onClick={() => quickSelect(n)} disabled={leads.length === 0}>{n}</button>
         ))}
-        <button className="link" style={{ color: "var(--accent)" }} onClick={() => quickSelect("all")} disabled={leads.length === 0}>☑ All loaded ({leads.length})</button>
-        {selected.size > 0 && <button className="link" style={{ color: "var(--muted)" }} onClick={() => setSelected(new Set())}>Clear</button>}
+        <button className="link" onClick={() => quickSelect("all")} disabled={leads.length === 0}>All loaded ({leads.length})</button>
+        {selected.size > 0 && <button className="link" onClick={() => setSelected(new Set())}>Clear</button>}
       </div>
 
       {/* List */}
@@ -761,10 +758,10 @@ export function LeadManager({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {leads.map((l) => (
-            <label key={l.id} className="card" style={{ display: "flex", gap: 12, alignItems: "center", cursor: "pointer", padding: 16, background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", transition: "all 0.2s ease" }}>
-              <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />
+            <label key={l.id} className="card lead-row">
+              <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 15, color: "#fff", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div className="lead-name">
                   {l.name || l.phone}
                   {l.temperature && TEMP_META[l.temperature] && (
                     <span style={{ fontSize: 11, fontWeight: 600, color: TEMP_META[l.temperature].color, background: TEMP_META[l.temperature].bg, borderRadius: 6, padding: "2px 8px" }}>
@@ -780,13 +777,13 @@ export function LeadManager({
                     </span>
                   )}
                 </div>
-                <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4, display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  <span style={{ color: "#cbd5e1" }}>📞 {l.phone}</span>
-                  {l.company_name && <span>· 🏢 {l.company_name}</span>}
-                  {l.territory && <span>· 📍 {l.territory}</span>}
-                  {l.budget && <span>· 💰 {l.budget}</span>}
-                  {timeAgo(l.last_contacted_at) && <span>· 📞 last: {timeAgo(l.last_contacted_at)}</span>}
-                  {l.created_at && <span>· 🕒 {new Date(l.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</span>}
+                <div className="lead-meta">
+                  <span style={{ color: "var(--text)" }}>{l.phone}</span>
+                  {l.company_name && <span>· {l.company_name}</span>}
+                  {l.territory && <span>· {l.territory}</span>}
+                  {l.budget && <span>· {l.budget}</span>}
+                  {timeAgo(l.last_contacted_at) && <span>· last: {timeAgo(l.last_contacted_at)}</span>}
+                  {l.created_at && <span>· {new Date(l.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</span>}
                 </div>
                 {l.notes && (
                   <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)", padding: "8px 12px", background: "rgba(16, 185, 129, 0.05)", borderLeft: "3px solid var(--accent)", borderRadius: 6 }}>
@@ -796,13 +793,13 @@ export function LeadManager({
                 {tab === "assigned" && <div style={{ color: "var(--accent)", fontSize: 12, marginTop: 6, fontWeight: 500 }}>→ Assigned to: {nameOf(l.salesperson_id)}</div>}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
-                <span className={`badge ${l.status}`} style={{ boxShadow: "0 0 10px rgba(255,255,255,0.05)" }}>{l.status}</span>
-                <button 
-                  className="link" 
-                  style={{ fontSize: 12, padding: "4px 10px", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "var(--muted)", background: "rgba(255,255,255,0.03)" }} 
+                <span className={`badge ${l.status}`}>{l.status}</span>
+                <button
+                  className="link"
+                  style={{ fontSize: 12, padding: "4px 10px" }}
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setHistoryId(l.id); }}
                 >
-                  📖 View History
+                  View History
                 </button>
               </div>
             </label>
@@ -837,31 +834,18 @@ export function LeadManager({
   );
 }
 
-function StatCard({ label, value, tone, bg }: { label: string; value: number; tone: string; bg: string }) {
+function StatCard({ label, value, tone }: { label: string; value: number; tone: string; bg: string }) {
   return (
-    <div className="card" style={{ background: bg, border: `1px solid ${tone}22`, boxShadow: `0 8px 32px ${tone}10`, padding: "20px" }}>
-      <div style={{ color: tone, fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
-      <div style={{ color: tone, fontSize: 32, fontWeight: 800, marginTop: 8 }}>{value.toLocaleString("en-IN")}</div>
+    <div className="card stat">
+      <div className="label"><span className="tone-dot" style={{ background: tone }} />{label}</div>
+      <div className="value">{value.toLocaleString("en-IN")}</div>
     </div>
   );
 }
 
 function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: "8px 16px",
-        borderRadius: 50,
-        border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-        background: active ? "var(--accent)" : "rgba(255,255,255,0.02)",
-        color: active ? "#fff" : "var(--text)",
-        cursor: "pointer",
-        fontWeight: 600,
-        transition: "all 0.2s ease",
-        boxShadow: active ? "0 4px 12px rgba(16, 185, 129, 0.2)" : "none",
-      }}
-    >
+    <button type="button" className={active ? "seg active" : "seg"} onClick={onClick}>
       {children}
     </button>
   );
@@ -869,20 +853,8 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
 
 function Chip({ active, onClick, label, count }: { active: boolean; onClick: () => void; label: string; count: number }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: "6px 14px",
-        borderRadius: 50,
-        border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-        background: active ? "var(--accent)" : "rgba(255,255,255,0.03)",
-        color: active ? "#fff" : "var(--text)",
-        cursor: "pointer",
-        fontSize: 13,
-        transition: "all 0.2s ease",
-      }}
-    >
-      {label} <span style={{ opacity: 0.7, marginLeft: 6 }}>{count}</span>
+    <button type="button" className={active ? "chip active" : "chip"} onClick={onClick}>
+      {label} <span className="count">{count}</span>
     </button>
   );
 }

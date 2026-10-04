@@ -54,9 +54,9 @@ export function PlatformSender({ companies }: { companies: { id: string; name: s
   const usable = companies.filter((c) => connected.has(c.id));
 
   return (
-    <div style={{ border: "1px solid rgba(37,211,102,0.3)", background: "rgba(37,211,102,0.05)", borderRadius: 12, padding: 14, margin: "12px 0" }}>
+    <div className="card" style={{ margin: "12px 0" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <strong style={{ color: "#fff", fontSize: 14 }}>🌐 Platform sending number</strong>
+        <strong style={{ color: "var(--text)", fontSize: 15 }}>Platform sending number</strong>
         <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
           Used for any company that hasn&apos;t connected its own WhatsApp — one number for the whole platform,
           like the shared ad account. Each founder still only gets their own company&apos;s report.

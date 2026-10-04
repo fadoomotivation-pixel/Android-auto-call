@@ -202,27 +202,26 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
   return (
     <div style={{ marginTop: 16 }}>
       {/* Controls */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
+      <div className="filters" style={{ marginBottom: 20 }}>
         <input
           type="date"
           value={date}
           max={istToday()}
           onChange={(e) => setDate(e.target.value)}
-          style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "var(--panel)", color: "var(--text)" }}
         />
         <button className="primary" onClick={load} disabled={busy}>
-          {busy ? "Building…" : "🔄 Refresh"}
+          {busy ? "Building…" : "Refresh"}
         </button>
         <div style={{ flex: 1 }} />
-        <button className="primary" style={{ background: "rgba(255,255,255,0.1)", color: "var(--text)" }} onClick={copyReport} disabled={!anyReps}>
-          {copied ? "✓ Copied" : "📋 Copy report"}
+        <button className="link" onClick={copyReport} disabled={!anyReps}>
+          {copied ? "Copied" : "Copy report"}
         </button>
         <button className="primary" style={{ background: "#25D366", color: "#032b17" }} onClick={whatsappReport} disabled={!anyReps}>
-          💬 WhatsApp
+          WhatsApp
         </button>
       </div>
 
-      {error && <div className="empty" style={{ color: "#f87171" }}>{error}</div>}
+      {error && <div className="error">{error}</div>}
 
       {busy && companies.length === 0 && (
         <div className="empty">Aaj ka pulse ban raha hai — AI har telecaller ka din likh raha hai…</div>
@@ -235,7 +234,7 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
       {companies.map((c) => (
         <div key={c.company_id} style={{ marginBottom: 28 }}>
           {isSuper && c.company_name && (
-            <h3 style={{ margin: "0 0 6px", color: "#fff" }}>🏢 {c.company_name}</h3>
+            <h3 style={{ margin: "0 0 6px" }}>{c.company_name}</h3>
           )}
           {/* Per company, always — the super admin sets a customer's founder up
               the same way they set up their own, and a subscriber can only ever
@@ -264,9 +263,9 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
               const idle = !r.calls && !(r.offCrmCalls ?? 0) && !r.voiceNotes.length && !r.moves.length &&
                 !r.siteVisits.length && r.callsTrusted !== false;
               return (
-                <div key={r.id} className="card" style={{ padding: 16, background: "var(--panel)", border: "1px solid rgba(255,255,255,0.08)", opacity: idle ? 0.65 : 1 }}>
+                <div key={r.id} className="card" style={{ padding: 16, opacity: idle ? 0.65 : 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <strong style={{ color: "#fff", fontSize: 16 }}>{r.name}</strong>
+                    <strong style={{ color: "var(--text)", fontSize: 16 }}>{r.name}</strong>
                     {r.hotLeads > 0 && (
                       <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "rgba(239,68,68,0.15)", color: "#fca5a5" }}>
                         🔥 {r.hotLeads} hot
@@ -475,18 +474,12 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
                   )}
 
                   {/* Per-telecaller share — send THIS rep's day on its own. */}
-                  <div style={{ display: "flex", gap: 8, marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <button
-                      onClick={() => copyRep(r)}
-                      style={{ flex: 1, fontSize: 12, padding: "6px 10px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "var(--text)", cursor: "pointer" }}
-                    >
-                      {copiedRep === r.id ? "✓ Copied" : "📋 Copy"}
+                  <div className="toolbar" style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+                    <button className="link" onClick={() => copyRep(r)} style={{ flex: 1 }}>
+                      {copiedRep === r.id ? "Copied" : "Copy"}
                     </button>
-                    <button
-                      onClick={() => whatsappRep(r)}
-                      style={{ flex: 1, fontSize: 12, padding: "6px 10px", borderRadius: 7, border: "none", background: "#25D366", color: "#032b17", fontWeight: 600, cursor: "pointer" }}
-                    >
-                      💬 WhatsApp
+                    <button className="primary" onClick={() => whatsappRep(r)} style={{ flex: 1, background: "#25D366", color: "#032b17" }}>
+                      WhatsApp
                     </button>
                   </div>
                 </div>

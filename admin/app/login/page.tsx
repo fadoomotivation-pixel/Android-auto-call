@@ -113,7 +113,7 @@ export default function LoginPage() {
                 lineHeight: 1,
               }}
             >
-              {showPassword ? "🙈" : "👁️"}
+              {showPassword ? "Hide" : "Show"}
             </button>
           </div>
         </div>

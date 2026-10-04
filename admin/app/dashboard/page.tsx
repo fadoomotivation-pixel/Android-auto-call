@@ -139,7 +139,7 @@ export default async function OverviewPage({
                 const fast = r.median_min > 0 && r.median_min <= 5;
                 return (
                   <tr key={r.id} className="hover-row">
-                    <td style={{ color: "#fff", fontWeight: 500 }}>{r.name}</td>
+                    <td style={{ color: "var(--text)", fontWeight: 500 }}>{r.name}</td>
                     <td>{r.leads_7d}</td>
                     <td>{r.called_7d}</td>
                     <td style={{ color: fast ? "var(--good)" : r.median_min > 60 ? "var(--bad)" : "var(--accent)", fontWeight: 600 }}>
@@ -180,7 +180,7 @@ export default async function OverviewPage({
               {s.leaderboard.map((l, i) => (
                 <tr key={l.id} className="hover-row">
                   <td style={{ color: "var(--muted)" }}>{i + 1}</td>
-                  <td style={{ color: "#fff", fontWeight: 500 }}>{l.name}</td>
+                  <td style={{ color: "var(--text)", fontWeight: 500 }}>{l.name}</td>
                   <td>{l.calls}</td>
                   <td style={{ color: "var(--good)" }}>{l.connected}</td>
                   <td style={{ color: "var(--accent)" }}>{connectRate(l.connected, l.calls)}%</td>
