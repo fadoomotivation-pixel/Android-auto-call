@@ -45,7 +45,21 @@ entry before you start, and add an entry after every change.**
 - BUILD: `assembleStandardDebug` green locally. These do not move the 82-to-11 site-visit gap.
 - NEXT/NOTE: Compose UI touched because the user asked. No schema, no new popup, no fourth follow-up tab.
 
----
+## 2026-10-04 — Cursor (dead WhatsApp capture banner)
+
+- WHAT: Admin dashboard layout shows a sticky banner when any `wa_rep_sessions`
+  row is disconnected, logged out, waiting for a QR, or `offline` (the watchdog).
+  It names the rep, the last captured message, and `last_seen_at`. It does not
+  read `link_ok_at` — on 4 Oct that column was refreshed at 16:14 IST while
+  Fanbe/Ankita stayed `disconnected` and the last message was 26 Sep 05:14 IST.
+  Super admin is unscoped (RLS), so the banner is cross-company. No alert is
+  sent: not `founder_alerts`, not Baileys.
+- FILES: `admin/app/dashboard/layout.tsx`, `CaptureOutageBanner.tsx`,
+  `admin/lib/capture-health.ts`, `admin/lib/types.ts` (`WaRepSession`),
+  `admin/app/dashboard/whatsapp/page.tsx` (anchor only), `admin/app/globals.css`.
+- WHY: The 25 Sep logout was visible as `status = disconnected` and nobody was
+  told for six days.
+- BUILD: admin `tsc`. No migration, no edge function, no Android.
 
 ## 2026-07-23 — Claude Code (Objection Buster in the floating coach)
 
@@ -132,6 +146,29 @@ service-bearer auth.
 ---
 
 ## LOG (newest first — prepend new entries)
+
+### 2026-10-04 — view fix (pending site visits were counting a prompt kind the app cannot write)
+- WHAT: `v_pending_site_visit_outcomes` counted `rep_prompts.kind = 'site_visit'`
+  for `times_asked` and `needs_manager` (`times_asked >= 2`). 0127 only allows
+  `visit_check`, `callback_check`, `day_review`, and the app writes
+  `visit_check`. Measured the same day: 0 `site_visit` rows, 33 `visit_check`,
+  15 of 23 pending leads already asked, 0 `answer = 'not_yet'` (the presses
+  were dismissals). Migration `0218_a_visit_check_counts_as_asking.sql`
+  counts `visit_check` for `times_asked` and sets `needs_manager` only from
+  two `not_yet` answers. Dismissals stay in `times_asked` and do not flip
+  the flag — `assistantDismiss` and the 0127 column comment both say a
+  dismissal is counted, never punished. Column names, types and order are
+  unchanged. Numbered 0218 because PR #484 already uses 0217 for
+  `v_lead_workstate`; the two replace different views and this one can be
+  applied on its own. Not applied; no scheduler; no Android change.
+- FILES: `supabase/migrations/0218_a_visit_check_counts_as_asking.sql`.
+- WHY: the Action Center and the Pulse were reading "never asked" on visits
+  the phone had already asked about.
+- BUILD: supabase SQL only. Do not apply from CI — founder applies by hand.
+- NEXT/NOTE: after it is applied, the 4 Oct rows should read times_asked
+  0×8, 1×6, 2×5, 3×4, and needs_manager still false on all 23. Readers are
+  `admin/app/dashboard/actions/page.tsx` and `pulse.ts` (PR #486); both
+  select these columns by name.
 
 ### 2026-07-19 — Claude Code (recordings hardening + super-admin HQ/Leads + selfie-less check-in)
 - **Migrations 0083–0085 applied live + committed.** Next number is **0086**.

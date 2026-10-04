@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "./Sidebar";
+import { CaptureOutageBanner } from "./CaptureOutageBanner";
 import type { Company, Profile } from "@/lib/types";
 
 export default async function DashboardLayout({
@@ -40,7 +41,10 @@ export default async function DashboardLayout({
   return (
     <div className="app">
       <Sidebar profile={profile} company={company} email={user.email} isSuper={isSuper} />
-      <main className="main">{children}</main>
+      <main className="main">
+        {(profile?.role === "admin" || isSuper) && <CaptureOutageBanner />}
+        {children}
+      </main>
     </div>
   );
 }

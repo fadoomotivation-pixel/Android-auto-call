@@ -291,4 +291,49 @@ button.link:disabled { opacity: 0.5; cursor: not-allowed; }
 .chat-send-btn { background: var(--accent); color: #fff; border: none; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: transform 0.2s; }
 .chat-send-btn:hover { transform: scale(1.05); }
 .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Dead WhatsApp capture. Sticky so a long page cannot scroll it away —
+   the in-page banner was missed for six days. */
+.capture-outage {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  margin: 0 0 28px;
+  padding: 14px 16px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 14px;
+  color: #fecaca;
+}
+.capture-outage strong {
+  display: block;
+  color: #ef4444;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.capture-outage p {
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.45;
+  max-width: 72ch;
+}
+.capture-outage ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.capture-outage li { font-size: 14px; line-height: 1.45; }
+.capture-outage a {
+  color: #fff;
+  font-weight: 600;
+  text-decoration: underline;
+}
+#telecaller-whatsapp { scroll-margin-top: 96px; }
+@media (max-width: 768px) {
+  .capture-outage { top: 64px; }
+}
 .chat-send-icon { width: 20px; height: 20px; fill: currentColor; margin-left: 2px; }
