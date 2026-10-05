@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (phone shows dead WhatsApp capture)
+
+- WHAT: The telecaller phone reads her own `wa_rep_sessions` row (status, last_seen_at, last_error) and, only when that row is already dead, the newest `wa_observed_messages.sent_at`. `link_ok_at` is not selected. A dead or unreadable capture is a card in the list on Home, Leads, Follow-ups, and the lead page — it scrolls with the page. The draft button says "Open in WhatsApp" and the phone does not write `followup_drafts.status = opened`, because `settle_followups` would later call that skipped. A rep with no session row gets the warning on the draft only, not a Home banner. No QR button: the phone has no scan screen, and fetching a QR would call the Baileys worker. Rebased onto main after the recording-honesty note below; both stay.
+- FILES: `android/.../data/CaptureHealth.kt`, `Repository.kt`, `ui/CaptureDownCard.kt`, `MainViewModel.kt`, `TelecallerScreens.kt`, `LeadDetailScreen.kt`, `docs/AGENT_SYNC.md`.
+- WHY: A logged-out watcher still let her draft, and the learning job marked those drafts skipped. Silence looked like the send was saved.
+- BUILD: `assembleStandardDebug` green locally before this rebase. No migration, no edge function, no admin change.
+- NEXT/NOTE: `settle_followups()` still turns an already-opened draft into skipped after a day when no message arrives. This PR stops new opens from being written while capture is not live. Rows already opened stay on the old path. Founder does not apply a migration for this. The recording-honesty work from #495 is unchanged.
+
 ## 2026-10-05 — Cursor (a missing recording cannot look like a clean call)
 
 - WHAT: After a SIM call, a harvest miss is logged `recording_status = failed` with a plain-English `recording_error`, not `none`. A speaker, mic, or app-recorder file used because the OEM folder had nothing is stored as `recording_source` `sim_speaker` / `sim_mic` / `sim_app` and labeled on the outcome strip, the nudge bar, the campaign review chips, the lead call row, and the Calls row. The phone now reads `audio_seconds`, `audio_complete`, and `recording_error`. A broken or far-too-short file says so. Play is not offered when `audio_complete` is false. Admin recordings name the same fallback sources. Tapping an outcome does not clear the warning.

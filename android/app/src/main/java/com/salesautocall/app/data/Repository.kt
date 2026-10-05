@@ -6,6 +6,8 @@ import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import io.github.jan.supabase.storage.storage
 import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
@@ -1073,6 +1075,61 @@ object Repository {
         }
     }
 
+    /**
+     * This rep's WhatsApp capture, from the tables the phone can already read.
+     *
+     * `link_ok_at` is not selected. A heartbeat refreshes it while the session
+     * is logged out, so a fresh value is not proof the capture is up.
+     * The newest captured message is read only after the session is already
+     * dead — a live row does not need a second query to stay quiet.
+     */
+    sealed class MyCapture {
+        data class Session(
+            val status: String,
+            val lastSeenAt: String?,
+            val lastError: String?,
+            val lastMessageAt: String?,
+            val messageFailed: Boolean,
+        ) : MyCapture()
+        /** Signed in, and wa_rep_sessions has no row for her. */
+        data object None : MyCapture()
+        data class Failed(val message: String) : MyCapture()
+    }
+
+    suspend fun fetchMyCapture(): MyCapture {
+        val uid = currentUserId() ?: return MyCapture.Failed("Not signed in")
+        val rows = try {
+            client.from("wa_rep_sessions").select(
+                columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                    "status, last_seen_at, last_error",
+                ),
+            ) {
+                filter { eq("salesperson_id", uid) }
+                limit(1L)
+            }.decodeList<WaRepSessionProbe>()
+        } catch (e: Exception) {
+            return MyCapture.Failed(e.message ?: "Could not read")
+        }
+        val row = rows.firstOrNull() ?: return MyCapture.None
+        val dead = CaptureHealth.classify(row.status, row.lastSeenAt, row.lastError) != null
+        if (!dead) {
+            return MyCapture.Session(row.status, row.lastSeenAt, row.lastError, null, false)
+        }
+        val (messageAt, failed) = try {
+            val msgs = client.from("wa_observed_messages").select(
+                columns = io.github.jan.supabase.postgrest.query.Columns.raw("sent_at"),
+            ) {
+                filter { eq("salesperson_id", uid) }
+                order("sent_at", Order.DESCENDING)
+                limit(1L)
+            }.decodeList<WaSentProbe>()
+            (msgs.firstOrNull()?.sentAt) to false
+        } catch (_: Exception) {
+            null to true
+        }
+        return MyCapture.Session(row.status, row.lastSeenAt, row.lastError, messageAt, failed)
+    }
+
     /** RAG v13 — one "Second Chance" pick: a dead lead worth calling again + why + the re-opening line. */
     data class RevivePick(val id: String, val reason: String, val opener: String)
 
@@ -2089,4 +2146,16 @@ object Repository {
         ).decodeAs<Int>()
     }
 }
+
+@Serializable
+private data class WaRepSessionProbe(
+    val status: String = "",
+    @SerialName("last_seen_at") val lastSeenAt: String? = null,
+    @SerialName("last_error") val lastError: String? = null,
+)
+
+@Serializable
+private data class WaSentProbe(
+    @SerialName("sent_at") val sentAt: String? = null,
+)
 
