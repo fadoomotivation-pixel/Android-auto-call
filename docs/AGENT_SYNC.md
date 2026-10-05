@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (phone hides capture-down; recordings are lead calls only)
+
+- WHAT: The phone no longer shows a WhatsApp capture-down card on Home, Leads, Follow-ups, or the lead page, and the draft card no longer says capture is down. The phone still does not mark a draft opened unless capture is live. The Calls recordings list (App, Missed, Follow-up) keeps only calls linked to a lead or to a lead's phone. A number that is not a lead is left out. There is no "not a lead" row. Recording failures on a real call still show. Admin capture health is unchanged.
+- FILES: `CaptureDownCard.kt` (removed), `TelecallerScreens.kt`, `LeadDetailScreen.kt`, `CallsScreen.kt`, `AudioPlayer.kt`, `CaptureHealth.kt`, `docs/AGENT_SYNC.md`.
+- WHY: Telecallers should not see "WhatsApp capture is down". A recording that is not a lead should not appear.
+- BUILD: `assembleStandardDebug` pending in this note until the local build finishes. No migration.
+- NEXT/NOTE: Dashboard capture banner stays. The Phone tab is still the handset log.
+
 ## 2026-10-05 — Cursor (CAPI purchase value, failed-event retry, creative count)
 
 - WHAT: `meta-capi` sends Purchase `value` and `currency` (INR) only when `contacts.token_amount` is a real number above zero. A budget is not used. A failed post is no longer treated as already sent: the same lead+event is retried, the `capi_events.response` column stores attempts, the value source, and the Meta body, and it stops after 5 failures. Facebook setup shows the failed count and a per-company Retry button (`facebook-manage` action `retry_capi`). The Ads page counts distinct ads, campaigns with a single ad, and tired ads from the rows already loaded, and says this does not turn Meta delivery on. The advisor prompt no longer says Andromeda is something we optimise as if it were switched on, and it is told not to promise housing returns. The Facebook status trigger is unchanged.
