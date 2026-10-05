@@ -31,10 +31,11 @@
  * without ever pinning them to their own, which is the rule that keeps the
  * "ankit" company from quietly becoming the whole platform.
  */
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import { resolveScope } from "@/lib/dashboard/scope";
 import { ModuleLinks } from "../ModuleLinks";
+import { RouteSkeleton } from "../skeletons";
 import { ist, daysAgo } from "@/lib/dashboard/format";
 import { agedLevel, dotOf, colorOf } from "@/lib/dashboard/health";
 import { KpiChip } from "./KpiChip";
@@ -133,7 +134,15 @@ function Row({ left, why, right, href, action }: {
   );
 }
 
-export default async function TodayPage({ searchParams }: { searchParams: Promise<Search> }) {
+export default function TodayPage({ searchParams }: { searchParams: Promise<Search> }) {
+  return (
+    <Suspense fallback={<RouteSkeleton title="Action Center" />}>
+      <ActionsBody searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
   // Identity, admin gate and company scope in one call. The rule that a super
   // admin defaults to ALL companies and is never pinned to their own lives in

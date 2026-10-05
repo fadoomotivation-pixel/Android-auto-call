@@ -45,6 +45,14 @@ entry before you start, and add an entry after every change.**
 - BUILD: `assembleStandardDebug` green locally. No migration.
 - NEXT/NOTE: Dashboard capture banner stays. The Phone tab is still the handset log.
 
+## 2026-10-05 — Cursor (dashboard routes open faster)
+
+- WHAT: The nine slow dashboard routes share one cached identity with the sidebar, and the WhatsApp capture check no longer holds the page. Facebook, Pulse, X-Ray, and Ads start their reads on the server. RAG counts in parallel and does not pull the fact list until it is opened. Leaks and telecaller activity start the drill-in queries with the list. Attachment links mint after the thread text is on screen. Loading states stay labelled as loading.
+- FILES: `admin/lib/dashboard/scope.ts`, `admin/app/dashboard/layout.tsx`, and the facebook, rag, coach, ads, pulse, xray, actions, leaks, and telecallers-activity routes.
+- WHY: Those pages waited on serial Supabase calls, and several waited for client JavaScript before the first query. A failed or unfinished read was easy to see as an empty day.
+- BUILD: admin `tsc`. No migration. No Android.
+- NEXT/NOTE: Leads list and detail were not touched. Recordings apostrophes stay escaped as `&apos;` so `next build` can finish.
+
 ## 2026-10-05 — Cursor (CAPI purchase value, failed-event retry, creative count)
 
 - WHAT: `meta-capi` sends Purchase `value` and `currency` (INR) only when `contacts.token_amount` is a real number above zero. A budget is not used. A failed post is no longer treated as already sent: the same lead+event is retried, the `capi_events.response` column stores attempts, the value source, and the Meta body, and it stops after 5 failures. Facebook setup shows the failed count and a per-company Retry button (`facebook-manage` action `retry_capi`). The Ads page counts distinct ads, campaigns with a single ad, and tired ads from the rows already loaded, and says this does not turn Meta delivery on. The advisor prompt no longer says Andromeda is something we optimise as if it were switched on, and it is told not to promise housing returns. The Facebook status trigger is unchanged.

@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { RouteSkeleton } from "../../skeletons";
 
 /**
  * Where the leads are dying — the super admin's early warning.
@@ -75,7 +77,19 @@ function Num({ n, warn, bad }: { n: number; warn: number; bad: number }) {
   return <strong style={{ color: c, fontWeight: c ? 700 : 500 }}>{n}</strong>;
 }
 
-export default async function LeaksPage({
+export default function LeaksPage({
+  searchParams,
+}: {
+  searchParams: { co?: string };
+}) {
+  return (
+    <Suspense fallback={<RouteSkeleton title="Where leads are dying" />}>
+      <LeaksBody searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function LeaksBody({
   searchParams,
 }: {
   searchParams: { co?: string };
@@ -83,10 +97,15 @@ export default async function LeaksPage({
   const supabase = await createClient();
   const co = searchParams.co || "";
 
-  const { data: raw, error } = await supabase.rpc("super_leaks", {
-    p_cold_days: 7,
-    p_silent_days: 3,
-  });
+  // The company drill-in used to wait for the all-companies rollup before it
+  // even asked for that company's reps. The id is already in the URL.
+  const [rollup, repsRes] = await Promise.all([
+    supabase.rpc("super_leaks", { p_cold_days: 7, p_silent_days: 3 }),
+    co
+      ? supabase.rpc("super_leaks_reps", { p_company: co, p_cold_days: 7, p_silent_days: 3 })
+      : Promise.resolve({ data: [] as LeakRep[], error: null }),
+  ]);
+  const { data: raw, error } = rollup;
 
   if (error) {
     return (
@@ -100,15 +119,8 @@ export default async function LeaksPage({
   const rows = ((raw ?? []) as Leak[]).filter((r) => r.leads_total > 0);
   const current = co ? rows.find((r) => r.company_id === co) ?? null : null;
 
-  let reps: LeakRep[] = [];
-  if (current) {
-    const { data } = await supabase.rpc("super_leaks_reps", {
-      p_company: current.company_id,
-      p_cold_days: 7,
-      p_silent_days: 3,
-    });
-    reps = (data ?? []) as LeakRep[];
-  }
+  const reps: LeakRep[] = current ? ((repsRes.data ?? []) as LeakRep[]) : [];
+  const repsError = current ? repsRes.error : null;
 
   const totalRisk = rows.reduce((s, r) => s + r.at_risk, 0);
   const totalLeads = rows.reduce((s, r) => s + r.leads_total, 0);
@@ -128,7 +140,9 @@ export default async function LeaksPage({
           {current.at_risk} of {current.leads_total} leads going nowhere ({current.at_risk_pct}%)
         </p>
 
-        {reps.length === 0 ? (
+        {repsError ? (
+          <div className="error">{repsError.message}</div>
+        ) : reps.length === 0 ? (
           <div className="empty">
             This company has no telecallers. Every one of its {current.leads_total} leads is
             unworked by definition.

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { loadDashboardSession } from "@/lib/dashboard/scope";
 import { ago, ist } from "@/lib/dashboard/format";
 import { classifyCapture, outageSince, reasonLabel, type CaptureReason } from "@/lib/capture-health";
 import type { WaRepSession } from "@/lib/types";
@@ -28,8 +28,20 @@ export interface DeadRow {
  * link_ok_at is not selected. On 4 Oct 2026 it was minutes old while the
  * only session had been logged out since 26 Sep.
  */
+/** Shown while the session read is in flight. Not green, not "all clear". */
+export function CaptureOutagePending() {
+  return (
+    <div className="capture-outage-pending" role="status" aria-live="polite" aria-busy="true">
+      <div className="capture-outage-inner">
+        <strong>Checking WhatsApp capture</strong>
+        <p>Not a result yet. A quiet bar here does not mean capture is up.</p>
+      </div>
+    </div>
+  );
+}
+
 export async function CaptureOutageBanner() {
-  const supabase = await createClient();
+  const { supabase } = await loadDashboardSession();
   const { data, error } = await supabase
     .from("wa_rep_sessions")
     .select("salesperson_id, company_id, status, last_seen_at, last_error")

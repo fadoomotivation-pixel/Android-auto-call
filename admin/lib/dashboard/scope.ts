@@ -27,38 +27,72 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import type { Company, Profile } from "@/lib/types";
 
 /**
  * The identity round trip, deduplicated per request.
  *
- * The layout renders the sidebar (which needs to know if you are a super admin)
- * and the page renders its content (which needs the same three facts). Without
- * this, every page load asked Supabase who you are TWICE — once for the chrome
- * and once for the body.
+ * The layout renders the sidebar and the page renders its content. Both need
+ * the same person. They used to ask separately — getUser, then the profile,
+ * then platform_admins, then the company, one after another — and the page
+ * asked again. That was four serial round trips before a single number could
+ * paint, paid twice.
  *
  * React's cache() memoises for the lifetime of a single server render, so the
- * second caller gets the first caller's result. Not a cross-request cache:
- * nothing about one user's identity ever survives into another's request, which
- * is the only property that matters here.
+ * layout and the page share one result. Not a cross-request cache: nothing
+ * about one user's identity ever survives into another's request.
+ *
+ * Profile and the super-admin check run together. The company row needs the
+ * profile's company_id, so it follows that pair and cannot start earlier.
  */
 const loadIdentity = cache(async () => {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { supabase, user: null, role: null, homeCompanyId: null, isSuper: false };
+  if (!user) {
+    return {
+      supabase,
+      user: null,
+      profile: null as Profile | null,
+      company: null as Company | null,
+      role: null as string | null,
+      homeCompanyId: null as string | null,
+      isSuper: false,
+    };
+  }
 
   const [{ data: me }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("role, company_id").eq("id", user.id)
-      .maybeSingle<{ role: string; company_id: string | null }>(),
+    supabase.from("profiles")
+      .select("id, company_id, full_name, phone, role, is_active, sip_agent_id, caller_id, sip_server, sip_port, speaks_as, created_at")
+      .eq("id", user.id)
+      .maybeSingle<Profile>(),
     supabase.from("platform_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
   ]);
+
+  let company: Company | null = null;
+  if (me?.company_id) {
+    const { data } = await supabase.from("companies")
+      .select("id, name, owner_id, join_code, created_at")
+      .eq("id", me.company_id)
+      .maybeSingle<Company>();
+    company = data;
+  }
+
   return {
     supabase,
     user,
+    profile: me,
+    company,
     role: me?.role ?? null,
     homeCompanyId: me?.company_id ?? null,
     isSuper: !!pa,
   };
 });
+
+/** Sidebar facts. Same cached round trip as resolveScope. */
+export async function loadDashboardSession() {
+  const { supabase, user, profile, company, isSuper } = await loadIdentity();
+  return { supabase, user, profile, company, isSuper };
+}
 
 export type Scope = {
   /**

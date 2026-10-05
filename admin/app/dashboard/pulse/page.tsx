@@ -1,6 +1,12 @@
+import { Suspense } from "react";
 import { resolveScope } from "@/lib/dashboard/scope";
 import { ModuleLinks } from "../ModuleLinks";
-import { PulseClient } from "./PulseClient";
+import { RouteSkeleton } from "../skeletons";
+import { PulseClient, type Company } from "./PulseClient";
+
+function istToday(): string {
+  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+}
 
 export default async function PulsePage({
   searchParams,
@@ -30,8 +36,27 @@ export default async function PulsePage({
         A rep showing no activity may not be idle — <a href="/dashboard/health" style={{ color: "var(--accent)" }}>Phone Health</a> says
         whether their phone is even reporting.
       </p>
-      <PulseClient isSuper={isSuper} />
+      <Suspense fallback={<RouteSkeleton title="Daily Pulse" bare />}>
+        <PulseData isSuper={isSuper} />
+      </Suspense>
       <ModuleLinks current="pulse" scope={scope} />
     </>
+  );
+}
+
+async function PulseData({ isSuper }: { isSuper: boolean }) {
+  const { supabase } = await resolveScope(undefined, { require: "any" });
+  const date = istToday();
+  const { data, error } = await supabase.functions.invoke<{
+    ok: boolean; error?: string; companies?: Company[];
+  }>("team-pulse", { body: { date } });
+  const failed = error || !data?.ok;
+  return (
+    <PulseClient
+      isSuper={isSuper}
+      initialDate={date}
+      initialCompanies={failed ? [] : (data?.companies ?? [])}
+      initialError={failed ? (data?.error || error?.message || "Couldn't build the pulse.") : null}
+    />
   );
 }

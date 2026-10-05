@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Row = {
@@ -239,7 +239,22 @@ function expiredOn(msg: string): string | null {
   return m ? m[1] : "a few days ago";
 }
 
-export function AdsManager({ companyId, configured, savedAccount }: { companyId: string; configured: boolean; savedAccount: string | null }) {
+export type AdsSnapshot = {
+  rows: Row[];
+  currency: string;
+  prev: { spend: number; leads: number; qualified: number; booked: number } | null;
+  error: string | null;
+};
+
+export function AdsManager({
+  companyId, configured, savedAccount, initial = null,
+}: {
+  companyId: string;
+  configured: boolean;
+  savedAccount: string | null;
+  /** Default last-30-days read, started on the server so the table does not wait for hydration. */
+  initial?: AdsSnapshot | null;
+}) {
   const supabase = createClient();
   const [setupOpen, setSetupOpen] = useState(!configured);
   const [acctId, setAcctId] = useState(savedAccount ?? "");
@@ -249,12 +264,12 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   const [isConfigured, setIsConfigured] = useState(configured);
 
   const [preset, setPreset] = useState("last_30d");
-  const [rows, setRows] = useState<Row[]>([]);
-  const [currency, setCurrency] = useState("");
+  const [rows, setRows] = useState<Row[]>(initial?.rows ?? []);
+  const [currency, setCurrency] = useState(initial?.currency ?? "");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initial?.error ?? null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(initial != null);
 
   // AI Ad Advisor — analyses the already-loaded rows (no extra Meta fetch).
   type Advice = {
@@ -277,7 +292,7 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   // Previous-period benchmark totals (same-length window immediately before).
-  const [prevTotals, setPrevTotals] = useState<{ spend: number; leads: number; qualified: number; booked: number } | null>(null);
+  const [prevTotals, setPrevTotals] = useState<{ spend: number; leads: number; qualified: number; booked: number } | null>(initial?.prev ?? null);
   // Breakdown ("what's working") — Meta-only metrics by dimension.
   type BdRow = { key: string; impressions: number; clicks: number; spend: number; ctr: number; cpc: number };
   const [bdKind, setBdKind] = useState<string>("");
@@ -319,15 +334,22 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
     const body = preset === "custom" && cur
       ? { company: companyId, time_range: { since: cur.since, until: cur.until } }
       : { company: companyId, date_preset: preset };
-    const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; currency?: string; rows?: Row[] }>("ads-insights", { body });
+    // The comparison window used to wait until this period finished. Start it
+    // now so the two Meta reads overlap. The table still paints from the first.
+    const prevBody = cur
+      ? { company: companyId, time_range: previousRange(cur) }
+      : null;
+    const currentP = supabase.functions.invoke<{ ok: boolean; error?: string; currency?: string; rows?: Row[] }>("ads-insights", { body });
+    const prevP = prevBody
+      ? supabase.functions.invoke<{ ok: boolean; rows?: Row[] }>("ads-insights", { body: prevBody })
+      : null;
+    const { data, error } = await currentP;
     setLoading(false); setLoaded(true);
     if (error || !data?.ok) { setError(data?.error || error?.message || "Couldn't load ads data."); setRows([]); return; }
     setCurrency(data.currency ?? "");
     setRows(data.rows ?? []);
-    // Benchmark: pull the same-length window immediately before, quietly.
-    if (cur) {
-      const prev = previousRange(cur);
-      const { data: pd } = await supabase.functions.invoke<{ ok: boolean; rows?: Row[] }>("ads-insights", { body: { company: companyId, time_range: prev } });
+    if (prevP) {
+      const { data: pd } = await prevP;
       if (pd?.ok && Array.isArray(pd.rows)) {
         const pt = pd.rows.reduce((t, r) => ({ spend: t.spend + r.spend, leads: t.leads + r.crm_leads, qualified: t.qualified + r.crm_qualified, booked: t.booked + r.crm_booked }), { spend: 0, leads: 0, qualified: 0, booked: 0 });
         setPrevTotals(pt);
@@ -336,9 +358,38 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, companyId, preset, customFrom, customTo]);
 
+  const skipServerSnapshot = useRef(initial != null);
   useEffect(() => {
+    if (skipServerSnapshot.current && preset === "last_30d") {
+      skipServerSnapshot.current = false;
+      return;
+    }
     if (isConfigured && (preset !== "custom" || (customFrom && customTo))) void load();
   }, [isConfigured, preset, customFrom, customTo, load]);
+
+  // Server snapshot has the current period and not the comparison. Fetch only
+  // the earlier window, overlapping nothing the table is still waiting on.
+  const benchmarkOnce = useRef(initial != null && !initial.error && !initial.prev);
+  useEffect(() => {
+    if (!benchmarkOnce.current || !isConfigured || preset !== "last_30d") return;
+    benchmarkOnce.current = false;
+    const cur = currentRange();
+    if (!cur) return;
+    const prev = previousRange(cur);
+    void supabase.functions.invoke<{ ok: boolean; rows?: Row[] }>("ads-insights", {
+      body: { company: companyId, time_range: prev },
+    }).then(({ data: pd }) => {
+      if (pd?.ok && Array.isArray(pd.rows)) {
+        const pt = pd.rows.reduce((t, r) => ({
+          spend: t.spend + r.spend, leads: t.leads + r.crm_leads,
+          qualified: t.qualified + r.crm_qualified, booked: t.booked + r.crm_booked,
+        }), { spend: 0, leads: 0, qualified: 0, booked: 0 });
+        setPrevTotals(pt);
+      }
+    });
+    // currentRange closes over preset; this runs once for the server snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfigured, preset, companyId, supabase]);
 
   async function loadBreakdown(kind: string) {
     setBdKind(kind); setBdLoading(true); setBdRows([]);

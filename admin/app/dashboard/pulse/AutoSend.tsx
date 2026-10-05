@@ -80,6 +80,7 @@ function hourLabel(h: number): string {
 export function AutoSend({ companyId, companyName }: { companyId: string; companyName?: string | null }) {
   const supabase = createClient();
   const [subs, setSubs] = useState<Sub[]>([]);
+  const [known, setKnown] = useState(false);
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState("");
   const [label, setLabel] = useState("Founder");
@@ -92,13 +93,19 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
   const [sendingId, setSendingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [{ data }, { data: rs }] = await Promise.all([
+    const [{ data, error }, { data: rs, error: rsErr }] = await Promise.all([
       supabase.from("pulse_subscribers").select("*").eq("company_id", companyId).order("created_at"),
       supabase.from("profiles").select("id, full_name")
         .eq("company_id", companyId).eq("role", "salesperson").order("full_name"),
     ]);
+    if (error || rsErr) {
+      setMsg(error?.message || rsErr?.message || "Could not load who gets this report.");
+      setKnown(true);
+      return;
+    }
     setSubs((data ?? []) as Sub[]);
     setReps((rs ?? []) as { id: string; full_name: string | null }[]);
+    setKnown(true);
   }, [supabase, companyId]);
 
   useEffect(() => { void load(); }, [load]);
@@ -160,8 +167,10 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
       <div className="toolbar">
         <strong style={{ color: "var(--text)", fontSize: 15 }}>Send this to WhatsApp automatically</strong>
         <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
-          {subs.length === 0
-            ? `Add a number — the founder gets the whole team, a telecaller gets only their own day. Goes out on its own, every evening.`
+          {!known
+            ? "Checking who gets this report. Not an empty list."
+            : subs.length === 0
+            ? "Add a number — the founder gets the whole team, a telecaller gets only their own day. Goes out on its own, every evening."
             : `${subs.filter((s) => s.active).length} number${subs.filter((s) => s.active).length === 1 ? "" : "s"} getting ${companyName ? `${companyName}'s` : "this"} report daily.`}
         </span>
         <button className="link" onClick={() => setOpen((o) => !o)} style={{ marginLeft: "auto" }}>

@@ -1,5 +1,8 @@
 "use client";
 
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createClient } from "@/lib/supabase/client";
+
 /**
  * A WhatsApp conversation, rendered like WhatsApp.
  *
@@ -101,7 +104,7 @@ const ICON: Record<string, string> = {
  * here as a picture, or named-but-never-downloaded. The third is the common one
  * for anything older than media capture, and saying so is the whole fix.
  */
-function Attachment({ m, url }: { m: Msg; url?: string }) {
+function Attachment({ m, url, pending }: { m: Msg; url?: string; pending?: boolean }) {
   const kind = m.media_kind ?? "other";
   const label = m.file_name || `${kind}`;
 
@@ -139,6 +142,24 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
           </span>
         </span>
       </a>
+    );
+  }
+
+  // The link is still being minted. That is not "the file was not saved"
+  // and it is not "saved but this view could not open it".
+  if (pending) {
+    return (
+      <div role="status" style={{
+        display: "flex", alignItems: "center", gap: 10, marginBottom: 4,
+        padding: "10px 12px", borderRadius: 8,
+        background: "rgba(0,0,0,0.18)", border: "1px dashed rgba(255,255,255,0.14)",
+      }}>
+        <span style={{ fontSize: 20, opacity: 0.6 }}>{ICON[kind] ?? "📎"}</span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>{label}</span>
+          <span style={{ fontSize: 11, opacity: 0.65 }}>Opening attachment…</span>
+        </span>
+      </div>
     );
   }
 
@@ -259,15 +280,73 @@ function Attachment({ m, url }: { m: Msg; url?: string }) {
   );
 }
 
+const MediaCtx = createContext<{ urls: Map<string, string>; pending: boolean }>({
+  urls: new Map(),
+  pending: false,
+});
+
+/**
+ * Mints attachment links after the thread text is already on screen.
+ * Signing every file on the server held the whole page, including chats
+ * that are only words. A failed mint says so — it does not become "not saved".
+ */
+export function MediaGate({ paths, children }: { paths: string[]; children: ReactNode }) {
+  const [urls, setUrls] = useState<Map<string, string>>(new Map());
+  const [pending, setPending] = useState(paths.length > 0);
+  const [error, setError] = useState<string | null>(null);
+  const key = paths.join("\n");
+
+  useEffect(() => {
+    if (!key) {
+      setPending(false);
+      return;
+    }
+    let cancel = false;
+    const list = key.split("\n");
+    const supabase = createClient();
+    void supabase.storage.from("wa-media").createSignedUrls(list, 3600).then(({ data, error: signErr }) => {
+      if (cancel) return;
+      if (signErr) {
+        setError(signErr.message);
+        setPending(false);
+        return;
+      }
+      const map = new Map<string, string>();
+      const problems: string[] = [];
+      for (const s of data ?? []) {
+        if (s.path && s.signedUrl) map.set(s.path, s.signedUrl);
+        else if (s.error) problems.push(s.error);
+      }
+      if (problems.length) setError(problems.slice(0, 3).join(" · "));
+      setUrls(map);
+      setPending(false);
+    });
+    return () => { cancel = true; };
+  }, [key]);
+
+  return (
+    <MediaCtx.Provider value={{ urls, pending }}>
+      {error && (
+        <div className="error" style={{ marginBottom: 12 }}>
+          Attachments could not be opened: {error}. The messages below are still the thread. A missing link is not a missing file.
+        </div>
+      )}
+      {children}
+    </MediaCtx.Provider>
+  );
+}
+
 export function WaThread({
   messages, mediaUrl, whoOut = "Rep", whoIn = "Them",
 }: {
   /** Oldest first. The caller decides the order; a chat reads downwards. */
   messages: Msg[];
-  mediaUrl: Map<string, string>;
+  /** Optional. When omitted, links come from MediaGate after paint. */
+  mediaUrl?: Map<string, string>;
   whoOut?: string;
   whoIn?: string;
 }) {
+  const ctx = useContext(MediaCtx);
   let lastDay = "";
 
   return (
@@ -284,7 +363,8 @@ export function WaThread({
         const d = dayKey(m.sent_at);
         const newDay = d !== lastDay;
         lastDay = d;
-        const url = m.media_path ? mediaUrl.get(m.media_path) : undefined;
+        const url = m.media_path ? (mediaUrl?.get(m.media_path) ?? ctx.urls.get(m.media_path)) : undefined;
+        const pending = !!m.media_path && !url && ctx.pending;
         // A signal colours the EDGE of the bubble rather than the whole thing:
         // the bubble's own colour is what tells you who spoke, and losing that
         // to a highlight makes the thread harder to read, not easier.
@@ -377,7 +457,7 @@ export function WaThread({
                   </>
                 ) : (
                   <>
-                    {m.media_kind && <Attachment m={m} url={url} />}
+                    {m.media_kind && <Attachment m={m} url={url} pending={pending} />}
                     {m.body && (
                       <div style={{ fontSize: 14, lineHeight: 1.35, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                         {m.body}
