@@ -751,7 +751,6 @@ a.rep-card:hover { color: inherit; border-color: var(--border-strong); }
   .topbar-inner { max-width: none; align-items: flex-start; }
   .topbar h1 { font-size: 28px; }
   .menu-btn { display: inline-flex; }
-  .capture-outage { top: 72px; }
   .card .value { font-size: 32px; }
 }
 
@@ -797,46 +796,50 @@ a.rep-card:hover { color: inherit; border-color: var(--border-strong); }
 .chat-send-btn { background: var(--accent); color: #fff; border: none; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 .chat-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* Dead WhatsApp capture. Sticky so a long page cannot scroll it away —
-   the in-page banner was missed for six days. Colour stays a warning:
-   this strip must not recede into the chrome. */
+/* Dead WhatsApp capture. In the shell flow, under the top bar: a soft
+   tint with a hairline, not a sticky card. Sticky let it float over the
+   title and the lead cards. The words stay a warning. */
 .capture-outage {
-  position: sticky;
-  top: 88px;
-  z-index: 14;
-  margin: 0 0 28px;
-  padding: 16px 18px;
+  position: static;
+  z-index: auto;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  background: color-mix(in srgb, var(--bad) 10%, var(--bg));
+  border-bottom: 1px solid color-mix(in srgb, var(--bad) 32%, transparent);
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--text);
+}
+.capture-outage-inner {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 10px 40px;
   display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  background: rgba(255, 69, 58, 0.14);
-  border: 1px solid rgba(255, 69, 58, 0.4);
-  border-radius: 16px;
-  color: #ffd1cc;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  flex-direction: column;
+  gap: 8px;
 }
-.capture-outage-icon {
-  width: 22px;
-  height: 22px;
-  flex: none;
-  margin-top: 1px;
-  color: #ff6961;
+.capture-outage-row {
+  display: flex;
+  align-items: center;
+  gap: 16px 20px;
+  min-width: 0;
 }
-.capture-outage-copy { min-width: 0; }
+.capture-outage-copy { min-width: 0; flex: 1; }
 .capture-outage strong {
   display: block;
-  color: #ff6961;
-  font-size: 16px;
+  color: var(--bad);
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  margin-bottom: 6px;
+  letter-spacing: -0.016em;
+  line-height: 1.3;
+  margin: 0 0 2px;
 }
 .capture-outage p {
-  margin: 0 0 10px;
+  margin: 0;
   color: var(--text);
-  font-size: 14px;
-  line-height: 1.45;
-  max-width: 72ch;
+  font-size: 13px;
+  line-height: 1.4;
 }
 .capture-outage ul {
   list-style: none;
@@ -844,24 +847,33 @@ a.rep-card:hover { color: inherit; border-color: var(--border-strong); }
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
-.capture-outage li { font-size: 14px; line-height: 1.45; }
-.capture-outage a {
+.capture-outage li { font-size: 13px; line-height: 1.4; }
+a.capture-outage-action {
   display: inline-flex;
   align-items: center;
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: #ff453a;
+  justify-content: center;
+  flex: none;
+  margin: 0;
+  padding: 7px 14px;
+  border-radius: 980px;
+  border: 1px solid transparent;
+  background: var(--bad);
   color: #fff;
   font-weight: 600;
   font-size: 13px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.011em;
+  line-height: 1.2;
   text-decoration: none;
-  transition: filter 180ms var(--ease), transform 180ms var(--ease);
+  white-space: nowrap;
 }
-.capture-outage a:hover { color: #fff; filter: brightness(1.08); }
+a.capture-outage-action:hover { color: #fff; filter: brightness(1.08); }
+@media (max-width: 768px) {
+  .capture-outage-inner { padding: 10px 16px; }
+  .capture-outage-row { flex-direction: column; align-items: stretch; }
+  a.capture-outage-action { align-self: flex-start; }
+}
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -876,7 +888,4 @@ a.rep-card:hover { color: inherit; border-color: var(--border-strong); }
 }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 #telecaller-whatsapp { scroll-margin-top: 96px; }
-@media (max-width: 768px) {
-  .capture-outage { top: 58px; }
-}
 .chat-send-icon { width: 18px; height: 18px; fill: currentColor; margin-left: 2px; }

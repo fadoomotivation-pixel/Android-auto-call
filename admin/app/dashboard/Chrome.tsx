@@ -97,7 +97,7 @@ export function Chrome({
             </div>
           </div>
         </header>
-        <main className="main">{children}</main>
+        {children}
       </div>
     </div>
   );
