@@ -40,8 +40,10 @@ export default async function DashboardLayout({
 
   return (
     <Chrome profile={profile} company={company} email={user.email} isSuper={isSuper}>
+      {/* The only capture-outage mount. It sits in the shell, under the top
+          bar and above the page, so a page cannot render a second copy. */}
       {(profile?.role === "admin" || isSuper) && <CaptureOutageBanner />}
-      {children}
+      <main className="main">{children}</main>
     </Chrome>
   );
 }

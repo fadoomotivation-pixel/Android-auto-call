@@ -37,6 +37,13 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (capture banner sits in the page)
+
+- WHAT: The dead-WhatsApp strip is no longer a sticky card. It is one band in the dashboard shell, under the frosted title bar and above the page, full width of the main column. One title line, one detail line, the Scan a new QR link as a button on the right (stacked on a phone). Same query, same one mount in the dashboard layout. A single session still names the rep, the company, the status, both ages, and that messages sent while this is down are not recorded. The three-way sentence (disconnected, logged out, or the watchdog) stays when more than one session is down. It does not cover the lead cards.
+- FILES: `admin/app/dashboard/layout.tsx`, `Chrome.tsx`, `CaptureOutageBanner.tsx`, `admin/app/globals.css`.
+- WHY: The sticky red panel floated over Lead Management — the title, the company picker, and the Unassigned / Assigned / Total cards.
+- BUILD: admin `tsc` and `next build`. No migration, no edge function, no Android.
+
 ## 2026-10-04 — Cursor (admin visual polish, second pass)
 
 - WHAT: Pushed the admin shell further. Inter is bundled (SF first, then the

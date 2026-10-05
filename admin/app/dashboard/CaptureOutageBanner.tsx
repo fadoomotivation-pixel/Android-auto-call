@@ -38,10 +38,14 @@ export async function CaptureOutageBanner() {
   if (error) {
     return (
       <BannerShell>
-        <strong>WhatsApp capture status could not be read</strong>
-        <p>
-          {error.message}. This page is not saying capture is up.
-        </p>
+        <div className="capture-outage-row">
+          <div className="capture-outage-copy">
+            <strong>WhatsApp capture status could not be read</strong>
+            <p>
+              {error.message}. This page is not saying capture is up.
+            </p>
+          </div>
+        </div>
       </BannerShell>
     );
   }
@@ -111,32 +115,38 @@ export async function CaptureOutageBanner() {
   return <CaptureOutageBannerView rows={rows} />;
 }
 
+const NOT_RECORDED =
+  "Messages sent while this is down are not recorded, and they cannot be fetched later. This is not the rep going quiet.";
+
 export function CaptureOutageBannerView({ rows }: { rows: DeadRow[] }) {
   if (rows.length === 0) return null;
+  const many = rows.length > 1;
+
   return (
     <BannerShell>
-      <strong>WhatsApp capture is down</strong>
-      <p>
-        {rows.length === 1
-          ? "A rep's capture session is disconnected, logged out, or the watchdog has marked it offline."
-          : `${rows.length} capture sessions are disconnected, logged out, or the watchdog has marked them offline.`}
-        {" "}Messages sent while this is down are not recorded, and they cannot be
-        fetched later. This is not the rep going quiet.
-      </p>
+      {many && (
+        <div className="capture-outage-copy">
+          <strong>WhatsApp capture is down</strong>
+          <p>
+            {rows.length} capture sessions are disconnected, logged out, or the watchdog has marked them offline. {NOT_RECORDED}
+          </p>
+        </div>
+      )}
       <ul>
         {rows.map((r) => {
-          const who = r.companyName ? `${r.repName} (${r.companyName})` : r.repName;
           const href = `/dashboard/whatsapp?company=${encodeURIComponent(r.companyId)}#telecaller-whatsapp`;
           return (
-            <li key={r.salespersonId}>
-              <div>
-                <b>{who}</b>
-                {" — "}
-                {reasonLabel(r.reason, r.status)}
-                {r.reason === "logged_out" && r.status !== "logged_out" ? ` (status: ${r.status})` : ""}.
+            <li key={r.salespersonId} className="capture-outage-row">
+              <div className="capture-outage-copy">
+                {!many && <strong>WhatsApp capture is down</strong>}
+                <p>
+                  {sessionFacts(r)}
+                  {!many && <> {NOT_RECORDED}</>}
+                </p>
               </div>
-              <OutageClock row={r} />
-              <a href={href}>Scan a new QR{r.companyName ? ` for ${r.companyName}` : ""}</a>
+              <a className="capture-outage-action" href={href}>
+                Scan a new QR{r.companyName ? ` for ${r.companyName}` : ""}
+              </a>
             </li>
           );
         })}
@@ -145,7 +155,14 @@ export function CaptureOutageBannerView({ rows }: { rows: DeadRow[] }) {
   );
 }
 
-function OutageClock({ row }: { row: DeadRow }) {
+function sessionFacts(row: DeadRow): string {
+  const who = row.companyName ? `${row.repName} (${row.companyName})` : row.repName;
+  const status = reasonLabel(row.reason, row.status)
+    + (row.reason === "logged_out" && row.status !== "logged_out" ? ` (status: ${row.status})` : "");
+  return `${who} — ${status}. ${clockLines(row).join(" ")}`;
+}
+
+function clockLines(row: DeadRow): string[] {
   const message = row.messageLookup === "ok" ? row.lastMessageAt : null;
   const seen = row.lastSeenAt;
   const lines: string[] = [];
@@ -167,24 +184,13 @@ function OutageClock({ row }: { row: DeadRow }) {
     }
   }
 
-  return (
-    <>
-      {lines.map((line) => (
-        <div key={line}>{line}</div>
-      ))}
-    </>
-  );
+  return lines;
 }
 
 function BannerShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="capture-outage" role="status">
-      <svg className="capture-outage-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M12 4.5 3.8 19h16.4L12 4.5Z" />
-        <path d="M12 10v4" />
-        <path d="M12 16.5h.01" />
-      </svg>
-      <div className="capture-outage-copy">{children}</div>
+      <div className="capture-outage-inner">{children}</div>
     </div>
   );
 }
