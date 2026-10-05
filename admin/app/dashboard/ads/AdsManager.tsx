@@ -138,6 +138,34 @@ function fatigue(frequency: number | undefined, ctr: number): { level: string; t
   return null;
 }
 
+/**
+ * How many different ads actually ran. Counted from the rows already loaded.
+ *
+ * One ad in a campaign means there is nothing else for delivery to try. This
+ * is a checklist, not a switch — nothing here turns a ranking system on.
+ * The tired-ad rule is the same one the table uses.
+ */
+function creativeVariety(rows: Row[]): {
+  creatives: number; campaigns: number; single: { name: string }[]; tired: number;
+} {
+  const byCamp = new Map<string, { name: string; ads: Set<string>; tired: number }>();
+  for (const r of rows) {
+    if (!(r.impressions > 0 || r.spend > 0) || !r.ad_id) continue;
+    const g = byCamp.get(r.campaign_id) ?? { name: r.campaign_name || r.campaign_id, ads: new Set<string>(), tired: 0 };
+    g.ads.add(r.ad_id);
+    const actr = r.impressions ? (r.clicks / r.impressions) * 100 : 0;
+    if (fatigue(r.frequency, actr)) g.tired += 1;
+    byCamp.set(r.campaign_id, g);
+  }
+  const groups = [...byCamp.values()];
+  return {
+    creatives: groups.reduce((s, g) => s + g.ads.size, 0),
+    campaigns: groups.length,
+    single: groups.filter((g) => g.ads.size === 1).map((g) => ({ name: g.name })),
+    tired: groups.reduce((s, g) => s + g.tired, 0),
+  };
+}
+
 const PRESETS: { key: string; label: string }[] = [
   { key: "today", label: "Today" },
   { key: "last_7d", label: "Last 7 days" },
@@ -511,14 +539,49 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
             </div>
           )}
 
+          {/* Creative variety — a count, not a switch. Visible without asking the advisor. */}
+          {loaded && !error && (() => {
+            const v = creativeVariety(rows);
+            return (
+              <div style={card}>
+                <strong style={{ color: "var(--text)", fontSize: 15 }}>Creative variety</strong>
+                <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55 }}>
+                  Counted from the ads loaded for this period. A campaign with one ad has nothing else to show.
+                  This page does not change Meta, and it does not write ads.
+                </p>
+                {v.creatives === 0 ? (
+                  <p style={{ margin: "12px 0 0", fontSize: 13.5, color: "var(--text)" }}>No ads with delivery in this period, so there is nothing to count.</p>
+                ) : (
+                  <ul style={{ margin: "12px 0 0", paddingLeft: 18, fontSize: 13.5, color: "var(--text)", lineHeight: 1.6 }}>
+                    <li><b>{v.creatives}</b> different {v.creatives === 1 ? "ad" : "ads"} had delivery, across {v.campaigns} {v.campaigns === 1 ? "campaign" : "campaigns"}.</li>
+                    <li>
+                      {v.single.length === 0
+                        ? "No campaign is running only one ad."
+                        : `${v.single.length} ${v.single.length === 1 ? "campaign is" : "campaigns are"} running a single ad: ${v.single.slice(0, 5).map((c) => c.name).join(", ")}${v.single.length > 5 ? ` and ${v.single.length - 5} more` : ""}.`}
+                    </li>
+                    <li>
+                      {v.tired === 0
+                        ? "No ad on this page looks tired (the same frequency rule as the table)."
+                        : `${v.tired} ${v.tired === 1 ? "ad looks" : "ads look"} tired — high frequency and a weak click rate. The table marks them too.`}
+                    </li>
+                    <li>Housing ads: do not promise guaranteed returns, rental yield, or appreciation. This page will not write that.</li>
+                  </ul>
+                )}
+                <p style={{ margin: "10px 0 0", fontSize: 12.5, color: "var(--muted)" }}>
+                  Add or pause creatives in Meta Ads Manager. This CRM only reads them.
+                </p>
+              </div>
+            );
+          })()}
+
           {/* AI Ad Advisor — reads the loaded campaigns and advises across the funnel. */}
           <div style={{ ...card, background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ minWidth: 220, flex: 1 }}>
                 <strong style={{ color: "#fff", fontSize: 15 }}>🧠 AI Ad Advisor</strong>
                 <p className="subtitle" style={{ margin: "2px 0 0" }}>
-                  Analyses your live campaigns — CTR, CPC, CPM, CPA, ROAS — and gives prioritised moves across
-                  awareness → retargeting → conversion to lower cost and lift returns (Andromeda-aware).
+                  Analyses your live campaigns — CTR, CPC, CPM, CPA, ROAS — and the creative
+                  counts on this page. It does not turn anything on in Meta.
                 </p>
               </div>
               <button className="primary" onClick={runAdvisor} disabled={advising || rows.length === 0}>

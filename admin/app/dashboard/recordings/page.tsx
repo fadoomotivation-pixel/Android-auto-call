@@ -306,11 +306,11 @@ export default async function RecordingsPage({
                       </div>
                     ) : null}
                     {c.recording_source === "sim_speaker" ? (
-                      <div className="warn-line">Speaker recording — not the phone's own file</div>
+                      <div className="warn-line">Speaker recording — not the phone&apos;s own file</div>
                     ) : c.recording_source === "sim_mic" ? (
-                      <div className="warn-line">Microphone recording — not the phone's own file</div>
+                      <div className="warn-line">Microphone recording — not the phone&apos;s own file</div>
                     ) : c.recording_source === "sim_app" ? (
-                      <div className="warn-line">App recording — the phone's own file was not found</div>
+                      <div className="warn-line">App recording — the phone&apos;s own file was not found</div>
                     ) : null}
                   </td>
                   <td>
