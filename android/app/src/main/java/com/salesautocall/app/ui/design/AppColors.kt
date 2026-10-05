@@ -5,32 +5,39 @@ import androidx.compose.ui.graphics.Color
 /**
  * Single source of truth for colour in the app.
  *
- * Apple-inspired light UI: near-white canvas, graphite type ramp, hairline
- * borders and one reserved indigo action colour. Nothing here is decorative —
- * indigo means "you can act on this", status colours mean "this is the state".
+ * Light UI in the same language as iOS Settings: grouped grey canvas, white
+ * cards, graphite type, hairline borders, and one action blue. Nothing here is
+ * decorative — the action blue means "you can act on this", status colours
+ * mean "this is the state".
+ *
+ * The token is still named Indigo. Hundreds of screens already say
+ * `AppColors.Indigo` for "the one action colour", and renaming it would be a
+ * logic-looking diff for a paint change. The paint itself is Apple system
+ * blue, the light-mode pair of the admin accent, not a second brand.
  *
  * UI layer only: no business logic, no models.
  */
 object AppColors {
-    // Canvas & surfaces
-    val Canvas = Color(0xFFFBFBFD)
+    // Canvas & surfaces. Grouped grey, white cards — the Settings read.
+    val Canvas = Color(0xFFF2F2F7)
     val Surface = Color(0xFFFFFFFF)
-    val SurfaceMuted = Color(0xFFF4F4F7)
-    val SurfaceSunken = Color(0xFFF7F7FA)
+    val SurfaceMuted = Color(0xFFE5E5EA)
+    val SurfaceSunken = Color(0xFFEFEFF4)
 
-    // Hairlines
-    val Border = Color(0xFFE7E7EC)
-    val BorderStrong = Color(0xFFD8D8DF)
+    // Hairlines. Dark enough to show on both the grey canvas and a white card.
+    val Border = Color(0xFFD1D1D6)
+    val BorderStrong = Color(0xFFC7C7CC)
 
     // Graphite type ramp
     val TextPrimary = Color(0xFF1C1C1E)
     val TextSecondary = Color(0xFF6E6E78)
     val TextTertiary = Color(0xFFA0A0AA)
 
-    // Action / interactive
-    val Indigo = Color(0xFF4F46E5)
-    val IndigoPressed = Color(0xFF4338CA)
-    val IndigoSoft = Color(0xFFEEEDFC)
+    // The one action colour. Apple system blue (light). Pressed is the same
+    // blue, a step darker, so a tap reads without introducing a second hue.
+    val Indigo = Color(0xFF007AFF)
+    val IndigoPressed = Color(0xFF0066D6)
+    val IndigoSoft = Color(0xFFE5F1FF)
     val OnIndigo = Color(0xFFFFFFFF)
 
     // Semantic (restrained, used for state only)

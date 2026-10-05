@@ -27,11 +27,11 @@ private val Inter = FontFamily(
 
 object AppType {
 
-    /** Big screen title, e.g. "Good morning, Rahul". */
+    /** Large title, the way a Settings screen opens. e.g. "Good day, Rahul". */
     val display = TextStyle(
         fontFamily = Inter,
-        fontSize = 28.sp,
-        lineHeight = 34.sp,
+        fontSize = 32.sp,
+        lineHeight = 38.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = (-0.6).sp,
     )
@@ -39,10 +39,10 @@ object AppType {
     /** Screen / sheet title. */
     val title = TextStyle(
         fontFamily = Inter,
-        fontSize = 20.sp,
-        lineHeight = 26.sp,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.3).sp,
+        letterSpacing = (-0.4).sp,
     )
 
     /** Row heading: lead name, contact name. */
