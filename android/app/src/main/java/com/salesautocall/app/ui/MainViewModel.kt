@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.salesautocall.app.data.AppPrefs
 import com.salesautocall.app.data.Attendance
+import com.salesautocall.app.data.CaptureHealth
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.LeadWork
@@ -123,6 +124,12 @@ data class AppState(
      * and a failed read is not one. Null once a read has succeeded.
      */
     val workStatesError: String? = null,
+    /**
+     * This rep's WhatsApp capture. Pending until the first read.
+     * Live only when status is connected or connecting. A failed read is
+     * Down — quiet would look like capture is working. link_ok_at is never loaded.
+     */
+    val capture: CaptureHealth.Snapshot = CaptureHealth.Snapshot.Pending,
     /** Settings self-check: the Test button's spinner and its visible verdict. */
     val syncTestBusy: Boolean = false,
     val syncTestResult: String? = null,
@@ -1588,6 +1595,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Loads everything the Home tab needs in one go. */
     fun loadHome(force: Boolean = false) {
+        loadCapture(force)
         loadToday(force)
         loadAttendance(force)
         loadFollowUps(force)
@@ -1627,6 +1635,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun consumeAutoCall() = set { it.copy(autoCallContactId = null) }
 
     fun loadLeads(force: Boolean = false) {
+        loadCapture(force)
         if (!shouldLoad("leads", force)) return
         viewModelScope.launch {
             set { it.copy(leadsLoading = true) }
@@ -2494,6 +2503,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- follow-up scheduler ----------
 
     fun loadFollowUps(force: Boolean = false) {
+        loadCapture(force)
         if (!shouldLoad("followups", force)) return
         viewModelScope.launch {
             set { it.copy(followUpsLoading = true) }
@@ -3978,11 +3988,63 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** She pressed Send and WhatsApp opened with the text in it. Recorded as
-     *  "opened", never as "sent" — the observer decides that. */
+    /**
+     * She pressed Send and WhatsApp opened with the text in it.
+     *
+     * Recorded as "opened", never as "sent" — the observer decides that.
+     * When capture is not live, it is not recorded at all. Writing "opened"
+     * is how settle_followups later writes "skipped": no captured message
+     * arrived, so the job decides she never sent it. That is a lie while
+     * the watcher is down, and a quiet screen would look like the send counted.
+     */
     fun markDraftOpened() {
         val id = _state.value.messageDraftId ?: return
-        viewModelScope.launch { Repository.markDraft(id, "opened") }
+        viewModelScope.launch {
+            val snapshot = when (val current = _state.value.capture) {
+                is CaptureHealth.Snapshot.Pending -> {
+                    val fetched = runCatching { Repository.fetchMyCapture() }
+                        .getOrElse { Repository.MyCapture.Failed(it.message ?: "Could not read") }
+                    applyCapture(fetched)
+                    _state.value.capture
+                }
+                else -> current
+            }
+            if (CaptureHealth.recordsSends(snapshot)) {
+                // She may have tapped "Not this one" while the read was in
+                // flight. That already wrote skipped. Do not overwrite it.
+                if (_state.value.messageDraftId == id) Repository.markDraft(id, "opened")
+            } else if (_state.value.messageDraftId == id) {
+                // Leave the server row as suggested. Do not mark skipped —
+                // she may have sent it, and we cannot see that.
+                clearMessageDraft()
+            }
+        }
+    }
+
+    /** Status, last_seen_at, and the newest captured message. Never link_ok_at. */
+    fun loadCapture(force: Boolean = false) {
+        if (!shouldLoad("capture", force)) return
+        viewModelScope.launch {
+            val fetched = runCatching { Repository.fetchMyCapture() }
+                .getOrElse { Repository.MyCapture.Failed(it.message ?: "Could not read") }
+            applyCapture(fetched)
+        }
+    }
+
+    private fun applyCapture(result: Repository.MyCapture) {
+        val snapshot = when (result) {
+            is Repository.MyCapture.Failed ->
+                CaptureHealth.Snapshot.Down(CaptureHealth.unreadableNotice(), proven = false)
+            Repository.MyCapture.None -> CaptureHealth.Snapshot.Unlinked
+            is Repository.MyCapture.Session -> CaptureHealth.fromSession(
+                status = result.status,
+                lastSeenAt = result.lastSeenAt,
+                lastError = result.lastError,
+                lastMessageAt = result.lastMessageAt,
+                messageLookupFailed = result.messageFailed,
+            )
+        }
+        set { it.copy(capture = snapshot) }
     }
 
     /** She read it and chose not to send it. That is a real answer about the
@@ -4068,7 +4130,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun refreshLeadDetail() { _state.value.leadDetailId?.let { openLeadDetail(it) } }
+    fun refreshLeadDetail() {
+        loadCapture(force = true)
+        _state.value.leadDetailId?.let { openLeadDetail(it) }
+    }
 
     // ---------- wada (AI-heard commitments, one-tap confirm) ----------
 

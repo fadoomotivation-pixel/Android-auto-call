@@ -78,6 +78,7 @@ import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.Repository
 import com.salesautocall.app.data.Wada
+import com.salesautocall.app.data.CaptureHealth
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
 import com.salesautocall.app.ui.design.Radii
@@ -356,6 +357,16 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
+                (app.capture as? CaptureHealth.Snapshot.Down)?.let { down ->
+                    item {
+                        CaptureDownCard(
+                            down.notice.title,
+                            down.notice.detail,
+                            Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
+                }
+
                 // ---- Hero ----
                 item {
                     IdentityBlock(
@@ -489,10 +500,12 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         draftVerdict = app.messageVerdict,
                         draftSentCount = app.messageSentCount,
                         onDraft = { vm.draftMessage(contact) },
+                        captureWarning = CaptureHealth.draftWarning(app.capture),
                         onSend = { msg ->
-                            // Tell the server the chat was opened with this text
-                            // BEFORE handing over to WhatsApp — the app never
-                            // comes back to this line once the intent fires.
+                            // Opened is written only when capture is live.
+                            // Writing it while the watcher is down is how the
+                            // learning job later marks the draft skipped — a
+                            // send it never saw, called "she did not send it".
                             vm.markDraftOpened()
                             openWhatsAppLocal(context, contact.phone, msg)
                         },
@@ -1130,6 +1143,8 @@ private fun AiCoachCard(
     onSend: (String) -> Unit,
     onCallInstead: () -> Unit,
     onClearDraft: () -> Unit,
+    /** Set when a send cannot be proved. The button must not say it was sent. */
+    captureWarning: String? = null,
     error: String? = null,
 ) {
     val clipboard = LocalClipboardManager.current
@@ -1312,6 +1327,12 @@ private fun AiCoachCard(
         // getting replies in this company — then writes the message and logs
         // its own choice so a buyer's reply can judge it later.
         if (mode == "message") {
+            // Before she spends a draft. A missing line here is how a dead
+            // watcher looked like the message had been saved.
+            captureWarning?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = RedL)
+            }
             if (draftLoading) {
                 Spacer(Modifier.height(12.dp))
                 CoachLoadingRow("Reading the call and the chat…")
@@ -1378,7 +1399,11 @@ private fun AiCoachCard(
                         .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
                         .padding(14.dp),
                 ) {
-                    Text("Ready to send", style = AppType.metaStrong, color = AppColors.TextSecondary)
+                    Text(
+                        if (captureWarning == null) "Ready to send" else "Opens WhatsApp. Not saved here.",
+                        style = AppType.metaStrong,
+                        color = if (captureWarning == null) AppColors.TextSecondary else RedL,
+                    )
                     // WHY this message. Printed above the text on purpose: a
                     // rep who can see the reasoning can overrule it, and one
                     // who cannot is being asked to trust a black box with her
@@ -1402,8 +1427,11 @@ private fun AiCoachCard(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Send on WhatsApp", color = Color.White,
-                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (captureWarning == null) "Send on WhatsApp" else "Open in WhatsApp",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                            )
                         }
                     }
                     Spacer(Modifier.height(10.dp))
