@@ -38,6 +38,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
+/** Shown when v_lead_workstate could not be read and nothing older is left
+ *  to show. Simple English. A zero next to a blank error is a quiet day. */
+private const val WORK_DUE_UNAVAILABLE = "Could not load who is due. Pull down to try again."
+
 data class AppState(
     val loading: Boolean = false,
     // False until the saved session (and, if signed in, profile + company) has
@@ -113,6 +117,12 @@ data class AppState(
      *  AND the last real call. Never computed on the phone — one clock, and it
      *  lives in the database. */
     val workByLead: Map<String, LeadWork> = emptyMap(),
+    /**
+     * The work-state read failed and there is no earlier copy to keep showing.
+     * Due now must not render as 0 while this is set — 0 would be a quiet day,
+     * and a failed read is not one. Null once a read has succeeded.
+     */
+    val workStatesError: String? = null,
     /** Settings self-check: the Test button's spinner and its visible verdict. */
     val syncTestBusy: Boolean = false,
     val syncTestResult: String? = null,
@@ -1333,11 +1343,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // Callable = the action queue, same rule the Leads screen power-dials
         // from. It used to be a status list that quietly excluded a lead whose
         // callback was genuinely due just because its disposition was 'called'.
-        val work = _state.value.workByLead
-        val callable = contacts.filter {
-            val a = it.id?.let { id -> work[id]?.actionState }
-            a == "overdue" || a == "call_now"
-        }
+        val callable = callNowContacts(contacts, _state.value.workByLead)
         if (callable.isEmpty()) {
             set { it.copy(error = "No contacts left to call in this campaign.") }
             return
@@ -1420,13 +1426,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDisposition(contactId: String, status: String, note: String?) {
         // Out of the queue on the tap, not on the next background sync.
-        markWorkedLocally(contactId, "no_next_step")
+        // A terminal outcome is `none`, not "no next step" — booked and lost
+        // are finished, and "No step" would keep them looking like open work.
+        markWorkedLocally(contactId, if (isTerminalDisposition(status)) "none" else "no_next_step")
         viewModelScope.launch {
             runCatching { Repository.setDisposition(contactId, status, note) }
                 .onSuccess {
                     set { st ->
                         st.copy(campaignContacts = st.campaignContacts.map { c ->
-                            if (c.id == contactId) c.copy(status = status, notes = note ?: c.notes) else c
+                            if (c.id == contactId) c.copy(
+                                status = status,
+                                stage = stageAfterDisposition(c.stage, status, st.leadStages),
+                                notes = note ?: c.notes,
+                            ) else c
                         })
                     }
                     // ...and then the server's real answer, which knows whether
@@ -1442,7 +1454,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * clears the suggestion. Optimistically updates the visible call/lead lists.
      */
     fun applyDisposition(callLogId: String, contactId: String, status: String) {
-        markWorkedLocally(contactId, "no_next_step")
+        markWorkedLocally(contactId, if (isTerminalDisposition(status)) "none" else "no_next_step")
         viewModelScope.launch {
             runCatching {
                 Repository.setDisposition(contactId, status, null)
@@ -1455,7 +1467,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             if (c.id == callLogId) c.copy(suggestedDisposition = null) else c
                         },
                         leads = st.leads.map { c ->
-                            if (c.id == contactId) c.copy(status = status) else c
+                            if (c.id == contactId) c.copy(
+                                status = status,
+                                stage = stageAfterDisposition(c.stage, status, st.leadStages),
+                            ) else c
                         },
                         message = "Lead updated ✓",
                     )
@@ -1525,14 +1540,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             // Stages and action states load alongside the leads: a tab row that
             // renders before its vocabulary arrives would flash the wrong labels.
             val stages = Repository.fetchLeadStages()
-            val work = Repository.currentUserId()?.let { Repository.fetchWorkStates(it) } ?: emptyList()
+            val uid = Repository.currentUserId()
+            val workResult = uid?.let { runCatching { Repository.fetchWorkStates(it) } }
             runCatching { Repository.fetchLeads() }
                 .onSuccess { list ->
-                    set {
-                        it.copy(
+                    set { st ->
+                        val withWork = if (workResult != null) applyWorkFetch(st, workResult) else st
+                        withWork.copy(
                             leads = list, leadsLoading = false,
-                            leadStages = if (stages.isNotEmpty()) stages else it.leadStages,
-                            workByLead = work.associateBy { w -> w.contactId },
+                            leadStages = if (stages.isNotEmpty()) stages else st.leadStages,
                         )
                     }
                     // Keep the on-device phone → lead map fresh so Lead Ring can
@@ -1728,12 +1744,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return if (msg.isEmpty()) name else "$name — ${msg.take(140)}"
     }
 
+    /**
+     * A successful read replaces the map, including a real empty day.
+     * A failed read keeps the last good map. Only when there is no last good
+     * map does the screen get [WORK_DUE_UNAVAILABLE] — never a silent 0.
+     */
+    private fun applyWorkFetch(st: AppState, result: Result<List<LeadWork>>): AppState {
+        val rows = result.getOrNull()
+        if (rows != null) {
+            return st.copy(workByLead = rows.associateBy { it.contactId }, workStatesError = null)
+        }
+        return if (st.workByLead.isEmpty()) st.copy(workStatesError = WORK_DUE_UNAVAILABLE) else st
+    }
+
     fun refreshWorkStates() {
         viewModelScope.launch {
             val uid = Repository.currentUserId() ?: return@launch
-            val work = runCatching { Repository.fetchWorkStates(uid) }.getOrNull() ?: return@launch
-            if (work.isEmpty()) return@launch
-            set { it.copy(workByLead = work.associateBy { w -> w.contactId }) }
+            val result = runCatching { Repository.fetchWorkStates(uid) }
+            set { applyWorkFetch(it, result) }
         }
     }
 
@@ -2127,15 +2155,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Optimistically updates the in-memory lead so the chip reflects instantly. */
     fun setLeadDisposition(contactId: String, status: String) {
+        if (isTerminalDisposition(status)) markWorkedLocally(contactId, "none")
         viewModelScope.launch {
             runCatching { Repository.setDisposition(contactId, status, null) }
                 .onSuccess {
                     launchActivityLog(contactId) { add("status" to "Stage → ${stageDisplay(status)}") }
                     set { st ->
                         st.copy(leads = st.leads.map { c ->
-                            if (c.id == contactId) c.copy(status = status) else c
+                            if (c.id == contactId) c.copy(
+                                status = status,
+                                stage = stageAfterDisposition(c.stage, status, st.leadStages),
+                            ) else c
                         })
                     }
+                    refreshWorkStates()
                 }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
@@ -2243,6 +2276,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // kept being asked about a call they had already written up. Same
         // one-line clear the popup path calls — not a second copy of the rule.
         if (status != null) clearPendingUpdate(contactId)
+        if (status != null && isTerminalDisposition(status)) markWorkedLocally(contactId, "none")
         viewModelScope.launch {
             // Persist a positive token amount whenever it's supplied. The sheet
             // asks for it on BOOKED as well as Token Paid, so paid-at has to be
@@ -2283,6 +2317,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         st.copy(leads = st.leads.map { c ->
                             if (c.id == contactId) c.copy(
                                 status = status ?: c.status,
+                                stage = if (status != null) stageAfterDisposition(c.stage, status, st.leadStages) else c.stage,
                                 temperature = temperature ?: c.temperature,
                                 budget = budget ?: c.budget,
                                 notes = note ?: c.notes,
@@ -2292,6 +2327,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             ) else c
                         })
                     }
+                    // The view knows whether this status is still "call now".
+                    // The stage above is only the optimistic half.
+                    if (status != null) refreshWorkStates()
                     // A "callback" lead rests in Working only while it has a pending
                     // reminder; the DB auto-creates one (migration 0086). Pull the
                     // fresh follow-up list so the lead leaves New right away instead
@@ -2442,7 +2480,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         refreshWorkStates()
                         if (mirrorStatus) set { st ->
                             st.copy(leads = st.leads.map { c ->
-                                if (c.id == contactId) c.copy(status = "follow_up") else c
+                                if (c.id == contactId) c.copy(
+                                    status = "follow_up",
+                                    stage = stageAfterDisposition(c.stage, "follow_up", st.leadStages),
+                                ) else c
                             })
                         }
                         launchActivityLog(contactId) {
@@ -2466,10 +2507,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // every one of them still sitting in Call now until the last reply
         // landed. The writes below are the same writes; only the waiting is gone.
         val ids = items.mapNotNull { it.id }.toSet()
+        val movedContacts = items.mapNotNull { it.contactId }.toSet()
         set { st ->
             st.copy(
                 followUpList = st.followUpList.map { if (it.id in ids) it.copy(dueAt = iso) else it }
                     .sortedBy { dueMillis(it.dueAt) },
+                // Tomorrow is not Call now. The list reads action_state, so
+                // moving the row's due_at alone left them sitting in Call now
+                // until the next work-state read.
+                workByLead = st.workByLead.mapValues { (id, w) ->
+                    if (id in movedContacts) w.copy(actionState = "scheduled", dueAt = iso) else w
+                },
                 message = "Moved ${items.size} follow-up${if (items.size == 1) "" else "s"} to ${shortWhen(dueAtMillis)}",
             )
         }
@@ -2480,7 +2528,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 FollowUpReminder.schedule(getApplication(), id, f.name, f.phone, f.note, dueAtMillis)
             }
             // Server truth, once, after all of them — not once per row.
+            // A buyer who is still waiting comes back to Call now here; the
+            // diary move does not cancel that.
             loadFollowUps(force = true)
+            refreshWorkStates()
         }
     }
 
@@ -2500,8 +2551,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * worse than a slow one, because nobody ever finds out about it.
      */
     fun completeFollowUp(id: String) {
-        val removed = dropFollowUpLocally(id)
-        viewModelScope.launch { pushComplete(id, removed) }
+        val removed = _state.value.followUpList.find { it.id == id }
+        val prevAction = removed?.contactId?.let { cid ->
+            _state.value.workByLead[cid]?.let { it.actionState to it.dueAt }
+        }
+        dropFollowUpLocally(id)
+        // Call now is the action state, not the row. Dropping the row and
+        // leaving action_state on call_now kept the lead in the queue.
+        // A terminal outcome already wrote `none` on this same tap — do not
+        // put that lead back into "No step".
+        removed?.contactId?.let { cid ->
+            if (_state.value.workByLead[cid]?.actionState != "none") markWorkedLocally(cid, "no_next_step")
+        }
+        viewModelScope.launch { pushComplete(id, removed, prevAction) }
     }
 
     /** Take the row off screen straight away, handing back what was removed so a
@@ -2512,13 +2574,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return removed
     }
 
-    private suspend fun pushComplete(id: String, removed: FollowUp?) {
+    private suspend fun pushComplete(
+        id: String,
+        removed: FollowUp?,
+        prevAction: Pair<String, String?>?,
+    ) {
         runCatching { Repository.completeFollowUp(id) }
             .onFailure { e ->
                 set { st ->
+                    val cid = removed?.contactId
+                    val work = if (cid != null && prevAction != null) {
+                        val cur = st.workByLead[cid]
+                        if (cur != null) {
+                            st.workByLead + (cid to cur.copy(actionState = prevAction.first, dueAt = prevAction.second))
+                        } else st.workByLead
+                    } else st.workByLead
                     st.copy(
                         followUpList = if (removed != null && st.followUpList.none { it.id == id })
                             (st.followUpList + removed).sortedBy { dueMillis(it.dueAt) } else st.followUpList,
+                        workByLead = work,
                         error = e.message,
                     )
                 }
@@ -2572,7 +2646,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         viewModelScope.launch {
-            if (id != null && !linked) pushComplete(id, removed)
+            if (id != null && !linked) pushComplete(id, removed, null)
             scheduleFollowUp(f.contactId, f.phone, f.name, dueAtMillis, note)
         }
     }
@@ -2637,7 +2711,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // The attempt ladder below may immediately book the next try, which
         // overwrites this with 'scheduled' — correct, and it is a different
         // sentence to the rep: "booked for later", not "call this now".
-        markWorkedLocally(contactId, "no_next_step")
+        markWorkedLocally(contactId, if (isTerminalDisposition(status)) "none" else "no_next_step")
         // Whether the attempt ladder below is about to book the next try. If it
         // is, IT owns the final work state and this function must not re-read
         // the server first: for no_answer/busy/wrong_person the view still says
@@ -2677,8 +2751,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                             leads = st.leads.map { c ->
                                 // handledAt locally too, so the lead leaves New the
                                 // instant the rep answers the prompt rather than on
-                                // the next server refresh.
-                                if (c.id == contactId) c.copy(status = status, temperature = temperature ?: c.temperature, notes = cleanNote ?: c.notes, siteVisitAt = visitIso ?: c.siteVisitAt, handledAt = java.time.Instant.now().toString()) else c
+                                // the next server refresh. Stage moves with status:
+                                // the trigger would do this on the server, and a
+                                // lost or booked lead must leave its old bucket
+                                // before the next full reload.
+                                if (c.id == contactId) c.copy(
+                                    status = status,
+                                    stage = stageAfterDisposition(c.stage, status, st.leadStages),
+                                    temperature = temperature ?: c.temperature,
+                                    notes = cleanNote ?: c.notes,
+                                    siteVisitAt = visitIso ?: c.siteVisitAt,
+                                    handledAt = java.time.Instant.now().toString(),
+                                ) else c
                             },
                         )
                     }
@@ -3555,14 +3639,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      *
      * v_lead_workstate is the answer, because it is the same one the queue
      * filters and power-dial obey. The phone does not get a second opinion
-     * about whose time has come.
+     * about whose time has come. Follow-ups Call now is this same list
+     * (callNowContacts), in the same five-tier order. A failed read sets
+     * workStatesError and must not be reported as 0.
      */
     fun dueNowCount(): Int {
         val st = _state.value
-        return st.leads.count { c ->
-            val a = c.id?.let { st.workByLead[it]?.actionState }
-            a == "overdue" || a == "call_now"
-        }
+        return callNowContacts(st.leads, st.workByLead).size
     }
 
     // ---------- attendance ----------

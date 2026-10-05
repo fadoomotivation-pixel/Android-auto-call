@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (Apple polish kept on top of the one Call now list)
+
+- WHAT: Merged main after the dialer-truth PR. The phone still uses one due list, the five-tier Call all order, stage sync on dispose, and a dash plus "Could not load who is due" when the work-state read fails. The Apple chrome (grouped grey canvas, white cards, taller Call, calm tabs, line icons) sits on that logic. A failed count still shows "—", never 0.
+- FILES: `TelecallerScreens.kt`, `docs/AGENT_SYNC.md`.
+- WHY: The two PRs edited the same screen. Neither note below is dropped.
+- BUILD: `assembleStandardDebug` green locally after the merge.
+- NEXT/NOTE: #493 is already on main. This branch does not need it to merge again.
+
 ## 2026-10-05 — Cursor (Android Apple-style UI polish)
 
 - WHAT: Visual pass on the telecaller phone. Grouped grey canvas, white cards, one action blue (`#007AFF`, token still named Indigo), large titles, line icons in place of emoji on the daily screens, a tab bar with no selected pill, and a larger Call control on the next-call card, lead rows, follow-up rows, and the lead page. Chips stay two across. Call all still shows only on Call now. No post-call popup, no fourth follow-up tab, no count added to a chip.
@@ -44,6 +52,14 @@ entry before you start, and add an entry after every change.**
 - WHY: Founder asked for the phone to feel like an Apple app. Same words, same queues, same buttons.
 - BUILD: `assembleStandardDebug`. No migration, no edge function, no admin.
 - NEXT/NOTE: Compose UI touched because the user asked. Dialer ranking, Call now, dispose, and fetchWorkStates are unchanged.
+
+## 2026-10-05 — Cursor (one Call now list for the phone)
+
+- WHAT: Home, the Leads deck, and Follow-ups now share one due list. Membership is `v_lead_workstate` action `overdue` or `call_now`. Order is the five tiers Follow-ups already used (buyer waiting, broken promise, spoken, few tries, never answered). The Leads "Or call all" queue and the Due / Call now / Overdue dial button were oldest-diary; they now dial that list. Follow-ups Call now is the same leads, not "follow_up.due_at has passed". After a disposition the phone copies `stage` with `status` (same forward-only rule as `contacts_stage_sync`, terminal always wins). A failed `v_lead_workstate` read keeps the last good map, or shows "Could not load who is due" when there is nothing to keep. It does not become Due 0.
+- FILES: `android/.../ui/CallNowQueue.kt` (new), `TelecallerScreens.kt`, `MainViewModel.kt`, `FeatureScreens.kt`, `data/Repository.kt`.
+- WHY: A buyer who wrote was dialed after a 43-day app-invented 11 AM, Due now and Call now could disagree, a lost lead stayed in the old stage until reload, and a failed work-state read looked like a quiet day.
+- BUILD: `assembleStandardDebug` green locally. No migration. Founder does not apply 0217/0218 from this PR.
+- NEXT/NOTE: Dashboard has no Call all button. The dial queue that was wrong is the Leads next-call card and the due-list Call button. Dead WhatsApp capture on the phone, OEM recording, and applying 0217/0218 stay out of this PR.
 
 ## 2026-10-05 — Cursor (capture banner sits in the page)
 
