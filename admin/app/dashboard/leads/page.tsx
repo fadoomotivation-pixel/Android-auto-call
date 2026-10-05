@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getServiceSupabase } from "@/lib/supabase/service";
 import type { Profile } from "@/lib/types";
@@ -142,7 +143,9 @@ export default async function LeadsPage() {
           limited. ({repsError})
         </div>
       )}
-      <LeadManager companyId={profile.company_id} salespeople={salespeople} isSuper={isSuper} allCompanies={allCompanies} />
+      <Suspense fallback={<div className="empty">Loading leads…</div>}>
+        <LeadManager companyId={profile.company_id} salespeople={salespeople} isSuper={isSuper} allCompanies={allCompanies} />
+      </Suspense>
     </>
   );
 }
