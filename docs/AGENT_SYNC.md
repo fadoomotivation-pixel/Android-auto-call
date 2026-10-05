@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (today's funnel counts the deal stage)
+
+- WHAT: The today card still has the same six steps. A lead is counted by her deal stage, not by the last call outcome. A no-answer on an Interested lead stays Interested. Token paid today counts as Booked. New means the lead is still in the New stage (assigned, created, or still there today), not "assigned today" under that label. A failed lead read still says "Could not load today's funnel." A morning that loaded and is empty still shows 0. Visit-day chips and the Booked/Lost leave-on-tap stay.
+- FILES: `android/.../ui/TodayFunnel.kt`, `docs/AGENT_SYNC.md`.
+- WHY: A missed call was moving an interested lead into Contacted, and a token paid today never reached Booked.
+- BUILD: `assembleStandardDebug` green locally on main after #500. No migration.
+- NEXT/NOTE: The funnel note below stays. No fourth tab, no popup, no second scheduler, no new store, no chip total.
+
 ## 2026-10-05 — Cursor (today's funnel and the next visit step)
 
 - WHAT: Home shows today's funnel (New, Contacted, Interested, Visit asked, Visit done, Booked) for leads touched today, IST, one step each, furthest step wins. Call now on that card is the same list as Due now. A failed lead read says "Could not load today's funnel." A failed due read shows "—" and the existing "Could not load who is due" line. It does not draw a quiet 0. People who promised a visit and still have no day are one sentence on that card. Follow-ups and Today's Plan show visits waiting on an outcome from `v_pending_site_visit_outcomes` (the list Pulse already uses). Ask counts come from `rep_prompts.kind = visit_check`, not from the view's times_asked column. Two answers of "not yet" stop the visit prompt; a dismissal does not. After Interested, the next chips are Tomorrow 4 PM, Sunday 11 AM, Other day, or Call again instead. There is no "Save without a reminder" on that path. A future visit leaves Call now as awaiting_visit on the tap. Booked and Lost already left on dispose; the assistant visit answers now do the same, and come back if the write is rejected. An arrival with no outcome reads "They came. The outcome is not written."
