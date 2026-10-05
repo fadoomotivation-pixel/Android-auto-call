@@ -91,8 +91,9 @@ object CaptureHealth {
     )
 
     /**
-     * One line on the draft itself. Null while the read is still in flight or
-     * capture is proven live — the banner covers the dead case everywhere else.
+     * Kept for the health read. The phone does not show this. Telecallers do
+     * not see a capture-down line. [recordsSends] still decides whether a
+     * draft may be marked opened.
      */
     fun draftWarning(snapshot: Snapshot): String? = when (snapshot) {
         is Snapshot.Live, Snapshot.Pending -> null

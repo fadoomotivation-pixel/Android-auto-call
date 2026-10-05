@@ -115,21 +115,32 @@ fun CallsScreen(vm: MainViewModel) {
     fun nameFor(c: CallLog): String? =
         c.contactId?.let { nameById[it] } ?: nameByPhone[c.phone.filter { it.isDigit() }.takeLast(10)]
 
+    val known = remember(app.leads) {
+        app.leads.associateBy { it.phone.filter { ch -> ch.isDigit() }.takeLast(10) }
+    }
+
     // ONE list, and every tab and every count derives from it.
     //
-    // The counts used to be built from app.callList while the rendered rows were
-    // built from app.callList.filter { !it.offCrm }. On a phone whose calls are
-    // mostly off-CRM that reads as a broken app, and it did: "Follow-up (56)"
-    // sitting directly above "No follow-ups — every call connected 🎉".
+    // App, Missed, and Follow-up are her lead calls only. A number that is not
+    // a lead — no contact on the call, and no lead with that phone — is left
+    // out. There is no row and no empty line that says so. The Phone tab is
+    // the handset log and is not this list.
     //
-    // The filter is gone rather than copied into the counts. It was there to
-    // keep a rep's personal calls out of the app, and it was not doing that:
-    // the Phone tab right next to it lists the device's ENTIRE call log,
-    // personal calls included. So it protected nothing and cost the rep every
-    // call she had actually made — including the Play button, which is why not
-    // one recording could be heard on a freshly logged-in phone. These are her
-    // own calls; she is allowed to see them.
-    val visible = app.callList
+    // Counts come from the same list as the rows. A count built from every
+    // call and a list built from some of them once read "Follow-up (56)" over
+    // an empty screen.
+    val visible = remember(app.callList, known) {
+        app.callList.filter { isLeadCall(it, known) }
+    }
+    val leadSummary = remember(visible) {
+        CallSummary(
+            total = visible.size,
+            connected = visible.count { it.outcome == "connected" },
+            noAnswer = visible.count { it.outcome == "no_answer" },
+            failed = visible.count { it.outcome == "failed" },
+            talkSeconds = visible.sumOf { it.durationSeconds },
+        )
+    }
     val followUps = remember(visible) {
         visible.filter { it.outcome == "no_answer" || it.outcome == "failed" }.distinctBy { it.phone }
     }
@@ -138,9 +149,6 @@ fun CallsScreen(vm: MainViewModel) {
     }
     val recentsGrouped = remember(app.deviceRecents) {
         app.deviceRecents.groupBy { dayBucket(it.timeMillis) }.toList()
-    }
-    val known = remember(app.leads) {
-        app.leads.associateBy { it.phone.filter { ch -> ch.isDigit() }.takeLast(10) }
     }
 
     Refreshable(onRefresh = { vm.loadCalls(force = true); vm.loadDeviceRecents(); vm.loadFollowUps(force = true) }) {
@@ -236,7 +244,7 @@ fun CallsScreen(vm: MainViewModel) {
             )
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 100.dp)) {
                 // Summary rides inside the list so it scrolls away like a native header.
-                item(key = "summary") { SummaryStrip(app.callSummary) }
+                item(key = "summary") { SummaryStrip(leadSummary) }
                 items(rows, key = { it.id ?: "${it.phone}-${it.startedAt}" }) {
                     CallRow(it, name = nameFor(it), project = projectFor(it),
                         playing = it.id != null && it.id == app.playingCallId,
@@ -366,6 +374,17 @@ private fun PhoneRecentRow(
             Hairline()
         }
     }
+}
+
+/**
+ * A call belongs on the recordings list when it is one of her leads.
+ * Linked by contact id, or by the same last-10 digits as a lead she has.
+ * Anything else is omitted. The screen does not say why.
+ */
+private fun isLeadCall(c: CallLog, knownByPhone: Map<String, com.salesautocall.app.data.Contact>): Boolean {
+    if (!c.contactId.isNullOrBlank()) return true
+    val digits = c.phone.filter { it.isDigit() }.takeLast(10)
+    return digits.length >= 10 && knownByPhone.containsKey(digits)
 }
 
 /** "Today" / "Yesterday" / "12 Jun" bucket header for the phone recents list. */
@@ -588,7 +607,6 @@ private fun CallRow(
             AudioPlayer(
                 callLogId = c.id!!,
                 callOwnerId = c.salespersonId,
-                offCrm = c.offCrm,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }

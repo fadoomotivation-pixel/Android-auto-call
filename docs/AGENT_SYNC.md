@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (phone hides capture-down; recordings are lead calls only)
+
+- WHAT: The phone no longer shows a WhatsApp capture-down card on Home, Leads, Follow-ups, or the lead page, and the draft card no longer says capture is down. The phone still does not mark a draft opened unless capture is live. The Calls recordings list (App, Missed, Follow-up) keeps only calls linked to a lead or to a lead's phone. A number that is not a lead is left out. There is no "not a lead" row. Recording failures on a real call still show. Admin capture health is unchanged.
+- FILES: `CaptureDownCard.kt` (removed), `TelecallerScreens.kt`, `LeadDetailScreen.kt`, `CallsScreen.kt`, `AudioPlayer.kt`, `CaptureHealth.kt`, `docs/AGENT_SYNC.md`.
+- WHY: Telecallers should not see "WhatsApp capture is down". A recording that is not a lead should not appear.
+- BUILD: `assembleStandardDebug` green locally. No migration.
+- NEXT/NOTE: Dashboard capture banner stays. The Phone tab is still the handset log.
+
 ## 2026-10-05 — Cursor (dashboard routes open faster)
 
 - WHAT: The nine slow dashboard routes share one cached identity with the sidebar, and the WhatsApp capture check no longer holds the page. Facebook, Pulse, X-Ray, and Ads start their reads on the server. RAG counts in parallel and does not pull the fact list until it is opened. Leaks and telecaller activity start the drill-in queries with the list. Attachment links mint after the thread text is on screen. Loading states stay labelled as loading.
