@@ -224,11 +224,11 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
       {error && <div className="error">{error}</div>}
 
       {busy && companies.length === 0 && (
-        <div className="empty">Aaj ka pulse ban raha hai — AI har telecaller ka din likh raha hai…</div>
+        <div className="empty">Building today&apos;s pulse. The AI is writing each telecaller&apos;s day…</div>
       )}
 
       {!busy && !anyReps && !error && (
-        <div className="empty">Is din koi telecaller activity nahi mili.</div>
+        <div className="empty">No telecaller activity on this day.</div>
       )}
 
       {companies.map((c) => (

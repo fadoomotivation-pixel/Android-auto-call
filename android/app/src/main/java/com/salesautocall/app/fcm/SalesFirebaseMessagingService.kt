@@ -92,11 +92,11 @@ class SalesFirebaseMessagingService : FirebaseMessagingService() {
                     R.raw.chime_followup, NotificationManager.IMPORTANCE_HIGH,
                 )
                 create(
-                    AGENDA_CHANNEL_ID, "Daily agenda", "Aaj ka plan — your 9:30 AM morning brief",
+                    AGENDA_CHANNEL_ID, "Daily agenda", "Today's plan — your 9:30 AM morning brief",
                     R.raw.chime_agenda, NotificationManager.IMPORTANCE_HIGH,
                 )
                 create(
-                    QUOTES_CHANNEL_ID, "Motivation", "Aaj ka funda — quick sales tips",
+                    QUOTES_CHANNEL_ID, "Motivation", "Today's tip — quick sales tips",
                     R.raw.chime_quote, NotificationManager.IMPORTANCE_DEFAULT,
                 )
             }

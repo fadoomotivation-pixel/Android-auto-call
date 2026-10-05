@@ -666,7 +666,7 @@ private fun DayReviewPrompt(vm: MainViewModel, ask: AssistantAsk) {
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                         ) {
                             Column {
-                                Text("Kal ye bolkar dekhiye",
+                                Text("Try saying this tomorrow",
                                     style = MaterialTheme.typography.labelSmall, color = Sea)
                                 Text("“${imp.say}”", style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium)
@@ -682,18 +682,18 @@ private fun DayReviewPrompt(vm: MainViewModel, ask: AssistantAsk) {
                 // and the line the coach already wrote on that call.
                 if (review?.bestCall != null || review?.worstCall != null) {
                     Spacer(Modifier.height(14.dp))
-                    Text("🎧 Aaj ki calls",
+                    Text("🎧 Today's calls",
                         style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
                     review.bestCall?.let { CallOfDay("🏆", "Best call", it.lead, it.rating, it.why, Jade) }
-                    review.worstCall?.let { CallOfDay("📉", "Sabse kamzor", it.lead, it.rating, it.why, Brass) }
+                    review.worstCall?.let { CallOfDay("📉", "Weakest call", it.lead, it.rating, it.why, Brass) }
                 }
 
                 // Two names, not a list. This is the last thing a rep reads
                 // before they close the app, and it has to survive the night.
                 review?.priorities?.takeIf { it.isNotEmpty() }?.let { picks ->
                     Spacer(Modifier.height(14.dp))
-                    Text("🎯 Kal sabse pehle",
+                    Text("🎯 First tomorrow",
                         style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
                     picks.take(2).forEach { p ->
@@ -746,7 +746,7 @@ private fun DayReviewPrompt(vm: MainViewModel, ask: AssistantAsk) {
     )
 }
 
-/** One end of the day's call range. "Sabse kamzor", never "worst" — the label a
+/** One end of the day's call range. "Weakest call", never "worst" — the label a
  *  rep reads about their own work should describe the call, not sentence them. */
 @Composable
 private fun CallOfDay(emoji: String, label: String, lead: String?, rating: Int, why: String?, tone: Color) {

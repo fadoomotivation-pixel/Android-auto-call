@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
       ok: true,
       verdict: "call_instead",
       sent_14d: plan.sent_14d ?? 0,
-      reason: `${plan.sent_14d ?? 0} messages in two weeks, no reply. Message nahi — call karo.`,
+      reason: `${plan.sent_14d ?? 0} messages in two weeks, no reply. Don't message. Call.`,
     });
   }
 

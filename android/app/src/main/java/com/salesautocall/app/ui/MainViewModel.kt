@@ -3909,7 +3909,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     phone = contact?.phone ?: call.phone,
                     name = contact?.name,
                     dueAtMillis = dueMs,
-                    note = wada.promiseNote ?: "Wada — call pe promise kiya tha",
+                    note = wada.promiseNote ?: "Promise made on the call",
                 )
             }
             // 2. The facts → the lead card (never overwriting human input).
@@ -3922,7 +3922,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 })
             }
             // scheduleFollowUp announces the ⏰ itself; only speak when there was no promise.
-            if (dueMs == null) set { it.copy(message = "🤝 Wada saved — lead update ho gayi") }
+            if (dueMs == null) set { it.copy(message = "🤝 Promise saved. Lead updated.") }
             if (call.contactId != null) loadLeads(force = true)
         }
     }

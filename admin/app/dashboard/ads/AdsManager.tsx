@@ -208,7 +208,7 @@ function rollUp(rows: Row[]): Agg[] {
 function expiredOn(msg: string): string | null {
   if (!/access token|OAuthException|expired/i.test(msg)) return null;
   const m = msg.match(/expired on\s+(?:\w+,\s*)?([0-9]{1,2}-\w{3}-[0-9]{2,4})/i);
-  return m ? m[1] : "kuch din pehle";
+  return m ? m[1] : "a few days ago";
 }
 
 export function AdsManager({ companyId, configured, savedAccount }: { companyId: string; configured: boolean; savedAccount: string | null }) {
@@ -657,20 +657,22 @@ export function AdsManager({ companyId, configured, savedAccount }: { companyId:
               // tells an owner nothing about what to do. The token simply has to
               // be replaced, so say that and open the box that takes it.
               <div style={{ ...card, borderColor: "rgba(245,158,11,0.45)" }}>
-                <strong style={{ color: "#f59e0b", fontSize: 15 }}>🔑 Facebook token expire ho gaya</strong>
+                <strong style={{ color: "#f59e0b", fontSize: 15 }}>🔑 Facebook token expired</strong>
                 <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text)", lineHeight: 1.6 }}>
-                  Meta ka token {expiredOn(error)} ko khatam ho gaya, isliye ad ke numbers (spend, CTR, CPC) abhi
-                  nahi aa rahe. <b>Leads par koi asar nahi</b> — wo alag token se aa rahi hain aur normal chal rahi hain.
+                  Meta&apos;s token ended on {expiredOn(error)}.
+                  Ad numbers (spend, CTR, CPC) are not coming in right now.
+                  <b> Leads are not affected.</b> They use a different token, and they are still coming in.
                 </p>
                 <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
-                  Naya token banayein: <b>Graph API Explorer</b> → apni app chunein → permission me <b>ads_read</b> add
-                  karein → <b>Generate Access Token</b> → jo lamba code mile wo copy karein. Phir neeche wale button se
-                  paste karke Save kar dein. Ad Account ID waisa hi rehne dein.
+                  Make a new token: <b>Graph API Explorer</b> → choose your app → add the <b>ads_read</b> permission
+                  → <b>Generate Access Token</b> → copy the long code.
+                  Paste it with the button below, then tap Save.
+                  Leave the Ad Account ID as it is.
                 </p>
                 <button type="button" onClick={() => setSetupOpen(true)}
                   style={{ marginTop: 12, background: "linear-gradient(135deg, #1877F2, #0A52CC)", color: "#fff",
                     padding: "9px 18px", borderRadius: 8, border: "none", fontWeight: 600, cursor: "pointer" }}>
-                  Naya token daalein
+                  Add new token
                 </button>
               </div>
             ) : (
