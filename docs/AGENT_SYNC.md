@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (admin build was failing on three apostrophes)
+
+- WHAT: Escaped three apostrophes on the recordings page so `next build` can finish. The words are the same. No other recordings change.
+- FILES: `admin/app/dashboard/recordings/page.tsx`.
+- WHY: Vercel runs the admin lint, and those three lines failed the lead-list preview. Typecheck was already green.
+- BUILD: `next build` after this note.
+- NEXT/NOTE: The lead-list note below is unchanged.
+
 ## 2026-10-05 — Cursor (lead list and lead page, Apple chrome, faster scroll)
 
 - WHAT: The lead board and the lead sheet use the same Apple chrome as the rest of the dashboard. One grouped list, calm selected rows, status pills, and the real stage funnel on the lead. The list windows rows, memoizes each row, builds row text once, and waits before a search hits the server. A failed load, count, or stage read says so. Counts stay "—" until they arrive.
