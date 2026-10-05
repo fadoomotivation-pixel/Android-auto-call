@@ -43,7 +43,7 @@ entry before you start, and add an entry after every change.**
 - FILES: `supabase/functions/meta-capi/index.ts`, `facebook-manage/index.ts`, `ad-advisor/index.ts`, `admin/app/dashboard/facebook/page.tsx`, `admin/app/dashboard/ads/AdsManager.tsx`, `docs/AGENT_SYNC.md`.
 - WHY: Purchase had no value. A unique row with `ok=false` could never be sent again. "Andromeda-aware" was a caption. Measured the same day: 47 CAPI events, all ok, only QualifiedLead and Schedule; token_amount is null on every lead; 0 failed rows.
 - BUILD: admin `tsc --noEmit` passed after the rebase. No migration. Do not apply anything. Edge functions ship only when this merges to main. Founder still needs the CAPI token in Vault for sends to leave the building — that token is already how the 47 events went out.
-- NEXT/NOTE: Rebased onto the Call now memory branch so this sync file does not fight that PR. #495, #496, and #497 notes stay below. Does not touch project `mfgjzkaabyltscgrkhdz` or `sdmibpxecasgfyodqzow`.
+- NEXT/NOTE: Rebased onto the Call now memory branch so this sync file does not fight that PR. #495, #496, and #497 notes stay below. Vercel was already failing on main: the recordings page from #495 has three unescaped apostrophes, and `next build` treats that as an error. Those three are escaped here. Does not touch project `mfgjzkaabyltscgrkhdz` or `sdmibpxecasgfyodqzow`.
 
 ## 2026-10-05 — Cursor (Call now shows the stored conversation)
 
