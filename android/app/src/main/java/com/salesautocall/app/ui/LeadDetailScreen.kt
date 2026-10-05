@@ -507,7 +507,14 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 // Merged so the rep never wonders which AI to use; collapsed by
                 // default, one section open at a time. ----
                 item {
+                    val stored = storedCoach(
+                        contact.id?.let { app.memoryByLead[it] },
+                        contact.id?.let { app.workByLead[it] },
+                        app.coachPicks,
+                        contact.id,
+                    )
                     AiCoachCard(
+                        stored = stored,
                         brief = app.leadBrief,
                         briefLoading = app.leadBriefLoading,
                         onGenerate = { contact.id?.let { vm.loadLeadBrief(it) } },
@@ -1170,6 +1177,7 @@ private fun NextStepBanner(color: Color, title: String, detail: String, cta: Str
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AiCoachCard(
+    stored: StoredCoach = StoredCoach(null, null, null, null, null),
     brief: String?,
     briefLoading: Boolean,
     onGenerate: () -> Unit,
@@ -1246,6 +1254,25 @@ private fun AiCoachCard(
                 Text("What to say", style = AppType.rowTitle, color = AppColors.TextPrimary)
                 Text("Opening line, the counter to their objection, a message to send",
                     style = MaterialTheme.typography.labelSmall, color = SubInk)
+            }
+        }
+
+        // Already on the server. No new question, no new model call. It stays
+        // on the card through the afternoon because the harvest rewrites it
+        // when the conversation moves, and the phone re-reads it with the queue.
+        if (!stored.isEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(SubInk.copy(alpha = 0.06f))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                stored.leftAt?.let { StoredFact("Left at", it) }
+                stored.theyWant?.let { StoredFact("They want", it) }
+                stored.stoppedBy?.let { StoredFact("Stopped by", it) }
+                stored.stillOwe?.let { StoredFact("You still owe", it) }
+                stored.sayThis?.let { StoredFact("Say this", it) }
             }
         }
 
@@ -1493,6 +1520,14 @@ private fun AiCoachCard(
     }
 }
 
+
+@Composable
+private fun StoredFact(label: String, value: String) {
+    Column {
+        Text(label, style = AppType.metaStrong, color = AppColors.TextSecondary)
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 20.sp)
+    }
+}
 
 /** One segment of the AI Coach card's segmented control (Pitch · Objection · Message). */
 @Composable

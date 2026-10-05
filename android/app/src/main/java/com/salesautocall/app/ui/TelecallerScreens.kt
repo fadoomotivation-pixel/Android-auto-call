@@ -1262,7 +1262,13 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                             rows = callbacks.take(3).map { f ->
                                 val work = f.contactId?.let { app.workByLead[it] }
                                 val why = dueSignal(work, app.focusReason(f.contactId))
-                                PlanRow(f.name ?: f.phone, relativeDue(f.dueAt), why ?: f.note, f.phone,
+                                val extra = focusSayLine(app.coachPicks, f.contactId)
+                                    ?: rowMemoryLine(f.contactId?.let { app.memoryByLead[it] })
+                                val detail = when {
+                                    why != null && extra != null -> "$why · $extra"
+                                    else -> why ?: extra ?: f.note
+                                }
+                                PlanRow(f.name ?: f.phone, relativeDue(f.dueAt), detail, f.phone,
                                     overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= nowMs)
                             },
                             more = callbacks.size - 3, onCall = { vm.dialManual(it) },
@@ -1730,6 +1736,10 @@ private fun UpNextCard(
     onCall: () -> Unit,
     onOpen: () -> Unit,
     onCallAll: () -> Unit,
+    /** Where the last conversation stopped. Null when there is no memory. */
+    coachLine: String? = null,
+    /** Today's focus opener, only when this lead is one of the five. */
+    sayLine: String? = null,
 ) {
     val who = prettyName(lead.name) ?: prettyPhone(lead.phone)
     // "Call Rahul", not "Call" — a named button is a decision already made.
@@ -1759,6 +1769,14 @@ private fun UpNextCard(
                 // itself is a queue a rep second-guesses, and then ignores.
                 Text(reason, style = AppType.meta, color = AppColors.TextSecondary,
                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                coachLine?.let {
+                    Text(it, style = AppType.meta, color = AppColors.TextPrimary,
+                        maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                sayLine?.let {
+                    Text(it, style = AppType.meta, color = AppColors.Indigo,
+                        maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
             }
             budgetLabel(lead.budget)?.let {
                 Spacer(Modifier.width(Space.s))
@@ -2285,6 +2303,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                                 next.createdAt != null -> "New lead · ${arrivedLabel(next.createdAt!!)}"
                                 else -> "Nobody has called them yet"
                             },
+                            coachLine = rowMemoryLine(next.id?.let { app.memoryByLead[it] }),
+                            sayLine = if (isDueNow(work)) focusSayLine(app.coachPicks, next.id) else null,
                             queueSize = queue.size,
                             onCall = { vm.dialManual(next.phone) },
                             onOpen = { next.id?.let { vm.openLeadDetail(it) } },
@@ -2466,6 +2486,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         LeadCard(
                             stages = app.leadStages,
                             work = app.workOf(c),
+                            memoryLine = if (isDueNow(app.workOf(c))) rowMemoryLine(c.id?.let { app.memoryByLead[it] }) else null,
+                            sayLine = if (isDueNow(app.workOf(c))) focusSayLine(app.coachPicks, c.id) else null,
                             c = c,
                             sharesName = (c.name?.trim()?.lowercase() ?: "") in repeatedNames,
                             followUp = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone],
@@ -2916,6 +2938,10 @@ private fun LeadCard(
     /** This lead's row from v_lead_workstate: what to do now, and the last real
      *  call against it. */
     work: LeadWork? = null,
+    /** Stored thread, only passed for a due lead. */
+    memoryLine: String? = null,
+    /** Focus-five opener, only passed for a due lead that was picked. */
+    sayLine: String? = null,
     followUp: FollowUp? = null,
     cloudOn: Boolean,
     selectMode: Boolean = false,
@@ -3262,6 +3288,16 @@ private fun LeadCard(
                     lineHeight = 16.sp, maxLines = 3,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
+        }
+        // The why line above is the clock. This is the conversation, which
+        // stays useful after the morning focus list has gone quiet.
+        listOfNotNull(memoryLine, sayLine).forEach { line ->
+            Spacer(Modifier.height(4.dp))
+            Text(
+                line, fontSize = 12.sp, color = AppColors.TextSecondary,
+                lineHeight = 16.sp, maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
         }
 
         if (!selectMode) {
@@ -4608,6 +4644,8 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     onOpen = if (cid == null) null else fun() { vm.openLeadDetail(cid) },
                     needsUpdate = cid != null && app.pendingUpdates.any { it.contactId == cid },
                     work = cid?.let { workByLead[it] },
+                    memoryLine = rowMemoryLine(cid?.let { app.memoryByLead[it] }),
+                    sayLine = if (isDueNow(cid?.let { workByLead[it] })) focusSayLine(app.coachPicks, cid) else null,
                 )
             }
         }
@@ -4759,6 +4797,10 @@ private fun FollowUpCard(
     whatsAppBusy: Boolean = false,
     /** One tap for a call that never connected. Null hides the chips. */
     onQuickOutcome: ((String) -> Unit)? = null,
+    /** Where the conversation was left. Shown under the why line. */
+    memoryLine: String? = null,
+    /** What to say, when focus-five named this lead. */
+    sayLine: String? = null,
 ) {
     // FIVE BUTTONS WAS THE PROBLEM.
     //
@@ -4874,6 +4916,16 @@ private fun FollowUpCard(
                     else -> AppColors.TextSecondary
                 },
                 maxLines = 3,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
+        listOfNotNull(memoryLine, sayLine).forEach { line ->
+            Spacer(Modifier.height(4.dp))
+            Text(
+                line,
+                style = AppType.meta,
+                color = AppColors.TextPrimary,
+                maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }

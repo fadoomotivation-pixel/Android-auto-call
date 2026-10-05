@@ -273,6 +273,22 @@ data class CoachPanel(val coaching: CoachCallFeedback?, val brief: CoachBrief?, 
 data class FocusPick(val contactId: String, val reason: String, val opener: String)
 
 /**
+ * One stored memory for a lead, from `lead_memory`.
+ *
+ * Written by the hourly harvest from calls and WhatsApp. The phone only
+ * reads it. An empty field means the harvest had nothing to say — do not
+ * fill one in on the device.
+ */
+@Serializable
+data class LeadMemory(
+    @SerialName("contact_id") val contactId: String,
+    @SerialName("where_we_left_it") val whereWeLeftIt: String? = null,
+    @SerialName("buyer_wants") val buyerWants: String? = null,
+    val objection: String? = null,
+    @SerialName("objection_code") val objectionCode: String? = null,
+)
+
+/**
  * The 7pm day review, built by rep-coach and cached there for the day.
  *
  * Every count is counted server-side, never estimated — a rep will argue with a

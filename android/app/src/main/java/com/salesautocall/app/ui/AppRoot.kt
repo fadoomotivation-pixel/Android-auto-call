@@ -828,6 +828,7 @@ private fun MainShell(vm: MainViewModel) {
                     loading = state.coachLoading,
                     picks = state.coachPicks,
                     picksLoading = state.coachPicksLoading,
+                    picksReady = state.coachPicksReady,
                     picksError = state.coachPicksError,
                     resolveLead = { id -> state.leads.firstOrNull { l -> l.id == id } },
                     objection = state.coachObjection,
@@ -924,6 +925,7 @@ private fun CoachSheet(
     loading: Boolean,
     picks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
     picksLoading: Boolean = false,
+    picksReady: Boolean = false,
     picksError: String? = null,
     resolveLead: (String) -> com.salesautocall.app.data.Contact? = { null },
     objection: String = "",
@@ -1074,9 +1076,11 @@ private fun CoachSheet(
                     color = MaterialTheme.colorScheme.error,
                 )
                 picks.isEmpty() -> Text(
-                    "No focus calls today. Call now is still the list to work.",
+                    if (picksReady) "No focus calls today. Call now is still the list to work."
+                    else "Reading your leads — your best 5 calls for today will show up here shortly.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (picksError != null) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 else -> picks.forEach { p ->
                     val lead = resolveLead(p.contactId)
