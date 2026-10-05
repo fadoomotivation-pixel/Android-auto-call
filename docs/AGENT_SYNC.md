@@ -42,7 +42,7 @@ entry before you start, and add an entry after every change.**
 - WHAT: The phone reads `lead_memory` for this rep (same RLS as the rest of her leads) whenever it reads who is due. A due row, the next-call card, Home's first three callbacks, and the lead's "What to say" card show "Left at", "They want", "Stopped by", and an open promise ("You still owe") from that row. Focus-five still runs once a session and, when it names a due lead, adds "Say this" under the reason already on the row. A failed focus read says so. It is not stored as "nobody today". The memory line is re-read with the queue, so it stays current after the morning. No new table, no new tab, no popup, no chip total. Buyer wording is shown as stored (it is often Hindi). The labels are English.
 - FILES: `android/.../ui/CallCoachLines.kt` (new), `Models.kt` (`LeadMemory`), `Repository.kt` (`fetchLeadMemories`, focus-five failure is not an empty list), `MainViewModel.kt`, `TelecallerScreens.kt`, `LeadDetailScreen.kt`, `AppRoot.kt`, `docs/AGENT_SYNC.md`.
 - WHY: 137 leads already in Call now had a memory and the phone never showed it. Focus-five lived in the coach sheet.
-- BUILD: `assembleStandardDebug` pending in this note until the local build finishes. No migration. No edge function.
+- BUILD: `assembleStandardDebug` green locally after the rebase onto main. No migration. No edge function.
 - NEXT/NOTE: Rebased onto main after #497. The speed chips, next due lead, focus reason, recording honesty, and capture-dead notes below stay. This adds the stored memory and the opener. CAPI and the ads creative checklist are a separate PR.
 
 ## 2026-10-05 — Cursor (daily speed kept with recording honesty and capture-dead)
