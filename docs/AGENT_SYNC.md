@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (today's funnel and the next visit step)
+
+- WHAT: Home shows today's funnel (New, Contacted, Interested, Visit asked, Visit done, Booked) for leads touched today, IST, one step each, furthest step wins. Call now on that card is the same list as Due now. A failed lead read says "Could not load today's funnel." A failed due read shows "—" and the existing "Could not load who is due" line. It does not draw a quiet 0. People who promised a visit and still have no day are one sentence on that card. Follow-ups and Today's Plan show visits waiting on an outcome from `v_pending_site_visit_outcomes` (the list Pulse already uses). Ask counts come from `rep_prompts.kind = visit_check`, not from the view's times_asked column. Two answers of "not yet" stop the visit prompt; a dismissal does not. After Interested, the next chips are Tomorrow 4 PM, Sunday 11 AM, Other day, or Call again instead. There is no "Save without a reminder" on that path. A future visit leaves Call now as awaiting_visit on the tap. Booked and Lost already left on dispose; the assistant visit answers now do the same, and come back if the write is rejected. An arrival with no outcome reads "They came. The outcome is not written."
+- FILES: `android/.../ui/TodayFunnel.kt` (new), `TelecallerScreens.kt`, `LeadDetailScreen.kt`, `MainViewModel.kt`, `data/Models.kt`, `data/Repository.kt`, `data/AppPrefs.kt`, `docs/AGENT_SYNC.md`.
+- WHY: 542 leads, 0 booked. 82 agreed a visit on a call, 11 reached the site-visit stage, 70 got no WhatsApp. The day stalled because the easy tap after Interested was another call, or no day at all.
+- BUILD: `assembleStandardDebug` green locally after rebasing onto main (#503, #502, and #501 already merged). No migration applied. Migration 0218 is already in the tree and still says "applied by hand". The founder applies it. Until then the phone counts visit_check itself, which is what 0218 will make the view count.
+- NEXT/NOTE: No fourth tab, no post-call popup, no second scheduler, no new knowledge store, no chip total, no Hindi. Company-wide visit reasons stay on Pulse. `settle_followups` is unchanged. The phone still does not show a capture-down card (#501). A draft is still not marked opened unless capture is live. Stored lead memory, the faster-day next lead, and the recording warning stay. The notes below are kept, not replaced.
+
 ## 2026-10-05 — Cursor (lead list rebased onto main after #501)
 
 - WHAT: Rebased the Apple lead list, the lead sheet, and the windowed scroll onto main. The recordings apostrophes were already escaped on main, so this branch does not edit that page. Both sync notes below stay.

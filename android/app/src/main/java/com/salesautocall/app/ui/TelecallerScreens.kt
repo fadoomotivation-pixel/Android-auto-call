@@ -1160,6 +1160,22 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     val (visitsDone, visitsUnconfirmed) = pastVisits.partition {
         it.first.siteVisitArrivedAt != null || it.first.status in AFTER_VISIT
     }
+    // The pending-visit view is the same list Pulse reads. When that read
+    // succeeded, it replaces the local "did they come?" guess. A failed read
+    // keeps the local question and says the list did not load — never a 0.
+    val visitBoard = app.pendingVisits
+    val visitServerReady = visitBoard.loaded && visitBoard.error == null
+    val showServerVisits = visitBoard.rows.isNotEmpty()
+    val pendingIds = if (visitServerReady || showServerVisits) visitBoard.rows.map { it.contactId }.toSet() else emptySet()
+    val visitsDoneShown = visitsDone.filter { it.first.id !in pendingIds }
+    val showLocalUnconfirmed = !visitServerReady && !showServerVisits
+    val funnel = remember(
+        app.leads, app.workByLead, app.leadsFetched, app.leadsFetchFailed, app.workStatesError,
+    ) {
+        buildTodayFunnel(
+            app.leads, app.workByLead, app.leadsFetched, app.leadsFetchFailed, app.workStatesError,
+        )
+    }
 
     Refreshable(onRefresh = { vm.loadHome(force = true); vm.loadLeads(force = true) }, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
@@ -1175,6 +1191,8 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
         }
+
+        item { TodayFunnelCard(funnel, onOpenFollowUps) }
 
         // Calling Score — front and centre. The AI listens to the rep's calls and
         // gives an honest average score, so they see their calling quality first.
@@ -1237,8 +1255,9 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // TODAY'S PLAN — the rep's whole day, by what the customer said:
         // who asked for a callback, whose site visit is fixed, whose visit
         // happened (and now needs closing). Names first, statuses never.
-        if (callbacks.isNotEmpty() || visitsPlanned.isNotEmpty() || visitsDone.isNotEmpty() ||
-            visitsUnconfirmed.isNotEmpty()
+        if (callbacks.isNotEmpty() || visitsPlanned.isNotEmpty() || visitsDoneShown.isNotEmpty() ||
+            (showLocalUnconfirmed && visitsUnconfirmed.isNotEmpty()) ||
+            showServerVisits || visitBoard.error != null
         ) {
             item {
                 Column(
@@ -1277,15 +1296,31 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                         )
                         PlanBucket(
                             icon = Icons.Outlined.CheckCircle, title = "Visit done — close them", color = Teal,
-                            rows = visitsDone.take(3).map { (c, _) ->
+                            rows = visitsDoneShown.take(3).map { (c, _) ->
                                 PlanRow(c.name ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone)
                             },
-                            more = visitsDone.size - 3, onCall = { vm.dialManual(it) },
+                            more = visitsDoneShown.size - 3, onCall = { vm.dialManual(it) },
                         )
-                        // Asked, never asserted. These are the ones where the
-                        // planned day came and went with nothing to show that
-                        // anyone actually visited.
-                        PlanBucket(
+                        visitBoard.error?.let { msg ->
+                            Spacer(Modifier.height(10.dp))
+                            Text(msg, color = MaterialTheme.colorScheme.error, style = AppType.meta)
+                        }
+                        if (showServerVisits) {
+                            val waiting = pendingVisitRows(visitBoard, app.leads) { id, phone, name, came ->
+                                vm.answerVisitHappened(id, phone, name, came)
+                            }
+                            PlanBucket(
+                                icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                                title = "Waiting on an outcome",
+                                color = Amber,
+                                rows = waiting.take(3),
+                                more = waiting.size - 3,
+                                onCall = { vm.dialManual(it) },
+                            )
+                        }
+                        // Asked, never asserted. Shown only when the pending-visit
+                        // view did not load — that view is the list when it did.
+                        if (showLocalUnconfirmed) PlanBucket(
                             icon = Icons.AutoMirrored.Outlined.HelpOutline, title = "Visit day gone — did they come?", color = Amber,
                             rows = visitsUnconfirmed.take(3).map { (c, _) ->
                                 PlanRow(
@@ -1515,6 +1550,40 @@ private data class PlanRow(
     val onNo: (() -> Unit)? = null,
 )
 
+/**
+ * Rows for visits whose day passed and nobody wrote an outcome.
+ * Yes / No only when this phone's copy of the lead has no arrival. If they
+ * already came, the line says the outcome is still missing.
+ */
+private fun pendingVisitRows(
+    board: PendingVisitBoard,
+    leads: List<Contact>,
+    onAnswer: (id: String, phone: String, name: String?, came: Boolean) -> Unit,
+): List<PlanRow> {
+    val byId = leads.associateBy { it.id }
+    return board.rows.map { v ->
+        val lead = byId[v.contactId]
+        val phone = v.phone.ifBlank { lead?.phone.orEmpty() }
+        val arrived = lead?.siteVisitArrivedAt != null
+        val asked = if (v.timesAsked == null) "Asked —" else "Asked ${v.timesAsked}×"
+        val detail = when {
+            v.needsManager == true -> "You said not yet, twice. Your manager can see this."
+            arrived -> "They came. The outcome is not written. $asked"
+            else -> asked
+        }
+        val canAsk = !arrived && phone.isNotBlank() && lead != null
+        PlanRow(
+            name = v.name.ifBlank { lead?.name ?: phone.ifBlank { "Lead" } },
+            whenLabel = if (v.daysWaiting <= 0) "Today" else "${v.daysWaiting}d",
+            detail = detail,
+            phone = phone,
+            overdue = v.daysWaiting > 0,
+            onYes = if (canAsk) ({ onAnswer(v.contactId, phone, v.name, true) }) else null,
+            onNo = if (canAsk) ({ onAnswer(v.contactId, phone, v.name, false) }) else null,
+        )
+    }
+}
+
 /** A titled bucket inside Today's Plan (callbacks / visits fixed / visits done). */
 @Composable
 private fun PlanBucket(
@@ -1552,7 +1621,7 @@ private fun PlanBucket(
                     }
                     r.detail?.takeIf { it.isNotBlank() }?.let {
                         Text(it, style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
                 }
@@ -3007,6 +3076,10 @@ private fun LeadCard(
         // single row. Done needs the on-site check-in or a stage that only
         // follows a real visit; otherwise it asks.
         visitMs != null && !isFinished(stages, c.stage) &&
+            c.siteVisitArrivedAt != null && c.siteVisitOutcome.isNullOrBlank() &&
+            c.status !in AFTER_VISIT && c.stage !in setOf("negotiation", "token_paid", "won") ->
+            "They came. The outcome is not written." to Amber
+        visitMs != null && !isFinished(stages, c.stage) &&
             (c.siteVisitArrivedAt != null || c.status in AFTER_VISIT) ->
             "Visit done — close them" to Teal
         visitMs != null && !isFinished(stages, c.stage) ->
@@ -3740,6 +3813,8 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
     // Which flow the schedule chips are serving: plain callback vs. an
     // Interested lead whose next touch we refuse to leave unscheduled.
     var scheduleFor by remember { mutableStateOf<String?>(null) }
+    // Interested asks for a visit day first. This flips that to a callback.
+    var callInstead by remember { mutableStateOf(false) }
     // "Site visit" opens the date picker rather than moving the lead silently.
     var visitPickOpen by remember { mutableStateOf(false) }
     // Optional temperature + note captured in the SAME step as the outcome, so a
@@ -3867,7 +3942,7 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     // because it is the one answer here that cannot be undone.
                     val choices: List<Triple<String, Color, () -> Unit>> = if (connected) {
                         listOf(
-                            Triple("Interested", AppColors.Positive, { scheduleFor = "interested" }),
+                            Triple("Interested", AppColors.Positive, { scheduleFor = "interested"; callInstead = false }),
                             Triple("Call back later", AppColors.Indigo, { scheduleFor = "callback" }),
                             // ASKS WHEN. A site visit with no date is not a site
                             // visit: it stamps the stage, tells nobody when, and
@@ -4007,19 +4082,31 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                         }
                     }
                 }
+            } else if (scheduleFor == "interested" && !callInstead) {
+                // A visit day, not "save with no reminder". That skip is how
+                // 82 people agreed to a visit and 11 reached the stage: the
+                // easy tap left no day on the lead. Call again is still here,
+                // and it does book a time.
+                VisitDayChips(
+                    onVisitAt = { millis ->
+                        vm.postCallDispose("site_visit", temp, note.ifBlank { null }, millis)
+                    },
+                    onOtherDay = { visitPickOpen = true },
+                    onCallInstead = { callInstead = true },
+                    onBack = { scheduleFor = null },
+                )
             } else {
-                val interested = scheduleFor == "interested"
                 // Inline quick-snooze — carries the temp + note, and stamps the
                 // right status so an Interested lead stays "interested".
                 QuickScheduleChips(
                     who = who,
-                    headline = if (interested) "⭐ Interested — when will you call again?" else "When should we remind you?",
+                    headline = if (scheduleFor == "interested") "When will you call again?" else "When should we remind you?",
                     onPick = { millis, n ->
                         vm.postCallScheduleFollowUp(millis, n ?: note.ifBlank { null }, temp, scheduleFor ?: "callback")
                     },
-                    onBack = { scheduleFor = null },
-                    onSkip = if (interested) ({ dispose("interested") }) else null,
-                    skipLabel = "Save without a reminder",
+                    onBack = {
+                        if (scheduleFor == "interested") callInstead = false else scheduleFor = null
+                    },
                 )
             }
         },
@@ -4150,6 +4237,53 @@ private fun TimeChip(label: String, modifier: Modifier = Modifier, onClick: () -
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
         )
+    }
+}
+
+/**
+ * After Interested: pick the visit day. Same two fast slots as the lead
+ * page, plus today when that hour is still ahead, plus the full picker.
+ */
+@Composable
+private fun VisitDayChips(
+    onVisitAt: (Long) -> Unit,
+    onOtherDay: () -> Unit,
+    onCallInstead: () -> Unit,
+    onBack: () -> Unit,
+) {
+    val now = java.time.ZonedDateTime.now()
+    fun at(days: Long, hour: Int) =
+        now.plusDays(days).withHour(hour).withMinute(0).withSecond(0).toInstant().toEpochMilli()
+    Column {
+        Text("When is the site visit?", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        if (now.hour < 16) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                if (now.hour < 11) TimeChip("Today 11 AM", Modifier.weight(1f)) { onVisitAt(at(0, 11)) }
+                TimeChip("Today 4 PM", Modifier.weight(1f)) { onVisitAt(at(0, 16)) }
+                if (now.hour >= 11) Spacer(Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            TimeChip("Tomorrow 4 PM", Modifier.weight(1f)) { onVisitAt(visitTomorrow4pm(now)) }
+            TimeChip("Sunday 11 AM", Modifier.weight(1f)) { onVisitAt(visitSunday11am(now)) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Other day",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                .clickable { onOtherDay() }
+                .padding(vertical = 9.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        TextButton(onClick = onCallInstead, modifier = Modifier.fillMaxWidth()) {
+            Text("Call again instead")
+        }
+        TextButton(onClick = onBack) { Text("← Back to disposition") }
     }
 }
 
@@ -4505,6 +4639,37 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 Text(blurb, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        // Visits waiting on an outcome. Not a chip and not a fourth tab —
+        // a section under the lists she already has. Hidden when the read
+        // succeeded and the list is empty. A failed read says so, and does
+        // not draw a zero.
+        if (app.pendingVisits.rows.isNotEmpty() || app.pendingVisits.error != null) {
+            item {
+                Column(
+                    Modifier.fillMaxWidth().clip(Radii.card)
+                        .background(AppColors.Surface)
+                        .border(1.dp, AppColors.Border, Radii.card)
+                        .padding(Space.l),
+                ) {
+                    Text("Visits waiting on an outcome", style = AppType.rowTitle, color = AppColors.TextPrimary)
+                    app.pendingVisits.error?.let { msg ->
+                        Spacer(Modifier.height(6.dp))
+                        Text(msg, color = MaterialTheme.colorScheme.error, style = AppType.meta)
+                    }
+                    val waiting = pendingVisitRows(app.pendingVisits, app.leads) { id, phone, name, came ->
+                        vm.answerVisitHappened(id, phone, name, came)
+                    }
+                    PlanBucket(
+                        icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                        title = "Did they come?",
+                        color = Amber,
+                        rows = waiting.take(5),
+                        more = waiting.size - 5,
+                        onCall = { vm.dialManual(it) },
+                    )
+                }
             }
         }
         // The one button that does the day's work, and the one that admits

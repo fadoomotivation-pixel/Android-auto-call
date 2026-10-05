@@ -134,6 +134,12 @@ data class Contact(
     @SerialName("site_visit_arrived_at") val siteVisitArrivedAt: String? = null,
     @SerialName("site_visit_distance_m") val siteVisitDistanceM: Int? = null,
     @SerialName("site_visit_verified") val siteVisitVerified: Boolean? = null,
+    /**
+     * What happened at the visit, copied onto the lead by the outcome trigger.
+     * Null means nobody has written it. An arrival with this still blank is a
+     * visit that happened and was never closed — the pending-visit list.
+     */
+    @SerialName("site_visit_outcome") val siteVisitOutcome: String? = null,
     /** The rep's own 0-100 read on how likely this lead is to buy, given after
      *  they have met at the site. A stage says where the lead IS; this says how
      *  close they are, which is the number a manager actually sorts by. */
@@ -238,6 +244,28 @@ data class LeadWork(
      *  exactly like a number that has never once been answered, so the app
      *  treated them the same and put both in tomorrow's list by age. */
     @SerialName("best_call_seconds") val bestCallSeconds: Int = 0,
+)
+
+/**
+ * One row of `v_pending_site_visit_outcomes`, without the ask columns.
+ *
+ * times_asked and needs_manager on the live view count `kind = site_visit`,
+ * which the app cannot insert. Migration 0218 fixes the view and is not
+ * applied. The phone counts `visit_check` itself.
+ */
+@Serializable
+data class PendingVisitRow(
+    @SerialName("contact_id") val contactId: String,
+    val name: String? = null,
+    val phone: String? = null,
+    @SerialName("days_waiting") val daysWaiting: Int = 0,
+)
+
+/** One visit_check prompt, enough to count asks and "not yet" answers. */
+@Serializable
+data class VisitCheckRow(
+    @SerialName("contact_id") val contactId: String? = null,
+    val answer: String? = null,
 )
 
 /** A company project's pinned location, used to geo-fence site-visit arrivals. */

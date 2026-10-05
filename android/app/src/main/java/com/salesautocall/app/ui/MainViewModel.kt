@@ -140,6 +140,12 @@ data class AppState(
     /** Company project pins, for geo-fencing site-visit arrivals. */
     val projectSites: List<ProjectSite> = emptyList(),
     val leadsLoading: Boolean = false,
+    /** True only after fetchLeads has succeeded this session. The funnel
+     *  must not draw zeros before that, or on a first load that failed. */
+    val leadsFetched: Boolean = false,
+    val leadsFetchFailed: Boolean = false,
+    /** Visits waiting on an outcome. Same view as Pulse. See PendingVisitBoard. */
+    val pendingVisits: PendingVisitBoard = PendingVisitBoard(),
     /** True while the AI lead-scoring call is running. */
     val aiScoringLeads: Boolean = false,
     val leadFilter: String = "open",
@@ -1718,6 +1724,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         val withWork = if (workResult != null && epoch == workEpoch) applyWorkFetch(st, workResult) else st
                         applyMemoryFetch(withWork, memoryResult).copy(
                             leads = list, leadsLoading = false,
+                            leadsFetched = true, leadsFetchFailed = false,
                             leadStages = if (stages.isNotEmpty()) stages else st.leadStages,
                         )
                     }
@@ -1728,7 +1735,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 // Keep whatever leads are already on screen on a network failure
                 // (don't blank the list) and show a friendly, non-technical message.
-                .onFailure { set { it.copy(leadsLoading = false, error = "Couldn't refresh leads — check your connection and try again.") } }
+                .onFailure {
+                    set { st ->
+                        st.copy(
+                            leadsLoading = false,
+                            leadsFetchFailed = if (!st.leadsFetched && st.leads.isEmpty()) true else st.leadsFetchFailed,
+                            error = "Couldn't refresh leads — check your connection and try again.",
+                        )
+                    }
+                }
             runCatching { Repository.fetchProjectSites() }
                 .onSuccess { sites -> set { it.copy(projectSites = sites) } }
         }
@@ -2116,6 +2131,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // Straight into the same prompt everything else uses, so the
                 // answer and the next step are one action, not two.
                 openFollowUpUpdate(contactId, phone, name, null)
+                loadPendingVisits()
             }.onFailure { e -> set { it.copy(error = e.message) } }
         }
     }
@@ -2489,7 +2505,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // kept being asked about a call they had already written up. Same
         // one-line clear the popup path calls — not a second copy of the rule.
         if (status != null) clearPendingUpdate(contactId)
-        if (status != null && isTerminalDisposition(status)) markWorkedLocally(contactId, "none")
+        if (status != null && isTerminalDisposition(status)) {
+            // Booked and Lost leave Call now on this tap. A future visit date
+            // must not override that — terminal wins.
+            markWorkedLocally(contactId, "none")
+        } else {
+            val visitMs = isoMillis(svAt)
+            if (visitMs != null && visitMs > System.currentTimeMillis()) {
+                // A visit with a day is not "call this now". The view will say
+                // awaiting_visit once the write lands; say it before advanceAfter
+                // looks at the queue, or she stays on the lead she just booked.
+                markWorkedLocally(contactId, "awaiting_visit", svAt)
+            }
+        }
         viewModelScope.launch {
             // Persist a positive token amount whenever it's supplied. The sheet
             // asks for it on BOOKED as well as Token Paid, so paid-at has to be
@@ -2537,6 +2565,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 siteVisitProject = svProj ?: c.siteVisitProject,
                                 siteVisitAt = svAt ?: c.siteVisitAt,
                                 tokenAmount = token ?: c.tokenAmount,
+                                handledAt = if (status != null) java.time.Instant.now().toString() else c.handledAt,
                             ) else c
                         })
                     }
@@ -2613,8 +2642,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- follow-up scheduler ----------
 
+    /**
+     * Visits waiting on an outcome, for Home and Follow-ups.
+     *
+     * A failed visit read keeps the last good list and says so. A failed
+     * prompt read leaves the list and sets timesAsked / needsManager to null
+     * so the row says "Asked —" instead of a zero the live view would invent.
+     * Migration 0218 makes the view count visit_check the same way. It is
+     * not applied here.
+     */
+    private fun loadPendingVisits() {
+        viewModelScope.launch {
+            val uid = Repository.currentUserId() ?: return@launch
+            val visits = runCatching { Repository.fetchPendingSiteVisits(uid) }
+            val checks = runCatching { Repository.fetchVisitChecks(uid) }
+            set { st ->
+                val failed = "Could not load visits waiting on an outcome."
+                val rows = visits.getOrNull()
+                if (rows == null) {
+                    return@set st.copy(
+                        pendingVisits = st.pendingVisits.copy(error = failed),
+                    )
+                }
+                val byContact = checks.getOrNull()
+                    ?.filter { !it.contactId.isNullOrBlank() }
+                    ?.groupBy { it.contactId }
+                st.copy(
+                    pendingVisits = PendingVisitBoard(
+                        loaded = true,
+                        error = null,
+                        rows = rows.map { r ->
+                            val prompts = byContact?.get(r.contactId).orEmpty()
+                            val notYet = prompts.count { it.answer == "not_yet" }
+                            PendingVisit(
+                                contactId = r.contactId,
+                                name = r.name?.takeIf { it.isNotBlank() } ?: r.phone ?: "Lead",
+                                phone = r.phone.orEmpty(),
+                                daysWaiting = r.daysWaiting,
+                                timesAsked = if (byContact == null) null else prompts.size,
+                                needsManager = if (byContact == null) null else notYet >= 2,
+                            )
+                        },
+                    ),
+                )
+            }
+        }
+    }
+
     fun loadFollowUps(force: Boolean = false) {
         loadCapture(force)
+        loadPendingVisits()
         if (!shouldLoad("followups", force)) return
         viewModelScope.launch {
             set { it.copy(followUpsLoading = true) }
@@ -2929,7 +3006,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // The attempt ladder below may immediately book the next try, which
         // overwrites this with 'scheduled' — correct, and it is a different
         // sentence to the rep: "booked for later", not "call this now".
-        markWorkedLocally(contactId, if (isTerminalDisposition(status)) "none" else "no_next_step")
+        // A site visit dated in the future is awaiting_visit, not "no next
+        // step": she booked the day, so Call now drops them on this tap.
+        val visitIsoEarly = siteVisitAtMillis?.let { java.time.Instant.ofEpochMilli(it).toString() }
+        val futureVisit = siteVisitAtMillis != null &&
+            siteVisitAtMillis > System.currentTimeMillis() &&
+            !isTerminalDisposition(status)
+        markWorkedLocally(
+            contactId,
+            when {
+                isTerminalDisposition(status) -> "none"
+                futureVisit -> "awaiting_visit"
+                else -> "no_next_step"
+            },
+            if (futureVisit) visitIsoEarly else null,
+        )
         // Whether the attempt ladder below is about to book the next try. If it
         // is, IT owns the final work state and this function must not re-read
         // the server first: for no_answer/busy/wrong_person the view still says
@@ -3386,12 +3477,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .asSequence()
             .filter { it.id != null && "visit_check:${it.id}" !in asked }
             .filter { !terminal(it.stage) && !pastVisit(it.stage) && it.siteVisitArrivedAt == null }
-            // Asked twice already and still no answer. Stop. A third prompt
-            // teaches the rep that these can be ignored, and after that they
-            // ignore the useful ones too. It is the manager's problem now —
-            // the lead is sitting in v_pending_site_visit_outcomes with
-            // needs_manager set, waiting for a person rather than a popup.
-            .filter { AppPrefs.getVisitAsks(ctx, it.id!!) < 2 }
+            // Stop only after two answers of "not yet". That is needs_manager
+            // on migration 0218, counted here from visit_check so it is true
+            // before the founder applies that migration. Dismissals stay in
+            // the ask count and do not retire the question. The on-device
+            // counter is only the fallback when this phone has not read the
+            // prompts — otherwise two swipes away would hide a visit she
+            // never actually answered.
+            .filter { lead ->
+                val id = lead.id ?: return@filter false
+                val row = _state.value.pendingVisits.rows.firstOrNull { it.contactId == id }
+                when {
+                    row?.needsManager == true -> false
+                    row != null && row.needsManager == false -> true
+                    else -> AppPrefs.getVisitAsks(ctx, id) < 2
+                }
+            }
             .mapNotNull { lead -> parseInstantOrNull(lead.siteVisitAt)?.let { lead to it } }
             .filter { (_, ms) -> ms < now - VISIT_SETTLE_MS && ms > now - VISIT_STALE_MS }
             .minByOrNull { it.second } ?: return null
@@ -3476,6 +3577,49 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- answering the assistant ----------
 
+    private data class DispositionSnap(val lead: Contact?, val work: LeadWork?)
+
+    private fun snapDisposition(contactId: String): DispositionSnap {
+        val st = _state.value
+        return DispositionSnap(st.leads.find { it.id == contactId }, st.workByLead[contactId])
+    }
+
+    /**
+     * Booked and Lost leave Call now before the network round trip.
+     *
+     * The assistant paths wrote the status only inside onSuccess, and they
+     * never wrote the stage, so a booking sat in Call now until the next
+     * full lead reload. A terminal status is `none` on the spot. If the
+     * write is rejected (a close with no visit outcome is), the snapshot
+     * put them back.
+     */
+    private fun stampDispositionLocally(contactId: String, status: String) {
+        if (isTerminalDisposition(status)) markWorkedLocally(contactId, "none")
+        val nowIso = java.time.Instant.now().toString()
+        set { st ->
+            st.copy(leads = st.leads.map { c ->
+                if (c.id != contactId) c
+                else c.copy(
+                    status = status,
+                    stage = stageAfterDisposition(c.stage, status, st.leadStages),
+                    handledAt = nowIso,
+                )
+            })
+        }
+    }
+
+    private fun restoreDisposition(contactId: String, snap: DispositionSnap, error: String?) {
+        set { st ->
+            st.copy(
+                error = error,
+                leads = if (snap.lead == null) st.leads
+                else st.leads.map { if (it.id == contactId) snap.lead else it },
+                workByLead = if (snap.work == null) st.workByLead
+                else st.workByLead + (contactId to snap.work),
+            )
+        }
+    }
+
     /** Closes the prompt and records that it went unanswered. Never punished. */
     fun assistantDismiss() {
         val ask = _state.value.assistantAsk ?: return
@@ -3495,7 +3639,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun assistantVisitCame(percent: Int, nextStatus: String) {
         val ask = _state.value.assistantAsk ?: return
         val contactId = ask.contactId ?: return
+        val snap = snapDisposition(contactId)
         set { it.copy(assistantAsk = null) }
+        stampDispositionLocally(contactId, nextStatus)
         viewModelScope.launch {
             runCatching {
                 Repository.confirmSiteVisitHappened(contactId)
@@ -3530,7 +3676,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         "After the site visit — $percent% chance", mirrorStatus = false)
                 }
                 loadLeads(force = true)
-            }.onFailure { e -> set { it.copy(error = e.message) } }
+                loadPendingVisits()
+            }.onFailure { e -> restoreDisposition(contactId, snap, e.message) }
         }
         logPrompt(ask, answer = "came", probability = percent, reason = nextStatus)
     }
@@ -3552,6 +3699,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             "competitor" -> "lost"
             else -> "callback"
         }
+        val snap = snapDisposition(contactId)
+        stampDispositionLocally(contactId, nextStatus)
         viewModelScope.launch {
             runCatching {
                 Repository.clearSiteVisit(contactId)
@@ -3580,7 +3729,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         "Visit missed — ${reasonLabel(reason)}", mirrorStatus = false)
                 }
                 loadLeads(force = true)
-            }.onFailure { e -> set { it.copy(error = e.message) } }
+                loadPendingVisits()
+            }.onFailure { e -> restoreDisposition(contactId, snap, e.message) }
         }
         logPrompt(ask, answer = "no_show", reason = reason)
     }
@@ -3672,6 +3822,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             else -> 0
         }
         val stillAlive = outcome in setOf("thinking", "follow_up", "rescheduled", "no_show", "cancelled", "not_reachable")
+        val snap = snapDisposition(contactId)
+        stampDispositionLocally(contactId, nextStatus)
 
         viewModelScope.launch {
             runCatching {
@@ -3701,6 +3853,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 status = nextStatus, closeProbability = probability,
                                 closeProbabilityAt = nowIso, handledAt = nowIso,
                                 tokenAmount = tokenAmount ?: c.tokenAmount,
+                                siteVisitOutcome = outcome,
                             )
                         },
                         message = visitOutcomeToast(outcome, tokenAmount),
@@ -3710,7 +3863,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     add("site_visit" to "Visit outcome: ${visitOutcomeLabel(outcome)}${note?.let { " — $it" } ?: ""}")
                 }
                 loadLeads(force = true)
-            }.onFailure { e -> set { it.copy(error = e.message) } }
+                loadPendingVisits()
+            }.onFailure { e -> restoreDisposition(contactId, snap, e.message) }
         }
 
         // The next action, booked without being asked for. A lead the rep has
