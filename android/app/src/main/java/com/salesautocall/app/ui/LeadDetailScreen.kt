@@ -78,7 +78,6 @@ import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.Repository
 import com.salesautocall.app.data.Wada
-import com.salesautocall.app.data.CaptureHealth
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
 import com.salesautocall.app.ui.design.Radii
@@ -378,16 +377,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                (app.capture as? CaptureHealth.Snapshot.Down)?.let { down ->
-                    item {
-                        CaptureDownCard(
-                            down.notice.title,
-                            down.notice.detail,
-                            Modifier.padding(horizontal = 16.dp),
-                        )
-                    }
-                }
-
                 // ---- Hero ----
                 item {
                     IdentityBlock(
@@ -528,7 +517,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         draftVerdict = app.messageVerdict,
                         draftSentCount = app.messageSentCount,
                         onDraft = { vm.draftMessage(contact) },
-                        captureWarning = CaptureHealth.draftWarning(app.capture),
                         onSend = { msg ->
                             // Opened is written only when capture is live.
                             // Writing it while the watcher is down is how the
@@ -1194,8 +1182,6 @@ private fun AiCoachCard(
     onSend: (String) -> Unit,
     onCallInstead: () -> Unit,
     onClearDraft: () -> Unit,
-    /** Set when a send cannot be proved. The button must not say it was sent. */
-    captureWarning: String? = null,
     error: String? = null,
 ) {
     val clipboard = LocalClipboardManager.current
@@ -1397,12 +1383,6 @@ private fun AiCoachCard(
         // getting replies in this company — then writes the message and logs
         // its own choice so a buyer's reply can judge it later.
         if (mode == "message") {
-            // Before she spends a draft. A missing line here is how a dead
-            // watcher looked like the message had been saved.
-            captureWarning?.let {
-                Spacer(Modifier.height(12.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, color = RedL)
-            }
             if (draftLoading) {
                 Spacer(Modifier.height(12.dp))
                 CoachLoadingRow("Reading the call and the chat…")
@@ -1470,9 +1450,9 @@ private fun AiCoachCard(
                         .padding(14.dp),
                 ) {
                     Text(
-                        if (captureWarning == null) "Ready to send" else "Opens WhatsApp. Not saved here.",
+                        "Ready to send",
                         style = AppType.metaStrong,
-                        color = if (captureWarning == null) AppColors.TextSecondary else RedL,
+                        color = AppColors.TextSecondary,
                     )
                     // WHY this message. Printed above the text on purpose: a
                     // rep who can see the reasoning can overrule it, and one
@@ -1498,7 +1478,7 @@ private fun AiCoachCard(
                             Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                if (captureWarning == null) "Send on WhatsApp" else "Open in WhatsApp",
+                                "Send on WhatsApp",
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
                             )
@@ -2199,7 +2179,9 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
             // NOT MY CALL, NOT MY RECORDING — and say so instead of offering a
             // Play button that will only refuse. AudioPlayer enforces the same
             // rule again; this is here so the rep is never invited to tap it.
-            val mineToHear = !call.offCrm && Repository.currentUserId()
+            // This list is already this lead's calls. A number that is not a
+            // lead never reaches it.
+            val mineToHear = Repository.currentUserId()
                 ?.takeIf { it.isNotBlank() } == call.salespersonId
             when {
                 !mineToHear -> {
@@ -2212,7 +2194,6 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
                 playing -> AudioPlayer(
                     callLogId = call.id,
                     callOwnerId = call.salespersonId,
-                    offCrm = call.offCrm,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 else -> {
