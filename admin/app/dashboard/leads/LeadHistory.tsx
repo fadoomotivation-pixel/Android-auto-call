@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import type { Stage } from "@/lib/dashboard/stage";
+import { LeadFunnel } from "./LeadFunnel";
+import { TEMPS, timeAgo } from "./leadView";
 
 type VoiceNote = {
   id: string;
@@ -13,14 +16,9 @@ type VoiceNote = {
   suggested_disposition: string | null;
   ai_status: string;
   created_at: string;
-  url?: string; // signed playback URL
+  url?: string;
 };
 
-/**
- * One observed WhatsApp message. Only ever exists for a conversation with a
- * lead of this company — match_wa_contact drops everything else server-side
- * before it is stored, so nothing personal can appear here.
- */
 type WaMessage = {
   id: string;
   direction: "in" | "out";
@@ -30,47 +28,112 @@ type WaMessage = {
   sent_at: string;
 };
 
+type CallLog = {
+  id: string;
+  outcome: string | null;
+  duration_seconds: number | null;
+  notes: string | null;
+  summary: string | null;
+  created_at: string;
+};
+
+type LeadRow = {
+  id: string;
+  name: string | null;
+  phone: string;
+  company_name: string | null;
+  status: string | null;
+  stage: string | null;
+  salesperson_id: string | null;
+  budget: string | null;
+  territory: string | null;
+  created_at: string;
+  notes: string | null;
+  temperature: string | null;
+  last_contacted_at: string | null;
+};
+
 const MEDIA_LABEL: Record<string, string> = {
-  document: "📄 PDF",
-  image: "🖼 Photo",
-  video: "🎥 Video",
-  audio: "🎤 Voice note",
+  document: "PDF",
+  image: "Photo",
+  video: "Video",
+  audio: "Voice note",
   sticker: "Sticker",
   other: "Attachment",
 };
 
-/** Whose turn is it? The buyer spoke last and nobody has answered. */
 function waWaiting(msgs: WaMessage[]): boolean {
   return msgs.length > 0 && msgs[msgs.length - 1].direction === "in";
 }
 
-export function LeadHistory({ contactId, onClose }: { contactId: string; onClose: () => void }) {
-  const [logs, setLogs] = useState<any[]>([]);
+function ist(iso: string, withTime: boolean) {
+  return new Date(iso).toLocaleString("en-IN", withTime
+    ? { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }
+    : { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
+}
+
+function words(code: string | null | undefined) {
+  if (!code) return "—";
+  return code.replace(/_/g, " ");
+}
+
+export function LeadHistory({
+  contactId,
+  onClose,
+  stages,
+  stagesFailed,
+  stagesReady,
+  assigneeName,
+}: {
+  contactId: string;
+  onClose: () => void;
+  stages: Stage[];
+  stagesFailed: boolean;
+  stagesReady: boolean;
+  assigneeName: (id: string | null) => string;
+}) {
+  const [lead, setLead] = useState<LeadRow | null>(null);
+  const [leadError, setLeadError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<CallLog[]>([]);
   const [notes, setNotes] = useState<VoiceNote[]>([]);
   const [wa, setWa] = useState<WaMessage[]>([]);
+  const [problems, setProblems] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   // Memoised because this is a dependency of the effect below. Unmemoised,
   // createClient() returns a new object per render, the effect re-runs, its
-  // setState causes another render, and the modal re-fetches forever — minting
-  // a fresh batch of signed audio URLs on every pass. It was already wrong
-  // before the WhatsApp thread was added; a third query and a longer render
-  // just made it expensive enough to notice.
+  // setState causes another render, and the sheet re-fetches forever.
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    let off = false;
     async function load() {
-      const [callsRes, notesRes, waRes] = await Promise.all([
+      setLoading(true);
+      const [leadRes, callsRes, notesRes, waRes] = await Promise.all([
+        supabase
+          .from("contacts")
+          .select("id, name, phone, company_name, status, stage, salesperson_id, budget, territory, created_at, notes, temperature, last_contacted_at")
+          .eq("id", contactId)
+          .maybeSingle()
+          .returns<LeadRow>(),
         supabase
           .from("call_logs")
-          .select("id, outcome, duration_seconds, notes, summary, created_at, salesperson_id")
+          .select("id, outcome, duration_seconds, notes, summary, created_at")
           .eq("contact_id", contactId)
-          .order("created_at", { ascending: false }),
+          .order("created_at", { ascending: false })
+          .returns<CallLog[]>(),
         supabase
           .from("lead_voice_notes")
           .select("id, actor_name, audio_path, duration_seconds, transcript, summary, suggested_disposition, ai_status, created_at")
           .eq("contact_id", contactId)
           .order("created_at", { ascending: false }),
-        // Oldest first: a conversation reads downwards, unlike the call log.
         supabase
           .from("wa_observed_messages")
           .select("id, direction, body, media_kind, shared_details, sent_at")
@@ -78,152 +141,198 @@ export function LeadHistory({ contactId, onClose }: { contactId: string; onClose
           .order("sent_at", { ascending: true })
           .returns<WaMessage[]>(),
       ]);
-      setLogs(callsRes.data || []);
-      setWa(waRes.data || []);
+      if (off) return;
 
-      // Private bucket → short-lived signed URLs for the <audio> players.
-      const vns: VoiceNote[] = (notesRes.data as VoiceNote[]) || [];
+      const nextProblems: string[] = [];
+      if (leadRes.error) nextProblems.push(`Lead: ${leadRes.error.message}`);
+      if (callsRes.error) nextProblems.push(`Calls: ${callsRes.error.message}`);
+      if (notesRes.error) nextProblems.push(`Voice notes: ${notesRes.error.message}`);
+      if (waRes.error) nextProblems.push(`WhatsApp: ${waRes.error.message}`);
+      setProblems(nextProblems);
+      setLeadError(leadRes.error ? leadRes.error.message : leadRes.data ? null : "This lead is not in the list you can see.");
+      setLead(leadRes.data ?? null);
+      setLogs(callsRes.error ? [] : (callsRes.data ?? []));
+      setWa(waRes.error ? [] : (waRes.data ?? []));
+
+      const vns = (notesRes.error ? [] : (notesRes.data as VoiceNote[]) || []);
       const signed = await Promise.all(
         vns.map(async (n) => {
-          const { data } = await supabase.storage.from("voice-notes").createSignedUrl(n.audio_path, 3600);
+          const { data, error } = await supabase.storage.from("voice-notes").createSignedUrl(n.audio_path, 3600);
+          if (error) return { ...n, url: undefined };
           return { ...n, url: data?.signedUrl };
         }),
       );
+      if (off) return;
       setNotes(signed);
       setLoading(false);
     }
-    load();
+    void load();
+    return () => { off = true; };
   }, [contactId, supabase]);
 
+  const temp = TEMPS.find((t) => t.code === lead?.temperature);
+  const title = lead?.name || lead?.phone || "Lead";
+  const historyEmpty = !loading && problems.length === 0 && logs.length === 0 && notes.length === 0 && wa.length === 0;
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-       <div className="card" style={{ width: "100%", maxWidth: 600, maxHeight: "80vh", overflowY: "auto", background: "var(--panel)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: 16 }}>
-           <h3 style={{ margin: 0, color: "#fff" }}>Interaction History</h3>
-           <button className="primary" style={{ background: "rgba(255,255,255,0.1)", color: "#fff", border: "none", padding: "6px 12px" }} onClick={onClose}>Close</button>
-         </div>
+    <div className="lead-sheet-back" role="presentation" onClick={onClose}>
+      <div
+        className="lead-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lead-sheet-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="lead-sheet-bar">
+          <div className="lead-sheet-heading">
+            <div className="kicker">Lead</div>
+            <h2 id="lead-sheet-title" className="keep-title">{loading && !lead ? "Loading…" : title}</h2>
+            {lead && (
+              <p className="lead-sheet-sub">
+                {lead.phone}
+                {lead.company_name ? ` · ${lead.company_name}` : ""}
+              </p>
+            )}
+          </div>
+          <button type="button" className="link" onClick={onClose}>Close</button>
+        </header>
 
-         {loading ? (
-           <div style={{ color: "var(--muted)", textAlign: "center", padding: 40 }}>Loading history...</div>
-         ) : (
-           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-             {/* The WhatsApp thread, first — it is the only place in the CRM
-                 where the buyer speaks in their own words, and it is usually
-                 the most recent thing that happened. */}
-             {wa.length > 0 && (
-               <>
-                 <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: "var(--muted)", textTransform: "uppercase" }}>
-                   💬 WhatsApp
-                   {waWaiting(wa) && (
-                     <span style={{ marginLeft: 8, color: "#ef4444", letterSpacing: 0 }}>
-                       · buyer is waiting for a reply
-                     </span>
-                   )}
-                 </div>
-                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                   {wa.map((m) => {
-                     const mine = m.direction === "out";
-                     return (
-                       <div key={m.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
-                         <div
-                           style={{
-                             maxWidth: "78%",
-                             padding: "8px 12px",
-                             borderRadius: 12,
-                             borderBottomRightRadius: mine ? 3 : 12,
-                             borderBottomLeftRadius: mine ? 12 : 3,
-                             background: mine ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.06)",
-                             border: `1px solid ${mine ? "rgba(16,185,129,0.22)" : "rgba(255,255,255,0.08)"}`,
-                           }}
-                         >
-                           {m.media_kind && (
-                             <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: m.body ? 4 : 0 }}>
-                               {MEDIA_LABEL[m.media_kind] ?? "Attachment"}
-                               {m.shared_details && <span style={{ color: "#22c55e" }}> · details</span>}
-                             </div>
-                           )}
-                           {m.body && (
-                             <div style={{ fontSize: 14, color: "var(--text)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                               {m.body}
-                             </div>
-                           )}
-                           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, textAlign: "right" }}>
-                             {new Date(m.sent_at).toLocaleString("en-IN", {
-                               timeZone: "Asia/Kolkata", day: "numeric", month: "short",
-                               hour: "numeric", minute: "2-digit",
-                             })}
-                           </div>
-                         </div>
-                       </div>
-                     );
-                   })}
-                 </div>
-                 <div style={{ fontSize: 11, color: "var(--muted)" }}>
-                   Only this lead&apos;s conversation is stored. The rep&apos;s other chats never reach the CRM.
-                 </div>
-               </>
-             )}
+        <div className="lead-sheet-body">
+          {leadError && <div className="error">{leadError}</div>}
+          {problems.length > 0 && (
+            <div className="error">
+              {problems.map((p) => <div key={p}>{p}</div>)}
+            </div>
+          )}
 
-             {notes.length > 0 && (
-               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: "var(--muted)", textTransform: "uppercase" }}>
-                 🎤 Telecaller voice notes
-               </div>
-             )}
-             {notes.map((n) => (
-               <div key={n.id} style={{ padding: 16, background: "rgba(139, 92, 246, 0.06)", borderRadius: 12, border: "1px solid rgba(139, 92, 246, 0.18)" }}>
-                 <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
-                   <span>🎤 {n.actor_name || "Telecaller"} · {new Date(n.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</span>
-                   <span>⏱️ {n.duration_seconds}s</span>
-                 </div>
-                 {n.url ? (
-                   <audio controls preload="none" src={n.url} style={{ width: "100%", height: 36 }} />
-                 ) : (
-                   <div style={{ fontSize: 13, color: "var(--muted)" }}>Audio unavailable</div>
-                 )}
-                 {n.summary && (
-                   <div style={{ marginTop: 10, fontSize: 14, color: "var(--text)", background: "rgba(139, 92, 246, 0.08)", padding: "10px 14px", borderRadius: 8, borderLeft: "3px solid #8b5cf6" }}>
-                     <strong>✨ AI Summary:</strong> {n.summary}
-                     {n.suggested_disposition && (
-                       <span style={{ marginLeft: 8, fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "rgba(139,92,246,0.2)", color: "#c4b5fd" }}>
-                         suggests: {n.suggested_disposition.replace(/_/g, " ")}
-                       </span>
-                     )}
-                   </div>
-                 )}
-                 {n.transcript && (
-                   <details style={{ marginTop: 8 }}>
-                     <summary style={{ fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>Transcript</summary>
-                     <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6, whiteSpace: "pre-wrap" }}>{n.transcript}</div>
-                   </details>
-                 )}
-                 {!n.summary && n.ai_status !== "failed" && (
-                   <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>✨ AI summary processing…</div>
-                 )}
-               </div>
-             ))}
+          <section className="card lead-block">
+            <div className="kicker">Where the deal is</div>
+            <LeadFunnel stages={stages} current={lead?.stage ?? null} failed={stagesFailed} ready={stagesReady} />
+          </section>
 
-             {notes.length > 0 && logs.length > 0 && (
-               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: "var(--muted)", textTransform: "uppercase", marginTop: 4 }}>
-                 📞 Calls
-               </div>
-             )}
-             {logs.length === 0 && notes.length === 0 && wa.length === 0 && <div className="empty">No calls or interactions logged yet.</div>}
-             {logs.map(l => (
-               <div key={l.id} style={{ padding: 16, background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.05)" }}>
-                 <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
-                   <span>🕒 {new Date(l.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</span>
-                   <span>⏱️ {l.duration_seconds} sec</span>
-                 </div>
-                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-                   <span className={`badge ${l.outcome || "unknown"}`}>{l.outcome || "No outcome"}</span>
-                 </div>
-                 {l.notes && <div style={{ marginTop: 8, fontSize: 14, color: "var(--text)", background: "rgba(16, 185, 129, 0.05)", padding: "10px 14px", borderRadius: 8, borderLeft: "3px solid var(--accent)" }}><strong>Telecaller Notes:</strong> {l.notes}</div>}
-                 {l.summary && <div style={{ marginTop: 8, fontSize: 14, color: "var(--muted)", background: "rgba(0,0,0,0.2)", padding: "10px 14px", borderRadius: 8 }}><strong>AI Summary:</strong> {l.summary}</div>}
-               </div>
-             ))}
-           </div>
-         )}
-       </div>
+          {lead && (
+            <section className="card lead-block">
+              <div className="lead-facts">
+                <Fact label="Phone" value={lead.phone} />
+                <Fact label="Company" value={lead.company_name || "—"} />
+                <Fact label="Territory" value={lead.territory || "—"} />
+                <Fact label="Budget" value={lead.budget || "—"} />
+                <Fact label="Assigned to" value={assigneeName(lead.salesperson_id)} />
+                <Fact label="Temperature" value={temp?.label || (lead.temperature ? words(lead.temperature) : "—")} />
+                <Fact label="Status" value={words(lead.status)} />
+                <Fact label="Last contacted" value={lead.last_contacted_at ? `${ist(lead.last_contacted_at, true)} (${timeAgo(lead.last_contacted_at) ?? "—"})` : "—"} />
+                <Fact label="Added" value={ist(lead.created_at, false)} />
+              </div>
+              <div className="lead-notes">
+                <div className="kicker">Notes</div>
+                <p>{lead.notes?.trim() ? lead.notes : "No notes."}</p>
+              </div>
+            </section>
+          )}
+
+          {loading && <div className="empty">Loading history…</div>}
+
+          {!loading && wa.length > 0 && (
+            <section className="card lead-block">
+              <div className="kicker">
+                WhatsApp
+                {waWaiting(wa) && <span className="lead-wait">Buyer is waiting for a reply</span>}
+              </div>
+              <div className="lead-thread">
+                {wa.map((m) => {
+                  const mine = m.direction === "out";
+                  return (
+                    <div key={m.id} className={mine ? "lead-bubble mine" : "lead-bubble"}>
+                      {m.media_kind && (
+                        <div className="lead-bubble-media">
+                          {MEDIA_LABEL[m.media_kind] ?? "Attachment"}
+                          {m.shared_details && <span> · details</span>}
+                        </div>
+                      )}
+                      {m.body && <div className="lead-bubble-body">{m.body}</div>}
+                      <div className="lead-bubble-time">{ist(m.sent_at, true)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="lead-fine">Only this lead&apos;s conversation is stored. The rep&apos;s other chats never reach the CRM.</p>
+            </section>
+          )}
+
+          {!loading && notes.length > 0 && (
+            <section className="card lead-block">
+              <div className="kicker">Voice notes</div>
+              <div className="lead-events">
+                {notes.map((n) => (
+                  <article key={n.id} className="lead-event">
+                    <div className="lead-event-meta">
+                      <span>{n.actor_name || "Telecaller"} · {ist(n.created_at, true)}</span>
+                      <span>{n.duration_seconds}s</span>
+                    </div>
+                    {n.url ? (
+                      <audio controls preload="none" src={n.url} />
+                    ) : (
+                      <div className="warn-line">Audio unavailable</div>
+                    )}
+                    {n.summary && (
+                      <p className="lead-summary">
+                        <strong>AI summary:</strong> {n.summary}
+                        {n.suggested_disposition && (
+                          <span className="status-pill" style={{ color: "var(--accent)", marginLeft: 8 }}>
+                            suggests {n.suggested_disposition.replace(/_/g, " ")}
+                          </span>
+                        )}
+                      </p>
+                    )}
+                    {n.transcript && (
+                      <details>
+                        <summary>Transcript</summary>
+                        <p>{n.transcript}</p>
+                      </details>
+                    )}
+                    {!n.summary && n.ai_status !== "failed" && (
+                      <p className="lead-fine">AI summary processing…</p>
+                    )}
+                    {!n.summary && n.ai_status === "failed" && (
+                      <p className="warn-line">AI summary failed.</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {!loading && logs.length > 0 && (
+            <section className="card lead-block">
+              <div className="kicker">Calls</div>
+              <div className="lead-events">
+                {logs.map((l) => (
+                  <article key={l.id} className="lead-event">
+                    <div className="lead-event-meta">
+                      <span>{ist(l.created_at, true)}</span>
+                      <span>{l.duration_seconds == null ? "—" : `${l.duration_seconds} sec`}</span>
+                    </div>
+                    <span className={`badge ${l.outcome || "unknown"}`}>{l.outcome ? words(l.outcome) : "No outcome"}</span>
+                    {l.notes && <p className="lead-summary"><strong>Telecaller notes:</strong> {l.notes}</p>}
+                    {l.summary && <p className="lead-summary"><strong>AI summary:</strong> {l.summary}</p>}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {historyEmpty && <div className="empty">No calls or messages yet.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="lead-fact">
+      <div className="lead-fact-label">{label}</div>
+      <div className="lead-fact-value">{value}</div>
     </div>
   );
 }

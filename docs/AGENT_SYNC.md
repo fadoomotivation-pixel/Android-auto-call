@@ -37,6 +37,22 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (lead list rebased onto main after #501)
+
+- WHAT: Rebased the Apple lead list, the lead sheet, and the windowed scroll onto main. The recordings apostrophes were already escaped on main, so this branch does not edit that page. Both sync notes below stay.
+- FILES: `docs/AGENT_SYNC.md` for this note. The lead files are the commit under it.
+- WHY: #501 landed on main and the sync log conflicted.
+- BUILD: admin `tsc` after the rebase.
+- NEXT/NOTE: Capture-down and CAPI notes stay under the lead-list note.
+
+## 2026-10-05 — Cursor (lead list and lead page, Apple chrome, faster scroll)
+
+- WHAT: The lead board and the lead sheet use the same Apple chrome as the rest of the dashboard. One grouped list, calm selected rows, status pills, and the real stage funnel on the lead. The list windows rows, memoizes each row, builds row text once, and waits before a search hits the server. A failed load, count, or stage read says so. Counts stay "—" until they arrive.
+- FILES: `admin/app/dashboard/leads/` (list, row, funnel, history), `admin/app/globals.css`, `docs/AGENT_SYNC.md`.
+- WHY: Those two screens still read as a generic admin, and a few hundred lead cards made the scroll hitch.
+- BUILD: admin `tsc`. No migration, no edge function, no Android.
+- NEXT/NOTE: Other CRM pages stay out of this PR. Rebased onto main after #501. The capture-down and CAPI notes below stay.
+
 ## 2026-10-05 — Cursor (phone hides capture-down; recordings are lead calls only)
 
 - WHAT: The phone no longer shows a WhatsApp capture-down card on Home, Leads, Follow-ups, or the lead page, and the draft card no longer says capture is down. The phone still does not mark a draft opened unless capture is live. The Calls recordings list (App, Missed, Follow-up) keeps only calls linked to a lead or to a lead's phone. A number that is not a lead is left out. There is no "not a lead" row. Recording failures on a real call still show. Admin capture health is unchanged.

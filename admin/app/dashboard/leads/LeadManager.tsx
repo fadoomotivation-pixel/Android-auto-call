@@ -1,50 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ImportLeads } from "./ImportLeads";
 import { loadStages, repStages, ACTION_STATES, type Stage } from "@/lib/dashboard/stage";
 import { LeadHistory } from "./LeadHistory";
+import { LeadList } from "./LeadList";
+import { buildLeadViews, norm10, TEMPS, type Lead } from "./leadView";
 
 type Sp = { id: string; full_name: string | null; territory: string | null; company_id?: string | null; company_name?: string | null };
-type Lead = {
-  id: string;
-  name: string | null;
-  phone: string;
-  company_name: string | null;
-  status: string;
-  stage: string;
-  salesperson_id: string | null;
-  budget: string | null;
-  territory: string | null;
-  created_at: string;
-  notes: string | null;
-  temperature: string | null;
-  last_contacted_at: string | null;
-};
 
 // The chips used to be nine hand-written entries here. Four live statuses had
 // no chip at all — 91 leads, 11.6% of the book, unreachable by any filter —
 // while three chips matched zero rows. They now come from lead_stages, the same
 // rows the Android app and every report read, so the three can never disagree
 // again. See admin/lib/dashboard/stage.ts.
-const TEMP_META: Record<string, { label: string; color: string; bg: string }> = {
-  hot: { label: "🔥 Hot", color: "#fca5a5", bg: "rgba(239,68,68,0.14)" },
-  warm: { label: "🌤 Warm", color: "#fcd34d", bg: "rgba(245,158,11,0.14)" },
-  cold: { label: "❄️ Cold", color: "#93c5fd", bg: "rgba(59,130,246,0.14)" },
-};
-function timeAgo(iso: string | null): string | null {
-  if (!iso) return null;
-  const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 0) return null;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-}
 
 const PAGE = 50;
 
@@ -65,7 +36,10 @@ export function LeadManager({
    *  being inferred from the telecaller list. */
   allCompanies?: [string, string][];
 }) {
-  const supabase = createClient();
+  const params = useSearchParams();
+  // One client for the life of the page. A new client every render makes every
+  // query callback change, and the list would refetch on each keystroke.
+  const supabase = useMemo(() => createClient(), []);
   const nameOf = (id: string | null) => salespeople.find((s) => s.id === id)?.full_name || (id ? "—" : "Unassigned");
   // For the super admin, a telecaller may belong to another company. That rep's
   // company is the target the lead MOVES to (via admin_assign_contacts), so the
@@ -76,10 +50,6 @@ export function LeadManager({
     return !!c && c !== companyId;
   };
   const labelOf = (s: Sp) => (isSuper && s.company_name ? `${s.full_name ?? "—"} · ${s.company_name}` : (s.full_name ?? "—"));
-  // Last-10 digits — the phone identity used for dedup everywhere (matches the
-  // 0080 DB trigger and the import check).
-  const norm10 = (p: string) => (p || "").replace(/\D/g, "").slice(-10);
-
   // Super admin only: narrow the whole board to one company. Built from the
   // telecaller list the page already loaded (unique company_id → name).
   // THE COMPANY LIST COMES FROM THE COMPANIES TABLE, NOT FROM THE REPS.
@@ -120,7 +90,8 @@ export function LeadManager({
 
   const [tab, setTab] = useState<"unassigned" | "assigned">("unassigned");
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => params.get("q") ?? "");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -132,10 +103,12 @@ export function LeadManager({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [historyId, setHistoryId] = useState<string | null>(null);
+  const [historyId, setHistoryId] = useState<string | null>(() => params.get("id"));
 
   const [stats, setStats] = useState({ total: 0, unassigned: 0, assigned: 0 });
-  const [agentCounts, setAgentCounts] = useState<Record<string, number>>({});
+  const [statsKnown, setStatsKnown] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [agentCounts, setAgentCounts] = useState<Record<string, number | null>>({});
   // Super admin only: phone tails (last-10) that exist under MORE THAN ONE
   // company. Per-company dedup (0080) can't catch these — different tenants —
   // so the super admin sees them flagged and can decide what to do.
@@ -147,9 +120,14 @@ export function LeadManager({
   const [stageFilter, setStageFilter] = useState<string>("");
   const [actionFilter, setActionFilter] = useState<string>("");
   const [stages, setStages] = useState<Stage[]>([]);
-  const [actionIds, setActionIds] = useState<string[] | null>(null);
+  const [stagesReady, setStagesReady] = useState(false);
+  const [stagesError, setStagesError] = useState<string | null>(null);
+  const [actionIds, setActionIds] = useState<{ code: string; ids: string[]; failed?: string } | null>(null);
   const [tempFilter, setTempFilter] = useState<string>("");
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [crossError, setCrossError] = useState<string | null>(null);
 
   const safe = (s: string) => s.trim().replace(/[,%()]/g, "");
 
@@ -181,57 +159,102 @@ export function LeadManager({
       if (agentFilter) q = q.eq("salesperson_id", agentFilter);
     }
     if (stageFilter) q = q.eq("stage", stageFilter);
-    // Action state is DERIVED (v_lead_action_state), so it cannot be a column
+    // Action state is DERIVED (v_lead_workstate), so it cannot be a column
     // filter on contacts. The ids are resolved separately below and joined here.
-    if (actionFilter && actionIds) q = q.in("id", actionIds.length ? actionIds : ["00000000-0000-0000-0000-000000000000"]);
+    if (actionFilter && actionIds && actionIds.code === actionFilter) {
+      q = q.in("id", actionIds.ids.length ? actionIds.ids : ["00000000-0000-0000-0000-000000000000"]);
+    }
     if (tempFilter) q = q.eq("temperature", tempFilter);
-    const s = safe(search);
+    const s = safe(debouncedSearch);
     if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
     return q;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, tab, agentFilter, search, companyId, isSuper, companyFilter, stageFilter, tempFilter, actionFilter, actionIds]);
+  }, [supabase, tab, agentFilter, debouncedSearch, companyId, isSuper, companyFilter, stageFilter, tempFilter, actionFilter, actionIds]);
+
+  const leadsRef = useRef<Lead[]>([]);
+  leadsRef.current = leads;
+  const loadGen = useRef(0);
 
   const load = useCallback(
     async (reset: boolean) => {
+      const ticket = ++loadGen.current;
+      // The action chip changed and its ids are not back yet. Wait, rather
+      // than listing every lead for a moment and calling that the filter.
+      if (actionFilter && (!actionIds || actionIds.code !== actionFilter)) {
+        setLoading(true);
+        return;
+      }
+      if (actionFilter && actionIds?.failed) {
+        setListError(actionIds.failed);
+        setLeads([]);
+        setHasMore(false);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
-      const from = reset ? 0 : leads.length;
-      const { data } = await buildQuery().range(from, from + PAGE - 1).returns<Lead[]>();
+      const from = reset ? 0 : leadsRef.current.length;
+      const { data, error } = await buildQuery().range(from, from + PAGE - 1).returns<Lead[]>();
+      if (ticket !== loadGen.current) return;
+      if (error) {
+        if (reset) setLeads([]);
+        setListError(error.message);
+        setHasMore(false);
+        setLoading(false);
+        return;
+      }
+      setListError(null);
       const rows = data ?? [];
       setHasMore(rows.length === PAGE);
       setLeads((prev) => (reset ? rows : [...prev, ...rows]));
       setLoading(false);
     },
-    [buildQuery, leads.length],
+    [buildQuery, actionFilter, actionIds],
   );
 
   const refreshStats = useCallback(async () => {
     const totalRes = await scopeCompany(supabase.from("contacts").select("id", { count: "exact", head: true }));
     const unRes = await scopeCompany(supabase.from("contacts").select("id", { count: "exact", head: true })).is("salesperson_id", null);
-    const total = totalRes.count ?? 0;
-    const unassigned = unRes.count ?? 0;
-    setStats({ total, unassigned, assigned: total - unassigned });
-    const counts: Record<string, number> = {};
+    if (totalRes.error || unRes.error) {
+      setStatsError(totalRes.error?.message || unRes.error?.message || "Could not count leads.");
+    } else {
+      const total = totalRes.count ?? 0;
+      const unassigned = unRes.count ?? 0;
+      setStats({ total, unassigned, assigned: total - unassigned });
+      setStatsKnown(true);
+      setStatsError(null);
+    }
+    const counts: Record<string, number | null> = {};
+    let repFail: string | null = null;
     await Promise.all(
       salespeople.map(async (sp) => {
         // Count purely by rep — never by the admin's company — so a cross-company
         // telecaller shows their real assigned total instead of 0.
         const r = await supabase.from("contacts").select("id", { count: "exact", head: true }).eq("salesperson_id", sp.id);
-        counts[sp.id] = r.count ?? 0;
+        if (r.error) {
+          counts[sp.id] = null;
+          repFail = r.error.message;
+        } else {
+          counts[sp.id] = r.count ?? 0;
+        }
       }),
     );
     setAgentCounts(counts);
+    if (repFail) setStatsError((prev) => prev ?? `Could not count some telecallers. (${repFail})`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, salespeople, companyId, isSuper, companyFilter]);
 
-  // Reload list when filters change (debounced for search).
+  // Search waits. Stage, temperature, and rep chips do not — those are a click.
   useEffect(() => {
-    const t = setTimeout(() => {
-      setSelected(new Set());
-      void load(true);
-    }, 250);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, agentFilter, search, companyFilter, stageFilter, tempFilter, actionFilter, actionIds]);
+  }, [search]);
+
+  // Reload list when filters change. Search is already debounced above.
+  useEffect(() => {
+    setSelected(new Set());
+    void load(true);
+    return () => { loadGen.current += 1; };
+  }, [load]);
 
   useEffect(() => {
     void refreshStats();
@@ -241,7 +264,16 @@ export function LeadManager({
   // The stage vocabulary, straight from the table both clients read.
   useEffect(() => {
     let off = false;
-    void loadStages(supabase).then((rows) => { if (!off) setStages(rows); });
+    void loadStages(supabase).then((rows) => {
+      if (off) return;
+      setStages(rows);
+      setStagesReady(true);
+      setStagesError(null);
+    }).catch((e: unknown) => {
+      if (off) return;
+      setStagesReady(true);
+      setStagesError(e instanceof Error ? e.message : "Could not load stages.");
+    });
     return () => { off = true; };
   }, [supabase]);
 
@@ -251,12 +283,18 @@ export function LeadManager({
   useEffect(() => {
     let off = false;
     if (!actionFilter) { setActionIds(null); return; }
+    const code = actionFilter;
     (async () => {
-      let q = supabase.from("v_lead_workstate").select("contact_id").eq("action_state", actionFilter);
+      let q = supabase.from("v_lead_workstate").select("contact_id").eq("action_state", code);
       if (!isSuper) q = q.eq("company_id", companyId);
       else if (companyFilter) q = q.eq("company_id", companyFilter);
-      const { data } = await q.limit(5000).returns<{ contact_id: string }[]>();
-      if (!off) setActionIds((data ?? []).map((r) => r.contact_id));
+      const { data, error } = await q.limit(5000).returns<{ contact_id: string }[]>();
+      if (off) return;
+      if (error) {
+        setActionIds({ code, ids: [], failed: error.message });
+        return;
+      }
+      setActionIds({ code, ids: (data ?? []).map((r) => r.contact_id) });
     })();
     return () => { off = true; };
   }, [supabase, actionFilter, companyId, isSuper, companyFilter]);
@@ -273,11 +311,17 @@ export function LeadManager({
         if (!isSuper) q = q.eq("company_id", companyId);
         else if (companyFilter) q = q.eq("company_id", companyFilter);
         const { data, error } = await q.range(from, from + P - 1).returns<{ stage: string }[]>();
-        if (error) break;
+        if (error) {
+          if (!cancelled) setStatusError(error.message);
+          return;
+        }
         for (const r of data ?? []) counts[r.stage] = (counts[r.stage] ?? 0) + 1;
         if (!data || data.length < P) break;
       }
-      if (!cancelled) setStatusCounts(counts);
+      if (!cancelled) {
+        setStatusCounts(counts);
+        setStatusError(null);
+      }
     })();
     return () => {
       cancelled = true;
@@ -300,7 +344,10 @@ export function LeadManager({
           .select("phone, company_id")
           .range(from, from + P - 1)
           .returns<{ phone: string; company_id: string | null }[]>();
-        if (error) break;
+        if (error) {
+          if (!cancelled) setCrossError(error.message);
+          return;
+        }
         for (const r of data ?? []) {
           const t = norm10(r.phone);
           if (t.length < 10 || !r.company_id) continue;
@@ -314,6 +361,7 @@ export function LeadManager({
       const cross = new Set<string>();
       for (const [t, comps] of byTail) if (comps.size > 1) cross.add(t);
       setCrossCoPhones(cross);
+      setCrossError(null);
     })();
     return () => {
       cancelled = true;
@@ -321,14 +369,6 @@ export function LeadManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuper, supabase]);
 
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
   function quickSelect(n: number | "all") {
     const ids = (n === "all" ? leads : leads.slice(0, n)).map((l) => l.id);
     setSelected(new Set(ids));
@@ -410,7 +450,7 @@ export function LeadManager({
       let more = true;
       while (more) {
         let q = scopeCompany(supabase.from("contacts").select("id")).is("salesperson_id", null).range(from, from + 999);
-        const s = safe(search);
+        const s = safe(debouncedSearch);
         if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
         const { data } = await q;
         const page = (data ?? []) as { id: string }[];
@@ -438,7 +478,7 @@ export function LeadManager({
       }
     } else {
       let q = supabase.from("contacts").update({ salesperson_id: assignTo }).is("salesperson_id", null);
-      const s = safe(search);
+      const s = safe(debouncedSearch);
       if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%`);
       await q;
       setBusy(false);
@@ -461,7 +501,7 @@ export function LeadManager({
     if (error || !r?.ok) {
       setMsg(`Distribute failed: ${r?.error || error?.message || "unknown error"}`);
     } else {
-      setMsg(`⚖️ Distributed ${r.assigned} leads across ${r.reps} telecallers.`);
+      setMsg(`Distributed ${r.assigned} leads across ${r.reps} telecallers.`);
     }
     setSelected(new Set());
     await load(true);
@@ -553,8 +593,27 @@ export function LeadManager({
     setTimeout(() => setMsg(null), 4000);
   }
 
+  const repNames = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of salespeople) m.set(s.id, s.full_name || "—");
+    return m;
+  }, [salespeople]);
+  const views = useMemo(
+    () => buildLeadViews(leads, stages, repNames, crossCoPhones, tab === "assigned"),
+    [leads, stages, repNames, crossCoPhones, tab],
+  );
+  const openLead = useCallback((id: string) => setHistoryId(id), []);
+  const toggleLead = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   return (
-    <div className="stack">
+    <div className="stack lead-board">
       <div className="toolbar">
         <button
           className="primary"
@@ -574,32 +633,40 @@ export function LeadManager({
             ))}
           </select>
         )}
-        {msg && <span style={{ color: "var(--accent)", fontSize: 13 }}>{msg}</span>}
+        {msg && <span className="lead-loading" style={{ color: "var(--accent)" }}>{msg}</span>}
       </div>
+
+      {statsError && <div className="error">{statsError}</div>}
+      {stagesError && <div className="error">Could not load stages. ({stagesError})</div>}
+      {statusError && <div className="error">Could not count stages. ({statusError})</div>}
+      {crossError && (
+        <div className="error">Could not check numbers that exist in more than one company. ({crossError})</div>
+      )}
+      {listError && <div className="error">Could not load leads. ({listError})</div>}
 
       {/* Stats */}
       <div className="cards" style={{ marginBottom: 0 }}>
-        <StatCard label="Unassigned" value={stats.unassigned} tone="var(--warn)" bg="rgba(245, 158, 11, 0.05)" />
-        <StatCard label="Assigned" value={stats.assigned} tone="var(--accent)" bg="rgba(59, 130, 246, 0.05)" />
-        <StatCard label="Total" value={stats.total} tone="var(--good)" bg="rgba(16, 185, 129, 0.05)" />
+        <StatCard label="Unassigned" value={statsKnown ? stats.unassigned : "—"} tone="var(--warn)" />
+        <StatCard label="Assigned" value={statsKnown ? stats.assigned : "—"} tone="var(--accent)" />
+        <StatCard label="Total" value={statsKnown ? stats.total : "—"} tone="var(--good)" />
       </div>
 
       {/* Tabs */}
-      <div className="toolbar">
+      <div className="lead-segs" role="tablist">
         <Tab active={tab === "unassigned"} onClick={() => { setTab("unassigned"); setAgentFilter(null); }}>
-          Unassigned ({stats.unassigned})
+          Unassigned ({statsKnown ? stats.unassigned : "—"})
         </Tab>
         <Tab active={tab === "assigned"} onClick={() => setTab("assigned")}>
-          Assigned ({stats.assigned})
+          Assigned ({statsKnown ? stats.assigned : "—"})
         </Tab>
       </div>
 
       {/* Telecaller chips (assigned tab → filter) */}
       {tab === "assigned" && salespeople.length > 0 && (
         <div className="toolbar">
-          <Chip active={agentFilter === null} onClick={() => setAgentFilter(null)} label="All" count={stats.assigned} />
+          <Chip active={agentFilter === null} onClick={() => setAgentFilter(null)} label="All" count={statsKnown ? stats.assigned : "—"} />
           {visibleReps.map((sp) => (
-            <Chip key={sp.id} active={agentFilter === sp.id} onClick={() => setAgentFilter(sp.id)} label={labelOf(sp)} count={agentCounts[sp.id] ?? 0} />
+            <Chip key={sp.id} active={agentFilter === sp.id} onClick={() => setAgentFilter(sp.id)} label={labelOf(sp)} count={agentCounts[sp.id] ?? "—"} />
           ))}
         </div>
       )}
@@ -614,19 +681,16 @@ export function LeadManager({
           What to do now
         </div>
         <div className="toolbar">
-          <Chip active={actionFilter === ""} onClick={() => setActionFilter("")} label="Any" count={stats.total} />
+          <Chip active={actionFilter === ""} onClick={() => setActionFilter("")} label="Any" count={statsKnown ? stats.total : "—"} />
           {ACTION_STATES.map((a) => (
             <button
               key={a.code}
+              type="button"
               title={a.hint}
               onClick={() => setActionFilter(actionFilter === a.code ? "" : a.code)}
-              className="chip"
-              style={{
-                borderColor: actionFilter === a.code ? a.color : undefined,
-                background: actionFilter === a.code ? `${a.color}22` : undefined,
-                color: actionFilter === a.code ? a.color : undefined,
-              }}
+              className={actionFilter === a.code ? "chip active" : "chip"}
             >
+              <span className="status-dot" style={{ color: a.color }} />
               {a.label}
             </button>
           ))}
@@ -644,27 +708,31 @@ export function LeadManager({
       <div className="kicker">
         Where the deal is
       </div>
-      <div className="toolbar">
-        <Chip active={stageFilter === ""} onClick={() => setStageFilter("")} label="All stages" count={stats.total} />
-        {repStages(stages).filter((st) => (statusCounts[st.code] ?? 0) > 0 || stageFilter === st.code).map((st) => (
-          <Chip key={st.code} active={stageFilter === st.code} onClick={() => setStageFilter(stageFilter === st.code ? "" : st.code)} label={st.label} count={statusCounts[st.code] ?? 0} />
+      <div className="lead-stage-row">
+        <Chip active={stageFilter === ""} onClick={() => setStageFilter("")} label="All stages" count={statsKnown ? stats.total : "—"} />
+        {repStages(stages).filter((st) => statusError || (statusCounts[st.code] ?? 0) > 0 || stageFilter === st.code).map((st) => (
+          <Chip
+            key={st.code}
+            active={stageFilter === st.code}
+            onClick={() => setStageFilter(stageFilter === st.code ? "" : st.code)}
+            label={st.label}
+            count={statusError ? "—" : (statusCounts[st.code] ?? 0)}
+            dot={st.color}
+          />
         ))}
       </div>
 
       {/* Temperature filter */}
       <div className="toolbar">
-        {(["hot", "warm", "cold"] as const).map((t) => (
+        {TEMPS.map((t) => (
           <button
-            key={t}
-            className="chip"
-            onClick={() => setTempFilter(tempFilter === t ? "" : t)}
-            style={{
-              borderColor: tempFilter === t ? TEMP_META[t].color : undefined,
-              background: tempFilter === t ? TEMP_META[t].bg : undefined,
-              color: tempFilter === t ? TEMP_META[t].color : undefined,
-            }}
+            key={t.code}
+            type="button"
+            className={tempFilter === t.code ? "chip active" : "chip"}
+            onClick={() => setTempFilter(tempFilter === t.code ? "" : t.code)}
           >
-            {TEMP_META[t].label}
+            <span className="status-dot" style={{ color: t.color }} />
+            {t.label}
           </button>
         ))}
       </div>
@@ -690,8 +758,8 @@ export function LeadManager({
           ))}
         </select>
         {isSuper && assignTo && isCrossCompany(assignTo) && (
-          <span style={{ fontSize: 12, color: "#f59e0b" }}>
-            ⚠ Moves the lead(s) into {spOf(assignTo)?.company_name}&apos;s account.
+          <span className="warn-line" style={{ marginTop: 0 }}>
+            Moves the lead(s) into {spOf(assignTo)?.company_name}&apos;s account.
           </span>
         )}
 
@@ -752,66 +820,29 @@ export function LeadManager({
         {selected.size > 0 && <button className="link" onClick={() => setSelected(new Set())}>Clear</button>}
       </div>
 
-      {/* List */}
-      {leads.length === 0 && !loading ? (
-        <div className="empty">{tab === "unassigned" ? "No unassigned leads. Import some above." : "No assigned leads yet."}</div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {leads.map((l) => (
-            <label key={l.id} className="card lead-row">
-              <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="lead-name">
-                  {l.name || l.phone}
-                  {l.temperature && TEMP_META[l.temperature] && (
-                    <span style={{ fontSize: 11, fontWeight: 600, color: TEMP_META[l.temperature].color, background: TEMP_META[l.temperature].bg, borderRadius: 6, padding: "2px 8px" }}>
-                      {TEMP_META[l.temperature].label}
-                    </span>
-                  )}
-                  {isSuper && crossCoPhones.has(norm10(l.phone)) && (
-                    <span
-                      title="This phone number also exists under another company"
-                      style={{ fontSize: 11, fontWeight: 600, color: "#f59e0b", background: "rgba(245, 158, 11, 0.12)", border: "1px solid rgba(245, 158, 11, 0.35)", borderRadius: 6, padding: "2px 8px" }}
-                    >
-                      ⧉ also in another company
-                    </span>
-                  )}
-                </div>
-                <div className="lead-meta">
-                  <span style={{ color: "var(--text)" }}>{l.phone}</span>
-                  {l.company_name && <span>· {l.company_name}</span>}
-                  {l.territory && <span>· {l.territory}</span>}
-                  {l.budget && <span>· {l.budget}</span>}
-                  {timeAgo(l.last_contacted_at) && <span>· last: {timeAgo(l.last_contacted_at)}</span>}
-                  {l.created_at && <span>· {new Date(l.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })}</span>}
-                </div>
-                {l.notes && (
-                  <div style={{ marginTop: 8, fontSize: 13, color: "var(--text)", padding: "8px 12px", background: "rgba(16, 185, 129, 0.05)", borderLeft: "3px solid var(--accent)", borderRadius: 6 }}>
-                    <strong>Admin/App Notes:</strong> {l.notes}
-                  </div>
-                )}
-                {tab === "assigned" && <div style={{ color: "var(--accent)", fontSize: 12, marginTop: 6, fontWeight: 500 }}>→ Assigned to: {nameOf(l.salesperson_id)}</div>}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
-                <span className={`badge ${l.status}`}>{l.status}</span>
-                <button
-                  className="link"
-                  style={{ fontSize: 12, padding: "4px 10px" }}
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setHistoryId(l.id); }}
-                >
-                  View History
-                </button>
-              </div>
-            </label>
-          ))}
+      {/* List. Rows are windowed: a few hundred stay in memory, only the
+          ones on screen are mounted. */}
+      {leads.length === 0 && !loading && !listError ? (
+        <div className="empty">
+          {stageFilter || actionFilter || tempFilter || debouncedSearch || agentFilter
+            ? "No leads match these filters."
+            : tab === "unassigned" ? "No unassigned leads. Import some above." : "No assigned leads yet."}
         </div>
-      )}
+      ) : leads.length === 0 && loading ? (
+        <div className="empty">Loading leads…</div>
+      ) : leads.length > 0 ? (
+        <LeadList views={views} selected={selected} onToggle={toggleLead} onOpen={openLead} />
+      ) : null}
 
-      {hasMore && (
-        <button className="link" style={{ color: "var(--accent)" }} disabled={loading} onClick={() => load(false)}>
-          {loading ? "Loading…" : "Load more"}
-        </button>
-      )}
+      <div className="toolbar">
+        {loading && leads.length > 0 && <span className="lead-loading">Loading…</span>}
+        <span className="lead-loading">{leads.length} loaded{hasMore ? ". More are still on the server." : "."}</span>
+        {hasMore && (
+          <button type="button" className="link" disabled={loading} onClick={() => load(false)}>
+            {loading ? "Loading…" : "Load more"}
+          </button>
+        )}
+      </div>
 
       {importOpen && (
         <ImportLeads
@@ -829,16 +860,25 @@ export function LeadManager({
         />
       )}
 
-      {historyId && <LeadHistory contactId={historyId} onClose={() => setHistoryId(null)} />}
+      {historyId && (
+        <LeadHistory
+          contactId={historyId}
+          stages={stages}
+          stagesFailed={!!stagesError}
+          stagesReady={stagesReady}
+          assigneeName={nameOf}
+          onClose={() => setHistoryId(null)}
+        />
+      )}
     </div>
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: number; tone: string; bg: string }) {
+function StatCard({ label, value, tone }: { label: string; value: number | string; tone: string }) {
   return (
     <div className="card stat">
       <div className="label"><span className="tone-dot" style={{ background: tone }} />{label}</div>
-      <div className="value">{value.toLocaleString("en-IN")}</div>
+      <div className="value">{typeof value === "number" ? value.toLocaleString("en-IN") : value}</div>
     </div>
   );
 }
@@ -851,9 +891,10 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
   );
 }
 
-function Chip({ active, onClick, label, count }: { active: boolean; onClick: () => void; label: string; count: number }) {
+function Chip({ active, onClick, label, count, dot }: { active: boolean; onClick: () => void; label: string; count: number | string; dot?: string }) {
   return (
     <button type="button" className={active ? "chip active" : "chip"} onClick={onClick}>
+      {dot && <span className="status-dot" style={{ color: dot }} />}
       {label} <span className="count">{count}</span>
     </button>
   );
