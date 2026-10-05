@@ -37,6 +37,22 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (daily speed kept with recording honesty and capture-dead)
+
+- WHAT: Merged main after #495 and #496. The faster day stays: one-tap miss chips, the next due lead in the five-tier Call now list, the Call all outcome bar, why-due on the row, work-state refresh that cannot paint a finished lead back, and the owed-WhatsApp path. A missing or fallback recording still shows on that bar and on the lead strip. A dead capture still shows its card, and opening WhatsApp still does not write `followup_drafts.status = opened` while capture is not live.
+- FILES: `AssistantPrompts.kt`, `LeadDetailScreen.kt`, `MainViewModel.kt`, `docs/AGENT_SYNC.md`.
+- WHY: The three changes edited the same screens. The notes below are the originals. None is dropped.
+- BUILD: `assembleStandardDebug` green locally after this merge. No migration.
+- NEXT/NOTE: Owed WhatsApp still opens her app. `markDraftOpened` is the only writer of "opened", and it stays quiet when capture is dead.
+
+## 2026-10-05 — Cursor (faster daily calling, same queue)
+
+- WHAT: After an outcome, the phone moves on. On the lead page the next due lead opens, in the same five-tier Call now order. From the list the row just leaves. Call all no longer stops on the Call List screen: the outcome bar appears where she is, No answer / Busy / Wrong number are one tap, and the next number starts. A missed call does not open the full Update sheet. Buyer-waiting, an unkept promise, today's focus line, and "rung N times, never picked up" show on the due row. Work states refresh when she comes back from the in-call screen. An owed WhatsApp (buyer wrote, or a promise) writes the server draft and opens her WhatsApp; a failure or "call instead" does not open it and says so. No popup, no fourth tab, no new scheduler, no new store, no chip total.
+- FILES: `CallNowQueue` callers in `TelecallerScreens.kt`, `LeadDetailScreen.kt`, `MainViewModel.kt`, `AssistantPrompts.kt`, `AppRoot.kt`, `Repository.focusFive`.
+- WHY: A 100-call day was hunt, sheet, hunt. The queue already knew who was next.
+- BUILD: `assembleStandardDebug` green locally. No migration.
+- NEXT/NOTE: Capture health is not read here. If a capture PR lands, this path still only opens her WhatsApp and does not claim the message was sent.
+
 ## 2026-10-05 — Cursor (phone shows dead WhatsApp capture)
 
 - WHAT: The telecaller phone reads her own `wa_rep_sessions` row (status, last_seen_at, last_error) and, only when that row is already dead, the newest `wa_observed_messages.sent_at`. `link_ok_at` is not selected. A dead or unreadable capture is a card in the list on Home, Leads, Follow-ups, and the lead page — it scrolls with the page. The draft button says "Open in WhatsApp" and the phone does not write `followup_drafts.status = opened`, because `settle_followups` would later call that skipped. A rep with no session row gets the warning on the draft only, not a Home banner. No QR button: the phone has no scan screen, and fetching a QR would call the Baileys worker. Rebased onto main after the recording-honesty note below; both stay.

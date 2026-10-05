@@ -287,6 +287,17 @@ data class AppState(
     val coachLoading: Boolean = false,
     val coachPicks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
     val coachPicksLoading: Boolean = false,
+    /** Set when focus-five failed. Empty picks plus this null means the
+     *  server named nobody. Empty picks plus this set means we do not know. */
+    val coachPicksError: String? = null,
+    /** One WhatsApp handoff. Opening the app is not a send — the observer
+     *  decides that. Cleared as soon as the phone has tried to open it. */
+    val waHandoff: WaHandoff? = null,
+    /** Contact whose owed-message draft is being written. Stops a second tap. */
+    val waDraftingId: String? = null,
+    /** A sentence she has to see: the draft failed, or WhatsApp did not open.
+     *  Never used for a success. Opening WhatsApp is the success. */
+    val waNote: String? = null,
     // Objection Buster inside the floating coach: the objection being typed, the
     // rebuttal (null = none yet), and whether we're fetching. Not tied to a lead.
     val coachObjection: String = "",
@@ -348,6 +359,9 @@ data class PendingUpdate(
     /** Missing, unharvested, or fallback-only recording. Not an outcome. */
     val recordingWarning: String? = null,
 )
+
+/** A message ready to open in her own WhatsApp. Not a receipt that it was sent. */
+data class WaHandoff(val phone: String, val text: String, val at: Long)
 
 /**
  * One question the assistant is asking the rep right now.
@@ -452,9 +466,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { com.salesautocall.app.sip.SipWatchdogWorker.schedule(app) }
         }
         observeSimCalls()
+        observeDialerReview()
         observeRecordingVerdicts()
         refreshSession()
     }
+
+    /** When the work-state view was last asked for. Coming back from the
+     *  in-call screen must not wait on a pull. */
+    private var lastWorkFetchAt: Long = 0L
+    /** Bumped when a fetch starts and when the queue is edited on the phone.
+     *  A fetch that started before that edit must not paint the old queue back. */
+    private var workEpoch: Int = 0
 
     /**
      * A MANUAL SIM dial just ended → arm the post-call disposition sheet, so a
@@ -520,6 +542,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         recordingWarnings = if (fresh)
                             recordingWarningMap(it.recordingWarnings, contactId, warning)
                         else it.recordingWarnings,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Call all pauses after each number so she can say what happened.
+     *
+     * The pause used to live on the Call List screen, and a SIM call that
+     * ended while the dialer was running never armed the outcome bar — so
+     * from Follow-ups the queue just stopped. This puts the same bar on the
+     * screen she is already on. It does not open a popup. A recording warning
+     * already on this call rides with the bar.
+     */
+    private fun observeDialerReview() {
+        viewModelScope.launch {
+            com.salesautocall.app.dialer.DialerController.state.collect {
+                val now = com.salesautocall.app.dialer.DialerController.state.value
+                if (!now.isRunning || !now.paused) return@collect
+                val id = now.lastContactId ?: return@collect
+                val phone = now.lastContactPhone ?: return@collect
+                if (_state.value.pendingUpdates.any { it.contactId == id }) return@collect
+                if (_state.value.postCallContactId == id) return@collect
+                // She already answered, and this pause event arrived late.
+                val action = _state.value.workByLead[id]?.actionState
+                if (action != null && !isCallNowAction(action)) return@collect
+                val warning = now.lastRecordingWarning
+                set {
+                    it.copy(
+                        pendingUpdates = it.pendingUpdates.filterNot { p -> p.contactId == id } +
+                            PendingUpdate(
+                                id, phone, now.lastContactName,
+                                connected = now.lastOutcome == "connected",
+                                recordingWarning = warning,
+                            ),
+                        recordingWarnings = recordingWarningMap(it.recordingWarnings, id, warning),
                     )
                 }
             }
@@ -1643,11 +1702,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             // renders before its vocabulary arrives would flash the wrong labels.
             val stages = Repository.fetchLeadStages()
             val uid = Repository.currentUserId()
+            lastWorkFetchAt = System.currentTimeMillis()
+            val epoch = ++workEpoch
             val workResult = uid?.let { runCatching { Repository.fetchWorkStates(it) } }
             runCatching { Repository.fetchLeads() }
                 .onSuccess { list ->
                     set { st ->
-                        val withWork = if (workResult != null) applyWorkFetch(st, workResult) else st
+                        val withWork = if (workResult != null && epoch == workEpoch) applyWorkFetch(st, workResult) else st
                         withWork.copy(
                             leads = list, leadsLoading = false,
                             leadStages = if (stages.isNotEmpty()) stages else st.leadStages,
@@ -1656,6 +1717,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     // Keep the on-device phone → lead map fresh so Lead Ring can
                     // name an inbound caller instantly, even offline.
                     runCatching { com.salesautocall.app.notify.LeadRing.cache(getApplication(), list) }
+                    prefetchFocus()
                 }
                 // Keep whatever leads are already on screen on a network failure
                 // (don't blank the list) and show a friendly, non-technical message.
@@ -1688,6 +1750,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * arrives; this only closes the gap in between.
      */
     private fun markWorkedLocally(contactId: String, action: String, dueAt: String? = null) {
+        // An in-flight work-state read still describes the queue before this tap.
+        // Applying it would put the lead she just finished back in Call now.
+        workEpoch++
         set { st ->
             val cur = st.workByLead[contactId] ?: return@set st
             st.copy(workByLead = st.workByLead + (contactId to cur.copy(actionState = action, dueAt = dueAt)))
@@ -1860,10 +1925,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshWorkStates() {
+        lastWorkFetchAt = System.currentTimeMillis()
+        val epoch = ++workEpoch
         viewModelScope.launch {
             val uid = Repository.currentUserId() ?: return@launch
             val result = runCatching { Repository.fetchWorkStates(uid) }
+            if (epoch != workEpoch) return@launch
             set { applyWorkFetch(it, result) }
+        }
+    }
+
+    /** Focus-five, once a session, so a due row can say why it was picked
+     *  without her opening the coach. A failure keeps the last list and says
+     *  so. It is never stored as "nobody today". */
+    private var focusLoaded: Boolean = false
+
+    private fun prefetchFocus() {
+        if (focusLoaded || _state.value.coachPicksLoading) return
+        if (_state.value.coachPicks.isNotEmpty()) {
+            focusLoaded = true
+            return
+        }
+        set { it.copy(coachPicksLoading = true) }
+        viewModelScope.launch {
+            val result = runCatching { Repository.focusFive() }
+            focusLoaded = result.isSuccess
+            set {
+                if (result.isSuccess) it.copy(
+                    coachPicks = result.getOrDefault(emptyList()),
+                    coachPicksLoading = false,
+                    coachPicksError = null,
+                ) else it.copy(
+                    coachPicksLoading = false,
+                    coachPicksError = "Couldn't load today's focus. Due leads still show why they are waiting.",
+                )
+            }
         }
     }
 
@@ -2300,11 +2396,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             set { it.copy(coachPanel = panel ?: it.coachPanel, coachLoading = false) }
         }
         viewModelScope.launch {
-            if (_state.value.coachPicks.isEmpty()) {
-                val picks = runCatching { Repository.focusFive() }.getOrDefault(emptyList())
-                set { it.copy(coachPicks = picks, coachPicksLoading = false) }
-            } else {
+            if (_state.value.coachPicks.isNotEmpty()) {
                 set { it.copy(coachPicksLoading = false) }
+                return@launch
+            }
+            val result = runCatching { Repository.focusFive() }
+            focusLoaded = result.isSuccess
+            set {
+                if (result.isSuccess) it.copy(
+                    coachPicks = result.getOrDefault(emptyList()),
+                    coachPicksLoading = false,
+                    coachPicksError = null,
+                ) else it.copy(
+                    coachPicksLoading = false,
+                    coachPicksError = "Couldn't load today's focus. Due leads still show why they are waiting.",
+                )
             }
         }
     }
@@ -2620,7 +2726,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // until the next work-state read.
                 workByLead = st.workByLead.mapValues { (id, w) ->
                     if (id in movedContacts) w.copy(actionState = "scheduled", dueAt = iso) else w
-                },
+                }.also { workEpoch++ },
                 message = "Moved ${items.size} follow-up${if (items.size == 1) "" else "s"} to ${shortWhen(dueAtMillis)}",
             )
         }
@@ -2773,6 +2879,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         temperature: String? = null,
         note: String? = null,
         siteVisitAtMillis: Long? = null,
+        /** False when the lead page still has to ask "when is the next call?".
+         *  Connected and Interested save on the first tap and then ask. Leaving
+         *  before that question drops the callback she was about to book. */
+        advance: Boolean = true,
     ) {
         val contactId = _state.value.postCallContactId ?: return
         val phone = _state.value.postCallPhone
@@ -2905,6 +3015,35 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         fromFollowUp?.let { completeFollowUp(it) }
         dismissPostCall()
+        if (advance) advanceAfter(contactId)
+    }
+
+    /**
+     * The person she just finished is no longer the one in front of her.
+     *
+     * Same five-tier list as Call all ([callNowContacts]). She is not sent
+     * hunting back through the leads. Two cases:
+     *
+     * Call all is paused on this person — the next number starts. That is
+     * the "one after another" the button already promised. No second screen,
+     * no Next button on the Call List tab.
+     *
+     * She is on this lead — the next due lead opens, Call already in reach.
+     * From the list itself the row just leaves; the next Call is the next card.
+     * Opening a lead from the list would hide that button.
+     */
+    fun advanceAfter(finishedId: String) {
+        val dial = com.salesautocall.app.dialer.DialerController.state.value
+        if (dial.isRunning && dial.paused && dial.lastContactId == finishedId) {
+            if (_state.value.leadDetailId == finishedId) closeLeadDetail()
+            com.salesautocall.app.dialer.DialerController.resume()
+            return
+        }
+        if (_state.value.leadDetailId != finishedId) return
+        val nextId = callNowContacts(_state.value.leads, _state.value.workByLead)
+            .firstOrNull { it.id != null && it.id != finishedId }
+            ?.id
+        if (nextId != null) openLeadDetail(nextId) else closeLeadDetail()
     }
 
     /** When to try a no-answer lead again: attempt 2 = next day, attempt 3 =
@@ -2956,6 +3095,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         status: String,
         /** The callback this lead was being worked from, so answering closes it. */
         followUpId: String? = null,
+        advance: Boolean = true,
     ) {
         set {
             it.copy(
@@ -2964,7 +3104,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 postCallFollowUpId = followUpId,
             )
         }
-        postCallDispose(status, null, null)
+        postCallDispose(status, null, null, advance = advance)
     }
 
     fun openFollowUpUpdate(contactId: String?, phone: String, name: String?, followUpId: String?) = set {
@@ -3136,6 +3276,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun onForeground() {
         foregroundAt = System.currentTimeMillis()
         expirePendingUpdates()
+        // The in-call screen owns the foreground, so this fires when she is
+        // back. Fifteen seconds keeps a tab switch from refetching the view
+        // she just loaded, and still refreshes a queue she has been away from.
+        if (System.currentTimeMillis() - lastWorkFetchAt > 15_000L) refreshWorkStates()
     }
 
     fun setAssistantOn(value: Boolean) {
@@ -3987,6 +4131,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /**
+     * The buyer wrote, or she still owes them what she promised. One tap
+     * writes the server draft and opens her WhatsApp with that text.
+     *
+     * A generic template is the wrong message for those two rows. A failure,
+     * or "call instead", leaves WhatsApp closed and says so. This does not
+     * write "opened" itself. [markDraftOpened] does, and only when capture
+     * is live.
+     */
+    fun sendOwedWhatsApp(contactId: String, phone: String) {
+        if (_state.value.waDraftingId != null) return
+        set { it.copy(waDraftingId = contactId, waNote = null) }
+        viewModelScope.launch {
+            val d = runCatching { Repository.smartDraft(contactId) }.getOrNull()
+            set { st ->
+                if (st.waDraftingId != contactId) return@set st
+                when {
+                    d == null || (d.body.isNullOrBlank() && d.verdict != "call_instead") -> st.copy(
+                        waDraftingId = null,
+                        waNote = "Couldn't write the message. WhatsApp was not opened.",
+                    )
+                    d.verdict == "call_instead" -> st.copy(
+                        waDraftingId = null,
+                        waNote = "${d.sent14d} messages in two weeks, no reply. Call them. WhatsApp was not opened.",
+                    )
+                    else -> st.copy(
+                        waDraftingId = null,
+                        messageDraft = d.body,
+                        messageDraftReason = d.reason,
+                        messageDraftId = d.draftId,
+                        messageVerdict = "draft",
+                        messageDraftLoading = false,
+                        waHandoff = WaHandoff(phone, d.body!!, System.currentTimeMillis()),
+                    )
+                }
+            }
+        }
+    }
+
+    fun consumeWaHandoff(opened: Boolean) = set {
+        it.copy(
+            waHandoff = null,
+            waNote = if (opened) it.waNote else "WhatsApp did not open. The message was not sent.",
+        )
+    }
+
+    fun consumeWaNote() = set { it.copy(waNote = null) }
 
     /**
      * She pressed Send and WhatsApp opened with the text in it.

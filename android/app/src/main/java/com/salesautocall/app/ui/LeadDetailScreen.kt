@@ -239,6 +239,9 @@ fun LeadDetailScreen(vm: MainViewModel) {
     var moreOpen by remember { mutableStateOf(false) }
     var handOverOpen by remember { mutableStateOf(false) }
     var editIdentityOpen by remember { mutableStateOf(false) }
+    // The outcome strip asked "when next?". A reminder opened from the
+    // banner must not jump her to another lead.
+    var advanceWhenBooked by remember { mutableStateOf(false) }
     var funnelExpanded by remember { mutableStateOf(false) }
     var journeyExpanded by remember { mutableStateOf(false) }
 
@@ -283,10 +286,28 @@ fun LeadDetailScreen(vm: MainViewModel) {
         if (app.callerdeskCalling) vm.cloudCall(number, contact.id, contact.campaignId) else vm.dialManual(number)
     }
     fun doCall() = doCallNumber(contact.phone)
-    fun doWhats() = openWhatsAppLocal(
-        context, contact.phone,
-        waTemplateLocal(contact.name, contact.companyName, app.profile?.fullName, app.company?.name, app.profile?.speaksAs),
-    )
+    fun doWhats() {
+        val id = contact.id
+        val work = id?.let { app.workByLead[it] }
+        val owed = work?.waitingSince != null ||
+            (work?.promiseDueSince != null && !work.promiseText.isNullOrBlank())
+        val ready = app.messageDraft?.takeIf {
+            app.messageVerdict == "draft" && app.leadDetailId == id && it.isNotBlank()
+        }
+        when {
+            // The draft is already on this lead. Open it. Don't write a second one.
+            ready != null -> {
+                vm.markDraftOpened()
+                openWhatsAppLocal(context, contact.phone, ready)
+            }
+            // owed is only true when this lead has a work row, so id is present.
+            owed -> vm.sendOwedWhatsApp(id!!, contact.phone)
+            else -> openWhatsAppLocal(
+                context, contact.phone,
+                waTemplateLocal(contact.name, contact.companyName, app.profile?.fullName, app.company?.name, app.profile?.speaksAs),
+            )
+        }
+    }
     fun copyNumber() {
         clipboard.setText(AnnotatedString(contact.phone))
         android.widget.Toast.makeText(context, "Number copied", android.widget.Toast.LENGTH_SHORT).show()
@@ -805,15 +826,27 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     vm.openFollowUpUpdate(contact.id, contact.phone, contact.name, followUp?.id)
                 },
                 onOutcome = { status ->
+                    // Connected and Interested save, then the strip asks when.
+                    // Leaving before that drops the callback she was about to book.
+                    val stayForNext = status == "called" || status == "interested"
                     contact.id?.let {
-                        vm.disposeFromLead(it, contact.phone, contact.name, status, followUp?.id)
+                        vm.disposeFromLead(
+                            it, contact.phone, contact.name, status, followUp?.id,
+                            advance = !stayForNext,
+                        )
                     }
                 },
-                onBookCallback = { scheduleOpen = true },
-                onBookVisit = { visitOpen = true },
+                onBookCallback = { advanceWhenBooked = true; scheduleOpen = true },
+                onBookVisit = { advanceWhenBooked = true; visitOpen = true },
                 onQuickCallback = { millis ->
                     vm.scheduleFollowUp(contact.id, contact.phone, contact.name, millis, null)
+                    contact.id?.let { vm.advanceAfter(it) }
                 },
+                onDoneWithLead = { contact.id?.let { vm.advanceAfter(it) } },
+                whyDue = dueSignal(
+                    contact.id?.let { app.workByLead[it] },
+                    app.coachPicks.firstOrNull { it.contactId == contact.id }?.reason,
+                ),
             )
             FloatingCallBar(
                 current = "leads",
@@ -833,20 +866,30 @@ fun LeadDetailScreen(vm: MainViewModel) {
     if (handOverOpen) HandOverDialog(vm = vm, c = contact, onDismiss = { handOverOpen = false })
 
     if (scheduleOpen) PickWhenDialog(
-        title = "Follow-up · ${contact.name ?: contact.phone}", onDismiss = { scheduleOpen = false },
+        title = "Follow-up · ${contact.name ?: contact.phone}",
+        onDismiss = { scheduleOpen = false; advanceWhenBooked = false },
         onPick = { millis ->
             scheduleOpen = false
             vm.scheduleFollowUp(contact.id, contact.phone, contact.name, millis, null)
             if (contact.status !in setOf("interested", "site_visit", "negotiation", "token_paid", "booked")) {
                 contact.id?.let { vm.applyLead(it, "callback", null, null, null, null, null, null) }
             }
+            if (advanceWhenBooked) {
+                advanceWhenBooked = false
+                contact.id?.let { vm.advanceAfter(it) }
+            }
         },
     )
     if (visitOpen) PickWhenDialog(
-        title = "Site visit · ${contact.name ?: contact.phone}", visitMode = true, onDismiss = { visitOpen = false },
+        title = "Site visit · ${contact.name ?: contact.phone}", visitMode = true,
+        onDismiss = { visitOpen = false; advanceWhenBooked = false },
         onPick = { millis ->
             visitOpen = false
             contact.id?.let { vm.applyLead(it, "site_visit", null, null, null, null, java.time.Instant.ofEpochMilli(millis).toString(), null) }
+            if (advanceWhenBooked) {
+                advanceWhenBooked = false
+                contact.id?.let { vm.advanceAfter(it) }
+            }
         },
     )
     confirmMoveKey?.let { key ->
@@ -1789,6 +1832,10 @@ private fun LeadActionBar(
     onBookCallback: () -> Unit,
     onBookVisit: () -> Unit,
     onQuickCallback: (Long) -> Unit,
+    /** "No next step" — she is done with this lead. */
+    onDoneWithLead: () -> Unit = {},
+    /** Why this lead is due, already computed. Null when there is nothing to say. */
+    whyDue: String? = null,
 ) {
     // Which half of the strip is showing. Keyed to the lead so opening another
     // one never inherits the last lead's half-finished answer.
@@ -1862,7 +1909,7 @@ private fun LeadActionBar(
                             }),
                             Triple("Pick a time", IndigoL, { dismissed = true; askNext = false; onBookCallback() }),
                             Triple("Book visit", PurpleL, { dismissed = true; askNext = false; onBookVisit() }),
-                            Triple("No next step", SubInk, { dismissed = true; askNext = false }),
+                            Triple("No next step", SubInk, { dismissed = true; askNext = false; onDoneWithLead() }),
                         )
                         pending?.connected == false -> listOf(
                             // A call that never connected has no funnel stage to
@@ -1893,6 +1940,19 @@ private fun LeadActionBar(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+            }
+            // Why she is on this lead, above the buttons. After an outcome the
+            // next due lead opens here, and this line is how she knows why
+            // without scrolling the page.
+            if (!whyDue.isNullOrBlank()) {
+                Text(
+                    whyDue,
+                    style = AppType.meta,
+                    color = SubInk,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(6.dp))
             }
             if (!stripOpen && !recordingWarning.isNullOrBlank()) {
                 // The outcome strip closes once they answer. The missing file

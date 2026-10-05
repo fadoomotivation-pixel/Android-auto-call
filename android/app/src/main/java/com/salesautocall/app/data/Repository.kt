@@ -791,8 +791,11 @@ object Repository {
      */
     suspend fun focusFive(): List<FocusPick> {
         val resp = client.functions.invoke("focus-five", buildJsonObject { })
-        val obj = runCatching { resp.body<JsonObject>() }.getOrNull() ?: return emptyList()
-        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return emptyList()
+        // A failed read is not "no focus calls today". Callers keep the last
+        // good list, or say the load failed. An empty list is only returned
+        // when the function itself said ok and named nobody.
+        val obj = resp.body<JsonObject>()
+        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) error("focus-five declined")
         val arr = obj["picks"] as? JsonArray ?: return emptyList()
         return arr.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null

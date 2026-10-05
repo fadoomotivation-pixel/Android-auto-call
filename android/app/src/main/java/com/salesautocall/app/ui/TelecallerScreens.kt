@@ -228,6 +228,50 @@ private fun lastCallLine(work: LeadWork?): Pair<String, Color>? {
 /** This lead's row from v_lead_workstate — action state plus the last real call. */
 private fun AppState.workOf(c: Contact): LeadWork? = c.id?.let { workByLead[it] }
 
+/** Today's focus line for this lead, if focus-five named them. Blank is not a reason. */
+private fun AppState.focusReason(contactId: String?): String? =
+    contactId?.let { id -> coachPicks.firstOrNull { it.contactId == id }?.reason }?.trim()?.takeIf { it.isNotEmpty() }
+
+/**
+ * Why a due row is due, from fields the server already computed.
+ *
+ * Order matches [callNowTier]: a buyer waiting, then a promise not kept,
+ * then today's focus line, then a number rung four times that has never
+ * been answered. Null when none of those is true — the diary note still
+ * speaks. Never a count, never a reason we invented.
+ */
+internal fun dueSignal(work: LeadWork?, focusReason: String?): String? {
+    val waiting = work?.waitingSince
+    if (waiting != null) return "They wrote ${agoLabel(waiting)} — no reply yet"
+    val owedSince = work?.promiseDueSince
+    val owedWhat = work?.promiseText
+    if (owedSince != null && !owedWhat.isNullOrBlank()) {
+        return "You said: $owedWhat · ${agoLabel(owedSince)}"
+    }
+    if (!focusReason.isNullOrBlank()) return focusReason
+    val calls = work?.callsTotal ?: 0
+    if ((work?.bestCallSeconds ?: 1) == 0 && calls >= 4) {
+        return "Rung $calls times — never picked up"
+    }
+    return null
+}
+
+/** A buyer is waiting, or she still owes what she said on a call. */
+private fun owesMessage(work: LeadWork?): Boolean =
+    work?.waitingSince != null || (work?.promiseDueSince != null && !work.promiseText.isNullOrBlank())
+
+private fun openRowWhatsApp(
+    context: android.content.Context,
+    vm: MainViewModel,
+    contactId: String?,
+    phone: String,
+    work: LeadWork?,
+    template: String?,
+) {
+    if (contactId != null && owesMessage(work)) vm.sendOwedWhatsApp(contactId, phone)
+    else openWhatsApp(context, phone, template)
+}
+
 /**
  * Call now sits FIRST and is what the screen opens on. A telecaller's job is
  * calling; the row they land in should already be the one they work from.
@@ -1216,7 +1260,9 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                         PlanBucket(
                             icon = Icons.Outlined.Refresh, title = "Asked to call back", color = Indigo,
                             rows = callbacks.take(3).map { f ->
-                                PlanRow(f.name ?: f.phone, relativeDue(f.dueAt), f.note, f.phone,
+                                val work = f.contactId?.let { app.workByLead[it] }
+                                val why = dueSignal(work, app.focusReason(f.contactId))
+                                PlanRow(f.name ?: f.phone, relativeDue(f.dueAt), why ?: f.note, f.phone,
                                     overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= nowMs)
                             },
                             more = callbacks.size - 3, onCall = { vm.dialManual(it) },
@@ -2233,11 +2279,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         val work = app.workOf(next)
                         UpNextCard(
                             lead = next,
-                            reason = when {
-                                work?.waitingSince != null ->
-                                    "They wrote ${agoLabel(work.waitingSince)} — no reply yet"
-                                work?.promiseDueSince != null && !work.promiseText.isNullOrBlank() ->
-                                    "You said: ${work.promiseText}"
+                            reason = dueSignal(work, app.focusReason(next.id)) ?: when {
                                 due != null && due <= nowMs -> "Callback was due ${agoLabel(fu.dueAt)}"
                                 due != null -> "Callback due ${relativeDue(fu.dueAt)}"
                                 next.createdAt != null -> "New lead · ${arrivedLabel(next.createdAt!!)}"
@@ -2445,9 +2487,21 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                             // WhatsApp. The tracked inbox still exists for the
                             // admin; the row button now just does what it says.
                             onWhatsApp = {
-                                openWhatsApp(context, c.phone,
+                                openRowWhatsApp(
+                                    context, vm, c.id, c.phone, app.workOf(c),
                                     waTemplate(c.name, c.companyName, app.profile?.fullName,
-                                        app.company?.name, app.profile?.speaksAs))
+                                        app.company?.name, app.profile?.speaksAs),
+                                )
+                            },
+                            whatsAppBusy = c.id != null && c.id == app.waDraftingId,
+                            focusReason = app.focusReason(c.id),
+                            onQuickOutcome = c.id?.takeIf { it in pendingUpdateIds }?.let { id ->
+                                { status: String ->
+                                    vm.disposeFromLead(
+                                        id, c.phone, c.name, status,
+                                        (fuByContact[id] ?: fuByPhone[c.phone])?.id,
+                                    )
+                                }
                             },
                             // The same prompt the Follow Ups screen opens, and
                             // the same one that appears after a call. There is
@@ -2871,6 +2925,12 @@ private fun LeadCard(
     /** Another lead in the same list has the exact same name — show the last
      *  four digits beside it so the rep can tell which person this is. */
     sharesName: Boolean = false,
+    /** focus-five's line, when this lead is one of today's picks. */
+    focusReason: String? = null,
+    /** True while the owed-message draft is being written. */
+    whatsAppBusy: Boolean = false,
+    /** One tap for a call that never connected. Null hides the chips. */
+    onQuickOutcome: ((String) -> Unit)? = null,
     onToggleSelect: () -> Unit = {},
     onCall: () -> Unit,
     onCloudCall: () -> Unit,
@@ -2892,43 +2952,16 @@ private fun LeadCard(
     // Pulled out rather than tested through the safe call inline: a local val
     // is smart-cast with no argument, and this line is read far more often
     // than it is written.
-    val waitingSince = work?.waitingSince
-    val promiseDueSince = work?.promiseDueSince
-    val promiseText = work?.promiseText
+    val signal = dueSignal(work, focusReason)
+    val hardSignal = work?.waitingSince != null ||
+        (work?.promiseDueSince != null && !work.promiseText.isNullOrBlank())
+    val diaryNote = (followUp?.note ?: "").trim()
+    val weakDiary = followUp == null || diaryNote.isEmpty() || diaryNote == AUTO_CALLBACK_NOTE
     val intent: Pair<String, Color>? = when {
-        // THE BUYER WROTE AND NOBODY WROTE BACK.
-        //
-        // First, above the callback note, because it outranks it: a person who
-        // messaged you today matters more than a time you wrote in a diary for
-        // Friday. The database agrees — v_lead_action_state puts this lead in
-        // Call now for the same reason (migration 0206).
-        //
-        // It says HOW LONG rather than just that something is owed. On the day
-        // this shipped, one buyer had been waiting ten days and another nine,
-        // and the rep had no way at all of knowing: WhatsApp buries a chat
-        // under two hundred others and a group posts forty times a morning.
-        //
-        // A call counts as answering, so this clears the moment she rings them
-        // — she does not have to reply on WhatsApp to make it go away.
-        waitingSince != null ->
-            "They wrote ${agoLabel(waitingSince)} — no reply yet" to Red
-        // YOU SAID YOU WOULD DO THIS, AND IT IS NOT DONE.
-        //
-        // Below the buyer-waiting line, because someone who wrote to you today
-        // outranks a note about yourself. Above the callback note, because a
-        // thing you promised out loud outranks a time you wrote in a diary.
-        //
-        // The app read it off the recording: 82 leads discussed a site visit
-        // on a call, 11 got there, and 70 of them were never sent a single
-        // WhatsApp afterwards. Nobody was slacking — there was simply no list
-        // anywhere of what had been promised, so it lived in one person's head
-        // until it fell out.
-        //
-        // It clears itself the moment the thing actually happens, on any
-        // channel: the file goes out on WhatsApp, the visit lands in the
-        // diary, or she rings them back. She never has to tick anything off.
-        promiseDueSince != null && !promiseText.isNullOrBlank() ->
-            "You said: $promiseText · ${agoLabel(promiseDueSince)}" to Red
+        // Buyer waiting and a broken promise outrank a diary note. Focus and
+        // "never picked up" outrank only an empty note or the 11 AM the app
+        // invented — a sentence she actually wrote stays.
+        signal != null && (hardSignal || weakDiary) -> signal to (if (hardSignal) Red else muted)
         followUp != null -> {
             val late = (instantMillis(followUp.dueAt) ?: Long.MAX_VALUE) <= now
             // WHY this lead is waiting, not just that it is.
@@ -3233,6 +3266,14 @@ private fun LeadCard(
 
         if (!selectMode) {
             Spacer(Modifier.height(9.dp))
+            // The call just ended and nobody picked up. The answer is on the
+            // card — Update still opens the full sheet for a real conversation.
+            if (needsUpdate && onQuickOutcome != null) {
+                Text("What happened?", style = AppType.meta, color = muted)
+                Spacer(Modifier.height(6.dp))
+                QuickOutcomeChips(onQuickOutcome)
+                Spacer(Modifier.height(8.dp))
+            }
             // ONE ACTION ROW, full width. Update shakes when this lead's call
             // has just ended with nothing written down — that wobble is the
             // whole replacement for the post-call popup on SIM calls.
@@ -3269,11 +3310,15 @@ private fun LeadCard(
                     Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
                         .background(AppColors.Surface)
                         .border(1.dp, AppColors.Border, RoundedCornerShape(12.dp))
-                        .clickable { onWhatsApp() },
+                        .clickable(enabled = !whatsAppBusy) { onWhatsApp() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WaGreen,
-                        modifier = Modifier.size(17.dp))
+                    if (whatsAppBusy) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = WaGreen)
+                    } else {
+                        Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WaGreen,
+                            modifier = Modifier.size(17.dp))
+                    }
                 }
                 Spacer(Modifier.width(7.dp))
                 // Calling is the job. The only filled button on the card.
@@ -4471,6 +4516,12 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                             Text("Call all ${dueContacts.size} due, one after another",
                                 color = Color.White, style = AppType.label, maxLines = 1)
                         }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "After each call, tap what happened. The next number starts on its own.",
+                            style = AppType.meta,
+                            color = AppColors.TextSecondary,
+                        )
                     }
                     if (showMoveOverdue) {
                         if (showCallAll) Spacer(Modifier.height(8.dp))
@@ -4531,7 +4582,17 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     f = f,
                     now = now,
                     onCall = { vm.dialManual(f.phone) },
-                    onWhatsApp = { openWhatsApp(context, f.phone, waTemplate(f.name, null, app.profile?.fullName, app.company?.name, app.profile?.speaksAs)) },
+                    onWhatsApp = {
+                        openRowWhatsApp(
+                            context, vm, cid, f.phone, cid?.let { workByLead[it] },
+                            waTemplate(f.name, null, app.profile?.fullName, app.company?.name, app.profile?.speaksAs),
+                        )
+                    },
+                    whatsAppBusy = cid != null && cid == app.waDraftingId,
+                    focusReason = app.focusReason(cid),
+                    onQuickOutcome = cid?.takeIf { id -> app.pendingUpdates.any { it.contactId == id } }?.let { id ->
+                        { status: String -> vm.disposeFromLead(id, f.phone, f.name, status, f.id) }
+                    },
                     onSnooze = {
                         val fid = f.id
                         if (fid != null) vm.snoozeFollowUp(fid, 1)
@@ -4630,6 +4691,46 @@ private fun syntheticCallNow(lead: Contact, work: LeadWork?): FollowUp = FollowU
 )
 
 /**
+ * No answer, Busy, Wrong number — the three answers for a call that never
+ * connected. One tap each. A real conversation still goes through Update.
+ * Wrong number stays visually apart: it files the lead as a dead number,
+ * and the undo bar is the way back.
+ */
+@Composable
+internal fun QuickOutcomeChips(onOutcome: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(
+            "No answer" to "no_answer",
+            "Busy" to "busy",
+            "Wrong number" to "invalid",
+        ).forEach { (label, status) ->
+            val danger = status == "invalid"
+            Box(
+                Modifier.weight(1f).heightIn(min = 44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (danger) AppColors.DangerSoft else AppColors.Surface)
+                    .border(
+                        1.dp,
+                        if (danger) AppColors.Danger.copy(alpha = 0.35f) else AppColors.Border,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .clickable { onOutcome(status) }
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label,
+                    style = AppType.metaStrong,
+                    color = if (danger) AppColors.Danger else AppColors.TextPrimary,
+                    maxLines = 2,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            }
+        }
+    }
+}
+
+/**
  * [onUpdate] is null when the callback isn't linked to a lead — there is no
  * funnel to move, so it falls back to plainly ticking the callback off. Every
  * pending callback on the platform is currently linked, but the column is
@@ -4653,6 +4754,11 @@ private fun FollowUpCard(
     /** Why this lead is really in Call now — a buyer left waiting, or a
      *  promise made on a recorded call and not kept. Null for most rows. */
     work: LeadWork? = null,
+    /** focus-five's line, when this lead is one of today's picks. */
+    focusReason: String? = null,
+    whatsAppBusy: Boolean = false,
+    /** One tap for a call that never connected. Null hides the chips. */
+    onQuickOutcome: ((String) -> Unit)? = null,
 ) {
     // FIVE BUTTONS WAS THE PROBLEM.
     //
@@ -4756,32 +4862,28 @@ private fun FollowUpCard(
             // Pulled into locals rather than tested through the safe call
             // inline: a local val is smart-cast with no !! and this line is
             // read far more often than it is written.
-            val waiting = work?.waitingSince
-            val owedSince = work?.promiseDueSince
-            val owedWhat = work?.promiseText
-            val realWhy: Pair<String, Color>? = when {
-                waiting != null -> "They wrote ${agoLabel(waiting)} — no reply yet" to Red
-                owedSince != null && !owedWhat.isNullOrBlank() ->
-                    "You said: $owedWhat · ${agoLabel(owedSince)}" to Red
-                // SAY IT, DO NOT JUST RANK IT.
-                //
-                // A row that quietly sinks to the bottom teaches a rep nothing
-                // and reads as the list being random again. This one tells her
-                // what she is looking at, so skipping it is her decision and
-                // not the app's secret.
-                (work?.bestCallSeconds ?: 1) == 0 && (work?.callsTotal ?: 0) >= 4 ->
-                    "Rung ${work?.callsTotal} times — never picked up" to muted
-                else -> null
-            }
+            val signal = dueSignal(work, focusReason)
+            val hardSignal = work?.waitingSince != null ||
+                (work?.promiseDueSince != null && !work.promiseText.isNullOrBlank())
             Text(
-                realWhy?.first ?: whyThisCallback(f),
+                signal ?: whyThisCallback(f),
                 style = AppType.meta,
-                color = realWhy?.second ?: AppColors.TextSecondary,
+                color = when {
+                    signal != null && hardSignal -> Red
+                    signal != null -> muted
+                    else -> AppColors.TextSecondary
+                },
                 maxLines = 3,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.height(9.dp))
+        if (needsUpdate && onQuickOutcome != null) {
+            Text("What happened?", style = AppType.meta, color = muted)
+            Spacer(Modifier.height(6.dp))
+            QuickOutcomeChips(onQuickOutcome)
+            Spacer(Modifier.height(8.dp))
+        }
         // Update REPLACES the old "Done".
         //
         // Done ticked the callback off and recorded nothing — which is exactly
@@ -4836,15 +4938,21 @@ private fun FollowUpCard(
                 Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
                     .background(AppColors.Surface)
                     .border(1.dp, AppColors.Border, RoundedCornerShape(12.dp))
-                    .clickable { onWhatsApp() },
+                    .clickable(enabled = !whatsAppBusy) { onWhatsApp() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
                 // WhatsApp's green survives as the icon only — it is a brand
                 // mark, which is worth keeping, not a reason to tint the button.
-                Icon(Icons.Default.Chat, contentDescription = null, tint = WaGreen, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(5.dp))
-                Text("WhatsApp", fontSize = 13.sp, color = AppColors.TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                if (whatsAppBusy) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = WaGreen)
+                    Spacer(Modifier.width(5.dp))
+                    Text("Writing…", fontSize = 13.sp, color = AppColors.TextSecondary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                } else {
+                    Icon(Icons.Default.Chat, contentDescription = null, tint = WaGreen, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("WhatsApp", fontSize = 13.sp, color = AppColors.TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
             }
             Spacer(Modifier.width(7.dp))
             Row(
