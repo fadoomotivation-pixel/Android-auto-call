@@ -1340,12 +1340,22 @@ object Repository {
         }.getOrElse { emptyList() }
 
     /**
-     * Every open lead's DERIVED action state for this rep.
+     * Every lead's derived action state for this rep, from `v_lead_workstate`.
      *
-     * Deliberately fetched, not computed on the phone. Two client-side
-     * definitions of "due" are exactly how the Follow-up tab and the Follow Ups
-     * screen ended up disagreeing about the same clock.
+     * Throws on failure. An empty list means this rep has no leads. Swallowing
+     * the error and returning empty is how Due now became 0 on a bad
+     * connection and read as a quiet day.
      */
+    suspend fun fetchWorkStates(salespersonId: String): List<LeadWork> =
+        client.from("v_lead_workstate").select(
+            columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                "contact_id, action_state, due_at, last_call_at, last_call_seconds, calls_total, waiting_since, " +
+                    "promise_due_since, promise_text, best_call_seconds",
+            )
+        ) {
+            filter { eq("salesperson_id", salespersonId) }
+        }.decodeList<LeadWork>()
+
     /** Today's arrivals: [arrived] = every call the office has, [toLeads] = the
      *  subset that was to a CRM lead. */
     data class TodaysCalls(val arrived: Int, val toLeads: Int)
@@ -1392,18 +1402,6 @@ object Repository {
             TodaysCalls(arrived = rows.size, toLeads = rows.count { !it.offCrm })
         }.getOrDefault(TodaysCalls(0, 0))
     }
-
-    suspend fun fetchWorkStates(salespersonId: String): List<LeadWork> =
-        runCatching {
-            client.from("v_lead_workstate").select(
-                columns = io.github.jan.supabase.postgrest.query.Columns.raw(
-                    "contact_id, action_state, due_at, last_call_at, last_call_seconds, calls_total, waiting_since, " +
-                        "promise_due_since, promise_text, best_call_seconds",
-                )
-            ) {
-                filter { eq("salesperson_id", salespersonId) }
-            }.decodeList<LeadWork>()
-        }.getOrElse { emptyList() }
 
     suspend fun fetchCampaignContacts(campaignId: String): List<Contact> {
         return client.from("contacts").select {
