@@ -24,7 +24,8 @@ import com.salesautocall.app.ui.design.AppMaterialTypography
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Light-first, Apple-inspired scheme.
+ * Light-only scheme, in the language of iOS Settings: grouped grey canvas,
+ * white cards, one action blue.
  *
  * SINGLE SCHEME, ON PURPOSE. The app previously shipped a dark variant that
  * followed the system setting. It is gone: telecallers work long shifts in

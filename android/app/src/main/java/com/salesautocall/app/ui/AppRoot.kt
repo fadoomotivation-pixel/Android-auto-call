@@ -50,6 +50,10 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
@@ -1240,10 +1244,10 @@ internal fun FloatingCallBar(
     // washing out in sunlight, which is where a telecaller actually works.
     val unsel = AppColors.TextSecondary
     val ring = MaterialTheme.colorScheme.background
-    Box(Modifier.fillMaxWidth().height(84.dp).padding(horizontal = 14.dp), contentAlignment = Alignment.BottomCenter) {
+    Box(Modifier.fillMaxWidth().height(88.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.BottomCenter) {
         Row(
-            Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(22.dp))
-                .background(pill).border(1.dp, hair, RoundedCornerShape(22.dp)),
+            Modifier.fillMaxWidth().height(62.dp).clip(RoundedCornerShape(24.dp))
+                .background(pill).border(1.dp, hair, RoundedCornerShape(24.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Follow Ups takes the slot Call history had.
@@ -1255,24 +1259,25 @@ internal fun FloatingCallBar(
             // most often, and this swap is worth more than any amount of
             // rearranging the screens themselves. History is still one tap away
             // under More → Calls & Recordings.
-            NavSlot("Home", Icons.Default.Home, current == "home", jade, unsel, Modifier.weight(1f)) { onTab("home") }
-            NavSlot("Leads", Icons.Default.People, current == "leads", jade, unsel, Modifier.weight(1f)) { onTab("leads") }
+            NavSlot("Home", Icons.Outlined.Home, current == "home", jade, unsel, Modifier.weight(1f)) { onTab("home") }
+            NavSlot("Leads", Icons.Outlined.People, current == "leads", jade, unsel, Modifier.weight(1f)) { onTab("leads") }
             // The gap goes with the dial, or the bar keeps a hole in its middle.
-            if (showDial) Spacer(Modifier.width(66.dp)) // room for the raised dial
-            NavSlot("Follow Ups", Icons.Default.AccessTime, current == "followups", jade, unsel, Modifier.weight(1f)) { onTab("followups") }
-            NavSlot("More", Icons.Default.Menu, false, jade, unsel, Modifier.weight(1f)) { onMore() }
+            if (showDial) Spacer(Modifier.width(72.dp)) // room for the raised dial
+            NavSlot("Follow Ups", Icons.Outlined.Schedule, current == "followups", jade, unsel, Modifier.weight(1f)) { onTab("followups") }
+            NavSlot("More", Icons.Outlined.Menu, false, jade, unsel, Modifier.weight(1f)) { onMore() }
         }
         // Raised centre Dial — the primary job, straddling the bar's top edge. A
-        // ring in the surrounding colour "cuts" it out of the bar.
+        // ring in the surrounding colour "cuts" it out of the bar. A circle, not
+        // a coloured squircle: the Phone-app control, large enough for a thumb.
         if (showDial) {
             Box(
-                Modifier.align(Alignment.TopCenter).size(66.dp).clip(CircleShape).background(ring),
+                Modifier.align(Alignment.TopCenter).size(70.dp).clip(CircleShape).background(ring),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    Modifier.size(56.dp).clip(RoundedCornerShape(19.dp)).background(jade).clickable { onDial() },
+                    Modifier.size(58.dp).clip(CircleShape).background(jade).clickable { onDial() },
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Default.Call, contentDescription = "Dial", tint = Color.White, modifier = Modifier.size(24.dp)) }
+                ) { Icon(Icons.Default.Call, contentDescription = "Dial", tint = Color.White, modifier = Modifier.size(26.dp)) }
             }
         }
     }
@@ -1280,26 +1285,18 @@ internal fun FloatingCallBar(
 
 @Composable
 private fun NavSlot(label: String, icon: ImageVector, on: Boolean, jade: Color, unsel: Color, modifier: Modifier, onClick: () -> Unit) {
-    // The active tab used to differ only by tint, which on a bright phone in
-    // daylight is close to no difference at all. It now carries a tinted pill
-    // behind the icon as well — a shape change reads at arm's length where a
-    // colour change does not.
+    // A tab bar, not a pill. The selected destination is the action colour on
+    // the icon and the label. A filled capsule behind the icon was the bright
+    // blue blob this bar used to wear, and it fought the Dial button for the
+    // only accent on the screen.
     Column(
-        modifier.clip(RoundedCornerShape(14.dp)).clickable { onClick() }.padding(vertical = 5.dp),
+        modifier.clip(RoundedCornerShape(14.dp)).clickable { onClick() }.padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            Modifier.clip(RoundedCornerShape(50))
-                .background(if (on) jade.copy(alpha = 0.15f) else Color.Transparent)
-                .padding(horizontal = 14.dp, vertical = 3.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = label, tint = if (on) jade else unsel,
-                modifier = Modifier.size(if (on) 23.dp else 21.dp))
-        }
+        Icon(icon, contentDescription = label, tint = if (on) jade else unsel, modifier = Modifier.size(22.dp))
         Spacer(Modifier.height(2.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
-            color = if (on) jade else unsel, fontWeight = if (on) FontWeight.Bold else FontWeight.Medium)
+            color = if (on) jade else unsel, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
     }
 }
 

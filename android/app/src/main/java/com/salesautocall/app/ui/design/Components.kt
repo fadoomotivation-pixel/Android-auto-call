@@ -22,7 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -495,7 +495,7 @@ fun AiPanel(
             .padding(Space.l),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.AutoAwesome, null, tint = AppColors.Indigo, modifier = Modifier.size(16.dp))
+            Icon(Icons.Outlined.AutoAwesome, null, tint = AppColors.Indigo, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(Space.s))
             Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.Indigo, modifier = Modifier.weight(1f))
             if (loading) {
@@ -527,7 +527,7 @@ fun AiChip(text: String, onClick: () -> Unit) {
             .padding(horizontal = Space.m, vertical = Space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Default.AutoAwesome, null, tint = AppColors.Indigo, modifier = Modifier.size(13.dp))
+        Icon(Icons.Outlined.AutoAwesome, null, tint = AppColors.Indigo, modifier = Modifier.size(13.dp))
         Spacer(Modifier.width(Space.xs + Space.xxs))
         Text(text, style = AppType.metaStrong, color = AppColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

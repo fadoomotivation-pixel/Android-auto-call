@@ -61,7 +61,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -320,7 +319,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         Spacer(Modifier.width(4.dp))
                         Text("Lead Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Ink)
                         Spacer(Modifier.weight(1f))
-                        TopIconButton(Icons.Default.Call, BlueL) { doCall() }
+                        TopIconButton(Icons.Default.Call, BlueL, size = 48) { doCall() }
                         Spacer(Modifier.width(8.dp))
                         TopIconButton(Icons.Default.Chat, WhatsGreen) { doWhats() }
                         Spacer(Modifier.width(8.dp))
@@ -340,7 +339,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                 // and it also lives here — in the menu that already
                                 // holds every other thing you DO to a lead rather
                                 // than type into it.
-                                DropdownMenuItem(text = { Text("🤝 Give to a teammate") }, onClick = {
+                                DropdownMenuItem(text = { Text("Give to a teammate") }, onClick = {
                                     moreOpen = false; handOverOpen = true
                                 })
                                 DropdownMenuItem(text = { Text("Not interested") }, onClick = {
@@ -876,16 +875,13 @@ fun LeadDetailScreen(vm: MainViewModel) {
 
 // ---------------- Building blocks ----------------
 
-// Soft, Apple-ish depth — a faint ambient shadow instead of a hard hairline, so
-// white cards float a hair above the near-white canvas. Cheap to draw (no blur).
-private val SoftShadow = Color(0x14101820)
-
 @Composable
 private fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-            .shadow(3.dp, Radii.card, ambientColor = SoftShadow, spotColor = SoftShadow)
-            .clip(Radii.card).background(CardBg).padding(Space.l),
+            .clip(Radii.card).background(CardBg)
+            .border(1.dp, Hair, Radii.card)
+            .padding(Space.l),
         content = content,
     )
 }
@@ -893,8 +889,9 @@ private fun SectionCard(content: @Composable androidx.compose.foundation.layout.
 @Composable
 private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
-        modifier.shadow(3.dp, Radii.card, ambientColor = SoftShadow, spotColor = SoftShadow)
+        modifier
             .clip(Radii.card).background(CardBg)
+            .border(1.dp, Hair, Radii.card)
             .heightIn(min = 96.dp).padding(Space.m),
     ) {
         Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.TextTertiary, maxLines = 1)
@@ -904,12 +901,14 @@ private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Com
 }
 
 @Composable
-private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) {
+private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, size: Int = 44, onClick: () -> Unit) {
     Box(
-        Modifier.size(42.dp).shadow(2.dp, Radii.control, ambientColor = SoftShadow, spotColor = SoftShadow)
-            .clip(Radii.control).background(CardBg).clickable { onClick() },
+        Modifier.size(size.dp)
+            .clip(CircleShape).background(CardBg)
+            .border(1.dp, Hair, CircleShape)
+            .clickable { onClick() },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp)) }
+    ) { Icon(icon, null, tint = tint, modifier = Modifier.size((size * 0.46f).dp)) }
 }
 
 // ActionTile went with the quad row it drew. Its last caller was that row, and
@@ -1002,10 +1001,10 @@ private fun IdentityBlock(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             LeadChip(stageLabel(stages, contact.stage), tempRing(null))
             contact.temperature?.takeIf { it.isNotBlank() }?.let { t ->
-                val (label, col) = when (t) { "hot" -> "🔥 Hot" to RedL; "warm" -> "☀ Warm" to AmberL; else -> "❄ Cold" to ColdL }
+                val (label, col) = when (t) { "hot" -> "Hot" to RedL; "warm" -> "Warm" to AmberL; else -> "Cold" to ColdL }
                 LeadChip(label, col)
             }
-            budgetLabel(contact.budget)?.let { LeadChip("💰 ₹ $it", GreenL) }
+            budgetLabel(contact.budget)?.let { LeadChip("₹ $it", Ink) }
             // EVERY OTHER ANSWER THEY GAVE THE FORM — not the first three.
             //
             // The list card has room for a few; this is the screen a rep opens
@@ -1016,7 +1015,7 @@ private fun IdentityBlock(
             leadAnswers(contact).forEach { (label, value) ->
                 LeadChip(if (label == null) value else "$label · $value", SubInk)
             }
-            contact.territory?.takeIf { it.isNotBlank() }?.let { LeadChip("📍 $it", SubInk) }
+            contact.territory?.takeIf { it.isNotBlank() }?.let { LeadChip(it, SubInk) }
             isoMs(contact.createdAt)?.let { LeadChip("Added ${fmtWhen(it)}", SubInk) }
         }
         contact.aiNextAction?.takeIf { it.isNotBlank() }?.let { tip ->
@@ -1026,7 +1025,7 @@ private fun IdentityBlock(
                     .clickable { onNextTap() }.padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("👉  $tip", style = MaterialTheme.typography.bodyMedium, color = JadeL, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(tip, style = MaterialTheme.typography.bodyMedium, color = Ink, modifier = Modifier.weight(1f))
                 Icon(Icons.Default.KeyboardArrowRight, null, tint = JadeL, modifier = Modifier.size(18.dp))
             }
         }
@@ -1175,19 +1174,17 @@ private fun AiCoachCard(
 
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-            .shadow(6.dp, RoundedCornerShape(20.dp), ambientColor = SoftShadow, spotColor = SoftShadow)
-            .clip(RoundedCornerShape(20.dp)).background(CardBg).padding(16.dp),
+            .clip(Radii.card).background(CardBg)
+            .border(1.dp, Hair, Radii.card)
+            .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // NOT "AI COACH". A rep does not want a tool, they want to be told
             // what to say. Naming the robot makes them decide whether to open it;
             // naming the JOB makes them read it. The three tabs underneath say
             // what it does, so the header does not have to.
-            Text("🤖", fontSize = 18.sp)
-            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("WHAT TO SAY", style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                Text("What to say", style = AppType.rowTitle, color = AppColors.TextPrimary)
                 Text("Opening line, the counter to their objection, a message to send",
                     style = MaterialTheme.typography.labelSmall, color = SubInk)
             }
@@ -1200,14 +1197,14 @@ private fun AiCoachCard(
                 .background(SubInk.copy(alpha = 0.08f)).padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            AiModeSegment("🎯 Pitch", selected = mode == "pitch", modifier = Modifier.weight(1f)) {
+            AiModeSegment("Pitch", selected = mode == "pitch", modifier = Modifier.weight(1f)) {
                 chosen = "pitch"
                 if (brief == null && !briefLoading) onGenerate()
             }
-            AiModeSegment("🛡️ Objection", selected = mode == "objection", modifier = Modifier.weight(1f)) {
+            AiModeSegment("Objection", selected = mode == "objection", modifier = Modifier.weight(1f)) {
                 chosen = "objection"
             }
-            AiModeSegment("💬 Message", selected = mode == "message", modifier = Modifier.weight(1f)) {
+            AiModeSegment("Message", selected = mode == "message", modifier = Modifier.weight(1f)) {
                 chosen = "message"
             }
         }
@@ -1287,7 +1284,7 @@ private fun AiCoachCard(
                         .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
                         .padding(14.dp),
                 ) {
-                    Text("SAY THIS 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                    Text("Say this", style = AppType.metaStrong, color = AppColors.TextSecondary)
                     Spacer(Modifier.height(6.dp))
                     Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp)
                     Spacer(Modifier.height(10.dp))
@@ -1380,7 +1377,7 @@ private fun AiCoachCard(
                         .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
                         .padding(14.dp),
                 ) {
-                    Text("READY TO SEND 👇", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                    Text("Ready to send", style = AppType.metaStrong, color = AppColors.TextSecondary)
                     // WHY this message. Printed above the text on purpose: a
                     // rep who can see the reasoning can overrule it, and one
                     // who cannot is being asked to trust a black box with her
@@ -1430,13 +1427,13 @@ private fun AiCoachCard(
 private fun AiModeSegment(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier.clip(RoundedCornerShape(10.dp))
-            .background(if (selected) JadeL else Color.Transparent)
+            .background(if (selected) AppColors.Surface else Color.Transparent)
             .clickable { onClick() }
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
-            maxLines = 1, color = if (selected) Color.White else SubInk)
+        Text(label, style = AppType.metaStrong,
+            maxLines = 1, color = if (selected) AppColors.TextPrimary else SubInk)
     }
 }
 
@@ -1499,11 +1496,11 @@ private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
         Spacer(Modifier.height(10.dp))
 
         val promiseMs = isoMs(wada.promiseAt)
-        promiseMs?.let { WadaRow("📅", "Promise", fmtWhen(it) + (wada.promiseNote?.let { n -> " — $n" } ?: "")) }
-        wada.budget?.let { WadaRow("💰", "Budget", it) }
-        wada.preferences?.let { WadaRow("🏠", "Wants", it) }
-        if (wada.objections.isNotEmpty()) WadaRow("⚠️", "Blocker", wada.objections.joinToString(", "))
-        wada.timeline?.let { WadaRow("⏳", "Timeline", it) }
+        promiseMs?.let { WadaRow("Promise", fmtWhen(it) + (wada.promiseNote?.let { n -> " — $n" } ?: "")) }
+        wada.budget?.let { WadaRow("Budget", it) }
+        wada.preferences?.let { WadaRow("Wants", it) }
+        if (wada.objections.isNotEmpty()) WadaRow("Blocker", wada.objections.joinToString(", "))
+        wada.timeline?.let { WadaRow("Timeline", it) }
 
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -1519,10 +1516,8 @@ private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun WadaRow(emoji: String, label: String, value: String) {
-    Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
-        Text(emoji, fontSize = 14.sp)
-        Spacer(Modifier.width(8.dp))
+private fun WadaRow(label: String, value: String) {
+    Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = SubInk,
             modifier = Modifier.width(76.dp), fontWeight = FontWeight.SemiBold, maxLines = 1)
         Text(value, style = MaterialTheme.typography.bodyMedium, color = Ink,
@@ -1831,7 +1826,7 @@ private fun LeadActionBar(
                                 )
                             }),
                             Triple("Pick a time", IndigoL, { dismissed = true; askNext = false; onBookCallback() }),
-                            Triple("🏠 Book visit", PurpleL, { dismissed = true; askNext = false; onBookVisit() }),
+                            Triple("Book visit", PurpleL, { dismissed = true; askNext = false; onBookVisit() }),
                             Triple("No next step", SubInk, { dismissed = true; askNext = false }),
                         )
                         pending?.connected == false -> listOf(
@@ -1839,17 +1834,17 @@ private fun LeadActionBar(
                             // pick, so it is not offered one — the same rule the
                             // post-call sheet follows. These two book their own
                             // retry, which is why neither leads to the next step.
-                            Triple("📵 No answer", RedL, { onOutcome("no_answer") }),
-                            Triple("⏳ Busy", AmberL, { onOutcome("busy") }),
-                            Triple("✖️ Wrong number", RedL, { onOutcome("invalid") }),
-                            Triple("↻ Call back", IndigoL, { dismissed = true; onBookCallback() }),
+                            Triple("No answer", RedL, { onOutcome("no_answer") }),
+                            Triple("Busy", AmberL, { onOutcome("busy") }),
+                            Triple("Wrong number", RedL, { onOutcome("invalid") }),
+                            Triple("Call back", IndigoL, { dismissed = true; onBookCallback() }),
                         )
                         else -> listOf(
-                            Triple("✓ Connected", GreenL, { onOutcome("called"); askNext = true }),
-                            Triple("⭐ Interested", GreenL, { onOutcome("interested"); askNext = true }),
-                            Triple("🏠 Site visit", PurpleL, { dismissed = true; onBookVisit() }),
-                            Triple("❌ Not interested", SubInk, { onOutcome("not_interested") }),
-                            Triple("✖️ Wrong number", RedL, { onOutcome("invalid") }),
+                            Triple("Connected", GreenL, { onOutcome("called"); askNext = true }),
+                            Triple("Interested", GreenL, { onOutcome("interested"); askNext = true }),
+                            Triple("Site visit", PurpleL, { dismissed = true; onBookVisit() }),
+                            Triple("Not interested", SubInk, { onOutcome("not_interested") }),
+                            Triple("Wrong number", RedL, { onOutcome("invalid") }),
                         )
                     }
                     chips.chunked(2).forEach { pair ->
@@ -1868,34 +1863,37 @@ private fun LeadActionBar(
             // a long page instead of only at the top of it.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(
-                    Modifier.weight(1.3f).height(44.dp).clip(RoundedCornerShape(12.dp))
+                    Modifier.weight(1.45f).height(52.dp).clip(RoundedCornerShape(14.dp))
                         .background(IndigoL).clickable { onCall() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(17.dp))
+                    Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Call", color = Color.White, style = AppType.label, maxLines = 1)
                 }
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(8.dp))
                 Box(
-                    Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
-                        .background(WhatsGreen.copy(alpha = 0.13f)).clickable { onWhatsApp() },
+                    Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+                        .background(AppColors.Surface)
+                        .border(1.dp, AppColors.Border, RoundedCornerShape(14.dp))
+                        .clickable { onWhatsApp() },
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = WhatsGreen, modifier = Modifier.size(18.dp)) }
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(8.dp))
                 // Everything the strip does not cover — temperature, a typed note, a
                 // voice note — is behind this, in the sheet that already does it.
-                val tint = if (pending != null && !stripOpen) AmberL else IndigoL
+                val tint = if (pending != null && !stripOpen) AmberL else AppColors.TextPrimary
                 Row(
                     Modifier.nudgeShake(pending != null && !stripOpen)
-                        .weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
-                        .background(tint.copy(alpha = 0.12f))
+                        .weight(1f).height(48.dp).clip(RoundedCornerShape(14.dp))
+                        .background(if (pending != null && !stripOpen) AmberL.copy(alpha = 0.14f) else AppColors.Surface)
+                        .border(1.dp, if (pending != null && !stripOpen) AmberL else AppColors.Border, RoundedCornerShape(14.dp))
                         .clickable { onOpenUpdate() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    Text("✎ Update", color = tint, style = AppType.label, maxLines = 1)
+                    Text("Update", color = tint, style = AppType.label, maxLines = 1)
                 }
             }
         }
@@ -1908,17 +1906,17 @@ private fun LeadActionBar(
 private fun BarChip(label: String, tint: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier
-            .heightIn(min = 36.dp)
+            .heightIn(min = 44.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(tint.copy(alpha = 0.12f))
             .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            style = AppType.tag,
+            style = AppType.metaStrong,
             color = tint,
             maxLines = 2,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
@@ -2092,24 +2090,26 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
 
 @Composable
 private fun JourneyRow(atIso: String?, type: String, text: String, last: Boolean) {
-    val (emoji, tint) = when (type) {
-        "created" -> "🟢" to GreenL
-        "status" -> "🔁" to IndigoL
-        "temperature" -> "🌡️" to AmberL
-        "note" -> "📝" to SubInk
-        "budget" -> "💰" to GreenL
-        "site_visit" -> "📍" to PurpleL
-        "follow_up" -> "⏰" to JadeL
-        "call" -> "📞" to GreenL
+    val tint = when (type) {
+        "created" -> GreenL
+        "status" -> IndigoL
+        "temperature" -> AmberL
+        "note" -> SubInk
+        "budget" -> GreenL
+        "site_visit" -> PurpleL
+        "follow_up" -> JadeL
+        "call" -> GreenL
         // Observed from the rep's own WhatsApp — migration 0168. Without this
-        // it fell through to the generic pencil, which reads as "someone edited
-        // something" for the one activity a buyer actually received.
-        "whatsapp" -> "💬" to GreenL
-        else -> "✏️" to SubInk
+        // it fell through to the generic note colour, which reads as "someone
+        // edited something" for the one activity a buyer actually received.
+        "whatsapp" -> GreenL
+        else -> SubInk
     }
     Row(Modifier.fillMaxWidth()) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(28.dp).clip(CircleShape).background(tint.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) { Text(emoji, style = MaterialTheme.typography.labelMedium) }
+            Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(tint))
+            }
             if (!last) Box(Modifier.width(2.dp).height(24.dp).background(Hair))
         }
         Spacer(Modifier.width(10.dp))
@@ -2145,7 +2145,7 @@ private fun VoiceNoteRow(
         }
         when (n.aiStatus) {
             "ready" -> {
-                if (!n.summary.isNullOrBlank()) { Spacer(Modifier.height(8.dp)); Text("✨ AI: ${n.summary}", style = MaterialTheme.typography.bodySmall, color = Ink) }
+                if (!n.summary.isNullOrBlank()) { Spacer(Modifier.height(8.dp)); Text(n.summary!!, style = MaterialTheme.typography.bodySmall, color = Ink) }
                 n.suggestedDisposition?.takeIf { it.isNotBlank() }?.let { d ->
                     val label = SETTABLE.firstOrNull { it.first == d }?.second ?: d
                     Spacer(Modifier.height(6.dp))

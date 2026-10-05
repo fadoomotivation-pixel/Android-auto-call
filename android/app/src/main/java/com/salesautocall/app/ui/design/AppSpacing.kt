@@ -25,14 +25,14 @@ object Space {
 object Radii {
     val tag = RoundedCornerShape(999.dp)
     val control = RoundedCornerShape(12.dp)
-    val card = RoundedCornerShape(16.dp)
-    val sheet = RoundedCornerShape(20.dp)
+    val card = RoundedCornerShape(18.dp)
+    val sheet = RoundedCornerShape(22.dp)
 }
 
 internal val AppMaterialShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(10.dp),
     medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(16.dp),
-    extraLarge = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(18.dp),
+    extraLarge = RoundedCornerShape(22.dp),
 )

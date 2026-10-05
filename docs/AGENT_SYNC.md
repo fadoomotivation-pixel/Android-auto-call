@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (Android Apple-style UI polish)
+
+- WHAT: Visual pass on the telecaller phone. Grouped grey canvas, white cards, one action blue (`#007AFF`, token still named Indigo), large titles, line icons in place of emoji on the daily screens, a tab bar with no selected pill, and a larger Call control on the next-call card, lead rows, follow-up rows, and the lead page. Chips stay two across. Call all still shows only on Call now. No post-call popup, no fourth follow-up tab, no count added to a chip.
+- FILES: `android/.../ui/design/{AppColors,AppType,AppSpacing,Components}.kt`, `Theme.kt`, `AppRoot.kt`, `TelecallerScreens.kt`, `LeadDetailScreen.kt`, `docs/AI_COLLAB_RULES.md`.
+- WHY: Founder asked for the phone to feel like an Apple app. Same words, same queues, same buttons.
+- BUILD: `assembleStandardDebug`. No migration, no edge function, no admin.
+- NEXT/NOTE: Compose UI touched because the user asked. Dialer ranking, Call now, dispose, and fetchWorkStates are unchanged.
+
 ## 2026-10-05 — Cursor (capture banner sits in the page)
 
 - WHAT: The dead-WhatsApp strip is no longer a sticky card. It is one band in the dashboard shell, under the frosted title bar and above the page, full width of the main column. One title line, one detail line, the Scan a new QR link as a button on the right (stacked on a phone). Same query, same one mount in the dashboard layout. A single session still names the rep, the company, the status, both ages, and that messages sent while this is down are not recorded. The three-way sentence (disconnected, logged out, or the watchdog) stays when more than one session is down. It does not cover the lead cards.
