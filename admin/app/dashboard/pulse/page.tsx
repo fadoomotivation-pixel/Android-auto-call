@@ -36,24 +36,30 @@ export default async function PulsePage({
         A rep showing no activity may not be idle — <a href="/dashboard/health" style={{ color: "var(--accent)" }}>Phone Health</a> says
         whether their phone is even reporting.
       </p>
+      {isSuper && scope.companyId && (
+        <p className="subtitle" style={{ marginTop: -8 }}>
+          One company, from the link. <a href="/dashboard/pulse">Show every company</a>
+        </p>
+      )}
       <Suspense fallback={<RouteSkeleton title="Daily Pulse" bare />}>
-        <PulseData isSuper={isSuper} />
+        <PulseData isSuper={isSuper} companyId={scope.companyId} />
       </Suspense>
       <ModuleLinks current="pulse" scope={scope} />
     </>
   );
 }
 
-async function PulseData({ isSuper }: { isSuper: boolean }) {
+async function PulseData({ isSuper, companyId }: { isSuper: boolean; companyId: string | null }) {
   const { supabase } = await resolveScope(undefined, { require: "any" });
   const date = istToday();
   const { data, error } = await supabase.functions.invoke<{
     ok: boolean; error?: string; companies?: Company[];
-  }>("team-pulse", { body: { date } });
+  }>("team-pulse", { body: companyId ? { date, company_id: companyId } : { date } });
   const failed = error || !data?.ok;
   return (
     <PulseClient
       isSuper={isSuper}
+      companyId={companyId}
       initialDate={date}
       initialCompanies={failed ? [] : (data?.companies ?? [])}
       initialError={failed ? (data?.error || error?.message || "Couldn't build the pulse.") : null}

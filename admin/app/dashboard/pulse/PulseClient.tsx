@@ -147,11 +147,14 @@ function VoiceNotePlayer({ path }: { path: string }) {
 
 export function PulseClient({
   isSuper,
+  companyId = null,
   initialDate,
   initialCompanies,
   initialError,
 }: {
   isSuper: boolean;
+  /** Set when the address names one company. Null means every company. */
+  companyId?: string | null;
   initialDate: string;
   initialCompanies: Company[];
   initialError: string | null;
@@ -170,7 +173,7 @@ export function PulseClient({
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string; companies?: Company[] }>(
       "team-pulse",
-      { body: { date } },
+      { body: companyId ? { date, company_id: companyId } : { date } },
     );
     setBusy(false);
     if (error || !data?.ok) {
@@ -178,7 +181,7 @@ export function PulseClient({
       return;
     }
     setCompanies(data.companies || []);
-  }, [date]);
+  }, [date, companyId]);
 
   useEffect(() => {
     if (skipInitial.current) {

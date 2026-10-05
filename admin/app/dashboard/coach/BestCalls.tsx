@@ -38,10 +38,13 @@ const mmss = (s: number | null) => {
  */
 export function BestCalls({
   isSuper,
+  initialCompanyId = null,
   initialRows = null,
   initialError = null,
 }: {
   isSuper: boolean;
+  /** Company from ?company=. Null means every company. */
+  initialCompanyId?: string | null;
   initialRows?: Row[] | null;
   initialError?: string | null;
 }) {
@@ -49,7 +52,7 @@ export function BestCalls({
   const [rows, setRows] = useState<Row[] | null>(initialError ? [] : initialRows);
   const [period, setPeriod] = useState<"day" | "week">("day");
   const [days, setDays] = useState(14);
-  const [company, setCompany] = useState("all");
+  const [company, setCompany] = useState(initialCompanyId || "all");
   const [rep, setRep] = useState("all");
   const [err, setErr] = useState<string | null>(initialError);
 
@@ -116,10 +119,13 @@ export function BestCalls({
           <option value={30}>Last 30 days</option>
           <option value={90}>Last 90 days</option>
         </select>
-        {isSuper && companies.length > 1 && (
+        {isSuper && (companies.length > 1 || company !== "all") && (
           <select value={company} onChange={(e) => { setCompany(e.target.value); setRep("all"); }} style={{ width: "auto" }}>
             <option value="all">🏢 All companies</option>
             {companies.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            {company !== "all" && !companies.some(([id]) => id === company) && (
+              <option value={company}>Selected company</option>
+            )}
           </select>
         )}
         {reps.length > 1 && (

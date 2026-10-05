@@ -39,46 +39,54 @@ export default async function CoachPage({
         It generates automatically every night; you can also run today&apos;s on demand.
       </p>
 
-      <CoachPanel />
+      {isSuper && scope.companyId && (
+        <p className="subtitle" style={{ marginTop: -8 }}>
+          One company, from the link. <a href="/dashboard/coach">Show every company</a>
+        </p>
+      )}
+
+      <CoachPanel companyId={isSuper ? scope.companyId : null} />
 
       {/* Best calls and the digest list are independent reads. Each streams
           as soon as it returns instead of the page waiting on both. */}
       <Suspense fallback={<RouteSkeleton title="Best calls" bare />}>
-        <BestCallsData isSuper={isSuper} />
+        <BestCallsData isSuper={isSuper} companyId={isSuper ? scope.companyId : null} />
       </Suspense>
 
       <KnowledgeBase />
 
       <Suspense fallback={<RouteSkeleton title="AI Coach digests" bare />}>
-        <DigestList isSuper={isSuper} />
+        <DigestList isSuper={isSuper} companyId={isSuper ? scope.companyId : null} />
       </Suspense>
       <ModuleLinks current="coach" scope={scope} />
     </>
   );
 }
 
-async function BestCallsData({ isSuper }: { isSuper: boolean }) {
+async function BestCallsData({ isSuper, companyId }: { isSuper: boolean; companyId: string | null }) {
   const { supabase } = await resolveScope(undefined, { require: "any" });
   const { data, error } = await supabase.rpc("best_calls", { p_period: "day", p_days: 14 });
   return (
     <BestCalls
       isSuper={isSuper}
+      initialCompanyId={companyId}
       initialRows={error ? [] : ((data as BestRow[] | null) ?? [])}
       initialError={error?.message ?? null}
     />
   );
 }
 
-async function DigestList({ isSuper }: { isSuper: boolean }) {
+async function DigestList({ isSuper, companyId }: { isSuper: boolean; companyId: string | null }) {
   const { supabase } = await resolveScope(undefined, { require: "any" });
   // RLS scopes digests to the admin's company; super-admin sees all.
   // Company names run in parallel with the digest read, not after it.
+  let digestsQuery = supabase.from("manager_digests")
+    .select("id, company_id, digest_date, content, stats")
+    .order("digest_date", { ascending: false })
+    .limit(30);
+  if (isSuper && companyId) digestsQuery = digestsQuery.eq("company_id", companyId);
   const [digestsRes, companiesRes] = await Promise.all([
-    supabase.from("manager_digests")
-      .select("id, company_id, digest_date, content, stats")
-      .order("digest_date", { ascending: false })
-      .limit(30)
-      .returns<Digest[]>(),
+    digestsQuery.returns<Digest[]>(),
     isSuper
       ? supabase.from("companies").select("id, name").returns<{ id: string; name: string }[]>()
       : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
@@ -90,7 +98,13 @@ async function DigestList({ isSuper }: { isSuper: boolean }) {
   const rows = digestsRes.data ?? [];
 
   if (rows.length === 0) {
-    return <div className="empty">No digests yet. Click &ldquo;Generate today&apos;s digest&rdquo; to create your first one.</div>;
+    return (
+      <div className="empty">
+        {companyId
+          ? "No digest for this company yet. Generate today\u2019s digest to write one."
+          : "No digests yet. Click \u201cGenerate today\u2019s digest\u201d to create your first one."}
+      </div>
+    );
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 20 }}>

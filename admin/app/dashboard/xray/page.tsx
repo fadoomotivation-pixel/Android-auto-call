@@ -32,22 +32,29 @@ export default async function XrayPage({
         For one day&apos;s work per rep see <a href="/dashboard/pulse" style={{ color: "var(--accent)" }}>Daily Pulse</a>;
         for how fast leads get called see <a href="/dashboard/velocity" style={{ color: "var(--accent)" }}>Sales Velocity</a>.
       </p>
+      {isSuper && scope.companyId && (
+        <p className="subtitle" style={{ marginTop: -8 }}>
+          One company, from the link. <a href="/dashboard/xray">Show every company</a>
+        </p>
+      )}
       <Suspense fallback={<RouteSkeleton title="Sales X-Ray" bare />}>
-        <XrayData isSuper={isSuper} />
+        <XrayData isSuper={isSuper} companyId={isSuper ? scope.companyId : null} />
       </Suspense>
       <ModuleLinks current="xray" scope={scope} />
     </>
   );
 }
 
-async function XrayData({ isSuper }: { isSuper: boolean }) {
+async function XrayData({ isSuper, companyId }: { isSuper: boolean; companyId: string | null }) {
   const { supabase } = await resolveScope(undefined, { require: "any" });
   const companiesP = isSuper
     ? supabase.from("companies").select("id, name").order("name").returns<{ id: string; name: string | null }[]>()
     : Promise.resolve({ data: [] as { id: string; name: string | null }[], error: null });
-  const storedP = isSuper
-    ? supabase.from("sales_xray").select("company_id, report, created_at").order("created_at", { ascending: false }).limit(200)
-    : supabase.from("sales_xray").select("report, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const storedP = isSuper && companyId
+    ? supabase.from("sales_xray").select("report, created_at").eq("company_id", companyId).order("created_at", { ascending: false }).limit(1).maybeSingle()
+    : isSuper
+      ? supabase.from("sales_xray").select("company_id, report, created_at").order("created_at", { ascending: false }).limit(200)
+      : supabase.from("sales_xray").select("report, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle();
 
   const [companiesRes, storedRes] = await Promise.all([companiesP, storedP]);
   const companies = companiesRes.data ?? [];
@@ -57,8 +64,23 @@ async function XrayData({ isSuper }: { isSuper: boolean }) {
       <XrayClient
         isSuper={isSuper}
         companies={companies}
+        initialCompanyId={companyId ?? ""}
         initialError={storedRes.error.message}
-        initialAcross={isSuper ? [] : null}
+        initialAcross={isSuper && !companyId ? [] : null}
+      />
+    );
+  }
+
+  if (isSuper && companyId) {
+    const row = storedRes.data as { report: Report; created_at: string } | null;
+    return (
+      <XrayClient
+        isSuper
+        companies={companies}
+        initialCompanyId={companyId}
+        initialReport={row?.report ?? null}
+        initialAt={row?.created_at ?? null}
+        initialAcross={null}
       />
     );
   }

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export function CoachPanel() {
+export function CoachPanel({ companyId = null }: { companyId?: string | null }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +15,7 @@ export function CoachPanel() {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke<{ ok: boolean; error?: string }>(
       "manager-digest",
-      { body: {} },
+      { body: companyId ? { company_id: companyId } : {} },
     );
     setBusy(false);
     if (error || !data?.ok) {
