@@ -58,6 +58,7 @@ class ManualCallService : Service() {
         }
         val companyId = intent.getStringExtra(EXTRA_COMPANY_ID)
         val salespersonId = intent.getStringExtra(EXTRA_SALESPERSON_ID)
+        val contactId = intent.getStringExtra(EXTRA_CONTACT_ID)
         val record = intent.getBooleanExtra(EXTRA_RECORD, true)
         leadName = intent.getStringExtra(EXTRA_NAME)
         runCatching {
@@ -66,12 +67,18 @@ class ManualCallService : Service() {
             runCatching { startForeground(NOTIF_ID, notification("Calling $phone…")) }
         }
         if (job?.isActive != true) {
-            job = scope.launch { runCall(phone, companyId, salespersonId, record) }
+            job = scope.launch { runCall(phone, companyId, salespersonId, contactId, record) }
         }
         return START_NOT_STICKY
     }
 
-    private suspend fun runCall(phone: String, companyId: String?, salespersonId: String?, record: Boolean) {
+    private suspend fun runCall(
+        phone: String,
+        companyId: String?,
+        salespersonId: String?,
+        contactId: String?,
+        record: Boolean,
+    ) {
         while (stateChannel.tryReceive().isSuccess) { /* drain */ }
         val startedAt = Instant.now()
         var durationSec = 0
@@ -134,7 +141,7 @@ class ManualCallService : Service() {
         SimCallMonitor.end(this)
         // Persist BEFORE stopping — stopSelf() cancels this scope, and a launched
         // persist coroutine used to die mid-insert (calls vanished from history).
-        persist(phone, companyId, salespersonId, startedAt, durationSec, outcome, capture)
+        persist(phone, companyId, salespersonId, contactId, startedAt, durationSec, outcome, capture)
         // Push the log + recording to the CRM now, not at the next 15-min window,
         // so the manager sees the call almost live.
         com.salesautocall.app.data.SyncWorkers.syncNow(applicationContext)
@@ -154,7 +161,7 @@ class ManualCallService : Service() {
 
     /** Runs to completion even while the service shuts down (non-cancellable). */
     private suspend fun persist(
-        phone: String, companyId: String?, salespersonId: String?,
+        phone: String, companyId: String?, salespersonId: String?, contactId: String?,
         startedAt: Instant, durationSec: Int, outcome: String, capture: RecordingTruth.Capture,
     ) {
         kotlinx.coroutines.withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
@@ -165,6 +172,7 @@ class ManualCallService : Service() {
                     CallLog(
                         companyId = company,
                         salespersonId = sales,
+                        contactId = contactId,
                         phone = phone,
                         outcome = outcome,
                         startedAt = startedAt.toString(),
@@ -297,10 +305,11 @@ class ManualCallService : Service() {
         private const val EXTRA_SALESPERSON_ID = "salesperson_id"
         private const val EXTRA_RECORD = "record"
         private const val EXTRA_NAME = "name"
+        private const val EXTRA_CONTACT_ID = "contact_id"
 
         fun dial(
             context: Context, phone: String, companyId: String?, salespersonId: String?,
-            record: Boolean, name: String? = null,
+            record: Boolean, name: String? = null, contactId: String? = null,
         ) {
             val i = Intent(context, ManualCallService::class.java)
                 .putExtra(EXTRA_PHONE, phone)
@@ -308,6 +317,7 @@ class ManualCallService : Service() {
                 .putExtra(EXTRA_SALESPERSON_ID, salespersonId)
                 .putExtra(EXTRA_RECORD, record)
                 .putExtra(EXTRA_NAME, name)
+                .putExtra(EXTRA_CONTACT_ID, contactId)
             context.startService(i)
         }
     }

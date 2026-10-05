@@ -282,9 +282,9 @@ private fun openRowWhatsApp(
  */
 private val ACTIONS = listOf(
     ActionChip("call_now", "Call now", AppColors.Warning,
-        "Ring these now. Due today, brand new, or nobody picked up last time."),
+        "Everyone to ring now. Late callbacks, brand-new leads, and numbers nobody picked up. One list."),
     ActionChip("overdue", "Overdue", AppColors.Danger,
-        "You said you would call earlier and the time has gone. Do these first."),
+        "Already inside Call now. Only the ones whose booked time has passed."),
     ActionChip("due_today", "Due today", AppColors.Teal,
         "Booked for later today. They come to Call now on their own, at their time."),
     ActionChip("scheduled", "Later", AppColors.Indigo,
@@ -1090,7 +1090,6 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     LaunchedEffect(Unit) { vm.loadHome(); vm.loadLeads() }
 
     val firstName = app.profile?.fullName?.substringBefore(' ')?.takeIf { it.isNotBlank() } ?: "there"
-    val due = vm.dueNowCount()
     // Home is the screen a rep opens fifty times a day, and every one of these
     // walks the whole lead list. They only change when the leads do, so they are
     // computed once per load instead of on every recomposition — and the status
@@ -1122,21 +1121,23 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     val tokenCollected = home.tokenCollected
     val hotUncontacted = home.hotUncontacted
     val unprotected = home.unprotected
-    // Today's Plan buckets — WHO asked for a callback, WHOSE visit is fixed,
-    // WHOSE visit already happened. Names up front, not buried in statuses.
+    // Today's Plan — who is due now, whose visit is fixed, whose visit
+    // already happened. The due count is Call now, not every future callback.
     val nowMs = System.currentTimeMillis()
-    // Same five-tier order as Call all. Oldest diary put the app's own "11 AM"
-    // ahead of a buyer who wrote this morning.
-    val callbacks = remember(app.followUpList, app.workByLead) {
-        app.followUpList.sortedWith(
-            compareBy(
-                { f: FollowUp -> callNowTier(f.contactId?.let { app.workByLead[it] }) },
-                { f: FollowUp ->
-                    val w = f.contactId?.let { app.workByLead[it] }
-                    if (w == null) isoMillis(f.dueAt) ?: Long.MAX_VALUE else callNowTieKey(w, null)
-                },
-            ),
-        )
+    // Today's Plan callbacks are the due list. The title count, the three
+    // rows, and "+N more" all come from this. followUpList includes callbacks
+    // booked for next week, and that is how the title said 320 due over rows
+    // that were not due.
+    val dueContacts = remember(app.leads, app.workByLead) {
+        callNowContacts(app.leads, app.workByLead)
+    }
+    val fuByDueId = remember(app.followUpList) {
+        buildMap {
+            for (f in app.followUpList) {
+                val id = f.contactId ?: continue
+                put(id, f)
+            }
+        }
     }
     val visitsPlanned = app.leads
         .mapNotNull { c -> c.siteVisitAt?.let { instantMillis(it) }?.let { ms -> c to ms } }
@@ -1255,7 +1256,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // TODAY'S PLAN — the rep's whole day, by what the customer said:
         // who asked for a callback, whose site visit is fixed, whose visit
         // happened (and now needs closing). Names first, statuses never.
-        if (callbacks.isNotEmpty() || visitsPlanned.isNotEmpty() || visitsDoneShown.isNotEmpty() ||
+        if (dueContacts.isNotEmpty() || visitsPlanned.isNotEmpty() || visitsDoneShown.isNotEmpty() ||
             (showLocalUnconfirmed && visitsUnconfirmed.isNotEmpty()) ||
             showServerVisits || visitBoard.error != null
         ) {
@@ -1268,24 +1269,31 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 ) {
                     Column {
                         SectionHeader(
-                            if (due > 0) "Today's Plan · $due due now" else "Today's Plan",
+                            if (dueContacts.isNotEmpty()) "Today's Plan · ${dueContacts.size} due now" else "Today's Plan",
                             "All follow-ups", onOpenFollowUps,
                         )
                         PlanBucket(
-                            icon = Icons.Outlined.Refresh, title = "Asked to call back", color = Indigo,
-                            rows = callbacks.take(3).map { f ->
-                                val work = f.contactId?.let { app.workByLead[it] }
-                                val why = dueSignal(work, app.focusReason(f.contactId))
-                                val extra = focusSayLine(app.coachPicks, f.contactId)
-                                    ?: rowMemoryLine(f.contactId?.let { app.memoryByLead[it] })
+                            icon = Icons.Outlined.Refresh, title = "Call now", color = Indigo,
+                            rows = dueContacts.take(3).map { c ->
+                                val work = c.id?.let { app.workByLead[it] }
+                                val fu = c.id?.let { fuByDueId[it] }
+                                val whenIso = work?.dueAt ?: fu?.dueAt
+                                val why = dueSignal(work, app.focusReason(c.id))
+                                val extra = focusSayLine(app.coachPicks, c.id)
+                                    ?: rowMemoryLine(c.id?.let { app.memoryByLead[it] })
                                 val detail = when {
                                     why != null && extra != null -> "$why · $extra"
-                                    else -> why ?: extra ?: f.note
+                                    else -> why ?: extra ?: fu?.note
                                 }
-                                PlanRow(f.name ?: f.phone, relativeDue(f.dueAt), detail, f.phone,
-                                    overdue = (instantMillis(f.dueAt) ?: Long.MAX_VALUE) <= nowMs)
+                                PlanRow(
+                                    c.name ?: c.phone,
+                                    if (whenIso.isNullOrBlank()) "Due now" else relativeDue(whenIso),
+                                    detail,
+                                    c.phone,
+                                    overdue = whenIso.isNullOrBlank() || (instantMillis(whenIso) ?: Long.MAX_VALUE) <= nowMs,
+                                )
                             },
-                            more = callbacks.size - 3, onCall = { vm.dialManual(it) },
+                            more = dueContacts.size - 3, onCall = { vm.dialManual(it) },
                         )
                         PlanBucket(
                             icon = Icons.Outlined.LocationOn, title = "Site visit fixed", color = Purple,
@@ -2163,7 +2171,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         // already carries last_call_at and the Leads screen already loads it,
         // so this is a client-side filter over data that was on screen.
         quick == "called" -> app.leads.filter { isToday(app.workOf(it)?.lastCallAt) }
-        quick == "retry" -> app.leads.filter { app.actionOf(it) == "call_now" }
+        quick == "retry" -> app.leads.filter { isNoAnswerRetry(it, app.workOf(it)) }
         // THE HOME DECK'S TWO BUTTONS LAND HERE, and until now they landed
         // nowhere. "followup" and "new" match neither the "act:" nor the
         // "stage:" prefix below, so both fell through to `else -> app.leads`
@@ -2186,11 +2194,16 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         // a second opinion computed here is exactly the drift being removed.
         bucket.startsWith("act:") -> {
             val code = bucket.removePrefix("act:")
-            val rows = app.leads.filter { app.actionOf(it) == code }
-            // Call now and Overdue are the dial queues. Same five tiers as
-            // Call all. The diary chips stay in time order.
-            if (code == "call_now" || code == "overdue") rows.sortedWith(callNowOrder(app.workByLead))
-            else rows.sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
+            when (code) {
+                // The tile says Call now. That is the same set as Call all,
+                // Home's due count, and Follow-ups Call now. Overdue alone is
+                // the late slice, and its hint says those people are already here.
+                "call_now" -> queue
+                "overdue" -> app.leads.filter { app.actionOf(it) == "overdue" }
+                    .sortedWith(callNowOrder(app.workByLead))
+                else -> app.leads.filter { app.actionOf(it) == code }
+                    .sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
+            }
         }
         bucket.startsWith("stage:") ->
             app.leads.filter { it.stage == bucket.removePrefix("stage:") }
@@ -2316,7 +2329,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         // "Due now" lands on Follow-up, which opens on Call now
                         // — the list this number counts. It used to drop the rep
                         // into New, where none of these leads live any more.
-                        onDueNow = { bucket = "followup"; stageFilter = null; quick = null; tempFilter = null },
+                        onDueNow = { bucket = "act:call_now"; stageFilter = null; quick = null; tempFilter = null },
                         onHot = { tempFilter = if (tempFilter == "hot") null else "hot" },
                         onNew = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },
                         onRevive = { reviveOpen = true; vm.loadSecondChance() },
@@ -2427,7 +2440,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 // This was six passes over three hundred leads on every
                 // recomposition, and this screen recomposes on every scroll.
                 val actionCounts = remember(app.leads, app.workByLead) {
-                    ACTIONS.map { a -> a to app.leads.count { app.actionOf(it) == a.code } }
+                    val callNow = callNowContacts(app.leads, app.workByLead).size
+                    ACTIONS.map { a ->
+                        val n = if (a.code == "call_now") callNow else app.leads.count { app.actionOf(it) == a.code }
+                        a to n
+                    }
                 }
                 WorkGrid(
                     counts = actionCounts,
@@ -2471,7 +2488,12 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 val active = buildList {
                     stageFilter?.let { sf -> add(Triple("stage", app.leadStages.firstOrNull { it.code == sf }?.label ?: sf) { stageFilter = null }) }
                     quick?.let { q ->
-                        val ql = when (q) { "called" -> "Called today"; "today" -> "Added today"; else -> "Retry" }
+                        val ql = when (q) {
+                            "called" -> "Called today"
+                            "today" -> "Added today"
+                            "retry" -> "Retry (no answer)"
+                            else -> q
+                        }
                         add(Triple("quick", ql) { quick = null })
                     }
                     tempFilter?.let { t -> add(Triple("temp", when (t) { "hot" -> "🔥 Hot"; "warm" -> "🌤 Warm"; else -> "❄️ Cold" }) { tempFilter = null }) }

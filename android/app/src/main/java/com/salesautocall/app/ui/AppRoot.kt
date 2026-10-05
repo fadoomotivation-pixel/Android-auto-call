@@ -632,7 +632,10 @@ private fun MainShell(vm: MainViewModel) {
                 role = state.profile?.role ?: "salesperson",
                 companyName = state.company?.name,
                 currentRoute = currentRoute,
-                followUps = state.followUpList.size,
+                // Call now, not every pending callback. A failed due read with
+                // nothing kept is a dash — a 0 there would be a quiet day.
+                callNow = if (state.workStatesError != null && state.workByLead.isEmpty()) "—"
+                    else callNowContacts(state.leads, state.workByLead).size.toString(),
                 siteVisits = state.leads.count { it.status == "site_visit" },
                 pipelineValue = pipelineValue(state.leads, state.leadStages),
                 onNavigate = { route ->
@@ -1382,7 +1385,7 @@ private fun AppDrawer(
     role: String,
     companyName: String?,
     currentRoute: String?,
-    followUps: Int,
+    callNow: String,
     siteVisits: Int,
     pipelineValue: String,
     onNavigate: (String) -> Unit,
@@ -1413,7 +1416,7 @@ private fun AppDrawer(
     // taps it once learns the menu lies; a rep who taps it twice stops reading
     // the menu. It comes back when there is a screen behind it.
     val more = listOf(
-        NavRow("Follow Ups", "Your due-now worklist", Icons.Default.AccessTime, "followups"),
+        NavRow("Follow Ups", "Opens on Call now", Icons.Default.AccessTime, "followups"),
         NavRow("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance"),
         NavRow("Calls & Recordings", "History and recordings", Icons.Default.Call, "calls"),
     )
@@ -1451,7 +1454,7 @@ private fun AppDrawer(
                     Text("TODAY'S OPPORTUNITIES", style = MaterialTheme.typography.labelSmall, color = MenuMuted, letterSpacing = 1.sp)
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth()) {
-                        OppStat(followUps.toString(), "Follow-ups", Modifier.weight(1f))
+                        OppStat(callNow, "Call now", Modifier.weight(1f))
                         OppStat(siteVisits.toString(), "Site visits", Modifier.weight(1f))
                         OppStat(pipelineValue, "Pipeline", Modifier.weight(1f))
                     }

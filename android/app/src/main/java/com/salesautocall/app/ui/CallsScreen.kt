@@ -91,12 +91,20 @@ fun CallsScreen(vm: MainViewModel) {
     // Opens on App — the calls made through the CRM. Phone is the handset's
     // entire log, personal calls included, and it is not what a telecaller
     // comes here to check.
-    var sub by remember { mutableIntStateOf(1) } // 0 = Phone, 1 = App, 2 = Missed, 3 = Follow-up
+    var sub by remember { mutableIntStateOf(1) } // 0 = Phone, 1 = App, 2 = Missed, 3 = No answer
 
     // Build phone/id → name lookups ONCE per lead-list change, not per row per
     // scroll frame. A linear app.leads.find() on every visible row was the fling jank.
     val nameByPhone = remember(app.leads) {
-        app.leads.mapNotNull { l -> l.name?.takeIf { it.isNotBlank() }?.let { l.phone.filter { c -> c.isDigit() }.takeLast(10) to it } }.toMap()
+        val map = mutableMapOf<String, String>()
+        for (l in app.leads) {
+            val name = l.name?.takeIf { it.isNotBlank() } ?: continue
+            for (raw in listOf(l.phone, l.altPhone)) {
+                val key = raw?.filter { it.isDigit() }?.takeLast(10) ?: continue
+                if (key.length >= 10) map.putIfAbsent(key, name)
+            }
+        }
+        map
     }
     val nameById = remember(app.leads) {
         app.leads.mapNotNull { l -> l.id?.let { id -> l.name?.takeIf { it.isNotBlank() }?.let { id to it } } }.toMap()
@@ -107,7 +115,15 @@ fun CallsScreen(vm: MainViewModel) {
         app.leads.mapNotNull { l -> l.id?.let { id -> l.companyName?.takeIf { it.isNotBlank() }?.let { id to it } } }.toMap()
     }
     val projectByPhone = remember(app.leads) {
-        app.leads.mapNotNull { l -> l.companyName?.takeIf { it.isNotBlank() }?.let { l.phone.filter { c -> c.isDigit() }.takeLast(10) to it } }.toMap()
+        val map = mutableMapOf<String, String>()
+        for (l in app.leads) {
+            val project = l.companyName?.takeIf { it.isNotBlank() } ?: continue
+            for (raw in listOf(l.phone, l.altPhone)) {
+                val key = raw?.filter { it.isDigit() }?.takeLast(10) ?: continue
+                if (key.length >= 10) map.putIfAbsent(key, project)
+            }
+        }
+        map
     }
     fun projectFor(c: CallLog): String? =
         c.contactId?.let { projectById[it] } ?: projectByPhone[c.phone.filter { it.isDigit() }.takeLast(10)]
@@ -116,22 +132,35 @@ fun CallsScreen(vm: MainViewModel) {
         c.contactId?.let { nameById[it] } ?: nameByPhone[c.phone.filter { it.isDigit() }.takeLast(10)]
 
     val known = remember(app.leads) {
-        app.leads.associateBy { it.phone.filter { ch -> ch.isDigit() }.takeLast(10) }
+        val map = mutableMapOf<String, com.salesautocall.app.data.Contact>()
+        for (l in app.leads) {
+            for (raw in listOf(l.phone, l.altPhone)) {
+                val key = raw?.filter { it.isDigit() }?.takeLast(10) ?: continue
+                if (key.length >= 10) map.putIfAbsent(key, l)
+            }
+        }
+        map
+    }
+    // A callback whose lead row is not on this page still belongs to a lead.
+    val followUpPhones = remember(app.followUpList) {
+        app.followUpList.mapNotNull { f ->
+            f.phone.filter { it.isDigit() }.takeLast(10).takeIf { it.length >= 10 }
+        }.toSet()
     }
 
     // ONE list, and every tab and every count derives from it.
     //
-    // App, Missed, and Follow-up are her lead calls only. A number that is not
-    // a lead — no contact on the call, and no lead with that phone — is left
-    // out. There is no row and no empty line that says so. The Phone tab is
+    // App, Missed, and No answer are her lead calls only. A number with no
+    // lead is left out. The screen does not say why. A call that is linked,
+    // or whose phone matches a lead or a callback, stays — including a harvest
+    // miss. The warning on the row is how that miss is said. The Phone tab is
     // the handset log and is not this list.
     //
-    // Counts come from the same list as the rows. A count built from every
-    // call and a list built from some of them once read "Follow-up (56)" over
-    // an empty screen.
-    val visible = remember(app.callList, known) {
-        app.callList.filter { isLeadCall(it, known) }
+    // Counts come from the same list as the rows.
+    val visible = remember(app.callList, known, followUpPhones) {
+        app.callList.filter { isLeadCall(it, known, followUpPhones) }
     }
+    LaunchedEffect(app.callList, app.leads, app.followUpList) { vm.linkVisibleCallsToLeads() }
     val leadSummary = remember(visible) {
         CallSummary(
             total = visible.size,
@@ -189,7 +218,7 @@ fun CallsScreen(vm: MainViewModel) {
             Tab(selected = sub == 2, onClick = { sub = 2 },
                 text = { Text(if (missed.isEmpty()) "Missed" else "Missed ${missed.size}") })
             Tab(selected = sub == 3, onClick = { sub = 3 },
-                text = { Text(if (followUps.isEmpty()) "Follow-up" else "Follow-up ${followUps.size}") })
+                text = { Text(if (followUps.isEmpty()) "No answer" else "No answer ${followUps.size}") })
         }
 
         if (sub == 0) {
@@ -236,7 +265,7 @@ fun CallsScreen(vm: MainViewModel) {
             rows.isEmpty() -> Text(
                 when (sub) {
                     2 -> "No missed calls 🎉"
-                    3 -> "No follow-ups — every call connected 🎉"
+                    3 -> "No unanswered calls in this period."
                     else -> "No calls in this period yet."
                 },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -378,13 +407,20 @@ private fun PhoneRecentRow(
 
 /**
  * A call belongs on the recordings list when it is one of her leads.
- * Linked by contact id, or by the same last-10 digits as a lead she has.
- * Anything else is omitted. The screen does not say why.
+ *
+ * Linked by contact id, or by the same last-10 digits as a loaded lead
+ * (including the alt number) or a pending callback. A harvest miss on that
+ * call stays in the list; [com.salesautocall.app.dialer.RecordingTruth] is
+ * what the row says. Anything else is omitted. The screen does not say why.
  */
-private fun isLeadCall(c: CallLog, knownByPhone: Map<String, com.salesautocall.app.data.Contact>): Boolean {
+private fun isLeadCall(
+    c: CallLog,
+    knownByPhone: Map<String, com.salesautocall.app.data.Contact>,
+    followUpPhones: Set<String>,
+): Boolean {
     if (!c.contactId.isNullOrBlank()) return true
     val digits = c.phone.filter { it.isDigit() }.takeLast(10)
-    return digits.length >= 10 && knownByPhone.containsKey(digits)
+    return digits.length >= 10 && (knownByPhone.containsKey(digits) || digits in followUpPhones)
 }
 
 /** "Today" / "Yesterday" / "12 Jun" bucket header for the phone recents list. */

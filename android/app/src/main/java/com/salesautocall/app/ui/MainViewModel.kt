@@ -1325,6 +1325,58 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Call ids we already tried to link this session. A failure is removed so the next load can try again. */
+    private val linkedCallAttempts = HashSet<String>()
+
+    /**
+     * An unlinked call whose phone is one of her leads gets that lead's id.
+     *
+     * The recordings list already keeps the row from the phone match, including
+     * a harvest miss. This write is so the next read does not depend on the
+     * lead still sitting in whatever page was loaded. A rejected write does
+     * not hide the row and does not toast a success.
+     */
+    fun linkVisibleCallsToLeads() {
+        val st = _state.value
+        val byPhone = HashMap<String, String>()
+        for (lead in st.leads) {
+            val id = lead.id ?: continue
+            for (raw in listOf(lead.phone, lead.altPhone)) {
+                val key = raw?.filter { it.isDigit() }?.takeLast(10) ?: continue
+                if (key.length >= 10) byPhone.putIfAbsent(key, id)
+            }
+        }
+        for (fu in st.followUpList) {
+            val id = fu.contactId ?: continue
+            val key = fu.phone.filter { it.isDigit() }.takeLast(10)
+            if (key.length >= 10) byPhone.putIfAbsent(key, id)
+        }
+        val todo = ArrayList<Pair<String, String>>()
+        for (c in st.callList) {
+            val callId = c.id ?: continue
+            if (!c.contactId.isNullOrBlank()) continue
+            if (callId in linkedCallAttempts) continue
+            val leadId = byPhone[c.phone.filter { it.isDigit() }.takeLast(10)] ?: continue
+            linkedCallAttempts += callId
+            todo += callId to leadId
+        }
+        if (todo.isEmpty()) return
+        viewModelScope.launch {
+            for ((callId, leadId) in todo) {
+                val ok = runCatching { Repository.linkCallToContact(callId, leadId) }.isSuccess
+                if (!ok) {
+                    linkedCallAttempts -= callId
+                    continue
+                }
+                set { s ->
+                    s.copy(callList = s.callList.map { row ->
+                        if (row.id == callId) row.copy(contactId = leadId, offCrm = false) else row
+                    })
+                }
+            }
+        }
+    }
+
     /**
      * Backfills recordings for already-logged calls by matching the dialer's
      * files (oDialer/Truecaller name their files "<phone>-<time>.<ext>") to each
@@ -1402,14 +1454,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun dialManual(phone: String) {
         val clean = phone.trim()
         if (clean.isEmpty()) return
-        // Resolve the lead's name now so the in-call screen (and the system
-        // overlay) can show it — the call screen no longer holds a ViewModel.
+        // Resolve the lead now so the call row is linked when it is written.
+        // A phone match after the fact used to depend on the lead still being
+        // inside a 500-row window. The alt number counts: that is the same person.
         val key = clean.filter { it.isDigit() }.takeLast(10)
-        val name = _state.value.leads.firstOrNull {
-            !it.name.isNullOrBlank() && it.phone.filter { c -> c.isDigit() }.takeLast(10) == key
-        }?.name
+        val lead = if (key.length < 10) null else _state.value.leads.firstOrNull { c ->
+            listOf(c.phone, c.altPhone).any { raw ->
+                raw?.filter { ch -> ch.isDigit() }?.takeLast(10) == key
+            }
+        }
         com.salesautocall.app.dialer.ManualCallService.dial(
-            getApplication(), clean, _state.value.company?.id, null, recordingEnabled(), name,
+            getApplication(), clean, _state.value.company?.id, null, recordingEnabled(),
+            name = lead?.name, contactId = lead?.id,
         )
     }
 
@@ -3844,13 +3900,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 Repository.setCloseProbability(contactId, probability)
                 Repository.setDisposition(contactId, nextStatus, null)
             }.onSuccess {
+                // Booked and Lost leave Call now on the success path too, not
+                // only on the optimistic stamp. A refresh that landed while
+                // this write was in flight would otherwise paint the old stage
+                // back. A rejected write restores the snapshot below.
+                if (isTerminalDisposition(nextStatus)) markWorkedLocally(contactId, "none")
                 val nowIso = java.time.Instant.now().toString()
                 set { st ->
                     st.copy(
                         leads = st.leads.map { c ->
                             if (c.id != contactId) c
                             else c.copy(
-                                status = nextStatus, closeProbability = probability,
+                                status = nextStatus,
+                                stage = stageAfterDisposition(c.stage, nextStatus, st.leadStages),
+                                closeProbability = probability,
                                 closeProbabilityAt = nowIso, handledAt = nowIso,
                                 tokenAmount = tokenAmount ?: c.tokenAmount,
                                 siteVisitOutcome = outcome,
@@ -4360,15 +4423,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 else -> current
             }
+            if (_state.value.messageDraftId != id) return@launch
             if (CaptureHealth.recordsSends(snapshot)) {
                 // She may have tapped "Not this one" while the read was in
                 // flight. That already wrote skipped. Do not overwrite it.
-                if (_state.value.messageDraftId == id) Repository.markDraft(id, "opened")
-            } else if (_state.value.messageDraftId == id) {
+                val saved = runCatching { Repository.markDraft(id, "opened") }.isSuccess
+                if (!saved && _state.value.messageDraftId == id) {
+                    // The card must not vanish as if the send was saved.
+                    sayDraftNotSaved(snapshot)
+                }
+            } else {
                 // Leave the server row as suggested. Do not mark skipped —
-                // she may have sent it, and we cannot see that.
-                clearMessageDraft()
+                // she may have sent it, and we cannot see that. WhatsApp
+                // still opens; the toast is what stops that looking saved.
+                sayDraftNotSaved(snapshot)
             }
+        }
+    }
+
+    /** Clears the draft card and says why, using [CaptureHealth.draftWarning]. */
+    private fun sayDraftNotSaved(snapshot: CaptureHealth.Snapshot) {
+        val warning = CaptureHealth.draftWarning(snapshot)
+            ?: "This message was not saved."
+        set {
+            it.copy(
+                messageDraft = null,
+                messageDraftReason = null,
+                messageDraftId = null,
+                messageVerdict = null,
+                messageSentCount = 0,
+                coachError = null,
+                waNote = warning,
+            )
         }
     }
 

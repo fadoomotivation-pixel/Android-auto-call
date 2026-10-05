@@ -182,6 +182,21 @@ object Repository {
         put("off_crm", c.offCrm)
     }
 
+    /**
+     * Attach an unlinked call to the lead whose phone it already matches.
+     *
+     * The list still shows that call from the phone match if this write is
+     * rejected. A failed link must not be the reason a harvest miss disappears.
+     */
+    suspend fun linkCallToContact(callId: String, contactId: String) {
+        client.from("call_logs").update(
+            buildJsonObject {
+                put("contact_id", contactId)
+                put("off_crm", false)
+            },
+        ) { filter { eq("id", callId) } }
+    }
+
     /** Force a call's recording_status (e.g. "failed" when no audio was captured). */
     suspend fun markRecordingStatus(callLogId: String, status: String, error: String? = null) {
         client.from("call_logs").update(
@@ -1200,17 +1215,26 @@ object Repository {
         }.decodeList<CallLog>().filter { !it.offCrm }
     }
 
-    /** This salesperson's calls since [sinceIso] (null = no lower bound). Newest first. */
-    suspend fun fetchCalls(sinceIso: String?, limit: Int = 300): List<CallLog> {
+    /**
+     * This salesperson's calls since [sinceIso] (null = no lower bound). Newest first.
+     *
+     * A hard 300 hid a harvest miss once the day was longer than that. Page
+     * until a short page, and stop at [limit] only as a fuse. A full last page
+     * at the fuse is still a cap — it is not "these are all the calls".
+     */
+    suspend fun fetchCalls(sinceIso: String?, limit: Int = 2000): List<CallLog> {
         val uid = currentUserId() ?: return emptyList()
-        return client.from("call_logs").select {
-            filter {
-                eq("salesperson_id", uid)
-                if (sinceIso != null) gte("created_at", sinceIso)
-            }
-            order("created_at", Order.DESCENDING)
-            limit(limit.toLong())
-        }.decodeList<CallLog>()
+        return readPages(pageSize = 400, ceiling = limit.coerceIn(400, 5_000)) { from, to ->
+            client.from("call_logs").select {
+                filter {
+                    eq("salesperson_id", uid)
+                    if (sinceIso != null) gte("created_at", sinceIso)
+                }
+                order("created_at", Order.DESCENDING)
+                order("id", Order.DESCENDING)
+                range(from, to)
+            }.decodeList<CallLog>()
+        }
     }
 
     /** Full call history for one lead — newest first — for the lead detail page. */
@@ -1644,14 +1668,25 @@ object Repository {
 
     // ---------- lead pipeline ----------
 
-    /** Every contact this salesperson owns, newest activity first — the pipeline. */
-    suspend fun fetchLeads(limit: Int = 500): List<Contact> {
+    /**
+     * Every contact this salesperson owns, newest activity first.
+     *
+     * A hard 500 dropped older untouched New leads. They sort to the end of
+     * `updated_at`, and on the account this was measured against (~542 leads)
+     * those are exactly the people Call now is supposed to include. Page until
+     * a short page. 5_000 is a fuse so a stuck server cannot loop; it is not
+     * a quiet "we have everyone" if a page comes back full at the fuse.
+     */
+    suspend fun fetchLeads(): List<Contact> {
         val uid = currentUserId() ?: return emptyList()
-        return client.from("contacts").select {
-            filter { eq("salesperson_id", uid) }
-            order("updated_at", Order.DESCENDING)
-            limit(limit.toLong())
-        }.decodeList<Contact>()
+        return readPages(pageSize = 500, ceiling = 5_000) { from, to ->
+            client.from("contacts").select {
+                filter { eq("salesperson_id", uid) }
+                order("updated_at", Order.DESCENDING)
+                order("id", Order.DESCENDING)
+                range(from, to)
+            }.decodeList<Contact>()
+        }
     }
 
     /** Leads assigned to me after [sinceIso] (newest first) — for the app-open
@@ -2085,17 +2120,48 @@ object Repository {
         return client.from("follow_ups").insert(fu) { select() }.decodeSingleOrNull<FollowUp>()
     }
 
-    /** This salesperson's follow-ups, soonest-due first. [includeDone] keeps history. */
+    /**
+     * This salesperson's follow-ups, soonest-due first. [includeDone] keeps history.
+     *
+     * Pending used to stop at 300. One open callback per lead, and the same
+     * account has ~542 leads, so the cap cut the diary the same way the lead
+     * cap cut Call now. Page until a short page.
+     */
     suspend fun fetchFollowUps(includeDone: Boolean = false): List<FollowUp> {
         val uid = currentUserId() ?: return emptyList()
-        return client.from("follow_ups").select {
-            filter {
-                eq("salesperson_id", uid)
-                if (!includeDone) eq("status", "pending")
-            }
-            order("due_at", Order.ASCENDING)
-            limit(300L)
-        }.decodeList<FollowUp>()
+        return readPages(pageSize = 400, ceiling = 5_000) { from, to ->
+            client.from("follow_ups").select {
+                filter {
+                    eq("salesperson_id", uid)
+                    if (!includeDone) eq("status", "pending")
+                }
+                order("due_at", Order.ASCENDING)
+                order("id", Order.ASCENDING)
+                range(from, to)
+            }.decodeList<FollowUp>()
+        }
+    }
+
+    /**
+     * Read [read] in inclusive PostgREST pages until a short page or [ceiling].
+     * [ceiling] is a fuse. Hitting it with a full page means rows may remain.
+     */
+    private suspend fun <T> readPages(
+        pageSize: Int,
+        ceiling: Int,
+        read: suspend (from: Long, to: Long) -> List<T>,
+    ): List<T> {
+        val out = ArrayList<T>(pageSize)
+        var from = 0L
+        while (out.size < ceiling) {
+            val room = ceiling - out.size
+            val size = minOf(pageSize, room)
+            val batch = read(from, from + size - 1)
+            out.addAll(batch)
+            if (batch.size < size) break
+            from += size
+        }
+        return out
     }
 
     /** Marks a follow-up done (after the callback has been made). */
