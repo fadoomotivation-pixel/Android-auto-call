@@ -118,6 +118,10 @@ data class AppState(
      *  AND the last real call. Never computed on the phone — one clock, and it
      *  lives in the database. */
     val workByLead: Map<String, LeadWork> = emptyMap(),
+    /** contact id -> lead_memory. Refreshed with the work-state read so a
+     *  harvest that landed at noon is on the row the same afternoon.
+     *  Missing key means no memory, once a read has succeeded. */
+    val memoryByLead: Map<String, com.salesautocall.app.data.LeadMemory> = emptyMap(),
     /**
      * The work-state read failed and there is no earlier copy to keep showing.
      * Due now must not render as 0 while this is set — 0 would be a quiet day,
@@ -287,6 +291,8 @@ data class AppState(
     val coachLoading: Boolean = false,
     val coachPicks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
     val coachPicksLoading: Boolean = false,
+    /** True after a successful focus-five read, including a real empty list. */
+    val coachPicksReady: Boolean = false,
     /** Set when focus-five failed. Empty picks plus this null means the
      *  server named nobody. Empty picks plus this set means we do not know. */
     val coachPicksError: String? = null,
@@ -1705,11 +1711,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             lastWorkFetchAt = System.currentTimeMillis()
             val epoch = ++workEpoch
             val workResult = uid?.let { runCatching { Repository.fetchWorkStates(it) } }
+            val memoryResult = uid?.let { runCatching { Repository.fetchLeadMemories(it) } }
             runCatching { Repository.fetchLeads() }
                 .onSuccess { list ->
                     set { st ->
                         val withWork = if (workResult != null && epoch == workEpoch) applyWorkFetch(st, workResult) else st
-                        withWork.copy(
+                        applyMemoryFetch(withWork, memoryResult).copy(
                             leads = list, leadsLoading = false,
                             leadStages = if (stages.isNotEmpty()) stages else st.leadStages,
                         )
@@ -1930,9 +1937,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val uid = Repository.currentUserId() ?: return@launch
             val result = runCatching { Repository.fetchWorkStates(uid) }
+            val memory = runCatching { Repository.fetchLeadMemories(uid) }
             if (epoch != workEpoch) return@launch
-            set { applyWorkFetch(it, result) }
+            set { applyMemoryFetch(applyWorkFetch(it, result), memory) }
         }
+    }
+
+    /**
+     * A successful memory read replaces the map, including a real empty one.
+     * A failed read keeps the last good map. Memory is not the due clock —
+     * a failure here must not flip Due now to an error or to 0.
+     */
+    private fun applyMemoryFetch(
+        st: AppState,
+        result: Result<List<com.salesautocall.app.data.LeadMemory>>?,
+    ): AppState {
+        val rows = result?.getOrNull() ?: return st
+        return st.copy(memoryByLead = rows.associateBy { it.contactId })
     }
 
     /** Focus-five, once a session, so a due row can say why it was picked
@@ -1944,6 +1965,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (focusLoaded || _state.value.coachPicksLoading) return
         if (_state.value.coachPicks.isNotEmpty()) {
             focusLoaded = true
+            set { it.copy(coachPicksReady = true, coachPicksError = null) }
             return
         }
         set { it.copy(coachPicksLoading = true) }
@@ -1954,10 +1976,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (result.isSuccess) it.copy(
                     coachPicks = result.getOrDefault(emptyList()),
                     coachPicksLoading = false,
+                    coachPicksReady = true,
                     coachPicksError = null,
                 ) else it.copy(
                     coachPicksLoading = false,
-                    coachPicksError = "Couldn't load today's focus. Due leads still show why they are waiting.",
+                    coachPicksError = "Couldn't load today's focus. Due leads still show why they are waiting, and what was said.",
                 )
             }
         }
@@ -2387,7 +2410,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 coachOpen = true,
                 coachLoading = it.coachPanel == null,
-                coachPicksLoading = it.coachPicks.isEmpty(),
             )
         }
         loadLeads(force = false) // so picks can resolve to names/phones
@@ -2395,24 +2417,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val panel = runCatching { Repository.coachPanel() }.getOrNull()
             set { it.copy(coachPanel = panel ?: it.coachPanel, coachLoading = false) }
         }
-        viewModelScope.launch {
-            if (_state.value.coachPicks.isNotEmpty()) {
-                set { it.copy(coachPicksLoading = false) }
-                return@launch
-            }
-            val result = runCatching { Repository.focusFive() }
-            focusLoaded = result.isSuccess
-            set {
-                if (result.isSuccess) it.copy(
-                    coachPicks = result.getOrDefault(emptyList()),
-                    coachPicksLoading = false,
-                    coachPicksError = null,
-                ) else it.copy(
-                    coachPicksLoading = false,
-                    coachPicksError = "Couldn't load today's focus. Due leads still show why they are waiting.",
-                )
-            }
-        }
+        prefetchFocus()
     }
     fun closeCoach() = set { it.copy(coachOpen = false) }
 

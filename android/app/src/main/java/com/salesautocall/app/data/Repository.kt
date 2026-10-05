@@ -794,8 +794,11 @@ object Repository {
         // A failed read is not "no focus calls today". Callers keep the last
         // good list, or say the load failed. An empty list is only returned
         // when the function itself said ok and named nobody.
-        val obj = resp.body<JsonObject>()
-        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) error("focus-five declined")
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull()
+            ?: error("Couldn't read today's 5")
+        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) {
+            error(obj["error"]?.jsonPrimitive?.contentOrNull ?: "focus-five declined")
+        }
         val arr = obj["picks"] as? JsonArray ?: return emptyList()
         return arr.mapNotNull { el ->
             val o = el as? JsonObject ?: return@mapNotNull null
@@ -1420,6 +1423,20 @@ object Repository {
         ) {
             filter { eq("salesperson_id", salespersonId) }
         }.decodeList<LeadWork>()
+
+    /**
+     * Stored memory for this rep's leads. RLS already limits the read to
+     * their own rows. A failure throws — the caller keeps the last good map.
+     * An empty list means the harvest has not written anything yet.
+     */
+    suspend fun fetchLeadMemories(salespersonId: String): List<LeadMemory> =
+        client.from("lead_memory").select(
+            columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                "contact_id, where_we_left_it, buyer_wants, objection, objection_code",
+            ),
+        ) {
+            filter { eq("salesperson_id", salespersonId) }
+        }.decodeList<LeadMemory>()
 
     /** Today's arrivals: [arrived] = every call the office has, [toLeads] = the
      *  subset that was to a CRM lead. */
