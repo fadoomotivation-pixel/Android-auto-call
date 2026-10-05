@@ -20,6 +20,8 @@ data class DialerUiState(
     val lastContactId: String? = null,
     val lastContactName: String? = null,
     val lastContactPhone: String? = null,
+    /** Set when this call's recording is missing, unharvested, or only a fallback. */
+    val lastRecordingWarning: String? = null,
     // session stats
     val sessionStartMillis: Long = 0,
     val sessionEndMillis: Long = 0,

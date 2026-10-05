@@ -98,6 +98,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.salesautocall.app.data.CaptureHealth
 import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.FollowUp
 import com.salesautocall.app.data.LeadStage
@@ -1170,6 +1171,10 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // Greeting hero
         item { GreetingCard(app, firstName, onOpenAttendance = { onNavigate("attendance") }) }
 
+        (app.capture as? CaptureHealth.Snapshot.Down)?.let { down ->
+            item { CaptureDownCard(down.notice.title, down.notice.detail) }
+        }
+
         app.workStatesError?.let { msg ->
             item {
                 Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
@@ -2171,6 +2176,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // at 7 the list read as one sheet.
             verticalArrangement = Arrangement.spacedBy(11.dp),
         ) {
+            (app.capture as? CaptureHealth.Snapshot.Down)?.let { down ->
+                item { CaptureDownCard(down.notice.title, down.notice.detail) }
+            }
             item {
                 if (!selectMode) {
                     // The hero: a brand-gradient command deck — pipeline ₹ value
@@ -3739,6 +3747,10 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
         text = {
             if (scheduleFor == null) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    app.postCallContactId?.let { app.recordingWarnings[it] }?.let { warning ->
+                        Text(warning, style = AppType.meta, color = AppColors.Warning)
+                        Spacer(Modifier.height(8.dp))
+                    }
                     // Context strip: budget + place + last note, always in front of the rep.
                     val lastNote = lead?.notes?.takeIf { it.isNotBlank() }
                     val budget = budgetLabel(lead?.budget)
@@ -4424,6 +4436,9 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
                 ) { Text("Back", fontSize = 13.sp) }
             }
+        }
+        (app.capture as? CaptureHealth.Snapshot.Down)?.let { down ->
+            item { CaptureDownCard(down.notice.title, down.notice.detail) }
         }
         // Above the chips, because it overrides them.
         item {

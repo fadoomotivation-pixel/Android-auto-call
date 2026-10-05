@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.salesautocall.app.data.AppPrefs
 import com.salesautocall.app.data.Attendance
+import com.salesautocall.app.data.CaptureHealth
 import com.salesautocall.app.data.CallLog
 import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.LeadWork
@@ -123,6 +124,12 @@ data class AppState(
      * and a failed read is not one. Null once a read has succeeded.
      */
     val workStatesError: String? = null,
+    /**
+     * This rep's WhatsApp capture. Pending until the first read.
+     * Live only when status is connected or connecting. A failed read is
+     * Down — quiet would look like capture is working. link_ok_at is never loaded.
+     */
+    val capture: CaptureHealth.Snapshot = CaptureHealth.Snapshot.Pending,
     /** Settings self-check: the Test button's spinner and its visible verdict. */
     val syncTestBusy: Boolean = false,
     val syncTestResult: String? = null,
@@ -205,6 +212,12 @@ data class AppState(
     /** Calls that have ended with nothing recorded yet — these are the leads
      *  whose Update button is shaking, and the ones the nudge bar counts. */
     val pendingUpdates: List<PendingUpdate> = emptyList(),
+    /**
+     * Recording problems for leads called this session, keyed by contact id.
+     * Kept after the outcome is saved — tapping Connected must not hide a
+     * missing file. Cleared when a later call on that lead captures cleanly.
+     */
+    val recordingWarnings: Map<String, String> = emptyMap(),
     /** Master switch for the assistant's own questions. */
     val assistantOn: Boolean = true,
     /** The one question the assistant is asking right now (null = silent). */
@@ -343,6 +356,8 @@ data class PendingUpdate(
     val name: String? = null,
     val connected: Boolean = false,
     val at: Long = System.currentTimeMillis(),
+    /** Missing, unharvested, or fallback-only recording. Not an outcome. */
+    val recordingWarning: String? = null,
 )
 
 /** A message ready to open in her own WhatsApp. Not a receipt that it was sent. */
@@ -452,6 +467,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         observeSimCalls()
         observeDialerReview()
+        observeRecordingVerdicts()
         refreshSession()
     }
 
@@ -486,6 +502,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 } ?: return@collect
                 val contactId = lead.id ?: return@collect
                 val didConnect = prev.activeAtMillis > 0
+                val verdict = com.salesautocall.app.dialer.SimCallMonitor.verdict.value
+                // Published in the same breath as the call ending. An older
+                // verdict is about a previous call and must not be pasted
+                // onto this one.
+                val fresh = verdict != null && System.currentTimeMillis() - verdict.at < 20_000L
+                val warning = if (
+                    fresh && verdict!!.phone.filter { d -> d.isDigit() }.takeLast(10) == key
+                ) verdict.warning else null
                 // A SIM call ends behind the phone's own in-call screen, so the
                 // sheet cannot land until Android hands focus back — which is
                 // the "popup aata hai kaafi slow" the reps described, followed by
@@ -499,7 +523,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     set {
                         it.copy(
                             pendingUpdates = it.pendingUpdates.filterNot { p -> p.contactId == contactId } +
-                                PendingUpdate(contactId, phone, lead.name, didConnect),
+                                PendingUpdate(contactId, phone, lead.name, didConnect, recordingWarning = warning),
+                            recordingWarnings = if (fresh)
+                                recordingWarningMap(it.recordingWarnings, contactId, warning)
+                            else it.recordingWarnings,
                         )
                     }
                     return@collect
@@ -512,6 +539,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         postCallCampaignId = null,
                         // Off-hook (activeAtMillis>0) = a real conversation → force an outcome.
                         postCallConnected = didConnect,
+                        recordingWarnings = if (fresh)
+                            recordingWarningMap(it.recordingWarnings, contactId, warning)
+                        else it.recordingWarnings,
                     )
                 }
             }
@@ -524,7 +554,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * The pause used to live on the Call List screen, and a SIM call that
      * ended while the dialer was running never armed the outcome bar — so
      * from Follow-ups the queue just stopped. This puts the same bar on the
-     * screen she is already on. It does not open a popup.
+     * screen she is already on. It does not open a popup. A recording warning
+     * already on this call rides with the bar.
      */
     private fun observeDialerReview() {
         viewModelScope.launch {
@@ -538,18 +569,91 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // She already answered, and this pause event arrived late.
                 val action = _state.value.workByLead[id]?.actionState
                 if (action != null && !isCallNowAction(action)) return@collect
+                val warning = now.lastRecordingWarning
                 set {
                     it.copy(
                         pendingUpdates = it.pendingUpdates.filterNot { p -> p.contactId == id } +
                             PendingUpdate(
                                 id, phone, now.lastContactName,
                                 connected = now.lastOutcome == "connected",
+                                recordingWarning = warning,
                             ),
+                        recordingWarnings = recordingWarningMap(it.recordingWarnings, id, warning),
                     )
                 }
             }
         }
     }
+
+    /**
+     * A recording verdict can arrive after the outcome bar is already up —
+     * the upload failing is the usual case. Patch the lead it belongs to.
+     * A blank warning means this call captured cleanly, so the previous
+     * warning on that lead is no longer the thing to show.
+     */
+    private fun observeRecordingVerdicts() {
+        viewModelScope.launch {
+            com.salesautocall.app.dialer.SimCallMonitor.verdict.collect { v ->
+                if (v == null) return@collect
+                val key = v.phone.filter { it.isDigit() }.takeLast(10)
+                if (key.length < 7) return@collect
+                val lead = _state.value.leads.firstOrNull {
+                    it.phone.filter { c -> c.isDigit() }.takeLast(10) == key
+                } ?: return@collect
+                val id = lead.id ?: return@collect
+                set { s ->
+                    s.copy(
+                        recordingWarnings = recordingWarningMap(s.recordingWarnings, id, v.warning),
+                        pendingUpdates = s.pendingUpdates.map { p ->
+                            if (p.contactId == id) p.copy(recordingWarning = v.warning) else p
+                        },
+                    )
+                }
+                // The row is inserted just after the verdict. Pull it once so
+                // the call history shows audio_seconds / the failed status
+                // without the rep leaving the lead and coming back.
+                viewModelScope.launch {
+                    kotlinx.coroutines.delay(2_500)
+                    if (_state.value.leadDetailId != id) return@launch
+                    val calls = runCatching { Repository.fetchCallsForContact(id) }.getOrNull() ?: return@launch
+                    val todayWarning = todayRecordingWarning(calls)
+                    set {
+                        if (it.leadDetailId != id) it
+                        else it.copy(
+                            leadDetailCalls = calls,
+                            recordingWarnings = if (todayWarning != null)
+                                it.recordingWarnings + (id to todayWarning)
+                            else it.recordingWarnings,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** The newest call, when it was today and its file is missing or not the OEM recording. */
+    private fun todayRecordingWarning(calls: List<com.salesautocall.app.data.CallLog>): String? {
+        val call = calls.firstOrNull() ?: return null
+        if (!callStartedToday(call.startedAt)) return null
+        return com.salesautocall.app.dialer.RecordingTruth.warningFor(call)
+    }
+
+    private fun callStartedToday(iso: String?): Boolean {
+        val ms = iso?.let {
+            runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+                ?: runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+        } ?: return false
+        val zone = java.time.ZoneId.systemDefault()
+        return java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate() ==
+            java.time.LocalDate.now(zone)
+    }
+
+    private fun recordingWarningMap(
+        current: Map<String, String>,
+        contactId: String,
+        warning: String?,
+    ): Map<String, String> =
+        if (warning.isNullOrBlank()) current - contactId else current + (contactId to warning)
 
     private val lenientJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
     private var cloudConnectedAt: Long = 0L
@@ -1550,6 +1654,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Loads everything the Home tab needs in one go. */
     fun loadHome(force: Boolean = false) {
+        loadCapture(force)
         loadToday(force)
         loadAttendance(force)
         loadFollowUps(force)
@@ -1589,6 +1694,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun consumeAutoCall() = set { it.copy(autoCallContactId = null) }
 
     fun loadLeads(force: Boolean = false) {
+        loadCapture(force)
         if (!shouldLoad("leads", force)) return
         viewModelScope.launch {
             set { it.copy(leadsLoading = true) }
@@ -2503,6 +2609,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- follow-up scheduler ----------
 
     fun loadFollowUps(force: Boolean = false) {
+        loadCapture(force)
         if (!shouldLoad("followups", force)) return
         viewModelScope.launch {
             set { it.copy(followUpsLoading = true) }
@@ -4029,10 +4136,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * The buyer wrote, or she still owes them what she promised. One tap
      * writes the server draft and opens her WhatsApp with that text.
      *
-     * A generic template is the wrong message for those two rows. This does
-     * not read capture health and does not say the message was sent — the
-     * observer does that, if capture is up. A failure, or "call instead",
-     * leaves WhatsApp closed and says so.
+     * A generic template is the wrong message for those two rows. A failure,
+     * or "call instead", leaves WhatsApp closed and says so. This does not
+     * write "opened" itself. [markDraftOpened] does, and only when capture
+     * is live.
      */
     fun sendOwedWhatsApp(contactId: String, phone: String) {
         if (_state.value.waDraftingId != null) return
@@ -4073,11 +4180,63 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun consumeWaNote() = set { it.copy(waNote = null) }
 
-    /** She pressed Send and WhatsApp opened with the text in it. Recorded as
-     *  "opened", never as "sent" — the observer decides that. */
+    /**
+     * She pressed Send and WhatsApp opened with the text in it.
+     *
+     * Recorded as "opened", never as "sent" — the observer decides that.
+     * When capture is not live, it is not recorded at all. Writing "opened"
+     * is how settle_followups later writes "skipped": no captured message
+     * arrived, so the job decides she never sent it. That is a lie while
+     * the watcher is down, and a quiet screen would look like the send counted.
+     */
     fun markDraftOpened() {
         val id = _state.value.messageDraftId ?: return
-        viewModelScope.launch { Repository.markDraft(id, "opened") }
+        viewModelScope.launch {
+            val snapshot = when (val current = _state.value.capture) {
+                is CaptureHealth.Snapshot.Pending -> {
+                    val fetched = runCatching { Repository.fetchMyCapture() }
+                        .getOrElse { Repository.MyCapture.Failed(it.message ?: "Could not read") }
+                    applyCapture(fetched)
+                    _state.value.capture
+                }
+                else -> current
+            }
+            if (CaptureHealth.recordsSends(snapshot)) {
+                // She may have tapped "Not this one" while the read was in
+                // flight. That already wrote skipped. Do not overwrite it.
+                if (_state.value.messageDraftId == id) Repository.markDraft(id, "opened")
+            } else if (_state.value.messageDraftId == id) {
+                // Leave the server row as suggested. Do not mark skipped —
+                // she may have sent it, and we cannot see that.
+                clearMessageDraft()
+            }
+        }
+    }
+
+    /** Status, last_seen_at, and the newest captured message. Never link_ok_at. */
+    fun loadCapture(force: Boolean = false) {
+        if (!shouldLoad("capture", force)) return
+        viewModelScope.launch {
+            val fetched = runCatching { Repository.fetchMyCapture() }
+                .getOrElse { Repository.MyCapture.Failed(it.message ?: "Could not read") }
+            applyCapture(fetched)
+        }
+    }
+
+    private fun applyCapture(result: Repository.MyCapture) {
+        val snapshot = when (result) {
+            is Repository.MyCapture.Failed ->
+                CaptureHealth.Snapshot.Down(CaptureHealth.unreadableNotice(), proven = false)
+            Repository.MyCapture.None -> CaptureHealth.Snapshot.Unlinked
+            is Repository.MyCapture.Session -> CaptureHealth.fromSession(
+                status = result.status,
+                lastSeenAt = result.lastSeenAt,
+                lastError = result.lastError,
+                lastMessageAt = result.lastMessageAt,
+                messageLookupFailed = result.messageFailed,
+            )
+        }
+        set { it.copy(capture = snapshot) }
     }
 
     /** She read it and chose not to send it. That is a real answer about the
@@ -4132,9 +4291,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())
             val notes = runCatching { Repository.fetchVoiceNotes(contactId) }.getOrDefault(emptyList())
+            val todayWarning = todayRecordingWarning(calls)
             set {
                 if (it.leadDetailId == contactId)
-                    it.copy(leadDetailCalls = calls, leadDetailActivities = acts, voiceNotes = notes, leadDetailLoading = false)
+                    it.copy(
+                        leadDetailCalls = calls,
+                        leadDetailActivities = acts,
+                        voiceNotes = notes,
+                        leadDetailLoading = false,
+                        recordingWarnings = if (todayWarning != null)
+                            it.recordingWarnings + (contactId to todayWarning)
+                        else it.recordingWarnings,
+                    )
                 else it
             }
             // Wada auto-apply: normally the server applies it the moment the
@@ -4154,7 +4322,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun refreshLeadDetail() { _state.value.leadDetailId?.let { openLeadDetail(it) } }
+    fun refreshLeadDetail() {
+        loadCapture(force = true)
+        _state.value.leadDetailId?.let { openLeadDetail(it) }
+    }
 
     // ---------- wada (AI-heard commitments, one-tap confirm) ----------
 

@@ -453,6 +453,16 @@ data class CallLog(
     @SerialName("recording_status") val recordingStatus: String = "none",
     @SerialName("recording_seconds") val recordingSeconds: Int? = null,
     @SerialName("recording_source") val recordingSource: String? = null,
+    /**
+     * Length of the file, measured from its own header at upload.
+     * Null on older rows and when the format has no cheap exact answer.
+     * Not the call length — that is [durationSeconds] / [recordingSeconds].
+     */
+    @SerialName("audio_seconds") val audioSeconds: Int? = null,
+    /** False when the uploaded container is unfinished and cannot be played. */
+    @SerialName("audio_complete") val audioComplete: Boolean? = null,
+    /** Why a recording is missing or unusable. Plain English when we wrote it. */
+    @SerialName("recording_error") val recordingError: String? = null,
     /** True when captured by record-all-calls and the number isn't a CRM lead. */
     @SerialName("off_crm") val offCrm: Boolean = false,
     val summary: String? = null,

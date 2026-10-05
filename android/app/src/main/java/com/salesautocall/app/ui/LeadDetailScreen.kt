@@ -78,6 +78,7 @@ import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.Repository
 import com.salesautocall.app.data.Wada
+import com.salesautocall.app.data.CaptureHealth
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
 import com.salesautocall.app.ui.design.Radii
@@ -377,6 +378,16 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
+                (app.capture as? CaptureHealth.Snapshot.Down)?.let { down ->
+                    item {
+                        CaptureDownCard(
+                            down.notice.title,
+                            down.notice.detail,
+                            Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
+                }
+
                 // ---- Hero ----
                 item {
                     IdentityBlock(
@@ -510,10 +521,12 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         draftVerdict = app.messageVerdict,
                         draftSentCount = app.messageSentCount,
                         onDraft = { vm.draftMessage(contact) },
+                        captureWarning = CaptureHealth.draftWarning(app.capture),
                         onSend = { msg ->
-                            // Tell the server the chat was opened with this text
-                            // BEFORE handing over to WhatsApp — the app never
-                            // comes back to this line once the intent fires.
+                            // Opened is written only when capture is live.
+                            // Writing it while the watcher is down is how the
+                            // learning job later marks the draft skipped — a
+                            // send it never saw, called "she did not send it".
                             vm.markDraftOpened()
                             openWhatsAppLocal(context, contact.phone, msg)
                         },
@@ -806,6 +819,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 contact = contact,
                 pending = app.pendingUpdates.firstOrNull { it.contactId == contact.id },
                 callLine = lastCallLineToday,
+                recordingWarning = contact.id?.let { app.recordingWarnings[it] },
                 onCall = { doCall() },
                 onWhatsApp = { doWhats() },
                 onOpenUpdate = {
@@ -1172,6 +1186,8 @@ private fun AiCoachCard(
     onSend: (String) -> Unit,
     onCallInstead: () -> Unit,
     onClearDraft: () -> Unit,
+    /** Set when a send cannot be proved. The button must not say it was sent. */
+    captureWarning: String? = null,
     error: String? = null,
 ) {
     val clipboard = LocalClipboardManager.current
@@ -1354,6 +1370,12 @@ private fun AiCoachCard(
         // getting replies in this company — then writes the message and logs
         // its own choice so a buyer's reply can judge it later.
         if (mode == "message") {
+            // Before she spends a draft. A missing line here is how a dead
+            // watcher looked like the message had been saved.
+            captureWarning?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(it, style = MaterialTheme.typography.bodySmall, color = RedL)
+            }
             if (draftLoading) {
                 Spacer(Modifier.height(12.dp))
                 CoachLoadingRow("Reading the call and the chat…")
@@ -1420,7 +1442,11 @@ private fun AiCoachCard(
                         .background(JadeL.copy(alpha = 0.06f)).border(1.dp, JadeL.copy(alpha = 0.30f), RoundedCornerShape(14.dp))
                         .padding(14.dp),
                 ) {
-                    Text("Ready to send", style = AppType.metaStrong, color = AppColors.TextSecondary)
+                    Text(
+                        if (captureWarning == null) "Ready to send" else "Opens WhatsApp. Not saved here.",
+                        style = AppType.metaStrong,
+                        color = if (captureWarning == null) AppColors.TextSecondary else RedL,
+                    )
                     // WHY this message. Printed above the text on purpose: a
                     // rep who can see the reasoning can overrule it, and one
                     // who cannot is being asked to trust a black box with her
@@ -1444,8 +1470,11 @@ private fun AiCoachCard(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Send on WhatsApp", color = Color.White,
-                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (captureWarning == null) "Send on WhatsApp" else "Open in WhatsApp",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                            )
                         }
                     }
                     Spacer(Modifier.height(10.dp))
@@ -1794,6 +1823,8 @@ private fun LeadActionBar(
     pending: PendingUpdate?,
     /** "Talked 3m 20s · Today, 6:06 PM" — this lead's last call, if it was today. */
     callLine: String?,
+    /** Missing file, failed harvest, or a speaker/mic fallback. Not an outcome chip. */
+    recordingWarning: String?,
     onCall: () -> Unit,
     onWhatsApp: () -> Unit,
     onOpenUpdate: () -> Unit,
@@ -1857,6 +1888,10 @@ private fun LeadActionBar(
                         Text(it, style = AppType.tag, color = SubInk, maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
+                    recordingWarning?.let {
+                        Spacer(Modifier.height(4.dp))
+                        Text(it, style = AppType.tag, color = AmberL, maxLines = 3)
+                    }
                     Spacer(Modifier.height(7.dp))
                     // Two across, same as the Update sheet. Five chips in one
                     // scrolling row hid the last ones past the edge of the
@@ -1917,6 +1952,13 @@ private fun LeadActionBar(
                     maxLines = 2,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
+                Spacer(Modifier.height(6.dp))
+            }
+            if (!stripOpen && !recordingWarning.isNullOrBlank()) {
+                // The outcome strip closes once they answer. The missing file
+                // does not. One line above Call, not a new sheet.
+                Text(recordingWarning, style = AppType.tag, color = AmberL, maxLines = 3,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
                 Spacer(Modifier.height(6.dp))
             }
             // Call and WhatsApp stay the primary actions, in reach at the bottom of
@@ -2111,7 +2153,14 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
             Spacer(Modifier.weight(1f))
             call.startedAt?.let { Text(it.take(16).replace('T', ' '), style = MaterialTheme.typography.labelSmall, color = SubInk) }
         }
-        if (call.recordingStatus == "ready" && call.id != null) {
+        val recordingNote = com.salesautocall.app.dialer.RecordingTruth.warningFor(call)
+        if (recordingNote != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(recordingNote, style = MaterialTheme.typography.labelMedium, color = AmberL, maxLines = 3)
+        }
+        // A file the server already marked unfinished cannot play. Offering
+        // Play on it is how a broken recording looked like a normal one.
+        if (call.recordingStatus == "ready" && call.id != null && call.audioComplete != false) {
             // NOT MY CALL, NOT MY RECORDING — and say so instead of offering a
             // Play button that will only refuse. AudioPlayer enforces the same
             // rule again; this is here so the rep is never invited to tap it.

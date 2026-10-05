@@ -126,7 +126,7 @@ class AutoDialerService : Service() {
             val placed = placeCall(contact.phone, cfg.simSlot)
             var outcome: String
             var durationSec = 0
-            var recordingPath: String? = null
+            var capture = RecordingTruth.none()
 
             if (!placed) {
                 outcome = "failed"
@@ -153,22 +153,35 @@ class AutoDialerService : Service() {
                     // Manual REC toggle may have stopped (and stashed) the recorder already.
                     val micPath = runCatching { SimRecorder.stop() }.getOrNull()
                         ?: SimCallMonitor.takeManualRecording()
+                    val micKind = if (micPath != null) SimRecorder.captureKind else null
                     // Native mode never runs the mic recorder, so harvest for any
                     // call with a few seconds of talk (not only ones past the
                     // "connected" threshold) so a short but real conversation the
                     // phone recorded isn't dropped. The 3s floor skips instant
-                    // no-answers, whose harvest poll would find nothing.
-                    recordingPath = when {
-                        useNative && durationSec >= NATIVE_HARVEST_MIN_SEC ->
-                            harvestNative(startedAt, contact.phone) ?: micPath
-                        else -> micPath
-                    }
+                    // no-answers, whose harvest poll would find nothing. A miss
+                    // stays visible: classify does not log it as "none".
+                    val harvestPath = if (useNative && durationSec >= NATIVE_HARVEST_MIN_SEC) {
+                        harvestNative(startedAt, contact.phone)
+                    } else null
+                    capture = RecordingTruth.classify(
+                        recordingOn = cfg.recordingEnabled,
+                        nativeFolder = useNative,
+                        durationSec = durationSec,
+                        harvestPath = harvestPath,
+                        micPath = micPath,
+                        micKind = micKind,
+                    )
                 }
+            }
+            // A call too short to expect a file does not publish — that would
+            // wipe the warning from the previous call on this lead.
+            if (capture.path != null || capture.warning != null) {
+                SimCallMonitor.publishVerdict(contact.phone, capture.warning)
             }
             SimCallMonitor.end(this)
             val endedAt = Instant.now()
 
-            persistResult(contact.id, contact, startedAt, endedAt, durationSec, outcome, cfg.simSlot, recordingPath)
+            persistResult(contact.id, contact, startedAt, endedAt, durationSec, outcome, cfg.simSlot, capture)
 
             val wasDialed = placed
             val talked = durationSec
@@ -181,6 +194,7 @@ class AutoDialerService : Service() {
                     lastContactId = contact.id,
                     lastContactName = contact.name,
                     lastContactPhone = contact.phone,
+                    lastRecordingWarning = capture.warning,
                 )
             }
 
@@ -225,7 +239,7 @@ class AutoDialerService : Service() {
         durationSec: Int,
         outcome: String,
         simSlot: Int?,
-        recordingPath: String?,
+        capture: RecordingTruth.Capture,
     ) {
         // NonCancellable: a Stop tap (or service teardown) right after a call must
         // not kill the insert/upload mid-flight — that's how calls went missing.
@@ -243,8 +257,9 @@ class AutoDialerService : Service() {
                         endedAt = endedAt.toString(),
                         durationSeconds = durationSec,
                         simSlot = simSlot,
-                        recordingStatus = if (recordingPath != null) "uploading" else "none",
-                        recordingSource = if (recordingPath != null) "sim" else null,
+                        recordingStatus = capture.status,
+                        recordingSource = capture.source,
+                        recordingError = capture.error,
                     ),
                 )
                 // The lead's stage is NOT written here, deliberately.
@@ -271,6 +286,7 @@ class AutoDialerService : Service() {
                 // touched. Every call path — auto-dial, manual, cloud — gets that
                 // same rule for free by simply not second-guessing it here.
                 // Ship the recording (if any) to Drive via the edge function.
+                val recordingPath = capture.path
                 if (logId != null && recordingPath != null) {
                     val f = File(recordingPath)
                     if (f.exists() && f.length() > 0) {
@@ -287,9 +303,20 @@ class AutoDialerService : Service() {
                         // A file left behind costs a few megabytes of cache; a
                         // file deleted costs the conversation.
                         val sent = runCatching {
-                            Repository.uploadRecording(logId, "sim", durationSec, f.readBytes())
+                            Repository.uploadRecording(logId, capture.source ?: "sim", durationSec, f.readBytes())
                         }.isSuccess
-                        if (sent) runCatching { f.delete() }
+                        if (sent) {
+                            runCatching { f.delete() }
+                        } else {
+                            val warning = RecordingTruth.withUploadFailure(capture.warning)
+                            runCatching {
+                                Repository.markRecordingStatus(logId, "failed", warning)
+                            }
+                            SimCallMonitor.publishVerdict(contact.phone, warning)
+                            DialerController.update { cur ->
+                                if (cur.lastContactPhone == contact.phone) cur.copy(lastRecordingWarning = warning) else cur
+                            }
+                        }
                     }
                 }
             }

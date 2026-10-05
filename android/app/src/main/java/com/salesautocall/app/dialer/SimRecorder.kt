@@ -44,6 +44,15 @@ object SimRecorder {
     var usedSpeaker = false
         private set
 
+    /**
+     * Which source the last successful start actually kept.
+     * "voice_call" | "speaker" | "mic". Null when this start captured nothing.
+     * Read it after [stop] — it is cleared at the beginning of the next [start].
+     */
+    @Volatile
+    var captureKind: String? = null
+        private set
+
     private data class Attempt(
         val source: Int,
         val speakerphone: Boolean,
@@ -71,6 +80,8 @@ object SimRecorder {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager = am
         prevSpeaker = am.isSpeakerphoneOn
+        captureKind = null
+        usedSpeaker = false
 
         val file = File(context.cacheDir, "simrec_${System.currentTimeMillis()}.m4a")
         for ((source, speakerphone, verify) in ATTEMPTS) {
@@ -105,6 +116,11 @@ object SimRecorder {
             recorder = r
             outputPath = file.absolutePath
             usedSpeaker = speakerphone
+            captureKind = when (source) {
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION -> RecordingTruth.KIND_SPEAKER
+                MediaRecorder.AudioSource.MIC -> RecordingTruth.KIND_MIC
+                else -> RecordingTruth.KIND_VOICE
+            }
             return true
         }
         restoreSpeaker(am)

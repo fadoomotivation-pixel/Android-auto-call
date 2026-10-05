@@ -90,7 +90,8 @@ Deno.serve(async (req) => {
   if (surface === "android" && row.off_crm === true) {
     return err({ ok: false, error: "This number is not a lead — its recording does not open in the app." }, 403);
   }
-  const contentType = row.recording_source === "sim" ? "audio/mp4" : "audio/wav";
+  // sim_speaker / sim_mic / sim_app are still phone files (m4a), not SIP wav.
+  const contentType = String(row.recording_source ?? "").startsWith("sim") ? "audio/mp4" : "audio/wav";
 
   // Cloud telephony (CallerDesk): no Drive file, just an external recording URL.
   // Proxy its bytes so the client stays RLS-gated and never sees the raw URL.
