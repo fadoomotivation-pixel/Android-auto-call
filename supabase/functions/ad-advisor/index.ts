@@ -4,8 +4,8 @@
 // ads-insights, and passes them here. This function computes the standard Meta
 // metrics (CTR, CPC, CPM, CPL, CPA, and ROAS when booking value is available),
 // then asks the LLM for concrete, prioritised moves across the funnel —
-// awareness → retargeting → conversion — with Andromeda-aware creative/targeting
-// guidance to lift CTR and lower CPC/CPM/CPA. Grounded in the SAME match_knowledge
+// awareness → retargeting → conversion. Creative advice uses the count of
+// distinct ads already in the request. Grounded in the SAME match_knowledge
 // brain (global guidebook) the coach/assistant use — no parallel store.
 //
 // Auth: platform super-admin only (the central ad business spans all companies).
@@ -31,6 +31,7 @@ const json = (o: unknown, s = 200) =>
 
 interface AdRow {
   campaign_id: string; campaign_name: string; campaign_status: string;
+  ad_id?: string; frequency?: number;
   impressions: number; clicks: number; spend: number;
   meta_leads: number; crm_leads: number; crm_qualified: number; crm_booked: number;
   booking_value?: number;
@@ -92,9 +93,11 @@ const SYSTEM =
   "cost-per-booking, CRM lead→qualified→booked rates, and ROAS where known). Analyse them and give SPECIFIC, prioritised " +
   "moves — never generic theory. Think across the FULL funnel: AWARENESS (reach/CTR/CPM, hook & creative), RETARGETING " +
   "(warm audiences, engagers, lead-form openers, site visitors), and CONVERSION (CPA, lead quality, booking rate). " +
-  "Optimise for Meta's Andromeda ranking: it rewards CREATIVE VOLUME + DIVERSITY and BROAD targeting (Advantage+ / broad + " +
-  "strong creative) over hyper-narrow audiences, and it leans on early engagement signals — so advise creative testing and " +
-  "letting the system find audiences rather than over-restricting. Concretely help LOWER CPC/CPM/CPA and RAISE CTR & ROAS: " +
+  "You are given a creative_variety block counted from the ads in this request: how many distinct ads ran, which campaigns " +
+  "had only one, and how many look tired. Use those counts when you talk about creative. Do NOT say Andromeda, Advantage+ " +
+  "delivery, or any Meta ranking system is turned on — this CRM cannot switch Meta's delivery, and a caption is not a switch. " +
+  "These are housing ads: NEVER promise guaranteed returns, rental yield, or appreciation. " +
+  "Concretely help LOWER CPC/CPM/CPA and RAISE CTR & ROAS: "
   "call out which campaigns to scale, cut, or restructure, and what to change (audience, creative, placement, budget, offer). " +
   'Reply ONLY as JSON: {"headline": string, "funnel": {"awareness": string, "retargeting": string, "conversion": string}, ' +
   '"alerts": [{"severity": "high"|"medium", "text": string}], ' +
@@ -193,8 +196,30 @@ Deno.serve(async (req) => {
   const companyId = typeof body.company_id === "string" ? body.company_id : null;
   const brain = await facts(admin, companyId);
 
+  // Same count the Ads page shows. One ad in a campaign means Meta has nothing
+  // else to try. This is not a switch and it does not claim a ranking system is on.
+  const byCamp = new Map<string, { name: string; ads: Set<string> }>();
+  let fatigued = 0;
+  for (const r of rows) {
+    if (!(n(r.impressions) > 0 || n(r.spend) > 0)) continue;
+    const id = String(r.campaign_id || r.campaign_name || "");
+    const g = byCamp.get(id) ?? { name: String(r.campaign_name || id), ads: new Set<string>() };
+    if (r.ad_id) g.ads.add(String(r.ad_id));
+    const freq = n(r.frequency);
+    const ctr = r.impressions ? (n(r.clicks) / n(r.impressions)) * 100 : 0;
+    if (freq >= 3 && ctr < 1.2) fatigued++;
+    byCamp.set(id, g);
+  }
+  const creativeVariety = {
+    distinct_ads: [...byCamp.values()].reduce((s, g) => s + g.ads.size, 0),
+    campaigns: byCamp.size,
+    campaigns_with_one_ad: [...byCamp.values()].filter((g) => g.ads.size === 1).map((g) => g.name).slice(0, 8),
+    tired_ads: fatigued,
+  };
+
   const userMsg =
     `Currency: ${currency || "?"}${range ? ` | Date range: ${range}` : ""}\nAccount totals: ${JSON.stringify(totals)}\n` +
+    `creative_variety: ${JSON.stringify(creativeVariety)}\n` +
     `Campaigns (top by spend). Each carries "followup" (how its leads were actually worked by the sales team) and a "verdict":\n${JSON.stringify(diagnosed.slice(0, 12))}` +
     (brain.length ? `\n\nOur playbook facts (use if relevant):\n${brain.map((f) => `- ${f}`).join("\n")}` : "");
 

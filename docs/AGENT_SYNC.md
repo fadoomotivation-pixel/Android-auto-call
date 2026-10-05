@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (CAPI purchase value, failed-event retry, creative count)
+
+- WHAT: `meta-capi` sends Purchase `value` and `currency` (INR) only when `contacts.token_amount` is a real number above zero. A budget is not used. A failed post is no longer treated as already sent: the same lead+event is retried, the `capi_events.response` column stores attempts, the value source, and the Meta body, and it stops after 5 failures. Facebook setup shows the failed count and a per-company Retry button (`facebook-manage` action `retry_capi`). The Ads page counts distinct ads, campaigns with a single ad, and tired ads from the rows already loaded, and says this does not turn Meta delivery on. The advisor prompt no longer says Andromeda is something we optimise as if it were switched on, and it is told not to promise housing returns. The Facebook status trigger is unchanged.
+- FILES: `supabase/functions/meta-capi/index.ts`, `facebook-manage/index.ts`, `ad-advisor/index.ts`, `admin/app/dashboard/facebook/page.tsx`, `admin/app/dashboard/ads/AdsManager.tsx`, `docs/AGENT_SYNC.md`.
+- WHY: Purchase had no value. A unique row with `ok=false` could never be sent again. "Andromeda-aware" was a caption. Measured the same day: 47 CAPI events, all ok, only QualifiedLead and Schedule; token_amount is null on every lead; 0 failed rows.
+- BUILD: admin `tsc` pending. No migration. Do not apply anything. Edge functions ship only when this merges to main. Founder still needs the CAPI token in Vault for sends to leave the building — that token is already how the 47 events went out.
+- NEXT/NOTE: Rebased onto the Call now memory branch so this sync file does not fight that PR. #495, #496, and #497 notes stay below. Does not touch project `mfgjzkaabyltscgrkhdz` or `sdmibpxecasgfyodqzow`.
+
 ## 2026-10-05 — Cursor (Call now shows the stored conversation)
 
 - WHAT: The phone reads `lead_memory` for this rep (same RLS as the rest of her leads) whenever it reads who is due. A due row, the next-call card, Home's first three callbacks, and the lead's "What to say" card show "Left at", "They want", "Stopped by", and an open promise ("You still owe") from that row. Focus-five still runs once a session and, when it names a due lead, adds "Say this" under the reason already on the row. A failed focus read says so. It is not stored as "nobody today". The memory line is re-read with the queue, so it stays current after the morning. No new table, no new tab, no popup, no chip total. Buyer wording is shown as stored (it is often Hindi). The labels are English.
