@@ -37,13 +37,13 @@ entry before you start, and add an entry after every change.**
 
 ---
 
-## 2026-10-05 — Cursor (admin build was failing on three apostrophes)
+## 2026-10-05 — Cursor (lead list rebased onto main after #501)
 
-- WHAT: Escaped three apostrophes on the recordings page so `next build` can finish. The words are the same. No other recordings change.
-- FILES: `admin/app/dashboard/recordings/page.tsx`.
-- WHY: Vercel runs the admin lint, and those three lines failed the lead-list preview. Typecheck was already green.
-- BUILD: `next build` after this note.
-- NEXT/NOTE: The lead-list note below is unchanged.
+- WHAT: Rebased the Apple lead list, the lead sheet, and the windowed scroll onto main. The recordings apostrophes were already escaped on main, so this branch does not edit that page. Both sync notes below stay.
+- FILES: `docs/AGENT_SYNC.md` for this note. The lead files are the commit under it.
+- WHY: #501 landed on main and the sync log conflicted.
+- BUILD: admin `tsc` after the rebase.
+- NEXT/NOTE: Capture-down and CAPI notes stay under the lead-list note.
 
 ## 2026-10-05 — Cursor (lead list and lead page, Apple chrome, faster scroll)
 
