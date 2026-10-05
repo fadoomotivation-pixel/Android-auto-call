@@ -2,6 +2,7 @@ name: Build Android APK
 
 on:
   push:
+    # cursor/** so a branch build can prove the APK compiles before merge.
     branches: [main, "claude/**", "cursor/**"]
     paths:
       - "android/**"
