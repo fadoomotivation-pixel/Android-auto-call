@@ -599,13 +599,15 @@ private fun WorkGrid(
     counts: List<Pair<ActionChip, Int>>,
     selectedCode: String?,
     onPick: (String?) -> Unit,
+    /** The read failed. Zeros here would be a quiet day. Show a dash. */
+    unknown: Boolean = false,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         counts.chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { (a, n) ->
                     val on = selectedCode == a.code
-                    val empty = n == 0 && !on
+                    val empty = !unknown && n == 0 && !on
                     val border = when {
                         on -> a.color
                         empty -> MaterialTheme.colorScheme.outlineVariant
@@ -639,7 +641,7 @@ private fun WorkGrid(
                         // nothing loses its identity.
                         val urgent = a.code == "call_now" || a.code == "overdue"
                         Text(
-                            n.toString(),
+                            if (unknown) "—" else n.toString(),
                             fontSize = 19.sp, lineHeight = 21.sp, fontWeight = FontWeight.Bold,
                             color = when {
                                 empty -> AppColors.TextTertiary
@@ -665,7 +667,15 @@ private fun WorkGrid(
 }
 
 @Composable
-private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Color, onClick: () -> Unit) {
+private fun FilterTab(
+    label: String,
+    count: Int,
+    selected: Boolean,
+    accent: Color,
+    /** When the count is unknown. "0" would read as a quiet list. */
+    countLabel: String? = null,
+    onClick: () -> Unit,
+) {
     // EVERY chip is the same height and carries its count in the same place, at
     // the same size. Chips that grew and shrank with their label — and lost the
     // badge entirely at zero — made a tidy row look ragged, which is most of
@@ -681,7 +691,7 @@ private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Colo
     // something a rep hits on the way to a call, so it is now 28dp, softly
     // squared rather than pill-shaped, and the count rides as plain text
     // instead of a second bubble.
-    val empty = count == 0 && !selected
+    val empty = countLabel == null && count == 0 && !selected
     val bg = when {
         selected -> accent
         empty -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f)
@@ -701,7 +711,7 @@ private fun FilterTab(label: String, count: Int, selected: Boolean, accent: Colo
         Text(label, color = fg, fontSize = 12.sp, maxLines = 1,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
         Spacer(Modifier.width(5.dp))
-        Text("$count", fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.Bold,
+        Text(countLabel ?: "$count", fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.Bold,
             color = if (selected) Color.White.copy(alpha = 0.75f) else fg.copy(alpha = 0.7f))
     }
 }
@@ -1054,7 +1064,19 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     // Today's Plan buckets — WHO asked for a callback, WHOSE visit is fixed,
     // WHOSE visit already happened. Names up front, not buried in statuses.
     val nowMs = System.currentTimeMillis()
-    val callbacks = app.followUpList.sortedBy { instantMillis(it.dueAt) ?: Long.MAX_VALUE }
+    // Same five-tier order as Call all. Oldest diary put the app's own "11 AM"
+    // ahead of a buyer who wrote this morning.
+    val callbacks = remember(app.followUpList, app.workByLead) {
+        app.followUpList.sortedWith(
+            compareBy(
+                { f: FollowUp -> callNowTier(f.contactId?.let { app.workByLead[it] }) },
+                { f: FollowUp ->
+                    val w = f.contactId?.let { app.workByLead[it] }
+                    if (w == null) isoMillis(f.dueAt) ?: Long.MAX_VALUE else callNowTieKey(w, null)
+                },
+            ),
+        )
+    }
     val visitsPlanned = app.leads
         .mapNotNull { c -> c.siteVisitAt?.let { instantMillis(it) }?.let { ms -> c to ms } }
         .filter { it.second >= nowMs }.sortedBy { it.second }
@@ -1086,6 +1108,12 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     ) {
         // Greeting hero
         item { GreetingCard(app, firstName, onOpenAttendance = { onNavigate("attendance") }) }
+
+        app.workStatesError?.let { msg ->
+            item {
+                Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
 
         // Calling Score — front and centre. The AI listens to the rep's calls and
         // gives an honest average score, so they see their calling quality first.
@@ -1533,6 +1561,8 @@ private fun PlanBucket(
 private fun LeadsDeck(
     app: AppState,
     dueNow: Int,
+    /** The due read failed. The number must not say 0. */
+    dueUnknown: Boolean,
     hotCount: Int,
     newCount: Int,
     pipelineValue: Double,
@@ -1621,10 +1651,10 @@ private fun LeadsDeck(
             // The four counters, still one tap each, now one line instead of a
             // row of 60dp tiles.
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                DeckStat(dueNow, "Due", dueNow > 0, Modifier.weight(1f), onDueNow)
-                DeckStat(hotCount, "Hot", false, Modifier.weight(1f), onHot)
-                DeckStat(newCount, "New", false, Modifier.weight(1f), onNew)
-                if (reviveCount > 0) DeckStat(reviveCount, "Revive", false, Modifier.weight(1f), onRevive)
+                DeckStat(if (dueUnknown) "—" else dueNow.toString(), "Due", !dueUnknown && dueNow > 0, Modifier.weight(1f), onDueNow)
+                DeckStat(hotCount.toString(), "Hot", false, Modifier.weight(1f), onHot)
+                DeckStat(newCount.toString(), "New", false, Modifier.weight(1f), onNew)
+                if (reviveCount > 0) DeckStat(reviveCount.toString(), "Revive", false, Modifier.weight(1f), onRevive)
             }
         }
     }
@@ -1726,7 +1756,7 @@ private fun UpNextCard(
 
 /** One glass counter on the deck — a number that is also a one-tap filter. */
 @Composable
-private fun DeckStat(value: Int, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun DeckStat(value: String, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     // One line, 26dp. Two-line tiles cost 60dp each and said nothing extra.
     //
     // The emoji is gone because it was eating the label. Four chips share the
@@ -1744,7 +1774,7 @@ private fun DeckStat(value: Int, label: String, highlight: Boolean, modifier: Mo
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        Text("$value", fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(value, fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
         Spacer(Modifier.width(4.dp))
         Text(
             label, fontSize = 9.5.sp, color = Color.White.copy(alpha = 0.8f),
@@ -1993,24 +2023,16 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
     LaunchedEffect(nowMs) { if (settled) vm.refreshWorkStates() else settled = true }
     fun fuOf(c: Contact) = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone]
 
-    // The call queue behind the Next call card. Hoisted here, not built inside
-    // the LazyColumn: that content block is a LazyListScope, not a composable
-    // one, so remember() cannot live there — and without remember this would
-    // re-sort four hundred leads on every scroll frame.
+    // The call queue behind the Next call card, and the list Call all dials.
+    // Hoisted here, not built inside the LazyColumn: that content block is a
+    // LazyListScope, not a composable one, so remember() cannot live there.
     //
-    // The rule is dueNowCount()'s, exactly: overdue or call_now. Ordered by the
-    // callback that was promised soonest, then by arrival for the ones nobody
-    // ever booked — the same order Follow Ups rings them in.
-    val queue = remember(app.leads, app.workByLead, app.followUpList) {
-        app.leads
-            .filter { val a = app.actionOf(it); a == "overdue" || a == "call_now" }
-            .sortedWith(
-                compareBy(
-                    { c: Contact -> fuOf(c)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE },
-                    { c: Contact -> instantMillis(c.createdAt) ?: Long.MAX_VALUE },
-                ),
-            )
+    // Same list as dueNowCount() and as Follow-ups Call now: overdue or
+    // call_now, five-tier order. See CallNowQueue.kt.
+    val queue = remember(app.leads, app.workByLead) {
+        callNowContacts(app.leads, app.workByLead)
     }
+    val dueUnknown = app.workStatesError != null
 
     val base = when {
         stageFilter != null -> app.leads.filter { it.stage == stageFilter }
@@ -2039,18 +2061,20 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
         // deck's Due number counts (see DeckStats above). One rule, used to
         // both count the badge and build the list it opens, so they cannot
         // drift apart again.
-        bucket == "followup" -> app.leads
-            .filter { val a = app.actionOf(it); a == "overdue" || a == "call_now" }
-            .sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
+        bucket == "followup" -> queue
         // Character-for-character the rule the deck's newCount uses.
         bucket == "new" -> app.leads.filter { it.stage == "new" }
         // Both axes read straight through. There is no client-side re-derivation
         // of either one: the stage is a column, the action state is a view, and
         // a second opinion computed here is exactly the drift being removed.
-        bucket.startsWith("act:") ->
-            app.leads.filter { app.actionOf(it) == bucket.removePrefix("act:") }
-                // Soonest first, so the longest wait is at the top of the queue.
-                .sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
+        bucket.startsWith("act:") -> {
+            val code = bucket.removePrefix("act:")
+            val rows = app.leads.filter { app.actionOf(it) == code }
+            // Call now and Overdue are the dial queues. Same five tiers as
+            // Call all. The diary chips stay in time order.
+            if (code == "call_now" || code == "overdue") rows.sortedWith(callNowOrder(app.workByLead))
+            else rows.sortedBy { fuOf(it)?.let { f -> instantMillis(f.dueAt) } ?: Long.MAX_VALUE }
+        }
         bucket.startsWith("stage:") ->
             app.leads.filter { it.stage == bucket.removePrefix("stage:") }
         else -> app.leads
@@ -2127,7 +2151,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // themselves do, so it must not re-run on every keystroke in
                     // the search box or every tap of a filter chip — which is
                     // what it did, on the main thread, before this remember.
-                    val deck = remember(app.leads, app.followUpList, nowMs / 60_000) {
+                    val deck = remember(app.leads, app.workByLead, app.workStatesError, app.followUpList, nowMs / 60_000) {
                         // Exactly the Follow-up tab's "Call now" rule, because
                         // that is where this counter now sends the rep. It used
                         // to count rows in the follow_ups table instead, which
@@ -2156,6 +2180,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     LeadsDeck(
                         app = app,
                         dueNow = deck.dueNow,
+                        dueUnknown = dueUnknown,
                         hotCount = deck.hotCount,
                         // Same rule as the New tab below. These two used to disagree
                         // (the card counted leads the tab had already drained into
@@ -2179,6 +2204,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                         onNew = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },
                         onRevive = { reviveOpen = true; vm.loadSecondChance() },
                     )
+                    if (dueUnknown) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            app.workStatesError ?: "",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 } else {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -2205,9 +2238,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     item(key = "up_next") {
                         val fu = fuOf(next)
                         val due = fu?.let { instantMillis(it.dueAt) }
+                        val work = app.workOf(next)
                         UpNextCard(
                             lead = next,
                             reason = when {
+                                work?.waitingSince != null ->
+                                    "They wrote ${agoLabel(work.waitingSince)} — no reply yet"
+                                work?.promiseDueSince != null && !work.promiseText.isNullOrBlank() ->
+                                    "You said: ${work.promiseText}"
                                 due != null && due <= nowMs -> "Callback was due ${agoLabel(fu.dueAt)}"
                                 due != null -> "Callback due ${relativeDue(fu.dueAt)}"
                                 next.createdAt != null -> "New lead · ${arrivedLabel(next.createdAt!!)}"
@@ -2278,6 +2316,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                 }
                 WorkGrid(
                     counts = actionCounts,
+                    unknown = dueUnknown,
                     selectedCode = bucket.removePrefix("act:").takeIf {
                         bucket.startsWith("act:") && stageFilter == null && quick == null
                     },
@@ -2441,7 +2480,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // chips on the action row — same three groups, same one
                     // clock, except the clock is the database's and the counts
                     // are the ones the dashboard shows.
-                    if (fuCallNow.isEmpty() && (bucket == "act:call_now" || bucket == "followup") && filtered.isEmpty()) {
+                    if (dueUnknown && filtered.isEmpty() && (bucket == "act:call_now" || bucket == "act:overdue" || bucket == "followup")) {
+                        item(key = "fu_unknown") {
+                            Text(
+                                app.workStatesError ?: "",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    } else if (fuCallNow.isEmpty() && (bucket == "act:call_now" || bucket == "followup") && filtered.isEmpty()) {
                         item(key = "fu_clear") { FollowUpAllClear(app.leads.count { app.actionOf(it) == "scheduled" }) }
                     } else {
                         items(filtered, key = { it.id ?: it.phone }) { c -> leadCard(c) }
@@ -4189,7 +4236,12 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     // rep to leave and come back — which is how a callback booked for 3 PM got
     // rung at 3:40 and the screen took the blame for being "late".
     val now = rememberNowTick()
+    // Call now is the server's answer. A local tick cannot move a 3 PM
+    // callback into it. Re-read the view each minute, same as the Leads screen.
+    var settled by remember { mutableStateOf(false) }
+    LaunchedEffect(now) { if (settled) vm.refreshWorkStates() else settled = true }
     val all = app.followUpList
+    val dueUnknown = app.workStatesError != null
 
     // EVERY DATE PARSED ONCE PER LOAD, NOT ONCE PER COMPARISON.
     //
@@ -4208,124 +4260,61 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val parsed = remember(all) {
         all.map { FuAt(it, instantMillis(it.dueAt) ?: Long.MAX_VALUE, dayLabel(it.dueAt)) }
     }
-    val leadById = remember(app.leads) { app.leads.mapNotNull { l -> l.id?.let { it to l } }.toMap() }
-    // Why each lead is really in Call now — a broken promise, or a buyer left
-    // waiting. Already loaded for the Leads list; this screen never read it.
+    // Why each lead is really in Call now. The order lives in CallNowQueue —
+    // the same function the Leads "Call all" dials, so the two screens cannot
+    // disagree about who is first.
     val workByLead = app.workByLead
+    val callNowLeads = remember(app.leads, workByLead) {
+        callNowContacts(app.leads, workByLead)
+    }
+    val dueIds = remember(callNowLeads) { callNowLeads.mapNotNull { it.id }.toSet() }
+    // Soonest pending row per lead. The list arrives ordered by due_at.
+    val fuByContact = remember(parsed) {
+        val map = LinkedHashMap<String, FuAt>()
+        for (x in parsed.sortedBy { it.ms }) {
+            val id = x.f.contactId ?: continue
+            map.putIfAbsent(id, x)
+        }
+        map
+    }
+    // One row per due lead, in five-tier order. A lead the clock says to call
+    // who has no diary row still appears — otherwise Due now and this chip
+    // count different people. A future diary on a waiting buyer is Call now,
+    // not Tomorrow: due beats later.
+    val toCall = remember(callNowLeads, fuByContact, workByLead) {
+        callNowLeads.map { lead ->
+            val existing = lead.id?.let { fuByContact[it] }?.f
+            existing ?: syntheticCallNow(lead, lead.id?.let { workByLead[it] })
+        }
+    }
+    val dueContacts = callNowLeads
 
-    // Bucketed in ONE pass, and only when the list or the minute actually
-    // changes. `now` is a key because these are clock questions — that is the
-    // whole point of the tick — but the answer is computed once per tick, not
-    // once per frame.
-    val buckets = remember(parsed, now, workByLead) {
-        val toCallL = ArrayList<FuAt>(); val laterL = ArrayList<FuAt>()
-        val tomorrowL = ArrayList<FuAt>(); val weekL = ArrayList<FuAt>()
+    // The other tabs are diary questions. They do not include anyone already
+    // in Call now. `now` is a key because later-today is a clock question.
+    val diary = remember(parsed, now, dueIds) {
+        val laterL = ArrayList<FuAt>()
+        val tomorrowL = ArrayList<FuAt>()
+        val weekL = ArrayList<FuAt>()
         val overdueL = ArrayList<FuAt>()
         val weekEnd = now + 7L * 24 * 3600_000L
         for (x in parsed) {
-            // ONE list for "what do I call now": every callback whose time has
-            // come, whether it fell due an hour ago or last Tuesday. Splitting
-            // these apart is what confused the reps — a rep with nothing dated
-            // today but twenty-four waiting from last week opened Follow Ups
-            // and saw an EMPTY LIST.
-            if (x.ms <= now) {
-                toCallL.add(x)
-                // Older than today: what the bulk-reschedule button acts on.
-                if (x.ms < now && x.day != "Today") overdueL.add(x)
-            } else {
+            val inCallNow = x.f.contactId != null && x.f.contactId in dueIds
+            if (x.ms < now && x.day != "Today") overdueL.add(x)
+            if (inCallNow) continue
+            if (x.ms > now) {
                 if (x.day == "Today") laterL.add(x)
                 if (x.ms <= weekEnd) weekL.add(x)
             }
-            // Tomorrow gets its own tab because that is how a telecaller plans
-            // — "kal kisko karna hai" is a real question, and it was buried
-            // inside a 7-day list.
             if (x.day == "Tomorrow") tomorrowL.add(x)
         }
-        // WHO IS WAITING ON YOU, THEN OLDEST.
-        //
-        // "Oldest first" was honest when every row in Call now was a callback
-        // a rep had actually promised. It is not honest now. 154 of these were
-        // booked by the app itself — "No call time was set, so we booked one
-        // for 11 AM" — and they are all 43 days old, so sorting by age puts
-        // the app's own invented callbacks above a buyer who messaged this
-        // morning and a floor plan promised out loud last week.
-        //
-        // Five tiers, and only for the Call now list:
-        //   0  the buyer wrote and nobody answered  — they acted, unprompted
-        //   1  you promised something and it is not done
-        //   2  someone has actually spoken to them  — warmest first
-        //   3  rung fewer than four times, never answered — a fair shot
-        //   4  four or more tries, never once answered
-        //
-        // Buyer above promise deliberately: a person who messaged you outranks
-        // a note about yourself. It is the same order the lead row already
-        // uses, and two screens disagreeing about what matters is worse than
-        // either order being wrong.
-        //
-        // The other tabs stay purely chronological — they are diary questions
-        // ("kal kisko karna hai"), not "what do I do next".
-        val rank = { x: FuAt ->
-            val w = x.f.contactId?.let { workByLead[it] }
-            when {
-                w?.waitingSince != null -> 0
-                w?.promiseDueSince != null -> 1
-                // SOMEONE HAS ACTUALLY SPOKEN TO THIS PERSON BEFORE.
-                //
-                // best_call_seconds is the longest call ever on this lead, not
-                // the last one (migration 0215). Of Ankita's 320 due leads, 236
-                // have a real conversation somewhere in their history and 52
-                // have never been answered in four or more tries — one number
-                // has been rung seventy-nine times. Sorting by age treated all
-                // three the same.
-                //
-                // 30 MUST MATCH MIGRATION 0217.
-                //
-                // An accepted WhatsApp call has no duration, so
-                // 0217_a_whatsapp_call_counts_as_contact.sql raises
-                // best_call_seconds to exactly 30 to mean "someone spoke".
-                // This threshold and that sentinel have to change together.
-                // Move the phone to 45 and leave the sentinel at 30, and the
-                // buyer who picked up on WhatsApp falls back into tier 4.
-                (w?.bestCallSeconds ?: 0) >= 30 -> 2
-                // Rung a few times, never answered. Still worth a fair shot.
-                (w?.callsTotal ?: 0) < 4 -> 3
-                // Four or more tries and not one answer. Kept in the list —
-                // hiding a lead is the founder's call, not the app's — but it
-                // stops outranking a buyer she spoke to last week.
-                else -> 4
-            }
-        }
         val byTime = compareBy<FuAt> { it.ms }
-        // EACH KEY COMPUTED ONCE, NOT ONCE PER COMPARISON.
-        //
-        // The comment thirty lines above this one is about exactly this trap:
-        // a comparator that does real work runs O(n log n) times, and this one
-        // would do a map lookup and an ISO parse on every call. 320 rows is a
-        // few thousand of each, on a mid-range phone, on every tick.
-        //
-        // Inside "ever talked", the WARMEST first: the person she spoke to
-        // last week before the one she spoke to in July. Everywhere else,
-        // oldest first, which is the fair order when nothing else is known.
-        val keyed = toCallL.map { x ->
-            val t = rank(x)
-            val w = x.f.contactId?.let { workByLead[it] }
-            Triple(x, t, if (t == 2) -(instantMillis(w?.lastCallAt) ?: 0L) else x.ms)
-        }.sortedWith(compareBy({ it.second }, { it.third }))
-        toCallL.clear()
-        keyed.forEach { toCallL.add(it.first) }
-        listOf(laterL, tomorrowL, weekL).forEach { it.sortWith(byTime) }
-        listOf(toCallL, laterL, tomorrowL, weekL, overdueL)
+        listOf(laterL, tomorrowL, weekL, overdueL).forEach { it.sortWith(byTime) }
+        listOf(laterL, tomorrowL, weekL, overdueL)
     }
-    val toCall = buckets[0].map { it.f }
-    val laterToday = buckets[1].map { it.f }
-    val tomorrow = buckets[2].map { it.f }
-    val weekList = buckets[3].map { it.f }
-    val overdueStrict = buckets[4].map { it.f }
-    // Map them to lead rows so we can power-dial back-to-back — one map hit
-    // each, not a scan of the whole lead list per row.
-    val dueContacts = remember(buckets, leadById) {
-        buckets[0].mapNotNull { it.f.contactId?.let { id -> leadById[id] } }
-    }
+    val laterToday = diary[0].map { it.f }
+    val tomorrow = diary[1].map { it.f }
+    val weekList = diary[2].map { it.f }
+    val overdueStrict = diary[3].map { it.f }
 
     // Land on the list that HAS the work. Only once the rep taps a tab does
     // their choice take over — so the screen is never empty by default while
@@ -4366,7 +4355,9 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     // otherwise the chips look selected while showing something else, which is
     // exactly the kind of "this screen is lying to me" moment this page has
     // already been fixed for once.
-    val blurb = if (query.isNotBlank()) {
+    val blurb = if (dueUnknown && filter == "tocall") {
+        app.workStatesError ?: ""
+    } else if (query.isNotBlank()) {
         "${shown.size} found across every list — clear the search to go back to the tabs."
     } else when (filter) {
         "tocall" -> "Waiting on you first, then people you have actually spoken to. " +
@@ -4426,8 +4417,19 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // spells out whichever one is selected.
         item {
             Column {
+                if (dueUnknown) {
+                    Text(
+                        app.workStatesError ?: "",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 CompactFilterRow {
-                    FilterTab("Call now", toCall.size, filter == "tocall", Red) { picked = "tocall" }
+                    FilterTab(
+                        "Call now", toCall.size, filter == "tocall", Red,
+                        countLabel = if (dueUnknown) "—" else null,
+                    ) { picked = "tocall" }
                     FilterTab("Later today", laterToday.size, filter == "later", MaterialTheme.colorScheme.primary) { picked = "later" }
                     FilterTab("Tomorrow", tomorrow.size, filter == "tomorrow", Amber) { picked = "tomorrow" }
                     FilterTab("This week", weekList.size, filter == "week", Indigo) { picked = "week" }
@@ -4515,6 +4517,8 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 // count of 24 is what taught reps to distrust this screen.
                 Text(
                     when {
+                        dueUnknown && (filter == "tocall" || all.isEmpty()) ->
+                            app.workStatesError ?: ""
                         query.isNotBlank() -> "No callback matches \"${query.trim()}\". This searches your callbacks only — the lead may still be on the Leads page."
                         all.isEmpty() -> "No callbacks scheduled. Book one from any lead."
                         toCall.isNotEmpty() -> "Nothing in this list — but ${toCall.size} are waiting in Call now."
@@ -4525,14 +4529,22 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 )
             }
         } else {
-            items(shown, key = { it.id ?: it.phone }) { f ->
+            items(shown, key = { it.id ?: it.contactId ?: it.phone }) { f ->
                 val cid = f.contactId
                 FollowUpCard(
                     f = f,
                     now = now,
                     onCall = { vm.dialManual(f.phone) },
                     onWhatsApp = { openWhatsApp(context, f.phone, waTemplate(f.name, null, app.profile?.fullName, app.company?.name, app.profile?.speaksAs)) },
-                    onSnooze = { f.id?.let { vm.snoozeFollowUp(it, 1) } },
+                    onSnooze = {
+                        val fid = f.id
+                        if (fid != null) vm.snoozeFollowUp(fid, 1)
+                        else vm.scheduleFollowUp(
+                            f.contactId, f.phone, f.name,
+                            System.currentTimeMillis() + 3_600_000L,
+                            null, mirrorStatus = false,
+                        )
+                    },
                     onReschedule = { rescheduleFor = f },
                     onUpdate = if (cid == null) null else fun() { vm.openFollowUpUpdate(cid, f.phone, f.name, f.id) },
                     onDone = { f.id?.let { vm.completeFollowUp(it) } },
@@ -4595,6 +4607,7 @@ private fun whyThisCallback(f: FollowUp): String {
         // through to "You said:", which told a rep they had typed something
         // they never typed — on the most common note in the table.
         note == AUTO_CALLBACK_NOTE -> "⏰ $note"
+        note == NO_PLAN_NOTE -> note
         note.isNotEmpty() -> "📝 You said: $note"
         else -> "↻ You booked a call back"
     }
@@ -4603,6 +4616,22 @@ private fun whyThisCallback(f: FollowUp): String {
 /** The note `book_callback_if_missing` stamps on a callback nobody timed —
  *  migration 0166. Matched, never written, by the app. */
 private const val AUTO_CALLBACK_NOTE = "No call time was set, so we booked one for 11 AM"
+
+/** A Call now lead with no diary row. Not "you booked this". */
+private const val NO_PLAN_NOTE = "No callback booked. Call them now."
+
+/** A row the Follow-ups card can draw for a due lead who has no follow-up yet.
+ *  id stays null so Done cannot mark a row that does not exist. */
+private fun syntheticCallNow(lead: Contact, work: LeadWork?): FollowUp = FollowUp(
+    id = null,
+    companyId = lead.companyId,
+    salespersonId = lead.salespersonId ?: "",
+    contactId = lead.id,
+    phone = lead.phone,
+    name = lead.name,
+    dueAt = work?.dueAt ?: java.time.Instant.now().toString(),
+    note = if (work?.waitingSince != null || !work?.promiseText.isNullOrBlank()) null else NO_PLAN_NOTE,
+)
 
 /**
  * [onUpdate] is null when the callback isn't linked to a lead — there is no

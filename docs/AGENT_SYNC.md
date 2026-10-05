@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (one Call now list for the phone)
+
+- WHAT: Home, the Leads deck, and Follow-ups now share one due list. Membership is `v_lead_workstate` action `overdue` or `call_now`. Order is the five tiers Follow-ups already used (buyer waiting, broken promise, spoken, few tries, never answered). The Leads "Or call all" queue and the Due / Call now / Overdue dial button were oldest-diary; they now dial that list. Follow-ups Call now is the same leads, not "follow_up.due_at has passed". After a disposition the phone copies `stage` with `status` (same forward-only rule as `contacts_stage_sync`, terminal always wins). A failed `v_lead_workstate` read keeps the last good map, or shows "Could not load who is due" when there is nothing to keep. It does not become Due 0.
+- FILES: `android/.../ui/CallNowQueue.kt` (new), `TelecallerScreens.kt`, `MainViewModel.kt`, `FeatureScreens.kt`, `data/Repository.kt`.
+- WHY: A buyer who wrote was dialed after a 43-day app-invented 11 AM, Due now and Call now could disagree, a lost lead stayed in the old stage until reload, and a failed work-state read looked like a quiet day.
+- BUILD: `assembleStandardDebug` green locally. No migration. Founder does not apply 0217/0218 from this PR.
+- NEXT/NOTE: Dashboard has no Call all button. The dial queue that was wrong is the Leads next-call card and the due-list Call button. Dead WhatsApp capture on the phone, OEM recording, and applying 0217/0218 stay out of this PR.
+
 ## 2026-10-05 — Cursor (capture banner sits in the page)
 
 - WHAT: The dead-WhatsApp strip is no longer a sticky card. It is one band in the dashboard shell, under the frosted title bar and above the page, full width of the main column. One title line, one detail line, the Scan a new QR link as a button on the right (stacked on a phone). Same query, same one mount in the dashboard layout. A single session still names the rep, the company, the status, both ages, and that messages sent while this is down are not recorded. The three-way sentence (disconnected, logged out, or the watchdog) stays when more than one session is down. It does not cover the lead cards.
