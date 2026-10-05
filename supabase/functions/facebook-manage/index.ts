@@ -111,6 +111,33 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: errMsg || `CAPI test failed (${res.status})` });
     }
 
+    // Re-post events whose last attempt failed. Scoped to this company.
+    // Does not send a new kind of event and does not invent a purchase value.
+    if (action === "retry_capi") {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/meta-capi`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SERVICE}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mode: "retry", company_id: company }),
+      });
+      const txt = await res.text();
+      let parsed: Record<string, unknown> = {};
+      try { parsed = JSON.parse(txt); } catch { parsed = { ok: false, error: txt.slice(0, 300) }; }
+      if (!res.ok || parsed.ok === false) {
+        return json({ ok: false, error: String(parsed.error ?? `Retry failed (${res.status})`) });
+      }
+      return json({
+        ok: true,
+        tried: parsed.tried ?? 0,
+        sent: parsed.sent ?? 0,
+        still_failed: parsed.still_failed ?? 0,
+        skipped_cap: parsed.skipped_cap ?? 0,
+        note: parsed.note ?? null,
+      });
+    }
+
     const { data: integ } = await admin.from("facebook_integrations").select("page_id").eq("company_id", company).maybeSingle();
     if (!integ?.page_id) return json({ ok: false, error: "Save your Page ID first." });
     const { data: token, error: tokErr } = await admin.rpc("get_facebook_token", { p_company: company });

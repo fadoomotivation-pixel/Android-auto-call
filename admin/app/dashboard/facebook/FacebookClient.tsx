@@ -34,7 +34,7 @@ const STAGE_LABELS: Record<string, string> = {
 
 type Check = { ok: boolean; label: string };
 export type RecentLead = { id: string; name: string | null; phone: string; created_at: string; extra: { form_id?: string; created_time?: string } | null };
-export type FbStats = { today: number; d7: number; d30: number; conversions: number };
+export type FbStats = { today: number; d7: number; d30: number; conversions: number; failed: number };
 
 type Company = { id: string; name: string | null };
 
@@ -101,7 +101,10 @@ export function FacebookClient({
   const [eventMap, setEventMap] = useState<Record<string, string>>(seeded.eventMap);
   const [savingCapi, setSavingCapi] = useState(false);
   const [capiTesting, setCapiTesting] = useState(false);
+  const [capiRetrying, setCapiRetrying] = useState(false);
   const [capiMsg, setCapiMsg] = useState<string | null>(null);
+  // null until the selected company's failed-event read returns. Zero is a result.
+  const [companyFailed, setCompanyFailed] = useState<{ n: number; note: string | null } | null>(null);
   const [pulling, setPulling] = useState(false);
   const [pullMsg, setPullMsg] = useState<string | null>(null);
 
@@ -175,6 +178,7 @@ export function FacebookClient({
     }
     loadIntegration();
     if (!isSuper) void loadStats(isSuper, companyId);
+    if (companyId) void loadCompanyFailed(companyId);
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, supabase]);
@@ -222,19 +226,84 @@ export function FacebookClient({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       superAdmin ? q : (q as any).eq("company_id", company);
     const base = () => scope(supabase.from("contacts").select("id", { count: "exact", head: true }).eq("lead_source", "facebook"));
-    const [t, w, m, conv] = await Promise.all([
+    const [t, w, m, conv, failedEvents] = await Promise.all([
       base().gte("created_at", startToday),
       base().gte("created_at", d7),
       base().gte("created_at", d30),
       scope(supabase.from("capi_events").select("id", { count: "exact", head: true }).eq("ok", true)),
+      scope(supabase.from("capi_events").select("id", { count: "exact", head: true }).eq("ok", false)),
     ]);
-    const failed = [t.error, w.error, m.error, conv.error].filter(Boolean);
-    if (failed.length) {
-      setStatsError(failed.map((e) => e!.message).join(" · "));
+    const bad = [t.error, w.error, m.error, conv.error, failedEvents.error].filter(Boolean);
+    if (bad.length) {
+      setStatsError(bad.map((e) => e!.message).join(" · "));
       setStats((s) => ({ ...s, loading: false }));
       return;
     }
-    setStats({ today: t.count ?? 0, d7: w.count ?? 0, d30: m.count ?? 0, conversions: conv.count ?? 0, loading: false });
+    setStats({
+      today: t.count ?? 0, d7: w.count ?? 0, d30: m.count ?? 0,
+      conversions: conv.count ?? 0, failed: failedEvents.count ?? 0, loading: false,
+    });
+    if (company) void loadCompanyFailed(company);
+  }
+
+  function describeFailure(row: { event_name?: string; response?: string | null } | undefined): string | null {
+    if (!row) return null;
+    const name = row.event_name ?? "Event";
+    const response = row.response ?? "";
+    try {
+      const j = JSON.parse(response) as { error?: unknown; meta?: unknown; attempts?: unknown };
+      const why = typeof j.error === "string" && j.error
+        ? j.error
+        : typeof j.meta === "string" ? j.meta.slice(0, 160) : response.slice(0, 160);
+      const attempts = typeof j.attempts === "number" ? ` · ${j.attempts} attempt${j.attempts === 1 ? "" : "s"}` : "";
+      return `${name}: ${why}${attempts}`;
+    } catch {
+      return response ? `${name}: ${response.slice(0, 160)}` : name;
+    }
+  }
+
+  async function loadCompanyFailed(company: string) {
+    setCompanyFailed(null);
+    const { count, error: countError } = await supabase.from("capi_events")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", company)
+      .eq("ok", false);
+    if (countError) {
+      setCapiMsg(countError.message);
+      return;
+    }
+    const { data, error } = await supabase.from("capi_events")
+      .select("event_name, response")
+      .eq("company_id", company)
+      .eq("ok", false)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error) {
+      setCapiMsg(error.message);
+      return;
+    }
+    setCompanyFailed({ n: count ?? 0, note: describeFailure(data?.[0]) });
+  }
+
+  async function retryFailed() {
+    if (!companyId || !companyFailed || companyFailed.n === 0) return;
+    setCapiRetrying(true);
+    setCapiMsg(null);
+    const { data, error } = await supabase.functions.invoke<{
+      ok: boolean; error?: string; tried?: number; sent?: number; still_failed?: number;
+    }>("facebook-manage", { body: { action: "retry_capi", company_id: companyId } });
+    setCapiRetrying(false);
+    if (error || !data?.ok) {
+      setCapiMsg(data?.error || error?.message || "Retry failed.");
+      return;
+    }
+    const tried = data.tried ?? 0;
+    const sent = data.sent ?? 0;
+    const still = data.still_failed ?? 0;
+    setCapiMsg(tried === 0
+      ? "No failed events to retry."
+      : `Retried ${tried}. Meta accepted ${sent}. Still failed: ${still}.`);
+    void loadStats(isSuper, companyId);
   }
 
   async function runTest() {
@@ -468,6 +537,7 @@ export function FacebookClient({
         <FbStat label="Last 7 days" value={stats.d7} tone="#22c55e" loading={countFailed} />
         <FbStat label="Last 30 days" value={stats.d30} tone="#a855f7" loading={countFailed} />
         <FbStat label="Conversions → Meta" value={stats.conversions} tone="#f59e0b" loading={countFailed} />
+        <FbStat label="Failed events" value={stats.failed} tone={stats.failed > 0 ? "#ef4444" : "#86868B"} loading={countFailed} />
       </div>
       {statsError && <div className="error">Lead counts could not be loaded. {statsError}</div>}
       {integrationError && <div className="error">Facebook setup could not be loaded. {integrationError}</div>}
@@ -778,7 +848,10 @@ export function FacebookClient({
               ))}
             </div>
             <p style={{ fontSize: 12, color: "var(--muted)", margin: "8px 2px 0" }}>
-              Leave a row blank to not send that stage. Each signal is sent once per lead.
+              Leave a row blank to not send that stage. A successful signal is sent once per lead.
+              A failed one can be retried. Purchase includes the token amount in INR only when that
+              amount is saved on the lead. A budget is not a sale. We do not guess a plot price,
+              and we do not send guaranteed returns — these are housing ads.
             </p>
           </div>
 
@@ -805,7 +878,24 @@ export function FacebookClient({
             >
               {capiTesting ? "Testing…" : "🧪 Test CAPI"}
             </button>
-            {capiMsg && <span style={{ fontSize: 13, color: capiMsg.startsWith("✓") ? "#22c55e" : "#f87171" }}>{capiMsg}</span>}
+            {capiMsg && <span style={{ fontSize: 13, color: capiMsg.startsWith("✓") || capiMsg.startsWith("No failed") || /Still failed: 0\b/.test(capiMsg) ? "#22c55e" : "#f87171" }}>{capiMsg}</span>}
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={retryFailed}
+              disabled={capiRetrying || !companyFailed || companyFailed.n === 0}
+              style={{ background: "rgba(239,68,68,0.10)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.35)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: capiRetrying || !companyFailed || companyFailed.n === 0 ? "default" : "pointer" }}
+            >
+              {capiRetrying ? "Retrying…" : companyFailed ? `Retry this company's failed (${companyFailed.n})` : "Checking failed events…"}
+            </button>
+            <span style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, maxWidth: 420 }}>
+              {companyFailed == null
+                ? "Checking this company's failed events. Not a zero."
+                : companyFailed.n === 0
+                  ? "No failed events for this company. A success is not retried."
+                  : (companyFailed.note ?? "A previous send failed. The button tries it again and writes the result.")}
+            </span>
           </div>
         </form>
       </div>

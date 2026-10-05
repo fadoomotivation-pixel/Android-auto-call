@@ -36,7 +36,7 @@ async function FacebookData() {
     fallback: "first",
   });
   const companyId = scope.isSuper ? (scope.companyId ?? "") : (scope.homeCompanyId ?? "");
-  const emptyStats: FbStats = { today: 0, d7: 0, d30: 0, conversions: 0 };
+  const emptyStats: FbStats = { today: 0, d7: 0, d30: 0, conversions: 0, failed: 0 };
 
   if (!companyId) {
     return (
@@ -66,13 +66,13 @@ async function FacebookData() {
     if (!isSuper) q = q.eq("company_id", companyId);
     return q;
   };
-  const capi = () => {
-    let q = supabase.from("capi_events").select("id", { count: "exact", head: true }).eq("ok", true);
+  const capi = (ok: boolean) => {
+    let q = supabase.from("capi_events").select("id", { count: "exact", head: true }).eq("ok", ok);
     if (!isSuper) q = q.eq("company_id", companyId);
     return q;
   };
 
-  const [integ, leads, today, week, month, conv] = await Promise.all([
+  const [integ, leads, today, week, month, conv, failedEvents] = await Promise.all([
     supabase.from("facebook_integrations").select("*").eq("company_id", companyId).maybeSingle(),
     supabase.from("contacts")
       .select("id, name, phone, created_at, extra")
@@ -83,10 +83,11 @@ async function FacebookData() {
     contacts().gte("created_at", startToday),
     contacts().gte("created_at", d7),
     contacts().gte("created_at", d30),
-    capi(),
+    capi(true),
+    capi(false),
   ]);
 
-  const statsError = [today.error, week.error, month.error, conv.error]
+  const statsError = [today.error, week.error, month.error, conv.error, failedEvents.error]
     .flatMap((e) => (e ? [e.message] : []))
     .join(" · ") || null;
 
@@ -104,6 +105,7 @@ async function FacebookData() {
         d7: week.count ?? 0,
         d30: month.count ?? 0,
         conversions: conv.count ?? 0,
+        failed: failedEvents.count ?? 0,
       }}
       statsError={statsError}
       freshVerifyToken={mintVerify()}
