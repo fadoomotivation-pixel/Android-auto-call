@@ -979,7 +979,7 @@ private fun CoachSheet(
                                 if ((c.rating ?: 0) >= 4 && c.improve.isNullOrBlank()) {
                                     Spacer(Modifier.height(6.dp))
                                     Text(
-                                        "🔥 Shaandaar call! Aise hi karte rahiye.",
+                                        "🔥 Great call. Keep going like this.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.SemiBold,
@@ -994,7 +994,7 @@ private fun CoachSheet(
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(
-                                    if (b.slot == "morning") "🌅 Kal ka din" else "🌆 Aaj ka din",
+                                    if (b.slot == "morning") "🌅 Yesterday" else "🌆 Today",
                                     style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
                                 )
                                 Spacer(Modifier.height(6.dp))
@@ -1012,7 +1012,7 @@ private fun CoachSheet(
                         ) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(
-                                    "💡 Aaj ka tip",
+                                    "💡 Today's tip",
                                     style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
@@ -1039,7 +1039,7 @@ private fun CoachSheet(
             // ---- "Aaj ke 5" — the AI sales manager's next-best calls, each with
             // a ready-to-speak opener. One tap = dialing. THE founder-demo moment.
             Spacer(Modifier.height(14.dp))
-            Text("🔥 Aaj ke 5 — sabse pehle ye calls", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("🔥 Today's 5 — call these first", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             when {
                 picksLoading -> Box(Modifier.fillMaxWidth().padding(18.dp), contentAlignment = Alignment.Center) {

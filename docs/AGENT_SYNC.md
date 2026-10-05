@@ -37,6 +37,21 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-04 — Cursor (simple English UI)
+
+- WHAT: Rewrote Hindi and Hinglish on-screen copy to short English in the
+  Android app, the admin dashboard, and the edge-function text those screens
+  show (toasts, cards, empty states, notifications, note labels). Buyer
+  WhatsApp text, lines meant to be said to a buyer, speaks_as Hindi, and
+  prompts whose job is Hindi output were left as they are. No logic change.
+- FILES: android ui/fcm/data note labels; admin ads, whatsapp setup, routing,
+  integrity, phone health, xray, pulse, branding, location interest;
+  supabase functions rep-coach, rep-assistant, lead-sla, lead-rescue,
+  follow-up-draft, focus-five (reason example only), _shared/summarize.
+- WHY: Founder rule — no Hindi or Hinglish in the app or admin UI.
+- BUILD: assembleStandardDebug, admin tsc, admin next build.
+- NEXT/NOTE: PR #490 is already on main. This branch only changes strings.
+
 ## 2026-10-04 — Cursor (admin visual polish, second pass)
 
 - WHAT: Pushed the admin shell further. Inter is bundled (SF first, then the

@@ -273,7 +273,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
         val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
-            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Bolkar note likhein…")
+            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Speak your note…")
         }
         runCatching { voiceLauncher.launch(intent) }
             .onFailure { android.widget.Toast.makeText(context, "Voice typing not available on this phone", android.widget.Toast.LENGTH_SHORT).show() }
@@ -459,7 +459,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                 }
                                 if ((coach.rating ?: 0) >= 4 && coach.improve.isNullOrBlank()) {
                                     Spacer(Modifier.height(6.dp))
-                                    Text("🔥 Shaandaar call! Aise hi karte rahiye.",
+                                    Text("🔥 Great call. Keep going like this.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold, color = IndigoL)
                                 }

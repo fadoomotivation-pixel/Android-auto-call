@@ -30,7 +30,7 @@ export default async function IntegrityPage() {
     <>
       <h2>🛡 Integrity check</h2>
       <p className="subtitle">
-        Team ke kaam me jo cheezein poochhne layak hain — saboot ke saath. Har flag ek sawaal hai, ilzaam nahi.
+        Things in the team&apos;s work that are worth a question, with the proof. Each flag is a question, not an accusation.
       </p>
       <IntegrityBoard isSuper={isSuper} />
     </>

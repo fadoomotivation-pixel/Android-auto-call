@@ -78,41 +78,41 @@ export function WhatsAppSetup({
           the difference between a 5-minute setup and a stuck afternoon. */}
       <details style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 12, padding: "12px 14px" }}>
         <summary style={{ cursor: "pointer", fontWeight: 600, color: "#f59e0b", fontSize: 14 }}>
-          ⚠️ Number add karte waqt Meta pe error aa raha hai? Pehle ye padh lein
+          ⚠️ Getting an error from Meta while adding a number? Read this first.
         </summary>
 
         <div style={{ marginTop: 12, fontSize: 13.5, lineHeight: 1.65, color: "var(--text)" }}>
           <strong>1. &quot;This phone number is already registered to a WhatsApp account&quot;</strong>
           <p style={{ margin: "4px 0 8px", color: "var(--muted)" }}>
-            Ye hamari CRM ka error nahi hai — Meta ka niyam hai. Ek number ek hi jagah reh sakta hai:
-            <strong> ya to WhatsApp / WhatsApp Business app me, ya Cloud API me</strong>. Dono me nahi. Wati jaise
-            providers pe bhi yahi niyam lagta hai; wo bas ise apne guided flow ke peeche chhupa dete hain.
+            This is not a CRM error. It is a Meta rule. One number can live in one place only:
+            <strong> either the WhatsApp or WhatsApp Business app, or the Cloud API</strong>. Not both. Providers like Wati
+            follow the same rule. They just hide it behind a guided flow.
           </p>
-          <p style={{ margin: "0 0 4px", color: "var(--muted)" }}>Do raaste hain:</p>
+          <p style={{ margin: "0 0 4px", color: "var(--muted)" }}>Two ways:</p>
           <ul style={{ margin: "0 0 10px 18px", color: "var(--muted)" }}>
             <li>
-              <strong style={{ color: "var(--text)" }}>Alag number lein (aasaan aur behtar)</strong> — jo number
-              phone pe chal raha hai use waise hi chalne dein, aur API ke liye ek naya number
-              (koi bhi SIM, ya landline) daal dein. Zyadatar companies yahi karti hain.
+              <strong style={{ color: "var(--text)" }}>Use a different number (easier and better)</strong> — leave the number
+              on the phone as it is, and add a new number for the API
+              (any SIM, or a landline). Most companies do this.
             </li>
             <li>
-              <strong style={{ color: "var(--text)" }}>Wahi number chahiye</strong> — to us phone me
-              WhatsApp Business app kholein → <em>Settings → Account → Delete my account</em> → number hata dein.
-              5 minute ruk kar Meta pe dobara try karein. <strong>Dhyan dein:</strong> isse us phone se wo
-              WhatsApp account aur uski chats chali jaayengi.
+              <strong style={{ color: "var(--text)" }}>You need the same number</strong> — on that phone,
+              open WhatsApp Business → <em>Settings → Account → Delete my account</em> → remove the number.
+              Wait 5 minutes, then try Meta again. <strong>Careful:</strong> this deletes that phone&apos;s
+              WhatsApp account and its chats.
             </li>
           </ul>
 
-          <strong>2. App &quot;Live&quot; honi chahiye, warna message aayenge hi nahi</strong>
+          <strong>2. The app must be &quot;Live&quot;, or messages will not arrive</strong>
           <p style={{ margin: "4px 0 0", color: "var(--muted)" }}>
-            Meta app agar <em>Development</em> mode me hai to sirf test webhook milte hain — customer ke asli
-            message kabhi nahi pahunchenge. Meta dashboard me upar app ko <strong>Live / Publish</strong> karna
-            zaroori hai. (Bhejna phir bhi chalta hai; aana band rehta hai.)
+            If the Meta app is in <em>Development</em> mode, only test webhooks arrive. Real customer
+            messages never come through. In the Meta dashboard, set the app to <strong>Live / Publish</strong>.
+            Sending still works. Receiving stops.
           </p>
 
           <p style={{ margin: "10px 0 0", color: "var(--muted)" }}>
-            Dono ho jaane ke baad neeche ke khaane bhar kar Save karein, phir upar <strong>🩺 Connection check</strong>
-            chala kar dekh lein ki sach me chal raha hai.
+            After both are done, fill the fields below and tap Save. Then run <strong>🩺 Connection check</strong>
+            above, and confirm it really works.
           </p>
         </div>
       </details>

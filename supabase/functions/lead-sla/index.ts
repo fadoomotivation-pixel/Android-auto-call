@@ -125,9 +125,9 @@ Deno.serve(async (req) => {
     }
     const oldest = list.reduce((a, b) => (a.ageMin >= b.ageMin ? a : b));
     const body = list.length === 1
-      ? `${oldest.who} ko ${oldest.ageMin} min pehle assign hua — pehle 5 minute me call karne wale hi jeette hain. Abhi dial karo!`
-      : `${list.length} naye leads abhi tak uncalled hain (sabse purana: ${oldest.who}, ${oldest.ageMin} min). Abhi dial karna shuru karo!`;
-    await push(rep, "⏱️ Naya lead thanda ho raha hai", body);
+      ? `${oldest.who} was assigned ${oldest.ageMin} min ago. The people who call in the first 5 minutes win the lead. Dial now.`
+      : `${list.length} new leads still not called (oldest: ${oldest.who}, ${oldest.ageMin} min). Start dialling now.`;
+    await push(rep, "⏱️ New lead is going cold", body);
   }
 
   for (const [rep, list] of escalate) {
@@ -138,15 +138,15 @@ Deno.serve(async (req) => {
         await admin.from("lead_activities").insert({
           company_id: l.company_id, contact_id: l.id, actor_id: rep,
           actor_name: "AI Assistant 🤖", type: "sla",
-          detail: `⏱️ Lead ${l.ageMin} min tak uncalled raha (5-minute rule breach)`,
+          detail: `⏱️ Lead sat uncalled for ${l.ageMin} min (5-minute rule)`,
         });
       }
     }
     const oldest = list.reduce((a, b) => (a.ageMin >= b.ageMin ? a : b));
     const body = list.length === 1
-      ? `${oldest.who} ko ${oldest.ageMin} min ho gaye — abhi call karo, warna lead haath se jayegi.`
-      : `${list.length} leads ${ESCALATE_AFTER_MIN}+ min se uncalled hain (sabse purana: ${oldest.who}). Ye ab risk me hain — turant call karo.`;
-    await push(rep, "🚨 Lead abhi tak uncalled!", body);
+      ? `${oldest.who} has waited ${oldest.ageMin} min. Call now, or this lead slips away.`
+      : `${list.length} leads uncalled for ${ESCALATE_AFTER_MIN}+ min (oldest: ${oldest.who}). These are at risk. Call now.`;
+    await push(rep, "🚨 Lead still not called", body);
   }
 
   return json({ ok: true, checked: leads.length, already_called: alreadyCalled, nudged, escalated, dry_run: !!dry_run });
