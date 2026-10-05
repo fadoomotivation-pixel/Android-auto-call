@@ -535,6 +535,16 @@ private fun CallRow(
                 // The first line of what was actually said. The full summary
                 // lives in CallAiPanel, which only opens with the row — this is
                 // the bit that lets a rep scan the day without tapping at all.
+                com.salesautocall.app.dialer.RecordingTruth.warningFor(c)?.let { note ->
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        note,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CAmberM,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
                 c.summary?.trim()?.takeIf { it.isNotEmpty() }?.let { sum ->
                     Spacer(Modifier.height(3.dp))
                     Text(
@@ -546,7 +556,7 @@ private fun CallRow(
                 }
             }
             OutcomeTag(c.outcome)
-            if (c.recordingStatus == "ready") {
+            if (c.recordingStatus == "ready" && c.audioComplete != false) {
                 Spacer(Modifier.width(Space.s))
                 IconButton(onClick = { if (playing) onStop() else onPlay() }) {
                     Icon(

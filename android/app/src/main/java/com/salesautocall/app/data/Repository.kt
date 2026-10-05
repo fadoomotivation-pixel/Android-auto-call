@@ -181,8 +181,13 @@ object Repository {
     }
 
     /** Force a call's recording_status (e.g. "failed" when no audio was captured). */
-    suspend fun markRecordingStatus(callLogId: String, status: String) {
-        client.from("call_logs").update(mapOf("recording_status" to status)) {
+    suspend fun markRecordingStatus(callLogId: String, status: String, error: String? = null) {
+        client.from("call_logs").update(
+            buildJsonObject {
+                put("recording_status", status)
+                if (error != null) put("recording_error", error)
+            },
+        ) {
             filter { eq("id", callLogId) }
         }
     }

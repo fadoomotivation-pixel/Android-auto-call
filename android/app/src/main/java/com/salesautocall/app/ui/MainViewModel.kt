@@ -205,6 +205,12 @@ data class AppState(
     /** Calls that have ended with nothing recorded yet — these are the leads
      *  whose Update button is shaking, and the ones the nudge bar counts. */
     val pendingUpdates: List<PendingUpdate> = emptyList(),
+    /**
+     * Recording problems for leads called this session, keyed by contact id.
+     * Kept after the outcome is saved — tapping Connected must not hide a
+     * missing file. Cleared when a later call on that lead captures cleanly.
+     */
+    val recordingWarnings: Map<String, String> = emptyMap(),
     /** Master switch for the assistant's own questions. */
     val assistantOn: Boolean = true,
     /** The one question the assistant is asking right now (null = silent). */
@@ -332,6 +338,8 @@ data class PendingUpdate(
     val name: String? = null,
     val connected: Boolean = false,
     val at: Long = System.currentTimeMillis(),
+    /** Missing, unharvested, or fallback-only recording. Not an outcome. */
+    val recordingWarning: String? = null,
 )
 
 /**
@@ -437,6 +445,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { com.salesautocall.app.sip.SipWatchdogWorker.schedule(app) }
         }
         observeSimCalls()
+        observeRecordingVerdicts()
         refreshSession()
     }
 
@@ -464,6 +473,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 } ?: return@collect
                 val contactId = lead.id ?: return@collect
                 val didConnect = prev.activeAtMillis > 0
+                val verdict = com.salesautocall.app.dialer.SimCallMonitor.verdict.value
+                // Published in the same breath as the call ending. An older
+                // verdict is about a previous call and must not be pasted
+                // onto this one.
+                val fresh = verdict != null && System.currentTimeMillis() - verdict.at < 20_000L
+                val warning = if (
+                    fresh && verdict!!.phone.filter { d -> d.isDigit() }.takeLast(10) == key
+                ) verdict.warning else null
                 // A SIM call ends behind the phone's own in-call screen, so the
                 // sheet cannot land until Android hands focus back — which is
                 // the "popup aata hai kaafi slow" the reps described, followed by
@@ -477,7 +494,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     set {
                         it.copy(
                             pendingUpdates = it.pendingUpdates.filterNot { p -> p.contactId == contactId } +
-                                PendingUpdate(contactId, phone, lead.name, didConnect),
+                                PendingUpdate(contactId, phone, lead.name, didConnect, recordingWarning = warning),
+                            recordingWarnings = if (fresh)
+                                recordingWarningMap(it.recordingWarnings, contactId, warning)
+                            else it.recordingWarnings,
                         )
                     }
                     return@collect
@@ -490,11 +510,84 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         postCallCampaignId = null,
                         // Off-hook (activeAtMillis>0) = a real conversation → force an outcome.
                         postCallConnected = didConnect,
+                        recordingWarnings = if (fresh)
+                            recordingWarningMap(it.recordingWarnings, contactId, warning)
+                        else it.recordingWarnings,
                     )
                 }
             }
         }
     }
+
+    /**
+     * A recording verdict can arrive after the outcome bar is already up —
+     * the upload failing is the usual case. Patch the lead it belongs to.
+     * A blank warning means this call captured cleanly, so the previous
+     * warning on that lead is no longer the thing to show.
+     */
+    private fun observeRecordingVerdicts() {
+        viewModelScope.launch {
+            com.salesautocall.app.dialer.SimCallMonitor.verdict.collect { v ->
+                if (v == null) return@collect
+                val key = v.phone.filter { it.isDigit() }.takeLast(10)
+                if (key.length < 7) return@collect
+                val lead = _state.value.leads.firstOrNull {
+                    it.phone.filter { c -> c.isDigit() }.takeLast(10) == key
+                } ?: return@collect
+                val id = lead.id ?: return@collect
+                set { s ->
+                    s.copy(
+                        recordingWarnings = recordingWarningMap(s.recordingWarnings, id, v.warning),
+                        pendingUpdates = s.pendingUpdates.map { p ->
+                            if (p.contactId == id) p.copy(recordingWarning = v.warning) else p
+                        },
+                    )
+                }
+                // The row is inserted just after the verdict. Pull it once so
+                // the call history shows audio_seconds / the failed status
+                // without the rep leaving the lead and coming back.
+                viewModelScope.launch {
+                    kotlinx.coroutines.delay(2_500)
+                    if (_state.value.leadDetailId != id) return@launch
+                    val calls = runCatching { Repository.fetchCallsForContact(id) }.getOrNull() ?: return@launch
+                    val todayWarning = todayRecordingWarning(calls)
+                    set {
+                        if (it.leadDetailId != id) it
+                        else it.copy(
+                            leadDetailCalls = calls,
+                            recordingWarnings = if (todayWarning != null)
+                                it.recordingWarnings + (id to todayWarning)
+                            else it.recordingWarnings,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /** The newest call, when it was today and its file is missing or not the OEM recording. */
+    private fun todayRecordingWarning(calls: List<com.salesautocall.app.data.CallLog>): String? {
+        val call = calls.firstOrNull() ?: return null
+        if (!callStartedToday(call.startedAt)) return null
+        return com.salesautocall.app.dialer.RecordingTruth.warningFor(call)
+    }
+
+    private fun callStartedToday(iso: String?): Boolean {
+        val ms = iso?.let {
+            runCatching { java.time.OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+                ?: runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+        } ?: return false
+        val zone = java.time.ZoneId.systemDefault()
+        return java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate() ==
+            java.time.LocalDate.now(zone)
+    }
+
+    private fun recordingWarningMap(
+        current: Map<String, String>,
+        contactId: String,
+        warning: String?,
+    ): Map<String, String> =
+        if (warning.isNullOrBlank()) current - contactId else current + (contactId to warning)
 
     private val lenientJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
     private var cloudConnectedAt: Long = 0L
@@ -3944,9 +4037,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())
             val notes = runCatching { Repository.fetchVoiceNotes(contactId) }.getOrDefault(emptyList())
+            val todayWarning = todayRecordingWarning(calls)
             set {
                 if (it.leadDetailId == contactId)
-                    it.copy(leadDetailCalls = calls, leadDetailActivities = acts, voiceNotes = notes, leadDetailLoading = false)
+                    it.copy(
+                        leadDetailCalls = calls,
+                        leadDetailActivities = acts,
+                        voiceNotes = notes,
+                        leadDetailLoading = false,
+                        recordingWarnings = if (todayWarning != null)
+                            it.recordingWarnings + (contactId to todayWarning)
+                        else it.recordingWarnings,
+                    )
                 else it
             }
             // Wada auto-apply: normally the server applies it the moment the
