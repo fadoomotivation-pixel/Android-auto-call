@@ -160,6 +160,23 @@ fun AppRoot(vm: MainViewModel) {
                 vm.tickAssistant()
             }
         }
+
+        // An owed message, written, then handed to her WhatsApp. Opening the
+        // app is not a send. If it does not open, say so — a quiet failure
+        // looks like the message went.
+        val handoff = state.waHandoff
+        LaunchedEffect(handoff?.at) {
+            val h = handoff ?: return@LaunchedEffect
+            val opened = com.salesautocall.app.data.WhatsAppLauncher.open(context, h.phone, h.text)
+            if (opened) vm.markDraftOpened()
+            vm.consumeWaHandoff(opened)
+        }
+        val waNote = state.waNote
+        LaunchedEffect(waNote) {
+            if (waNote.isNullOrBlank()) return@LaunchedEffect
+            android.widget.Toast.makeText(context, waNote, android.widget.Toast.LENGTH_LONG).show()
+            vm.consumeWaNote()
+        }
     }
 
     when {
@@ -811,6 +828,7 @@ private fun MainShell(vm: MainViewModel) {
                     loading = state.coachLoading,
                     picks = state.coachPicks,
                     picksLoading = state.coachPicksLoading,
+                    picksError = state.coachPicksError,
                     resolveLead = { id -> state.leads.firstOrNull { l -> l.id == id } },
                     objection = state.coachObjection,
                     onObjectionChange = { vm.setCoachObjection(it) },
@@ -906,6 +924,7 @@ private fun CoachSheet(
     loading: Boolean,
     picks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
     picksLoading: Boolean = false,
+    picksError: String? = null,
     resolveLead: (String) -> com.salesautocall.app.data.Contact? = { null },
     objection: String = "",
     onObjectionChange: (String) -> Unit = {},
@@ -1049,8 +1068,13 @@ private fun CoachSheet(
                 picksLoading -> Box(Modifier.fillMaxWidth().padding(18.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
                 }
+                picksError != null && picks.isEmpty() -> Text(
+                    picksError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
                 picks.isEmpty() -> Text(
-                    "Reading your leads — your best 5 calls for today will show up here shortly.",
+                    "No focus calls today. Call now is still the list to work.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

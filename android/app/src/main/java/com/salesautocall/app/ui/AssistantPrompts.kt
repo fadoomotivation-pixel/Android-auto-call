@@ -836,41 +836,56 @@ fun PendingUpdateBar(vm: MainViewModel) {
     val glow = pulseAlpha()
 
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        Row(
+        Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.5.dp, Brass.copy(alpha = glow + 0.35f), RoundedCornerShape(16.dp))
-                .clickable { vm.openPendingUpdate(pending) }
                 .padding(horizontal = 13.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                Modifier.size(34.dp).clip(CircleShape).background(Brass.copy(alpha = glow)),
-                contentAlignment = Alignment.Center,
-            ) { Text(if (pending.connected) "📝" else "📵", fontSize = 15.sp) }
-            Spacer(Modifier.width(11.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    if (pending.connected) "You just spoke to $who" else "No answer from $who",
-                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, maxLines = 1,
-                )
-                Text(
-                    if (app.pendingUpdates.size > 1)
-                        "${app.pendingUpdates.size} calls waiting — tap to write them up"
-                    else "Tap Update to say what happened",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape).background(Brass.copy(alpha = glow)),
+                    contentAlignment = Alignment.Center,
+                ) { Text(if (pending.connected) "📝" else "📵", fontSize = 15.sp) }
+                Spacer(Modifier.width(11.dp))
+                Column(
+                    Modifier.weight(1f).clickable { vm.openPendingUpdate(pending) },
+                ) {
+                    Text(
+                        if (pending.connected) "You just spoke to $who" else "No answer from $who",
+                        style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, maxLines = 1,
+                    )
+                    Text(
+                        when {
+                            !pending.connected -> "Pick one. The next due lead is ready after this."
+                            app.pendingUpdates.size > 1 ->
+                                "${app.pendingUpdates.size} calls waiting — tap to write them up"
+                            else -> "Tap Update to say what happened"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier.nudgeShake(true)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Brass)
+                        .clickable { vm.openPendingUpdate(pending) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text("Update", style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold, color = Color.White)
+                }
             }
-            Spacer(Modifier.width(8.dp))
-            Box(
-                Modifier.nudgeShake(true)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Brass)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-            ) {
-                Text("Update", style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold, color = Color.White)
+            // A missed call does not need the full sheet. One of these three
+            // is the whole answer, and Call all starts the next number from it.
+            if (!pending.connected) {
+                Spacer(Modifier.height(8.dp))
+                val fuId = app.followUpList.firstOrNull { it.contactId == pending.contactId }?.id
+                QuickOutcomeChips { status ->
+                    vm.disposeFromLead(pending.contactId, pending.phone, pending.name, status, fuId)
+                }
             }
         }
     }

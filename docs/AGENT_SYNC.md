@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (faster daily calling, same queue)
+
+- WHAT: After an outcome, the phone moves on. On the lead page the next due lead opens, in the same five-tier Call now order. From the list the row just leaves. Call all no longer stops on the Call List screen: the outcome bar appears where she is, No answer / Busy / Wrong number are one tap, and the next number starts. A missed call does not open the full Update sheet. Buyer-waiting, an unkept promise, today's focus line, and "rung N times, never picked up" show on the due row. Work states refresh when she comes back from the in-call screen. An owed WhatsApp (buyer wrote, or a promise) writes the server draft and opens her WhatsApp; a failure or "call instead" does not open it and says so. No popup, no fourth tab, no new scheduler, no new store, no chip total.
+- FILES: `CallNowQueue` callers in `TelecallerScreens.kt`, `LeadDetailScreen.kt`, `MainViewModel.kt`, `AssistantPrompts.kt`, `AppRoot.kt`, `Repository.focusFive`.
+- WHY: A 100-call day was hunt, sheet, hunt. The queue already knew who was next.
+- BUILD: `assembleStandardDebug` green locally. No migration.
+- NEXT/NOTE: Capture health is not read here. If a capture PR lands, this path still only opens her WhatsApp and does not claim the message was sent.
+
 ## 2026-10-05 — Cursor (Apple polish kept on top of the one Call now list)
 
 - WHAT: Merged main after the dialer-truth PR. The phone still uses one due list, the five-tier Call all order, stage sync on dispose, and a dash plus "Could not load who is due" when the work-state read fails. The Apple chrome (grouped grey canvas, white cards, taller Call, calm tabs, line icons) sits on that logic. A failed count still shows "—", never 0.
