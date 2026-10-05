@@ -189,13 +189,11 @@ object AppPrefs {
         prefs(context).edit().putInt("day_review_hour", h.coerceIn(12, 21)).apply()
 
     /**
-     * How many times we have asked this lead's "did they come?" question.
+     * How many times this phone has raised "did they come?" for this lead.
      *
-     * The app asks, waits a day, asks once more, and then stops. A third ask
-     * teaches the rep that prompts can be ignored, and once they have learned
-     * that they ignore the useful ones too. After two the lead shows up in
-     * v_pending_site_visit_outcomes with needs_manager set — an unanswered
-     * visit stops being a notification and becomes a person's job.
+     * Used only when the server's visit_check rows could not be read. Two
+     * dismissals are not two "not yet" answers — needs_manager is the latter,
+     * counted from rep_prompts, and a dismissal must not retire the question.
      */
     fun getVisitAsks(context: Context, contactId: String): Int =
         prefs(context).getInt("visit_asks_$contactId", 0)

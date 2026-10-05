@@ -833,11 +833,18 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 },
                 onBookCallback = { advanceWhenBooked = true; scheduleOpen = true },
                 onBookVisit = { advanceWhenBooked = true; visitOpen = true },
+                onBookVisitAt = { millis ->
+                    contact.id?.let {
+                        vm.applyLead(it, "site_visit", null, null, null, null, java.time.Instant.ofEpochMilli(millis).toString(), null)
+                        vm.advanceAfter(it)
+                    }
+                },
                 onQuickCallback = { millis ->
                     vm.scheduleFollowUp(contact.id, contact.phone, contact.name, millis, null)
                     contact.id?.let { vm.advanceAfter(it) }
                 },
                 onDoneWithLead = { contact.id?.let { vm.advanceAfter(it) } },
+                visitPromise = isVisitPromise(contact.id?.let { app.workByLead[it]?.promiseText }),
                 whyDue = dueSignal(
                     contact.id?.let { app.workByLead[it] },
                     app.coachPicks.firstOrNull { it.contactId == contact.id }?.reason,
@@ -1846,15 +1853,21 @@ private fun LeadActionBar(
     onOutcome: (String) -> Unit,
     onBookCallback: () -> Unit,
     onBookVisit: () -> Unit,
+    /** A visit day, already chosen. Writes site_visit and leaves this lead. */
+    onBookVisitAt: (Long) -> Unit = {},
     onQuickCallback: (Long) -> Unit,
     /** "No next step" — she is done with this lead. */
     onDoneWithLead: () -> Unit = {},
     /** Why this lead is due, already computed. Null when there is nothing to say. */
     whyDue: String? = null,
+    /** She promised a visit on a recorded call and there is still no day. */
+    visitPromise: Boolean = false,
 ) {
     // Which half of the strip is showing. Keyed to the lead so opening another
     // one never inherits the last lead's half-finished answer.
     var askNext by remember(contact.id) { mutableStateOf(false) }
+    var visitFirst by remember(contact.id) { mutableStateOf(false) }
+    var callInstead by remember(contact.id) { mutableStateOf(false) }
     // The strip closes itself when the outcome lands: `pending` goes null the
     // moment postCallDispose clears it, and asking for a next step after the
     // rep has already booked one would be nagging.
@@ -1891,6 +1904,7 @@ private fun LeadActionBar(
                 ) {
                     Text(
                         when {
+                            askNext && visitFirst && !callInstead -> "When is the site visit?"
                             askNext -> "Saved. When is the next call?"
                             pending?.connected == false -> "Nobody picked up — what now?"
                             else -> "What happened on the call?"
@@ -1913,7 +1927,20 @@ private fun LeadActionBar(
                     // phone. Every answer is on screen, and each tap target is
                     // half the row — a thumb can hit it without scrolling.
                     val chips: List<Triple<String, Color, () -> Unit>> = when {
+                        askNext && visitFirst && !callInstead -> listOf(
+                            Triple("Tomorrow 4 PM", PurpleL, {
+                                dismissed = true; askNext = false
+                                onBookVisitAt(visitTomorrow4pm())
+                            }),
+                            Triple("Sunday 11 AM", PurpleL, {
+                                dismissed = true; askNext = false
+                                onBookVisitAt(visitSunday11am())
+                            }),
+                            Triple("Other day", PurpleL, { dismissed = true; askNext = false; onBookVisit() }),
+                            Triple("Call again instead", IndigoL, { callInstead = true }),
+                        )
                         askNext -> listOf(
+                            Triple("Book a visit", PurpleL, { dismissed = true; askNext = false; onBookVisit() }),
                             Triple("Tomorrow 11 AM", IndigoL, {
                                 dismissed = true; askNext = false
                                 onQuickCallback(
@@ -1923,7 +1950,6 @@ private fun LeadActionBar(
                                 )
                             }),
                             Triple("Pick a time", IndigoL, { dismissed = true; askNext = false; onBookCallback() }),
-                            Triple("Book visit", PurpleL, { dismissed = true; askNext = false; onBookVisit() }),
                             Triple("No next step", SubInk, { dismissed = true; askNext = false; onDoneWithLead() }),
                         )
                         pending?.connected == false -> listOf(
@@ -1937,8 +1963,14 @@ private fun LeadActionBar(
                             Triple("Call back", IndigoL, { dismissed = true; onBookCallback() }),
                         )
                         else -> listOf(
-                            Triple("Connected", GreenL, { onOutcome("called"); askNext = true }),
-                            Triple("Interested", GreenL, { onOutcome("interested"); askNext = true }),
+                            Triple("Connected", GreenL, {
+                                onOutcome("called"); askNext = true
+                                visitFirst = visitPromise; callInstead = false
+                            }),
+                            Triple("Interested", GreenL, {
+                                onOutcome("interested"); askNext = true
+                                visitFirst = true; callInstead = false
+                            }),
                             Triple("Site visit", PurpleL, { dismissed = true; onBookVisit() }),
                             Triple("Not interested", SubInk, { onOutcome("not_interested") }),
                             Triple("Wrong number", RedL, { onOutcome("invalid") }),

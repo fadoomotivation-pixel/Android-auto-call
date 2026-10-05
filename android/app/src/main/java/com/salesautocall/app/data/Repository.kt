@@ -1438,6 +1438,43 @@ object Repository {
             filter { eq("salesperson_id", salespersonId) }
         }.decodeList<LeadMemory>()
 
+    /**
+     * Site visits whose day has passed and nobody has written an outcome.
+     *
+     * Same view Pulse and the admin Action Center read. Throws on failure —
+     * an empty list is a real empty list. times_asked and needs_manager are
+     * not selected: until migration 0218 is applied by hand they count a
+     * prompt kind the app never writes, so they would show a fake zero.
+     */
+    suspend fun fetchPendingSiteVisits(salespersonId: String): List<PendingVisitRow> =
+        client.from("v_pending_site_visit_outcomes").select(
+            columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                "contact_id, name, phone, days_waiting",
+            )
+        ) {
+            filter { eq("salesperson_id", salespersonId) }
+            order("days_waiting", Order.DESCENDING)
+            limit(80)
+        }.decodeList<PendingVisitRow>()
+
+    /**
+     * visit_check prompts for this rep. The phone counts these because the
+     * live pending-visit view does not, until 0218 is applied.
+     * Throws on failure. Do not turn that into zero asks.
+     */
+    suspend fun fetchVisitChecks(salespersonId: String): List<VisitCheckRow> =
+        client.from("rep_prompts").select(
+            columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                "contact_id, answer",
+            )
+        ) {
+            filter {
+                eq("salesperson_id", salespersonId)
+                eq("kind", "visit_check")
+            }
+            limit(500)
+        }.decodeList<VisitCheckRow>()
+
     /** Today's arrivals: [arrived] = every call the office has, [toLeads] = the
      *  subset that was to a CRM lead. */
     data class TodaysCalls(val arrived: Int, val toLeads: Int)
