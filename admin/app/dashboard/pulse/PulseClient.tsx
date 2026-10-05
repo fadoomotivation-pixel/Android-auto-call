@@ -1,8 +1,17 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/client";
-import { AutoSend } from "./AutoSend";
+
+const AutoSend = dynamic(() => import("./AutoSend").then((m) => m.AutoSend), {
+  loading: () => (
+    <div className="card" style={{ marginBottom: 14 }} role="status" aria-busy="true">
+      <div className="skeleton" style={{ height: 16, width: 220 }} />
+      <p className="subtitle" style={{ margin: "8px 0 0" }}>Checking who gets this report. Not an empty list.</p>
+    </div>
+  ),
+});
 
 type Rep = {
   id: string;
@@ -43,7 +52,7 @@ type Rep = {
   /** Ready-to-send wording, written server-side (see _shared/pulse.ts). */
   text?: string;
 };
-type Company = {
+export type Company = {
   company_id: string;
   company_name: string | null;
   date: string;
@@ -136,11 +145,22 @@ function VoiceNotePlayer({ path }: { path: string }) {
   );
 }
 
-export function PulseClient({ isSuper }: { isSuper: boolean }) {
-  const [date, setDate] = useState(istToday());
-  const [companies, setCompanies] = useState<Company[]>([]);
+export function PulseClient({
+  isSuper,
+  initialDate,
+  initialCompanies,
+  initialError,
+}: {
+  isSuper: boolean;
+  initialDate: string;
+  initialCompanies: Company[];
+  initialError: string | null;
+}) {
+  const [date, setDate] = useState(initialDate);
+  const [companies, setCompanies] = useState<Company[]>(initialCompanies);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
+  const skipInitial = useRef(true);
   const [copied, setCopied] = useState(false);
   const [copiedRep, setCopiedRep] = useState<string | null>(null);
 
@@ -160,7 +180,13 @@ export function PulseClient({ isSuper }: { isSuper: boolean }) {
     setCompanies(data.companies || []);
   }, [date]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (skipInitial.current) {
+      skipInitial.current = false;
+      return;
+    }
+    void load();
+  }, [load]);
 
   /**
    * The wording is NOT written here any more.

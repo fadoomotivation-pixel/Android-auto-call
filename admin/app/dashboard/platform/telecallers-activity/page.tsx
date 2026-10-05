@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { RouteSkeleton } from "../../skeletons";
 import { captureLead } from "./actions";
-import { WaThread } from "./WaThread";
+import { MediaGate, WaThread } from "./WaThread";
 import { WaInbox } from "./WaInbox";
 import { OpenAtLatest } from "./OpenAtLatest";
 
@@ -210,7 +212,19 @@ const WATCH_TONE: Record<Row["wa_watch"], string | undefined> = {
   none: undefined, ok: "#22c55e", stale: "#f59e0b",
 };
 
-export default async function TelecallerActivityPage({
+export default function TelecallerActivityPage({
+  searchParams,
+}: {
+  searchParams: { rep?: string; days?: string; peer?: string };
+}) {
+  return (
+    <Suspense fallback={<RouteSkeleton title="Telecaller activity" />}>
+      <ActivityBody searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function ActivityBody({
   searchParams,
 }: {
   searchParams: { rep?: string; days?: string; peer?: string };
@@ -221,7 +235,24 @@ export default async function TelecallerActivityPage({
   const rep = searchParams.rep || "";
   const peer = searchParams.peer || "";
 
-  const { data, error } = await supabase.rpc("super_rep_activity", { p_days: days });
+  // List, the open rep's panels, and an open chat all start together.
+  // They used to run in that order, so a thread paid for the leaderboard first.
+  const activityP = supabase.rpc("super_rep_activity", { p_days: days });
+  const detailP = rep
+    ? Promise.all([
+        supabase.rpc("super_rep_threads", { p_rep: rep, p_limit: 300 }),
+        supabase.rpc("super_rep_unknown_numbers", { p_rep: rep, p_days: 0 }),
+        supabase.rpc("super_rep_wa_fit", { p_rep: rep }),
+        supabase.rpc("super_rep_blasts", { p_rep: rep, p_days: days }),
+        supabase.rpc("super_rep_conversations", { p_rep: rep }),
+        supabase.rpc("super_rep_locked_chats", { p_rep: rep }),
+      ])
+    : null;
+  const peerP = rep && peer
+    ? supabase.rpc("super_rep_peer_thread", { p_rep: rep, p_peer: peer, p_limit: 400 })
+    : null;
+
+  const [{ data, error }, detail, peerRes] = await Promise.all([activityP, detailP, peerP]);
   if (error) {
     return (
       <>
@@ -240,8 +271,7 @@ export default async function TelecallerActivityPage({
   let conversations: Conversation[] = [];
   let locked: LockedChat[] = [];
   let rpcErrors: string[] = [];
-  const mediaUrl = new Map<string, string>();
-  if (current) {
+  if (current && detail) {
     const [
       { data: m, error: mErr },
       { data: u, error: uErr },
@@ -249,20 +279,7 @@ export default async function TelecallerActivityPage({
       { data: b, error: bErr },
       { data: cv, error: cvErr },
       { data: lk, error: lkErr },
-    ] = await Promise.all([
-      supabase.rpc("super_rep_threads", { p_rep: current.rep_id, p_limit: 300 }),
-      // 0 = every number ever. An uncaptured lead does not stop being
-      // uncaptured because nobody messaged them this week; one that went
-      // quiet in June is more at risk, not less.
-      supabase.rpc("super_rep_unknown_numbers", { p_rep: current.rep_id, p_days: 0 }),
-      supabase.rpc("super_rep_wa_fit", { p_rep: current.rep_id }),
-      supabase.rpc("super_rep_blasts", { p_rep: current.rep_id, p_days: days }),
-      supabase.rpc("super_rep_conversations", { p_rep: current.rep_id }),
-      // Chats that arrived and could not be opened. This is the one number
-      // that distinguishes "this rep is quiet" from "the link is broken", and
-      // for a fortnight the screen had no way to tell them apart.
-      supabase.rpc("super_rep_locked_chats", { p_rep: current.rep_id }),
-    ]);
+    ] = detail;
     msgs = (m ?? []) as Msg[];
     unknown = (u ?? []) as UnknownRow[];
     locked = (lk ?? []) as LockedChat[];
@@ -286,21 +303,6 @@ export default async function TelecallerActivityPage({
       fErr && `number check: ${fErr.message}`,
       bErr && `copy-paste check: ${bErr.message}`,
     ].filter(Boolean) as string[];
-
-    // SIGNED, NEVER PUBLIC. wa-media is a private bucket for the same reason
-    // call-recordings is: a buyer's voice note is not something that should be
-    // reachable by anyone who guesses a path. One short-lived link per file,
-    // minted here — after the RPC above has already enforced super-admin.
-    const paths = msgs.map((x) => x.media_path).filter((p): p is string => Boolean(p));
-    if (paths.length) {
-      const { data: signed, error: sErr } = await supabase.storage
-        .from("wa-media").createSignedUrls(paths, 60 * 60);
-      if (sErr) rpcErrors.push(`attachments could not be opened: ${sErr.message}`);
-      for (const s of signed ?? []) {
-        if (s.path && s.signedUrl) mediaUrl.set(s.path, s.signedUrl);
-        else if (s.error) rpcErrors.push(`attachment ${s.path ?? ""}: ${s.error}`);
-      }
-    }
   }
 
   const qs = (o: { rep?: string; days?: number; peer?: string }) => {
@@ -319,29 +321,11 @@ export default async function TelecallerActivityPage({
   // buyer, a broker or the rep's cousin — which is a judgement only a person
   // can make, and only from the words.
   if (current && peer) {
-    const { data: pm, error: pErr } = await supabase.rpc("super_rep_peer_thread", {
-      p_rep: current.rep_id, p_peer: peer, p_limit: 400,
-    });
-    const thread = (pm ?? []) as PeerMsg[];
-    const paths = thread.map((x) => x.media_path).filter((p): p is string => Boolean(p));
-    const purl = new Map<string, string>();
-    if (paths.length) {
-      // THE ERROR HERE WAS BEING DROPPED, AND IT WAS THE WHOLE STORY.
-      //
-      // createSignedUrls runs as the signed-in user, against storage.objects
-      // RLS — and wa-media had no policy at all, so every request failed. The
-      // page then rendered "the file was not saved" over a file that was
-      // sitting in the bucket, one green "1/1 downloaded" line above it.
-      // Discarding the error is what made a permissions problem look like a
-      // download problem for as long as it did.
-      const { data: signed, error: sErr } = await supabase.storage
-        .from("wa-media").createSignedUrls(paths, 3600);
-      if (sErr) rpcErrors.push(`attachments could not be opened: ${sErr.message}`);
-      for (const s of signed ?? []) {
-        if (s.path && s.signedUrl) purl.set(s.path, s.signedUrl);
-        else if (s.error) rpcErrors.push(`attachment ${s.path ?? ""}: ${s.error}`);
-      }
-    }
+    // Already started with the leaderboard. Links are minted in the browser
+    // so this thread's words are not stuck behind storage.
+    const pErr = peerRes?.error ?? null;
+    const thread = ((peerRes?.data ?? []) as PeerMsg[]);
+    const peerPaths = [...new Set(thread.map((x) => x.media_path).filter((p): p is string => Boolean(p)))];
     const named = thread.find((t) => t.peer_name)?.peer_name ?? null;
     const ordered = [...thread].reverse();
 
@@ -349,7 +333,7 @@ export default async function TelecallerActivityPage({
     const inCrm = conversations.find((c) => c.peer_phone === peer)?.contact_id ?? null;
 
     return (
-      <>
+      <MediaGate paths={peerPaths}>
         <h2 style={{ marginBottom: 2 }}>
           💬 {current.rep_name || "Telecaller"} · {current.company_name.trim()}
         </h2>
@@ -477,7 +461,7 @@ export default async function TelecallerActivityPage({
           );
         })()}
 
-        <WaThread messages={ordered} mediaUrl={purl} whoIn={named ?? peer} whoOut={current.rep_name || "Rep"} />
+        <WaThread messages={ordered} whoIn={named ?? peer} whoOut={current.rep_name || "Rep"} />
         {/* Puts the pane at the newest message, which is where a chat opens.
             Without it a long thread opened on its oldest day and read as "the
             recent messages are missing". */}
@@ -514,7 +498,7 @@ export default async function TelecallerActivityPage({
           leave it. This list is a shortlist to judge, not a verdict.
         </p>
         </WaInbox>
-      </>
+      </MediaGate>
     );
   }
 
@@ -527,8 +511,9 @@ export default async function TelecallerActivityPage({
       if (!byLead.has(m.contact_id)) byLead.set(m.contact_id, []);
       byLead.get(m.contact_id)!.push(m);
     }
+    const mediaPaths = [...new Set(msgs.map((x) => x.media_path).filter((p): p is string => Boolean(p)))];
     return (
-      <>
+      <MediaGate paths={mediaPaths}>
         <h2 className="keep-title">👥 {current.rep_name || "Telecaller"} · {current.company_name.trim()}</h2>
         <p className="subtitle">
           <a href={`/dashboard/platform/telecallers-activity${qs({ days })}`}>← All telecallers</a>
@@ -863,7 +848,7 @@ export default async function TelecallerActivityPage({
                   </span>
                 </div>
                 <div style={{ marginTop: 12 }}>
-                  <WaThread messages={ordered} mediaUrl={mediaUrl}
+                  <WaThread messages={ordered}
                     whoIn={head.lead_name || head.lead_phone || "Lead"}
                     whoOut={current.rep_name || "Rep"} />
                 </div>
@@ -987,7 +972,7 @@ export default async function TelecallerActivityPage({
           That is the point: a buyer messaging a company number who was never added to the CRM is
           a lead nobody wrote down, and it can only be recovered if someone can read it.
         </p>
-      </>
+      </MediaGate>
     );
   }
 

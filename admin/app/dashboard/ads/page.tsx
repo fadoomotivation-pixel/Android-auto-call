@@ -1,18 +1,23 @@
-import { createClient } from "@/lib/supabase/server";
-import { AdsManager } from "./AdsManager";
+import { Suspense } from "react";
+import { resolveScope } from "@/lib/dashboard/scope";
+import { RouteSkeleton } from "../skeletons";
+import { AdsManager, type AdsSnapshot } from "./AdsManager";
 
 // Ads Manager — one place to see every Meta campaign's performance AND its real
 // CRM outcome. Central account, so it's a super-admin surface (the platform runs
 // the ads; leads route to each company).
-export default async function AdsPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+export default function AdsPage() {
+  return (
+    <Suspense fallback={<RouteSkeleton title="Ads Manager" />}>
+      <AdsBody />
+    </Suspense>
+  );
+}
 
-  const [{ data: prof }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("company_id").eq("id", user!.id).maybeSingle<{ company_id: string | null }>(),
-    supabase.from("platform_admins").select("user_id").eq("user_id", user!.id).maybeSingle(),
-  ]);
-  const isSuper = !!pa;
+async function AdsBody() {
+  // require "any": a telecaller used to see the explanation, not a redirect.
+  const scope = await resolveScope(undefined, { require: "any" });
+  const isSuper = scope.isSuper;
 
   if (!isSuper) {
     return (
@@ -26,9 +31,14 @@ export default async function AdsPage() {
     );
   }
 
-  const hub = prof?.company_id ?? null;
+  // The ads token lives on the super admin's own company row because there is
+  // one central ad account. This is not the company being viewed.
+  const hub = scope.homeCompanyId;
   const { data: integ } = hub
-    ? await supabase.from("facebook_integrations").select("ad_account_id, ads_token_secret_id").eq("company_id", hub).maybeSingle<{ ad_account_id: string | null; ads_token_secret_id: string | null }>()
+    ? await scope.supabase.from("facebook_integrations")
+        .select("ad_account_id, ads_token_secret_id")
+        .eq("company_id", hub)
+        .maybeSingle<{ ad_account_id: string | null; ads_token_secret_id: string | null }>()
     : { data: null };
   const configured = !!(integ?.ad_account_id && integ?.ads_token_secret_id);
 
@@ -39,10 +49,48 @@ export default async function AdsPage() {
         Every Meta campaign in one view — with the real CRM result of each ad (Interested, Booked), not just form-fills.
       </p>
       {hub ? (
-        <AdsManager companyId={hub} configured={configured} savedAccount={integ?.ad_account_id ?? null} />
+        <Suspense fallback={<RouteSkeleton title="Ads Manager" bare />}>
+          <AdsNumbers hub={hub} configured={configured} savedAccount={integ?.ad_account_id ?? null} />
+        </Suspense>
       ) : (
         <div className="empty">Your super-admin account isn&apos;t linked to a company yet.</div>
       )}
     </>
   );
+}
+
+async function AdsNumbers({
+  hub, configured, savedAccount,
+}: {
+  hub: string;
+  configured: boolean;
+  savedAccount: string | null;
+}) {
+  const { supabase } = await resolveScope(undefined, { require: "any" });
+  let initial: AdsSnapshot | null = null;
+  if (configured) {
+    // Current period only. The comparison window is a second Meta call and
+    // must not hold the table. The client starts it after this paint.
+    const cur = await supabase.functions.invoke<{ ok: boolean; error?: string; currency?: string; rows?: AdsSnapshot["rows"] }>(
+      "ads-insights",
+      { body: { company: hub, date_preset: "last_30d" } },
+    );
+    if (cur.error || !cur.data?.ok) {
+      initial = {
+        rows: [],
+        currency: "",
+        prev: null,
+        error: cur.data?.error || cur.error?.message || "Couldn't load ads data.",
+      };
+    } else {
+      initial = {
+        rows: cur.data.rows ?? [],
+        currency: cur.data.currency ?? "",
+        prev: null,
+        error: null,
+      };
+    }
+  }
+
+  return <AdsManager companyId={hub} configured={configured} savedAccount={savedAccount} initial={initial} />;
 }

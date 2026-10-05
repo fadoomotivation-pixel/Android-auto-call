@@ -799,6 +799,19 @@ a.rep-card:hover { color: inherit; border-color: var(--border-strong); }
 /* Dead WhatsApp capture. In the shell flow, under the top bar: a soft
    tint with a hairline, not a sticky card. Sticky let it float over the
    title and the lead cards. The words stay a warning. */
+/* Checking, not an outage and not an all-clear. Neutral on purpose. */
+.capture-outage-pending {
+  position: static;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  background: color-mix(in srgb, var(--muted) 12%, var(--bg));
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.capture-outage-pending strong { font-size: 13px; font-weight: 600; }
+.capture-outage-pending p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+
 .capture-outage {
   position: static;
   z-index: auto;

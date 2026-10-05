@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (dashboard routes open faster)
+
+- WHAT: The nine slow dashboard routes share one cached identity with the sidebar, and the WhatsApp capture check no longer holds the page. Facebook, Pulse, X-Ray, and Ads start their reads on the server. RAG counts in parallel and does not pull the fact list until it is opened. Leaks and telecaller activity start the drill-in queries with the list. Attachment links mint after the thread text is on screen. Loading states stay labelled as loading.
+- FILES: `admin/lib/dashboard/scope.ts`, `admin/app/dashboard/layout.tsx`, and the facebook, rag, coach, ads, pulse, xray, actions, leaks, and telecallers-activity routes.
+- WHY: Those pages waited on serial Supabase calls, and several waited for client JavaScript before the first query. A failed or unfinished read was easy to see as an empty day.
+- BUILD: admin `tsc`. No migration. No Android.
+- NEXT/NOTE: Leads list and detail were not touched.
+
 ## 2026-10-05 — Cursor (Call now shows the stored conversation)
 
 - WHAT: The phone reads `lead_memory` for this rep (same RLS as the rest of her leads) whenever it reads who is due. A due row, the next-call card, Home's first three callbacks, and the lead's "What to say" card show "Left at", "They want", "Stopped by", and an open promise ("You still owe") from that row. Focus-five still runs once a session and, when it names a due lead, adds "Say this" under the reason already on the row. A failed focus read says so. It is not stored as "nobody today". The memory line is re-read with the queue, so it stays current after the morning. No new table, no new tab, no popup, no chip total. Buyer wording is shown as stored (it is often Hindi). The labels are English.

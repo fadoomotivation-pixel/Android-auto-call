@@ -66,6 +66,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; companies: Company[] }) {
   const supabase = useMemo(() => createClient(), []);
+  const [open, setOpen] = useState(false);
   const [chunks, setChunks] = useState<Chunk[] | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -96,7 +97,9 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
     setChunks(data ?? []);
   }, [supabase]);
 
-  useEffect(() => { load(); }, [load]);
+  // Four thousand fact rows is the slow part of this page. The health table
+  // above does not need them. Load only when someone opens the list.
+  useEffect(() => { if (open) void load(); }, [open, load]);
 
   const groups: Group[] = useMemo(() => {
     const map = new Map<string, Group>();
@@ -177,6 +180,21 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
   const row: CSSProperties = { display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid var(--border)" };
   const tag: CSSProperties = { fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "rgba(255,255,255,0.06)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" };
 
+  if (!open) {
+    return (
+      <div style={wrap}>
+        <strong style={{ fontSize: 16, color: "#fff" }}>🗂️ Trained knowledge</strong>
+        <p className="subtitle" style={{ marginTop: 2 }}>
+          The full list is large. It stays closed so this page can open on the health table.
+          Nothing here has been counted as empty.
+        </p>
+        <button type="button" className="primary" style={{ width: "auto", marginTop: 8 }} onClick={() => setOpen(true)}>
+          Show learned facts
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={wrap}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -193,9 +211,13 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
 
       {err && <div className="error" style={{ marginTop: 8 }}>{err}</div>}
 
-      {chunks === null ? (
-        <div className="subtitle" style={{ padding: "14px 0" }}>Loading…</div>
-      ) : groups.length === 0 ? (
+      {chunks === null && !err ? (
+        <div role="status" aria-busy="true" style={{ padding: "14px 0" }}>
+          <div className="skeleton" style={{ height: 18, width: "70%", marginBottom: 10 }} />
+          <div className="skeleton" style={{ height: 18, width: "55%" }} />
+          <p className="subtitle" style={{ marginTop: 8 }}>Loading learned facts. Not an empty brain.</p>
+        </div>
+      ) : chunks !== null && groups.length === 0 ? (
         <div className="empty" style={{ marginTop: 10 }}>Nothing trained yet.</div>
       ) : (
         <div style={{ marginTop: 8 }}>

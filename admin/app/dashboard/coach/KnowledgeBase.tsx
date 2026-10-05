@@ -27,11 +27,11 @@ export function KnowledgeBase() {
   const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [items, setItems] = useState<Chunk[]>([]);
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState<number | null>(null);
   const [gaps, setGaps] = useState<Gap[]>([]);
 
   async function load() {
-    const [{ data, count: c }, { data: g }] = await Promise.all([
+    const [{ data, count: c, error }, { data: g, error: gErr }] = await Promise.all([
       supabase.from("knowledge_chunks")
         .select("id, title, source_kind, created_at", { count: "exact" })
         .order("created_at", { ascending: false }).limit(20),
@@ -39,6 +39,10 @@ export function KnowledgeBase() {
         .select("id, question, ask_count").eq("resolved", false)
         .order("ask_count", { ascending: false }).limit(10),
     ]);
+    if (error || gErr) {
+      setMsg(error?.message || gErr?.message || "Could not load the knowledge base.");
+      return;
+    }
     setItems((data as Chunk[]) ?? []);
     setCount(c ?? 0);
     setGaps((g as Gap[]) ?? []);
@@ -103,7 +107,9 @@ export function KnowledgeBase() {
     <div style={card}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <strong style={{ fontSize: 16, color: "#fff" }}>📚 AI Knowledge base</strong>
-        <span style={{ fontSize: 13, color: "var(--muted)" }}>{count} chunk{count === 1 ? "" : "s"} learned</span>
+        <span style={{ fontSize: 13, color: "var(--muted)" }}>
+          {count === null ? "Counting learned facts…" : `${count} chunk${count === 1 ? "" : "s"} learned`}
+        </span>
       </div>
       <p className="subtitle" style={{ marginTop: 4 }}>
         Paste your real prices, project details and FAQ answers. The AI Coach will quote these facts to your team instead of guessing.
@@ -170,7 +176,7 @@ export function KnowledgeBase() {
               <button className="link" style={{ fontSize: 12, color: "#ef4444" }} onClick={() => remove(it.id)}>Remove</button>
             </div>
           ))}
-          {count > items.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>Showing latest 20 of {count}.</span>}
+          {count !== null && count > items.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>Showing latest 20 of {count}.</span>}
         </div>
       )}
     </div>

@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import type { CSSProperties } from "react";
 import { resolveScope } from "@/lib/dashboard/scope";
 import { ModuleLinks } from "../ModuleLinks";
 import { istDate } from "@/lib/dashboard/format";
 import { colorOf } from "@/lib/dashboard/health";
+import { RouteSkeleton } from "../skeletons";
 import { AskConsole } from "./AskConsole";
 import { KnowledgeTrainer } from "./KnowledgeTrainer";
 import { KnowledgeManager } from "./KnowledgeManager";
@@ -44,21 +46,49 @@ export default async function RagPage({
   searchParams,
 }: { searchParams: Promise<{ company?: string }> }) {
   const scope = await resolveScope(await searchParams, { require: "any" });
-  const { supabase, isSuper } = scope;
+  const { isSuper } = scope;
   if (scope.role !== "admin" && !isSuper) {
     return <><h2>RAG</h2><div className="empty">Managers only.</div></>;
   }
 
-  const { data, error } = await supabase.rpc("rag_stats");
-  const rows = (data as Stat[] | null) ?? [];
+  return (
+    <>
+      <h2>🧠 RAG</h2>
+      <p className="subtitle">
+        RAG (Retrieval-Augmented Generation) is your AI&apos;s memory. Each company teaches the AI its
+        real prices, brochures and winning calls — and the coach quotes those facts instead of guessing.
+        Every company&apos;s brain is fully separate; this page shows how well each one is fed.
+      </p>
+      <Suspense fallback={<RouteSkeleton title="RAG" bare />}>
+        <RagBody isSuper={isSuper} />
+      </Suspense>
+      <AskConsole />
+      <div className="card" style={{ marginTop: 20, background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.2)" }}>
+        <strong style={{ color: "#a5b4fc" }}>How to feed a company&apos;s brain</strong>
+        <ol style={{ margin: "8px 0 0", paddingLeft: 20, color: "rgba(255,255,255,0.8)", lineHeight: 1.7, fontSize: 14 }}>
+          <li>Open <strong>AI Coach</strong> → <strong>AI Knowledge base</strong>.</li>
+          <li>Tap <strong>&ldquo;Learn from my won calls + library&rdquo;</strong> — it auto-builds from real closed deals.</li>
+          <li>Paste price lists / brochures / FAQ answers for anything not captured yet.</li>
+          <li>Watch <strong>&ldquo;Your team asked — the AI didn&apos;t know&rdquo;</strong> and answer the top questions.</li>
+        </ol>
+      </div>
+      <ModuleLinks current="rag" scope={scope} />
+    </>
+  );
+}
 
-  // The shared global brain lives in company_id-NULL rows, so it isn't part of
-  // any company's rag_stats group. Count it separately (RLS lets everyone read
-  // the global layer, so this head-count is safe).
-  const { count: globalChunks } = await supabase
-    .from("knowledge_chunks")
-    .select("id", { count: "exact", head: true })
-    .is("company_id", null);
+async function RagBody({ isSuper }: { isSuper: boolean }) {
+  const { supabase } = await resolveScope(undefined, { require: "any" });
+  // Company stats and the global-brain count are independent. They used to
+  // run one after the other, so the table waited on a second round trip.
+  const [statsRes, globalRes] = await Promise.all([
+    supabase.rpc("rag_stats"),
+    supabase.from("knowledge_chunks").select("id", { count: "exact", head: true }).is("company_id", null),
+  ]);
+  const { data, error } = statsRes;
+  const rows = (data as Stat[] | null) ?? [];
+  const globalChunks = globalRes.count;
+  const globalError = globalRes.error?.message ?? null;
 
   const totalChunks = rows.reduce((a, r) => a + Number(r.chunks), 0);
   const totalGaps = rows.reduce((a, r) => a + Number(r.open_gaps), 0);
@@ -71,28 +101,16 @@ export default async function RagPage({
 
   return (
     <>
-      <h2>🧠 RAG</h2>
-      <p className="subtitle">
-        RAG (Retrieval-Augmented Generation) is your AI&apos;s memory. Each company teaches the AI its
-        real prices, brochures and winning calls — and the coach quotes those facts instead of guessing.
-        Every company&apos;s brain is fully separate; this page shows how well each one is fed.
-      </p>
-
       {error && <div className="error" style={{ marginTop: 8 }}>{error.message}</div>}
+      {globalError && <div className="error" style={{ marginTop: 8 }}>Global facts could not be counted. {globalError}</div>}
 
-      <KnowledgeTrainer isSuper={isSuper} companies={companies} />
-
-      <KnowledgeManager isSuper={isSuper} companies={companies} />
-
-      <AskConsole />
-
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "16px 0" }}>
+      {!error && <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "16px 0" }}>
         <div style={stat}>
           <div style={{ fontSize: 28, fontWeight: 800, color: "#fff" }}>{totalChunks}</div>
           <div className="subtitle">company facts learned</div>
         </div>
         <div style={stat}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "#10b981" }}>{globalChunks ?? 0}</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: "#10b981" }}>{globalError ? "—" : (globalChunks ?? 0)}</div>
           <div className="subtitle">🌐 global facts (shared to all)</div>
         </div>
         <div style={stat}>
@@ -103,9 +121,9 @@ export default async function RagPage({
           <div style={{ fontSize: 28, fontWeight: 800, color: totalGaps > 0 ? "#f59e0b" : "#10b981" }}>{totalGaps}</div>
           <div className="subtitle">open questions the AI couldn&apos;t answer</div>
         </div>
-      </div>
+      </div>}
 
-      {rows.length === 0 ? (
+      {error ? null : rows.length === 0 ? (
         <div className="empty">No companies yet.</div>
       ) : (
         <div className="table-responsive">
@@ -146,16 +164,8 @@ export default async function RagPage({
         </div>
       )}
 
-      <div className="card" style={{ marginTop: 20, background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.2)" }}>
-        <strong style={{ color: "#a5b4fc" }}>How to feed a company&apos;s brain</strong>
-        <ol style={{ margin: "8px 0 0", paddingLeft: 20, color: "rgba(255,255,255,0.8)", lineHeight: 1.7, fontSize: 14 }}>
-          <li>Open <strong>AI Coach</strong> → <strong>AI Knowledge base</strong>.</li>
-          <li>Tap <strong>&ldquo;Learn from my won calls + library&rdquo;</strong> — it auto-builds from real closed deals.</li>
-          <li>Paste price lists / brochures / FAQ answers for anything not captured yet.</li>
-          <li>Watch <strong>&ldquo;Your team asked — the AI didn&apos;t know&rdquo;</strong> and answer the top questions.</li>
-        </ol>
-      </div>
-      <ModuleLinks current="rag" scope={scope} />
+      <KnowledgeTrainer isSuper={isSuper} companies={companies} />
+      <KnowledgeManager isSuper={isSuper} companies={companies} />
     </>
   );
 }

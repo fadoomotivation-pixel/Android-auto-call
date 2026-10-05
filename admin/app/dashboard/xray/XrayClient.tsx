@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ist, istDate } from "@/lib/dashboard/format";
 
 type Objection = { label: string; count: number; quote: string; fix: string };
 type Demand = { what: string; count: number };
 type Gold = { name: string; phone: string; why: string; opener: string };
-type Report = {
+export type Report = {
   headline?: string;
   objections?: Objection[];
   demand?: Demand[];
@@ -18,22 +18,57 @@ type Report = {
 };
 
 type Company = { id: string; name: string | null };
-/** One company's stored report, for the all-companies overview. */
-type Across = { companyId: string; name: string; report: Report; at: string };
+/** One company's stored report, for the all-companies overview.
+ *  Slim on purpose: the card needs a headline and the top objection, not the
+ *  whole analysis for every company in the first payload. */
+export type Across = {
+  companyId: string;
+  name: string;
+  at: string;
+  headline?: string;
+  topLabel?: string;
+  topCount?: number;
+  gold: number;
+};
 
-export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: boolean; companies?: Company[] }) {
-  const [report, setReport] = useState<Report | null>(null);
-  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+export function XrayClient({
+  isSuper = false,
+  companies = [],
+  initialReport = null,
+  initialAt = null,
+  initialAcross = null,
+  initialError = null,
+}: {
+  isSuper?: boolean;
+  companies?: Company[];
+  initialReport?: Report | null;
+  initialAt?: string | null;
+  initialAcross?: Across[] | null;
+  initialError?: string | null;
+}) {
+  const [report, setReport] = useState<Report | null>(initialReport);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(initialAt);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [reading, setReading] = useState(false);
+  const [error, setError] = useState<string | null>(initialError);
   // Super admin picks whose X-Ray to read; regular admin is scoped by RLS.
   // "" = every company at once — the platform owner runs several businesses and
   // should not have to open each one to find which is bleeding.
   const [companyId, setCompanyId] = useState<string>("");
-  const [across, setAcross] = useState<Across[] | null>(null);
+  const [across, setAcross] = useState<Across[] | null>(initialAcross);
 
   // Open instantly with the latest stored report (the Monday cron keeps it fresh).
   const loadStored = useCallback(async () => {
+    if (isSuper && !companyId) {
+      setReport(null);
+      setGeneratedAt(null);
+      setReading(false);
+      return;
+    }
+    setReading(true);
+    setReport(null);
+    setGeneratedAt(null);
+    setError(null);
     const supabase = createClient();
     let q = supabase
       .from("sales_xray")
@@ -43,7 +78,14 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
     // Without this filter a super admin would see whichever company's report is
     // newest — pin it to the selected company instead.
     if (isSuper && companyId) q = q.eq("company_id", companyId);
-    const { data } = await q.maybeSingle();
+    const { data, error: readErr } = await q.maybeSingle();
+    setReading(false);
+    if (readErr) {
+      setReport(null);
+      setGeneratedAt(null);
+      setError(readErr.message);
+      return;
+    }
     if (data) {
       setReport(data.report as Report);
       setGeneratedAt(data.created_at as string);
@@ -53,7 +95,14 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
     }
   }, [isSuper, companyId]);
 
-  useEffect(() => { loadStored(); }, [loadStored]);
+  const skipStored = useRef(true);
+  useEffect(() => {
+    if (skipStored.current) {
+      skipStored.current = false;
+      return;
+    }
+    void loadStored();
+  }, [loadStored]);
 
   // All-companies overview: read the reports the Monday cron already wrote —
   // newest one per company. No second AI pass and no parallel analysis logic;
@@ -72,17 +121,29 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
       const cid = r.company_id as string;
       if (seen.has(cid)) continue;
       seen.add(cid);
+      const report = r.report as Report;
+      const top = (report.objections ?? [])[0];
       rows.push({
         companyId: cid,
         name: companies.find((c) => c.id === cid)?.name ?? "Company",
-        report: r.report as Report,
         at: r.created_at as string,
+        headline: report.headline,
+        topLabel: top?.label,
+        topCount: top?.count,
+        gold: (report.gold ?? []).length,
       });
     }
     setAcross(rows);
   }, [isSuper, companyId, companies]);
 
-  useEffect(() => { void loadAcross(); }, [loadAcross]);
+  const skipAcross = useRef(initialAcross !== null);
+  useEffect(() => {
+    if (skipAcross.current) {
+      skipAcross.current = false;
+      return;
+    }
+    void loadAcross();
+  }, [loadAcross]);
 
   // Fresh scan on demand.
   async function regenerate() {
@@ -136,32 +197,30 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
 
       {/* Every company at once — which business is bleeding, without opening each. */}
       {isSuper && !companyId && (
-        across === null ? <div className="empty">Loading every company&apos;s X-Ray…</div>
-        : across.length === 0 ? <div className="empty">No X-Ray stored yet. Pick a company above and run the first scan.</div>
+        across === null ? <div className="empty" role="status">Loading every company&apos;s X-Ray. Not an empty scan.</div>
+        : across.length === 0 && !error ? <div className="empty">No X-Ray stored yet. Pick a company above and run the first scan.</div>
         : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 14 }}>
             {across.map((a) => {
-              const top = (a.report.objections ?? [])[0];
-              const gold = (a.report.gold ?? []).length;
               return (
                 <div key={a.companyId} className="card" style={{ padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                     <strong style={{ color: "#fff", fontSize: 15 }}>🏢 {a.name}</strong>
                     <button className="link" onClick={() => setCompanyId(a.companyId)}>Open →</button>
                   </div>
-                  {a.report.headline && (
+                  {a.headline && (
                     <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 8, lineHeight: 1.55 }}>
-                      {a.report.headline}
+                      {a.headline}
                     </div>
                   )}
-                  {top && (
+                  {a.topLabel && (
                     <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 10 }}>
-                      ☠️ Biggest deal killer: <strong style={{ color: "#fff" }}>{top.label}</strong> ({top.count} leads)
+                      ☠️ Biggest deal killer: <strong style={{ color: "#fff" }}>{a.topLabel}</strong> ({a.topCount ?? 0} leads)
                     </div>
                   )}
-                  {gold > 0 && (
+                  {a.gold > 0 && (
                     <div style={{ fontSize: 13, color: "var(--good)", marginTop: 4 }}>
-                      💰 {gold} dead {gold === 1 ? "lead" : "leads"} the AI thinks are winnable
+                      💰 {a.gold} dead {a.gold === 1 ? "lead" : "leads"} the AI thinks are winnable
                     </div>
                   )}
                   <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10 }}>
@@ -174,8 +233,10 @@ export function XrayClient({ isSuper = false, companies = [] }: { isSuper?: bool
         )
       )}
 
-      {!isSuper && !report && !error && <div className="empty">No X-Ray yet — run your first scan above.</div>}
-      {isSuper && !!companyId && !report && !error && <div className="empty">No X-Ray for this company yet — run the first scan above.</div>}
+      {!isSuper && reading && <div className="empty" role="status">Loading the stored X-Ray. Not an empty scan.</div>}
+      {!isSuper && !reading && !report && !error && <div className="empty">No X-Ray yet — run your first scan above.</div>}
+      {isSuper && !!companyId && reading && <div className="empty" role="status">Loading this company&apos;s X-Ray. Not an empty scan.</div>}
+      {isSuper && !!companyId && !reading && !report && !error && <div className="empty">No X-Ray for this company yet — run the first scan above.</div>}
 
       {report && !(isSuper && !companyId) && (
         <>

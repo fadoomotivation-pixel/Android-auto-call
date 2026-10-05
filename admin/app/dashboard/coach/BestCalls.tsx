@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ist, istDate } from "@/lib/dashboard/format";
 
-interface Row {
+export interface Row {
   company_id: string;
   company_name: string | null;
   salesperson_id: string;
@@ -36,24 +36,39 @@ const mmss = (s: number | null) => {
  * from coach_feedback, the same number the rep already sees on their own call.
  * A second, disagreeing "best call" metric would make both untrustworthy.
  */
-export function BestCalls({ isSuper }: { isSuper: boolean }) {
+export function BestCalls({
+  isSuper,
+  initialRows = null,
+  initialError = null,
+}: {
+  isSuper: boolean;
+  initialRows?: Row[] | null;
+  initialError?: string | null;
+}) {
   const supabase = createClient();
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(initialError ? [] : initialRows);
   const [period, setPeriod] = useState<"day" | "week">("day");
   const [days, setDays] = useState(14);
   const [company, setCompany] = useState("all");
   const [rep, setRep] = useState("all");
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(initialError);
 
   const load = useCallback(async () => {
     setErr(null);
     setRows(null);
     const { data, error } = await supabase.rpc("best_calls", { p_period: period, p_days: days });
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(error.message); setRows([]); return; }
     setRows((data as Row[]) ?? []);
   }, [supabase, period, days]);
 
-  useEffect(() => { void load(); }, [load]);
+  const skipInitial = useRef(initialRows !== null || initialError !== null);
+  useEffect(() => {
+    if (skipInitial.current) {
+      skipInitial.current = false;
+      return;
+    }
+    void load();
+  }, [load]);
 
   const companies = useMemo(() => {
     const m = new Map<string, string>();
@@ -117,8 +132,8 @@ export function BestCalls({ isSuper }: { isSuper: boolean }) {
       </div>
 
       {err && <div className="error" style={{ marginBottom: 10 }}>{err}</div>}
-      {!rows && <div className="empty">Loading…</div>}
-      {rows && shown.length === 0 && (
+      {!rows && !err && <div className="empty" role="status">Loading best calls. Not an empty week.</div>}
+      {rows && !err && shown.length === 0 && (
         <div className="empty">
           No rated calls in this window. The coach rates a call once it has a recording it can listen to —
           check Phone Health if recordings aren&apos;t arriving.

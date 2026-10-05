@@ -1,12 +1,14 @@
+import { Suspense } from "react";
 import { resolveScope } from "@/lib/dashboard/scope";
 import { ModuleLinks } from "../ModuleLinks";
-import { XrayClient } from "./XrayClient";
+import { RouteSkeleton } from "../skeletons";
+import { XrayClient, type Across, type Report } from "./XrayClient";
 
 export default async function XrayPage({
   searchParams,
 }: { searchParams: Promise<{ company?: string }> }) {
   const scope = await resolveScope(await searchParams, { require: "any" });
-  const { supabase, isSuper } = scope;
+  const isSuper = scope.isSuper;
   const isAdmin = scope.role === "admin" || isSuper;
 
   if (!isAdmin) {
@@ -17,12 +19,6 @@ export default async function XrayPage({
       </>
     );
   }
-
-  // The super admin serves EVERY company equally — they choose whose X-Ray to
-  // read (the sales-xray function already scopes by company_id for them).
-  const { data: companies } = isSuper
-    ? await supabase.from("companies").select("id, name").order("name").returns<{ id: string; name: string | null }[]>()
-    : { data: null };
 
   return (
     <>
@@ -36,8 +32,64 @@ export default async function XrayPage({
         For one day&apos;s work per rep see <a href="/dashboard/pulse" style={{ color: "var(--accent)" }}>Daily Pulse</a>;
         for how fast leads get called see <a href="/dashboard/velocity" style={{ color: "var(--accent)" }}>Sales Velocity</a>.
       </p>
-      <XrayClient isSuper={isSuper} companies={companies ?? []} />
+      <Suspense fallback={<RouteSkeleton title="Sales X-Ray" bare />}>
+        <XrayData isSuper={isSuper} />
+      </Suspense>
       <ModuleLinks current="xray" scope={scope} />
     </>
+  );
+}
+
+async function XrayData({ isSuper }: { isSuper: boolean }) {
+  const { supabase } = await resolveScope(undefined, { require: "any" });
+  const companiesP = isSuper
+    ? supabase.from("companies").select("id, name").order("name").returns<{ id: string; name: string | null }[]>()
+    : Promise.resolve({ data: [] as { id: string; name: string | null }[], error: null });
+  const storedP = isSuper
+    ? supabase.from("sales_xray").select("company_id, report, created_at").order("created_at", { ascending: false }).limit(200)
+    : supabase.from("sales_xray").select("report, created_at").order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+  const [companiesRes, storedRes] = await Promise.all([companiesP, storedP]);
+  const companies = companiesRes.data ?? [];
+
+  if (storedRes.error) {
+    return (
+      <XrayClient
+        isSuper={isSuper}
+        companies={companies}
+        initialError={storedRes.error.message}
+        initialAcross={isSuper ? [] : null}
+      />
+    );
+  }
+
+  if (isSuper) {
+    const seen = new Set<string>();
+    const across: Across[] = [];
+    for (const r of (storedRes.data ?? []) as { company_id: string; report: Report; created_at: string }[]) {
+      if (seen.has(r.company_id)) continue;
+      seen.add(r.company_id);
+      const top = (r.report?.objections ?? [])[0];
+      across.push({
+        companyId: r.company_id,
+        name: companies.find((c) => c.id === r.company_id)?.name ?? "Company",
+        at: r.created_at,
+        headline: r.report?.headline,
+        topLabel: top?.label,
+        topCount: top?.count,
+        gold: (r.report?.gold ?? []).length,
+      });
+    }
+    return <XrayClient isSuper companies={companies} initialAcross={across} />;
+  }
+
+  const row = storedRes.data as { report: Report; created_at: string } | null;
+  return (
+    <XrayClient
+      isSuper={false}
+      companies={[]}
+      initialReport={row?.report ?? null}
+      initialAt={row?.created_at ?? null}
+    />
   );
 }
