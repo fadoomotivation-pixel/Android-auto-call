@@ -76,7 +76,7 @@ class ManualCallService : Service() {
         val startedAt = Instant.now()
         var durationSec = 0
         var outcome = "failed"
-        var recordingPath: String? = null
+        var capture = RecordingTruth.none()
 
         // Prefer the phone's native both-sides recording; MediaRecorder
         // (mic-only) is the fallback when no native folder is set.
@@ -103,21 +103,38 @@ class ManualCallService : Service() {
                 // Manual REC toggle may have stopped (and stashed) the recorder already.
                 val micPath = runCatching { SimRecorder.stop() }.getOrNull()
                     ?: SimCallMonitor.takeManualRecording()
+                val micKind = if (micPath != null) SimRecorder.captureKind else null
                 // Native mode never runs the mic recorder, so harvest for any call
                 // with a few seconds of talk — not only ones past the "connected"
                 // threshold — so a short but real conversation the phone recorded
                 // isn't dropped. The 3s floor skips instant no-answers (whose 9s
-                // harvest poll would otherwise find nothing).
-                recordingPath = when {
-                    useNative && durationSec >= NATIVE_HARVEST_MIN_SEC -> harvestNative(startedAt, phone) ?: micPath
-                    else -> micPath
-                }
+                // harvest poll would otherwise find nothing). A miss is NOT a
+                // silent success: classify names it, and a speaker/mic file is
+                // labeled as such instead of looking like the phone's own file.
+                val harvestPath = if (useNative && durationSec >= NATIVE_HARVEST_MIN_SEC) {
+                    harvestNative(startedAt, phone)
+                } else null
+                capture = RecordingTruth.classify(
+                    recordingOn = record,
+                    nativeFolder = useNative,
+                    durationSec = durationSec,
+                    harvestPath = harvestPath,
+                    micPath = micPath,
+                    micKind = micKind,
+                )
             }
+        }
+        // Say what was captured BEFORE the call state clears, so the outcome
+        // bar can show it the moment the rep is asked what happened.
+        // A call too short to expect a file does not publish: that would
+        // wipe the warning from the previous call on this lead.
+        if (capture.path != null || capture.warning != null) {
+            SimCallMonitor.publishVerdict(phone, capture.warning)
         }
         SimCallMonitor.end(this)
         // Persist BEFORE stopping — stopSelf() cancels this scope, and a launched
         // persist coroutine used to die mid-insert (calls vanished from history).
-        persist(phone, companyId, salespersonId, startedAt, durationSec, outcome, recordingPath)
+        persist(phone, companyId, salespersonId, startedAt, durationSec, outcome, capture)
         // Push the log + recording to the CRM now, not at the next 15-min window,
         // so the manager sees the call almost live.
         com.salesautocall.app.data.SyncWorkers.syncNow(applicationContext)
@@ -138,7 +155,7 @@ class ManualCallService : Service() {
     /** Runs to completion even while the service shuts down (non-cancellable). */
     private suspend fun persist(
         phone: String, companyId: String?, salespersonId: String?,
-        startedAt: Instant, durationSec: Int, outcome: String, recordingPath: String?,
+        startedAt: Instant, durationSec: Int, outcome: String, capture: RecordingTruth.Capture,
     ) {
         kotlinx.coroutines.withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
             runCatching {
@@ -153,10 +170,12 @@ class ManualCallService : Service() {
                         startedAt = startedAt.toString(),
                         endedAt = Instant.now().toString(),
                         durationSeconds = durationSec,
-                        recordingStatus = if (recordingPath != null) "uploading" else "none",
-                        recordingSource = if (recordingPath != null) "sim" else null,
+                        recordingStatus = capture.status,
+                        recordingSource = capture.source,
+                        recordingError = capture.error,
                     ),
                 )
+                val recordingPath = capture.path
                 if (logId != null && recordingPath != null) {
                     val f = File(recordingPath)
                     if (f.exists() && f.length() > 0) {
@@ -173,9 +192,17 @@ class ManualCallService : Service() {
                         // A file left behind costs a few megabytes of cache; a
                         // file deleted costs the conversation.
                         val sent = runCatching {
-                            Repository.uploadRecording(logId, "sim", durationSec, f.readBytes())
+                            Repository.uploadRecording(logId, capture.source ?: "sim", durationSec, f.readBytes())
                         }.isSuccess
-                        if (sent) runCatching { f.delete() }
+                        if (sent) {
+                            runCatching { f.delete() }
+                        } else {
+                            val warning = RecordingTruth.withUploadFailure(capture.warning)
+                            runCatching {
+                                Repository.markRecordingStatus(logId, "failed", warning)
+                            }
+                            SimCallMonitor.publishVerdict(phone, warning)
+                        }
                     }
                 }
             }

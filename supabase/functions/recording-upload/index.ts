@@ -40,7 +40,8 @@ function sniffAudio(b: Uint8Array, source: string): [string, string] {
   if (b.length >= 4 && ascii(0, "OggS")) return ["ogg", "audio/ogg"];
   if (b.length >= 3 && ascii(0, "ID3")) return ["mp3", "audio/mpeg"];
   if (b.length >= 2 && b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return ["mp3", "audio/mpeg"]; // MPEG frame sync
-  return source === "sim" ? ["m4a", "audio/mp4"] : ["wav", "audio/wav"];
+  // sim_speaker / sim_mic / sim_app are phone captures too, not SIP wav.
+  return source.startsWith("sim") ? ["m4a", "audio/mp4"] : ["wav", "audio/wav"];
 }
 /**
  * HOW LONG THE AUDIO ACTUALLY IS — measured from the bytes, not believed.

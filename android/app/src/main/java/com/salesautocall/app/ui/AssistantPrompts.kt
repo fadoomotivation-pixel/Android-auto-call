@@ -854,12 +854,17 @@ fun PendingUpdateBar(vm: MainViewModel) {
                     if (pending.connected) "You just spoke to $who" else "No answer from $who",
                     style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, maxLines = 1,
                 )
+                val recordingWarning = pending.recordingWarning
                 Text(
-                    if (app.pendingUpdates.size > 1)
-                        "${app.pendingUpdates.size} calls waiting — tap to write them up"
-                    else "Tap Update to say what happened",
+                    when {
+                        recordingWarning != null -> recordingWarning
+                        app.pendingUpdates.size > 1 ->
+                            "${app.pendingUpdates.size} calls waiting — tap to write them up"
+                        else -> "Tap Update to say what happened"
+                    },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                    color = if (recordingWarning != null) Brass else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (recordingWarning != null) 2 else 1,
                 )
             }
             Spacer(Modifier.width(8.dp))

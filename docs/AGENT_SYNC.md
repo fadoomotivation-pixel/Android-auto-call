@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (a missing recording cannot look like a clean call)
+
+- WHAT: After a SIM call, a harvest miss is logged `recording_status = failed` with a plain-English `recording_error`, not `none`. A speaker, mic, or app-recorder file used because the OEM folder had nothing is stored as `recording_source` `sim_speaker` / `sim_mic` / `sim_app` and labeled on the outcome strip, the nudge bar, the campaign review chips, the lead call row, and the Calls row. The phone now reads `audio_seconds`, `audio_complete`, and `recording_error`. A broken or far-too-short file says so. Play is not offered when `audio_complete` is false. Admin recordings name the same fallback sources. Tapping an outcome does not clear the warning.
+- FILES: `android/.../dialer/RecordingTruth.kt` (new), `SimRecorder.kt`, `SimCallMonitor.kt`, `ManualCallService.kt`, `AutoDialerService.kt`, `DialerController.kt`, `Models.kt`, `Repository.kt`, `MainViewModel.kt`, `LeadDetailScreen.kt`, `AssistantPrompts.kt`, `TelecallerScreens.kt`, `FeatureScreens.kt`, `CallsScreen.kt`, `admin/.../recordings/page.tsx`, `supabase/functions/recording-upload/index.ts`, `recording-url/index.ts`, `docs/AGENT_SYNC.md`.
+- WHY: An OEM folder that missed the file, or a silent speaker/mic fallback, was logged like a normal call. The phone could not see the audio fields the admin already had.
+- BUILD: `assembleStandardDebug`. No migration. Edge functions ship only when this merges to main.
+- NEXT/NOTE: Compose UI touched because the warning has to sit on the existing outcome bar. No new popup, no new tab. CAPI, Andromeda, and backfilling the 952 unmeasured files stay out.
+
 ## 2026-10-05 — Cursor (Apple polish kept on top of the one Call now list)
 
 - WHAT: Merged main after the dialer-truth PR. The phone still uses one due list, the five-tier Call all order, stage sync on dispose, and a dash plus "Could not load who is due" when the work-state read fails. The Apple chrome (grouped grey canvas, white cards, taller Call, calm tabs, line icons) sits on that logic. A failed count still shows "—", never 0.

@@ -3694,6 +3694,10 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
         text = {
             if (scheduleFor == null) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    app.postCallContactId?.let { app.recordingWarnings[it] }?.let { warning ->
+                        Text(warning, style = AppType.meta, color = AppColors.Warning)
+                        Spacer(Modifier.height(8.dp))
+                    }
                     // Context strip: budget + place + last note, always in front of the rep.
                     val lastNote = lead?.notes?.takeIf { it.isNotBlank() }
                     val budget = budgetLabel(lead?.budget)

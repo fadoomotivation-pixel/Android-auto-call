@@ -40,6 +40,20 @@ object SimCallMonitor {
     private val _state = MutableStateFlow<SimCallUi?>(null)
     val state: StateFlow<SimCallUi?> = _state.asStateFlow()
 
+    /**
+     * What the call that just ended actually captured.
+     * Published before the call state clears, and again if the upload fails,
+     * so the outcome bar can say so without waiting for a refetch.
+     */
+    data class RecordingVerdict(val phone: String, val warning: String?, val at: Long = System.currentTimeMillis())
+
+    private val _verdict = MutableStateFlow<RecordingVerdict?>(null)
+    val verdict: StateFlow<RecordingVerdict?> = _verdict.asStateFlow()
+
+    fun publishVerdict(phone: String, warning: String?) {
+        _verdict.value = RecordingVerdict(phone, warning)
+    }
+
     /** Recording captured via the manual REC toggle; the owning service consumes it. */
     @Volatile
     var manualRecordingPath: String? = null

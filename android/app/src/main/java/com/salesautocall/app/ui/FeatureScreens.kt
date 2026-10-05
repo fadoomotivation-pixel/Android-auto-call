@@ -889,6 +889,10 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
                         Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         dial.lastContactPhone?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         Text("Outcome: ${dial.lastOutcome ?: "—"}", style = MaterialTheme.typography.bodySmall)
+                        dial.lastRecordingWarning?.let {
+                            Spacer(Modifier.height(4.dp))
+                            Text(it, style = AppType.meta, color = AppColors.Warning, maxLines = 3)
+                        }
                     }
                 }
                 Spacer(Modifier.height(14.dp))

@@ -785,6 +785,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 contact = contact,
                 pending = app.pendingUpdates.firstOrNull { it.contactId == contact.id },
                 callLine = lastCallLineToday,
+                recordingWarning = contact.id?.let { app.recordingWarnings[it] },
                 onCall = { doCall() },
                 onWhatsApp = { doWhats() },
                 onOpenUpdate = {
@@ -1751,6 +1752,8 @@ private fun LeadActionBar(
     pending: PendingUpdate?,
     /** "Talked 3m 20s · Today, 6:06 PM" — this lead's last call, if it was today. */
     callLine: String?,
+    /** Missing file, failed harvest, or a speaker/mic fallback. Not an outcome chip. */
+    recordingWarning: String?,
     onCall: () -> Unit,
     onWhatsApp: () -> Unit,
     onOpenUpdate: () -> Unit,
@@ -1810,6 +1813,10 @@ private fun LeadActionBar(
                         Text(it, style = AppType.tag, color = SubInk, maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
+                    recordingWarning?.let {
+                        Spacer(Modifier.height(4.dp))
+                        Text(it, style = AppType.tag, color = AmberL, maxLines = 3)
+                    }
                     Spacer(Modifier.height(7.dp))
                     // Two across, same as the Update sheet. Five chips in one
                     // scrolling row hid the last ones past the edge of the
@@ -1858,6 +1865,13 @@ private fun LeadActionBar(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+            }
+            if (!stripOpen && !recordingWarning.isNullOrBlank()) {
+                // The outcome strip closes once they answer. The missing file
+                // does not. One line above Call, not a new sheet.
+                Text(recordingWarning, style = AppType.tag, color = AmberL, maxLines = 3,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                Spacer(Modifier.height(6.dp))
             }
             // Call and WhatsApp stay the primary actions, in reach at the bottom of
             // a long page instead of only at the top of it.
@@ -2051,7 +2065,14 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
             Spacer(Modifier.weight(1f))
             call.startedAt?.let { Text(it.take(16).replace('T', ' '), style = MaterialTheme.typography.labelSmall, color = SubInk) }
         }
-        if (call.recordingStatus == "ready" && call.id != null) {
+        val recordingNote = com.salesautocall.app.dialer.RecordingTruth.warningFor(call)
+        if (recordingNote != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(recordingNote, style = MaterialTheme.typography.labelMedium, color = AmberL, maxLines = 3)
+        }
+        // A file the server already marked unfinished cannot play. Offering
+        // Play on it is how a broken recording looked like a normal one.
+        if (call.recordingStatus == "ready" && call.id != null && call.audioComplete != false) {
             // NOT MY CALL, NOT MY RECORDING — and say so instead of offering a
             // Play button that will only refuse. AudioPlayer enforces the same
             // rule again; this is here so the rep is never invited to tap it.
