@@ -640,6 +640,32 @@ object Repository {
      *
      * Shared by the manual "Sync" button and the hourly RecordingSyncWorker.
      * Returns (attached, failed, firstErrorMessage).
+     *
+     * THIS FUNCTION IS WHERE 2,108 CALLS GOT SOMEBODY ELSE'S AUDIO.
+     *
+     * It used to pick, for every call, the file whose timestamp sat closest to
+     * the call's START, accept it if it was within TWELVE HOURS, and upload it.
+     * Two things made that catastrophic rather than merely sloppy:
+     *
+     *   - It never asked whether the call had connected. A no-answer that rang
+     *     out for zero seconds was matched exactly like a five-minute
+     *     conversation, and of course the nearest file was a real recording of
+     *     a different call.
+     *   - "Closest to the start, within twelve hours" is not a test. When a rep
+     *     power-dials, the previous call's file is seconds away.
+     *
+     * Ankita's 2 Oct rows show the result: 15:12:57 and 15:13:33, both
+     * zero-second no-answers to a lead called Prashant, both "ready", both
+     * carrying a byte-identical transcript of a conversation that happened on
+     * neither of them. Then the AI summarised it as Prashant's call, and
+     * promise-watch read obligations out of it. The founder heard a stranger's
+     * voice under his buyer's name and assumed the recording had leaked from
+     * somewhere; it had not. It was filed by a clock, badly.
+     *
+     * Now a file must have been written DURING the call it is claimed for, and
+     * a call with no talk time is skipped outright. Fewer recordings will
+     * attach. That is the point: an unattached recording is a gap the rep can
+     * see, and a wrongly attached one is a lie she cannot.
      */
     suspend fun syncRecordings(context: android.content.Context, sinceIso: String?): Triple<Int, Int, String?> {
         awaitSession()
@@ -657,13 +683,37 @@ object Repository {
         for (c in calls) {
             val id = c.id ?: continue
             if (c.recordingStatus == "ready") continue
+            // A call that never connected recorded nothing. Whatever the folder
+            // offers for it was recorded during a DIFFERENT call, so there is
+            // nothing here to attach and no file to go looking for.
+            if (c.durationSeconds < com.salesautocall.app.dialer.RecordingTruth.MIN_SEC) continue
             val startMs = recIsoMs(c.startedAt) ?: continue
+            val endMs = startMs + c.durationSeconds * 1000L
             val digits = c.phone.filter { it.isDigit() }.takeLast(10)
-            val byName = if (digits.length >= 7)
-                files.filter { f -> f.name.filter { it.isDigit() }.contains(digits) } else emptyList()
-            val pick = byName.ifEmpty { files.filter { kotlin.math.abs(it.lastModified - startMs) < 300_000L } }
-                .minByOrNull { kotlin.math.abs(it.lastModified - startMs) } ?: continue
-            if (kotlin.math.abs(pick.lastModified - startMs) > 12L * 3600_000L) continue
+            // The file has to have been written WHILE this call was happening.
+            // The OEM stamps it somewhere between going off-hook and finishing
+            // the container a little after hang-up, so the window is the call
+            // itself plus a small margin at each end — not a radius around the
+            // start time, which is what let a neighbouring call's file win.
+            fun inWindow(f: com.salesautocall.app.dialer.NativeRecordingHarvester.FileRef): Boolean =
+                f.lastModified >= startMs - FILE_EARLY_GRACE_MS &&
+                    f.lastModified <= endMs + FILE_LATE_GRACE_MS
+            // A filename carrying the dialled number is the strongest evidence
+            // there is, so it is checked first — but it still has to fall in the
+            // window, and if it does not, this call is SKIPPED rather than
+            // handed the nearest unrelated file. We know which file is supposed
+            // to be its, and the timestamp disagrees; guessing past that is the
+            // exact move that caused this bug.
+            val named = if (digits.length >= 7)
+                files.filter { f -> f.name.filter { it.isDigit() }.contains(digits) }
+            else emptyList()
+            val candidates = when {
+                named.isNotEmpty() -> named.filter { inWindow(it) }
+                else -> files.filter { inWindow(it) }
+            }
+            // Closest to the END of the call, because that is when a recorder
+            // writes the file out.
+            val pick = candidates.minByOrNull { kotlin.math.abs(it.lastModified - endMs) } ?: continue
             val bytes = runCatching {
                 com.salesautocall.app.dialer.NativeRecordingHarvester.bytesOf(context, pick.docId)
             }.getOrNull()
@@ -679,6 +729,15 @@ object Repository {
         }
         return Triple(attached, failed, firstError)
     }
+
+    /** A recorder may stamp the file as the call goes off-hook, a moment before
+     *  our own start time. Small on purpose: a wide margin here is what let the
+     *  PREVIOUS call's file look like this one's during power-dialling. */
+    private const val FILE_EARLY_GRACE_MS = 15_000L
+
+    /** …and may take a while after hang-up to finish writing the container.
+     *  Generous, because a late file is still unambiguously this call's. */
+    private const val FILE_LATE_GRACE_MS = 300_000L
 
     // The API's "+00:00" shape first — Instant.parse throws on it, and this runs
     // once per recording being matched.

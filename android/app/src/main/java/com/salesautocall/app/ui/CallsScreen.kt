@@ -418,6 +418,12 @@ private fun isLeadCall(
     knownByPhone: Map<String, com.salesautocall.app.data.Contact>,
     followUpPhones: Set<String>,
 ): Boolean {
+    // The row already knows. off_crm is set when the call was logged, from the
+    // contact lookup that happened at the time; matching phone digits against
+    // whatever leads this screen happens to be holding is a re-derivation of
+    // the same question with less information. Where the two disagree — 78
+    // calls do — the flag is right and the digits are a coincidence.
+    if (c.offCrm) return false
     if (!c.contactId.isNullOrBlank()) return true
     val digits = c.phone.filter { it.isDigit() }.takeLast(10)
     return digits.length >= 10 && (knownByPhone.containsKey(digits) || digits in followUpPhones)
@@ -643,6 +649,7 @@ private fun CallRow(
             AudioPlayer(
                 callLogId = c.id!!,
                 callOwnerId = c.salespersonId,
+                offCrm = c.offCrm,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }

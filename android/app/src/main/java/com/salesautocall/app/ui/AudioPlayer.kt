@@ -43,8 +43,28 @@ import java.util.concurrent.TimeUnit
  * the next screen that wants to play a recording must be made to answer the
  * question rather than quietly inherit a yes.
  *
- * A number that is not a lead never reaches this player. The recordings
- * list leaves those calls out. This screen does not explain that.
+ * AND AN OFF-CRM RECORDING NEVER PLAYS ON A PHONE AT ALL.
+ *
+ * Under record-all-calls the app records everything the handset dials, so
+ * thousands of a rep's calls are to numbers that are not leads: her family,
+ * her friends, her doctor. Those are not company work and their audio is
+ * super-admin only — CLAUDE.md has said so all along.
+ *
+ * The founder found the sharp end of this himself: he signed into a rep's
+ * account on his own phone, and his own personal calls uploaded into her app
+ * with the audio attached. Ownership alone could never have caught that —
+ * those calls ARE hers by salesperson_id. Being off-CRM is what gives them
+ * away, and it is the honest test: if the number is not a lead, the recording
+ * is nobody's business on a handset.
+ *
+ * THIS CHECK WAS REMOVED ONCE AND IS BACK ON PURPOSE. It was replaced with a
+ * list-side filter that decides "is this a lead" by matching the last ten
+ * digits of the phone number against the rep's own lead list. That is a guess
+ * standing in for a fact the row already carries: call_logs.off_crm. The guess
+ * disagrees with the flag on 78 calls, 39 of which have audio — so the filter
+ * was not doing the job the guard had been doing, and the flag is free. Keep
+ * both if you like, but the authoritative one is the one that reads off_crm,
+ * and it belongs here, where the audio is actually requested.
  *
  * The web is untouched: callproai.in is where a founder reviews calls, behind
  * a login on a machine they control.
@@ -55,24 +75,32 @@ fun AudioPlayer(
     callLogId: String,
     /** salesperson_id of the call. Only this person hears it on a phone. */
     callOwnerId: String?,
+    /** call_logs.off_crm — a number that is not a CRM lead. Required, not
+     *  defaulted, for the same reason [callOwnerId] is. */
+    offCrm: Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // The owner check happens BEFORE the player is built, so a recording the
+    // Both checks happen BEFORE the player is built, so a recording the
     // listener may not hear is never even requested from the server.
     val mine = remember(callOwnerId) {
         val me = Repository.currentUserId()
         !me.isNullOrBlank() && me == callOwnerId
     }
-    if (!mine) {
+    val blocked = when {
+        offCrm -> "🔒 This number is not a lead — its recording does not open in the app."
+        !mine -> "🔒 Recording only opens for the telecaller who made this call."
+        else -> null
+    }
+    if (blocked != null) {
         Row(
             modifier.padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "🔒 Recording only opens for the telecaller who made this call.",
+                blocked,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
