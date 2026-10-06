@@ -2210,12 +2210,23 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
         if (call.recordingStatus == "ready" && call.id != null && call.audioComplete != false) {
             // NOT MY CALL, NOT MY RECORDING — and say so instead of offering a
             // Play button that will only refuse. AudioPlayer enforces the same
-            // rule again; this is here so the rep is never invited to tap it.
-            // This list is already this lead's calls. A number that is not a
-            // lead never reaches it.
-            val mineToHear = Repository.currentUserId()
+            // rules again; this is here so the rep is never invited to tap it.
+            //
+            // off_crm is checked even on a lead's own page. "This list is this
+            // lead's calls, so nothing off-CRM reaches it" was the reasoning for
+            // dropping it, and the database disagrees: calls carrying off_crm
+            // true whose number matches a lead exist, 39 of them with audio.
+            // The flag is on the row; there is no reason to reason about it.
+            val mineToHear = !call.offCrm && Repository.currentUserId()
                 ?.takeIf { it.isNotBlank() } == call.salespersonId
             when {
+                call.offCrm -> {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "🔒 This number is not a lead — its recording does not open in the app",
+                        style = MaterialTheme.typography.labelMedium, color = SubInk,
+                    )
+                }
                 !mineToHear -> {
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -2226,6 +2237,7 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
                 playing -> AudioPlayer(
                     callLogId = call.id,
                     callOwnerId = call.salespersonId,
+                    offCrm = call.offCrm,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 else -> {

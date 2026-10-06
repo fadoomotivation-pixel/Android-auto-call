@@ -249,6 +249,43 @@ async function resolveDrive(admin: SupabaseClient, companyId: string, companyNam
   return { refreshToken: ps.refresh_token as string, parent: sub };
 }
 
+/** Talk time below which a call cannot have produced a recording of its own. */
+const TALK_FLOOR_SEC = 3;
+
+/**
+ * Why this file cannot be this call's audio, or null if it plausibly is.
+ *
+ * Two rules, both deliberately generous, because refusing a real recording
+ * also costs the rep something:
+ *
+ *  1. A call with no talk time has no audio. There is nothing to be generous
+ *     about — a number that rang out and was never picked up produced silence,
+ *     so any file offered for it was recorded during some OTHER call.
+ *
+ *  2. Audio much longer than the call it claims to describe. The slack is a
+ *     full minute or the length of the call again, whichever is larger, so
+ *     ringing time, a recorder that keeps running past hang-up and a lazy OEM
+ *     flush all pass. A 38-second call carrying 496 seconds of audio does not,
+ *     and that row is real too.
+ *
+ * Audio SHORTER than the call is not judged here. That is the truncated-file
+ * problem — audio_complete and v_broken_recordings already name it, and the
+ * audio, as far as it goes, is genuinely this call's.
+ */
+function audioBelongsToAnotherCall(callSeconds: number, audioSeconds: number | null): string | null {
+  if (audioSeconds === null || audioSeconds < 1) return null; // nothing measured, nothing to judge
+  if (callSeconds < TALK_FLOOR_SEC) {
+    return `This call lasted ${callSeconds}s, so it recorded nothing, but the file holds ` +
+      `${audioSeconds}s of audio. The file belongs to a different call and was not saved.`;
+  }
+  const slack = Math.max(60, callSeconds);
+  if (audioSeconds > callSeconds + slack) {
+    return `The call lasted ${callSeconds}s but the file holds ${audioSeconds}s of audio. ` +
+      `The file belongs to a different call and was not saved.`;
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const callId = req.headers.get("x-call-id") ?? "";
@@ -261,7 +298,8 @@ Deno.serve(async (req) => {
   const { data: ud } = await u.auth.getUser();
   if (!ud?.user) return json({ ok: false, error: "Unauthorized" }, 401);
 
-  const { data: row } = await u.from("call_logs").select("id, company_id").eq("id", callId).maybeSingle();
+  const { data: row } = await u.from("call_logs")
+    .select("id, company_id, duration_seconds, outcome").eq("id", callId).maybeSingle();
   if (!row?.company_id) return json({ ok: false, error: "call not found" }, 404);
 
   const admin = createClient(SUPABASE_URL, SERVICE);
@@ -308,6 +346,40 @@ Deno.serve(async (req) => {
     // later misbehaves. See measureAudio: this is the only number here that
     // describes the AUDIO rather than the call.
     const facts = measureAudio(bytes, ext);
+
+    // IS THIS AUDIO EVEN THIS CALL'S?
+    //
+    // Nothing used to ask. The phone said "here is a file for call X" and the
+    // server believed it, and the phone had no way of knowing either: it picks
+    // a file out of the OEM's recording folder by how close the file's
+    // timestamp is to the call. When a rep power-dials, two calls are forty
+    // seconds apart and the same file is the closest match to both.
+    //
+    // That is not a hypothetical. Two of Ankita's rows, 15:12:57 and 15:13:33
+    // on 2 Oct, are both no-answers that lasted ZERO seconds, both point at
+    // different Drive files, and both carry a byte-identical 129-character
+    // transcript of a conversation that happened on neither of them. Across the
+    // database 2,108 calls that never connected carry a recording: 1,759 of
+    // them a transcript of somebody else's call, 901 an AI summary of it, on
+    // 359 real leads. promise-watch then read 28 obligations out of that audio
+    // and put them at the top of a rep's Call now list.
+    //
+    // The client-side window is the real fix and it is in this same change.
+    // This check is the backstop, because the phone's clock, the OEM's flush
+    // delay and a future third dialler are all outside our control, and a
+    // recording filed against the wrong buyer is worse than no recording:
+    // the rep hears a stranger, the AI invents a promise, and every number
+    // built on top of it is quietly false.
+    //
+    // The file is NOT stored. The phone keeps its copy (it only deletes after a
+    // 2xx), so nothing is destroyed by refusing — and the call says plainly
+    // that it has no recording instead of showing someone else's.
+    const callSec = typeof row.duration_seconds === "number" ? row.duration_seconds : duration;
+    const foreign = audioBelongsToAnotherCall(callSec, facts.seconds);
+    if (foreign) {
+      await markFailed(admin, callId, foreign);
+      return json({ ok: false, error: foreign }, 409);
+    }
 
     // Prefer Drive if configured; otherwise (or on Drive failure) store the
     // recording in Supabase Storage. recording_path carries an "sb://" prefix for

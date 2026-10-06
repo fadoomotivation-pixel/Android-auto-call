@@ -81,9 +81,14 @@ object NativeRecordingHarvester {
         val folder = AppPrefs.getRecordingFolder(context).ifBlank { return null }
         val treeUri = runCatching { Uri.parse(folder) }.getOrNull() ?: return null
         val phoneDigits = phone.filter { it.isDigit() }.takeLast(10)
-        // Allow the file to have started a hair before we armed, and to land a
-        // while after hang-up (third-party dialers like oDialer flush lazily).
-        val windowStart = startedAtMillis - 20_000L
+        // Allow the file to have started a hair before we armed.
+        //
+        // This margin was twenty seconds, and twenty seconds is longer than the
+        // gap between two power-dialled calls. The previous call's recording sat
+        // inside the window, was the newest file there, and won — which is one
+        // of the two ways a buyer ended up listed against a stranger's audio.
+        // See Repository.syncRecordings for the other, and for the count.
+        val windowStart = startedAtMillis - EARLY_GRACE_MS
 
         // Poll for ~18s: some dialers write the file several seconds after the
         // call ends (finalising the MP4/M4A container).
@@ -97,6 +102,9 @@ object NativeRecordingHarvester {
         }
         return null
     }
+
+    /** See [harvest]. Short on purpose; a wide margin lets the previous call win. */
+    private const val EARLY_GRACE_MS = 5_000L
 
     /** Scans the tree (root + one level of sub-folders) for the best recent audio file. */
     private fun newestMatch(context: Context, treeUri: Uri, windowStart: Long, phoneDigits: String): Candidate? {
