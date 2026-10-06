@@ -91,9 +91,10 @@ object CaptureHealth {
     )
 
     /**
-     * Kept for the health read. The phone does not show this. Telecallers do
-     * not see a capture-down line. [recordsSends] still decides whether a
-     * draft may be marked opened.
+     * The sentence the phone says when a draft is opened and capture is not
+     * live. There is no capture-down banner. This text is the toast, so the
+     * draft card going away is not a saved send. [recordsSends] still decides
+     * whether a draft may be marked opened.
      */
     fun draftWarning(snapshot: Snapshot): String? = when (snapshot) {
         is Snapshot.Live, Snapshot.Pending -> null

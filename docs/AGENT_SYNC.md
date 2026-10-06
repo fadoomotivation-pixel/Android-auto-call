@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (one Call now, and a quiet failure says so)
+
+- WHAT: Call now is one list everywhere it is named: overdue or call_now, via callNowContacts. The Leads Call now tile, its Call button, Home's due count, the three plan rows, and "+N more" all use that list. Overdue stays a late slice and says those people are already in Call now. Leads and pending follow-ups page past the old 500 and 300 caps. Opening WhatsApp while capture is not live still opens WhatsApp, does not mark the draft opened, and toasts draftWarning. Retry is no-answer or busy inside the due set, not brand-new leads. The drawer opportunities number is Call now, or a dash when that read failed with nothing kept. The Calls tab that was Follow-up is No answer. A lead call with a harvest miss stays on the recordings list; an unlinked call that matches a lead phone is linked, and a failed link does not drop the row. Booked and Lost from the visit prompt set the stage and leave Call now immediately, and come back if the write is rejected.
+- FILES: CallNowQueue.kt, TelecallerScreens.kt, MainViewModel.kt, Repository.kt, CallsScreen.kt, AppRoot.kt, ManualCallService.kt, CaptureHealth.kt, docs/AGENT_SYNC.md.
+- WHY: The same words were counting two queues, a 500-row window hid older new leads, and a cleared draft looked like a saved send.
+- BUILD: assembleStandardDebug. No migration. Do not apply one. Merged onto main after #504 and #505. The today card still counts by deal stage. Failed recordings and the valueless Purchase stay as in the note below.
+- NEXT/NOTE: No post-call popup, no fourth Follow-up tab, no second reminder scheduler, no separate knowledge store, no count on the Follow-up nav chip, no capture-down banner, no Hindi. The notes below stay.
+
 ## 2026-10-05 — Cursor (failed recordings, Purchase value, company link)
 
 - WHAT: The recordings page lists failed harvests under the playable table and shows "—" if that read fails. A Purchase is not marked sent until the token amount is above zero, so a missing amount cannot block a later valued send. Overlapping sends claim the row before the Meta post. The event id stays the lead id plus the event name. Facebook, Pulse, X-Ray, and Coach open `?company=` instead of the first company by name. Retry stays disabled while it runs.

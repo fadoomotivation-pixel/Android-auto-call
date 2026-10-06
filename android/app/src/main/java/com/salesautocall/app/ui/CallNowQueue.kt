@@ -6,7 +6,8 @@ import com.salesautocall.app.data.LeadWork
 
 /**
  * Who to ring, and in what order. One definition for Home, the Leads deck,
- * and Follow-ups. Two copies of this is how those screens disagreed.
+ * the Leads "Call now" tile, its Call button, and Follow-ups. Two copies of
+ * this is how those screens disagreed.
  *
  * Membership is `v_lead_workstate.action_state` of `overdue` or `call_now`.
  * That column is `v_lead_action_state`: a buyer who wrote and got no reply, a
@@ -62,13 +63,31 @@ internal fun callNowContacts(
     .filter { c -> isCallNowAction(c.id?.let { workByLead[it]?.actionState }) }
     .sortedWith(callNowOrder(workByLead))
 
-/** Same order as [callNowContacts], for a list that is already the due set
- *  (the Overdue chip, or the Call now chip, on their own). */
+/**
+ * Same order as [callNowContacts]. The Overdue tile is a late slice of this
+ * list, not a second queue: those leads are already inside [callNowContacts].
+ */
 internal fun callNowOrder(workByLead: Map<String, LeadWork>): Comparator<Contact> =
     compareBy(
         { c -> callNowTier(c.id?.let { workByLead[it] }) },
         { c -> callNowTieKey(c.id?.let { workByLead[it] }, c.createdAt) },
     )
+
+/**
+ * Quick view "Retry (no answer/busy)".
+ *
+ * The due set only — overdue or call_now — and only where a call was already
+ * tried and nobody had a real conversation, or the last outcome was no answer
+ * or busy. A brand-new lead has never been rung. Putting one under Retry is
+ * how that word stopped meaning a retry.
+ */
+internal fun isNoAnswerRetry(contact: Contact, work: LeadWork?): Boolean {
+    if (!isCallNowAction(work?.actionState)) return false
+    val tried = (work?.callsTotal ?: 0) > 0 || contact.attempts > 0 || !work?.lastCallAt.isNullOrBlank()
+    if (!tried) return false
+    if (contact.status == "no_answer" || contact.status == "busy") return true
+    return (work?.bestCallSeconds ?: 0) < 30
+}
 
 /**
  * The stage `contacts_stage_sync` will store for this disposition.
