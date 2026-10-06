@@ -28,9 +28,13 @@ import com.salesautocall.app.ui.design.Space
 /**
  * Today's funnel for the person making the calls.
  *
- * Six steps, one lead in one step, the furthest step she actually reached
- * today (IST). A failed read says so. A zero is only drawn after a read
- * that succeeded — a blank morning and a dead connection are different.
+ * Six steps, one lead in one step, the furthest deal stage she actually
+ * reached today (IST). The bucket is the stage, not the last call outcome:
+ * a no-answer does not pull an Interested lead back into Contacted.
+ * Token paid today is Booked — that is the step reps reach. New means the
+ * lead is still in the New stage. A failed read says so. A zero is only
+ * drawn after a read that succeeded — a blank morning and a dead connection
+ * are different.
  *
  * Call now is [callNowContacts], the same list Home, Leads, and Follow-ups
  * already share. This card does not invent a second queue.
@@ -63,6 +67,12 @@ private val IST: java.time.ZoneId = java.time.ZoneId.of("Asia/Kolkata")
 
 private val CONTACTED_STATUSES = setOf(
     "called", "no_answer", "busy", "wrong_person", "callback", "follow_up",
+)
+
+/** Deal stages that are already past Contacted. A missed call must not
+ *  drop one of these into the Contacted count. */
+private val PAST_CONTACTED = setOf(
+    "interested", "site_visit", "negotiation", "token_paid", "won", "lost", "dnc", "invalid",
 )
 
 private val TERMINAL_STAGES = setOf("won", "lost", "dnc", "invalid")
@@ -127,16 +137,35 @@ internal fun buildTodayFunnel(
         val contactedToday = isTodayIst(c.lastContactedAt, today)
         val arrivedToday = isTodayIst(c.siteVisitArrivedAt, today)
         val tokenToday = isTodayIst(c.tokenPaidAt, today)
-        val assignedToday = isTodayIst(c.assignedAt, today) || isTodayIst(c.createdAt, today)
+        val assignedToday = isTodayIst(c.assignedAt, today)
+        val createdToday = isTodayIst(c.createdAt, today)
+        val workedToday = handledToday || contactedToday
+        val stage = c.stage
+        // Booked is won, or a token paid today. Reps close on token_paid;
+        // the six-step card has no separate token column.
+        val bookedToday = (c.status == "booked" || stage == "won") &&
+            (handledToday || tokenToday || arrivedToday)
+        val tokenPaidToday = (c.status == "token_paid" || stage == "token_paid") &&
+            (tokenToday || handledToday || arrivedToday)
         when {
-            (c.status == "booked" || c.stage == "won") && (handledToday || tokenToday) -> booked++
+            bookedToday || tokenPaidToday -> booked++
             arrivedToday -> visitDone++
-            handledToday && c.status == "site_visit" && !c.siteVisitAt.isNullOrBlank() &&
-                c.siteVisitArrivedAt == null -> visitAsked++
-            handledToday && c.status == "interested" -> interested++
-            (handledToday || contactedToday) &&
-                (c.stage == "contacted" || c.status in CONTACTED_STATUSES) -> contacted++
-            c.stage == "new" && assignedToday -> fresh++
+            (stage == "site_visit" || c.status == "site_visit") &&
+                !c.siteVisitAt.isNullOrBlank() &&
+                c.siteVisitArrivedAt == null &&
+                workedToday -> visitAsked++
+            // Stage wins over today's outcome. no_answer on an interested
+            // lead stays Interested. Status is only the fallback when the
+            // stage write has not caught up yet.
+            (stage == "interested" ||
+                (c.status == "interested" && stage !in PAST_CONTACTED)) &&
+                workedToday -> interested++
+            stage !in PAST_CONTACTED && workedToday &&
+                (stage == "contacted" || c.status in CONTACTED_STATUSES) -> contacted++
+            // New is the New stage, among leads who arrived or were still
+            // there today. It is not "assigned today" under a New label.
+            stage == "new" && c.status !in CONTACTED_STATUSES &&
+                (assignedToday || createdToday || workedToday) -> fresh++
         }
     }
     return TodayFunnel(
