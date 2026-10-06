@@ -6,12 +6,26 @@
 // The database trigger (migration 0053) calls this only for
 // lead_source = 'facebook' with a lead id, and only when status changes.
 // This function still accepts a hashed phone when something calls it directly
-// (the import-lead path). It does not widen that trigger.
+// (the import-lead path). It does not widen that trigger. A token amount saved
+// later without a status change is picked up by Retry, which also reads
+// Purchase rows that were marked sent with no amount.
+//
+// event_id stays `${contact_id}:${event_name}`.
+// Dedupe assumption (Meta Conversions API, event_name + event_id): Meta treats
+// that pair as one event and, within about 48 hours, keeps the first. The
+// documented case is a browser event and a server event that share the id.
+// Two server posts are not a value correction. A Purchase with no amount is
+// therefore not posted and is not stored as ok=true — that would occupy the
+// id and block a later amount. A row that was already ok=true with no amount
+// (older sends) is posted once more under the same id, and the row records
+// that Meta may still be counting the first event.
 //
 // Body: { contact_id, status?, event_name? }
 //   - status     → mapped to a Meta event_name via the company's map (or defaults)
 //   - event_name → send this event explicitly (overrides the map; used for tests)
-//   - mode:"retry" → re-send rows whose last attempt failed. Optional company_id.
+//   - mode:"retry" → re-send rows whose last attempt failed, purchases still
+//     waiting for an amount, and purchases marked sent with no amount.
+//     Optional company_id.
 // Auth: service role only (the DB trigger calls it; facebook-manage retries).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
@@ -29,14 +43,27 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GRAPH = "https://graph.facebook.com/v21.0";
 
-// Stop hammering Meta after this many failed posts for the same lead+event.
+// Stop hammering Meta after this many failed posts of the SAME payload.
 const MAX_ATTEMPTS = 5;
+
+// One click may post this many events. Each post is one Graph call. The loop
+// also stops at RETRY_BUDGET_MS so the isolate is not cut off mid-write.
+// The button stays disabled until this function returns, and a claim row
+// stops a second send overlapping the first.
+const RETRY_POSTS = 40;
+const RETRY_BUDGET_MS = 45_000;
+
+// A claim older than this is no longer in flight. The other send may take the row.
+const CLAIM_TTL_MS = 90_000;
 
 // token_amount is rupees. The rest of this CRM (pulse, voice notes, the
 // founder's report) treats it as INR and never as a plot price. Measured
 // 2026-10-05: the column is null on every lead, and no Purchase has ever
 // been sent. When a token is saved later, this is the number we send.
 const CURRENCY = "INR";
+
+const WAITING = "purchase waiting for token amount";
+const IN_FLIGHT = "another send is in flight";
 
 // Which funnel stage counts as which Meta event, when the company hasn't set
 // its own map. These are the milestones worth optimizing on.
@@ -72,18 +99,60 @@ export function purchaseValue(eventName: string, tokenAmount: unknown): {
   return { value: Math.round(n * 100) / 100, currency: CURRENCY, value_source: "token_amount" };
 }
 
-type Log = { attempts: number; stopped: boolean };
+function eventIdFor(contactId: string, eventName: string): string {
+  return `${contactId}:${eventName}`;
+}
 
-/** Read our own envelope. A raw Meta body counts as one earlier attempt. */
+type Log = {
+  attempts: number;
+  stopped: boolean;
+  value: number | null;
+  value_source: ValueSource | null;
+  deferred: boolean;
+  inflight: boolean;
+  claimed_at: number | null;
+};
+
+/** Read our own envelope. A raw Meta body counts as one earlier attempt with no value. */
 function parseLog(response: string | null | undefined): Log {
-  if (!response) return { attempts: 0, stopped: false };
+  const empty: Log = {
+    attempts: 0, stopped: false, value: null, value_source: null,
+    deferred: false, inflight: false, claimed_at: null,
+  };
+  if (!response) return empty;
   try {
-    const j = JSON.parse(response) as { attempts?: unknown; value_source?: unknown; stopped?: unknown };
+    const j = JSON.parse(response) as Record<string, unknown>;
+    if (j.inflight === true && typeof j.value_source !== "string") {
+      return {
+        ...empty,
+        inflight: true,
+        claimed_at: typeof j.claimed_at === "number" ? j.claimed_at : null,
+        attempts: typeof j.attempts === "number" ? j.attempts : 0,
+      };
+    }
     if (typeof j.attempts === "number" && typeof j.value_source === "string") {
-      return { attempts: j.attempts, stopped: j.stopped === true };
+      return {
+        attempts: j.attempts,
+        stopped: j.stopped === true,
+        value: typeof j.value === "number" ? j.value : null,
+        value_source: j.value_source as ValueSource,
+        deferred: j.deferred === true,
+        inflight: j.inflight === true,
+        claimed_at: typeof j.claimed_at === "number" ? j.claimed_at : null,
+      };
     }
   } catch { /* a plain Meta body */ }
-  return { attempts: 1, stopped: false };
+  return { ...empty, attempts: 1 };
+}
+
+function valuedPurchase(log: Log): boolean {
+  return log.value_source === "token_amount" && (log.value ?? 0) > 0;
+}
+
+function inflightActive(response: string | null | undefined, now = Date.now()): boolean {
+  const log = parseLog(response);
+  if (!log.inflight || log.claimed_at == null) return false;
+  return now - log.claimed_at < CLAIM_TTL_MS;
 }
 
 function envelope(o: {
@@ -94,6 +163,8 @@ function envelope(o: {
   meta: string;
   error: string | null;
   stopped?: boolean;
+  deferred?: boolean;
+  dedupe?: string | null;
 }): string {
   return JSON.stringify({
     attempts: o.attempts,
@@ -103,8 +174,12 @@ function envelope(o: {
     meta: o.meta.slice(0, 400),
     error: o.error,
     stopped: o.stopped === true,
+    deferred: o.deferred === true,
+    dedupe: o.dedupe ?? null,
   });
 }
+
+type EventRow = { ok: boolean | null; response: string | null };
 
 type SendResult = {
   ok: boolean;
@@ -116,6 +191,103 @@ type SendResult = {
   value_source?: ValueSource;
   attempts?: number;
 };
+
+async function readEvent(admin: SupabaseClient, contactId: string, eventName: string): Promise<EventRow | null> {
+  const { data } = await admin.from("capi_events")
+    .select("ok, response")
+    .eq("contact_id", contactId).eq("event_name", eventName).maybeSingle();
+  return data ?? null;
+}
+
+/**
+ * Insert the row, or compare-and-swap `response` (and ok) so only one caller
+ * holds it. The unique key on (contact_id, event_name) is what makes the
+ * insert lose. The update matches the response we just read, so the second
+ * caller gets zero rows and does not post.
+ */
+async function claimRow(
+  admin: SupabaseClient,
+  contact: { id: string; company_id: string; lead_source_id: string | null },
+  eventName: string,
+  existing: EventRow | null,
+  priorAttempts: number,
+): Promise<{ owned: true; claim: string } | { owned: false; reason: "inflight" | "lost" | "error"; error?: string }> {
+  const claim = JSON.stringify({
+    inflight: true,
+    claimed_at: Date.now(),
+    attempts: priorAttempts,
+  });
+  const metaLeadId = contact.lead_source_id ? String(contact.lead_source_id) : null;
+
+  if (!existing) {
+    const { error: insErr } = await admin.from("capi_events").insert({
+      company_id: contact.company_id,
+      contact_id: contact.id,
+      event_name: eventName,
+      meta_lead_id: metaLeadId,
+      ok: null,
+      response: claim,
+    });
+    if (!insErr) return { owned: true, claim };
+    if (insErr.code !== "23505") return { owned: false, reason: "error", error: insErr.message };
+    existing = await readEvent(admin, contact.id, eventName);
+    if (!existing) return { owned: false, reason: "lost" };
+  }
+
+  if (inflightActive(existing.response)) return { owned: false, reason: "inflight" };
+
+  let q = admin.from("capi_events").update({ ok: null, response: claim })
+    .eq("contact_id", contact.id).eq("event_name", eventName);
+  q = existing.response == null ? q.is("response", null) : q.eq("response", existing.response);
+  q = existing.ok === true ? q.eq("ok", true) : existing.ok === false ? q.eq("ok", false) : q.is("ok", null);
+  const { data: won, error: upErr } = await q.select("contact_id");
+  if (upErr) return { owned: false, reason: "error", error: upErr.message };
+  if (!won || won.length === 0) return { owned: false, reason: "lost" };
+  return { owned: true, claim };
+}
+
+/** Remember a Purchase that has no amount yet. ok stays null so a later amount can send. */
+async function deferPurchase(
+  admin: SupabaseClient,
+  contact: { id: string; company_id: string; lead_source_id: string | null },
+  eventName: string,
+  existing: EventRow | null,
+  attempts: number,
+): Promise<"waiting" | "inflight" | "error"> {
+  if (existing && inflightActive(existing.response)) return "inflight";
+  const response = envelope({
+    attempts,
+    value: null,
+    currency: null,
+    value_source: "none",
+    meta: "",
+    error: "Purchase is waiting for a token amount. Nothing was sent to Meta.",
+    deferred: true,
+  });
+  const metaLeadId = contact.lead_source_id ? String(contact.lead_source_id) : null;
+  if (!existing) {
+    const { error } = await admin.from("capi_events").insert({
+      company_id: contact.company_id,
+      contact_id: contact.id,
+      event_name: eventName,
+      meta_lead_id: metaLeadId,
+      ok: null,
+      response,
+    });
+    if (!error) return "waiting";
+    if (error.code !== "23505") return "error";
+    const raced = await readEvent(admin, contact.id, eventName);
+    if (!raced || inflightActive(raced.response)) return "inflight";
+    existing = raced;
+  }
+  let q = admin.from("capi_events").update({ ok: null, response })
+    .eq("contact_id", contact.id).eq("event_name", eventName);
+  q = existing.response == null ? q.is("response", null) : q.eq("response", existing.response);
+  q = existing.ok === true ? q.eq("ok", true) : existing.ok === false ? q.eq("ok", false) : q.is("ok", null);
+  const { error: upErr } = await q;
+  if (upErr) return "error";
+  return "waiting";
+}
 
 async function sendOne(
   admin: SupabaseClient,
@@ -146,29 +318,45 @@ async function sendOne(
   if (!eventName) return { ok: true, skipped: `no event for stage '${status ?? contact.status}'` };
 
   const money = purchaseValue(eventName, contact.token_amount);
+  let existing = await readEvent(admin, contact.id, eventName);
+  const logged = parseLog(existing?.response);
+  const priorValued = valuedPurchase(logged);
 
-  // De-dup: one signal of each kind per lead. A row with ok=true has been sent.
-  // A row with ok=false is a failed post and must be tried again — treating the
-  // unique key as "already sent" is how a failure stayed a failure forever.
-  let prior = 0;
-  const { error: dupErr } = await admin.from("capi_events").insert({
-    company_id: contact.company_id, contact_id: contact.id,
-    event_name: eventName, meta_lead_id: contact.lead_source_id ? String(contact.lead_source_id) : null,
-  });
-  if (dupErr) {
-    if (dupErr.code !== "23505") return { ok: false, error: dupErr.message };
-    const { data: row } = await admin.from("capi_events")
-      .select("ok, response")
-      .eq("contact_id", contact.id).eq("event_name", eventName).maybeSingle();
-    if (row?.ok === true) return { ok: true, skipped: "already sent", event_name: eventName };
-    const logged = parseLog(row?.response as string | null);
-    if (logged.stopped || logged.attempts >= MAX_ATTEMPTS) {
-      return {
-        ok: false, skipped: "stopped after failed attempts",
-        event_name: eventName, attempts: logged.attempts,
-      };
+  // A finished, valued Purchase (or any other event already accepted) is done.
+  // A Purchase marked sent with no amount is NOT done: ok=true must not block
+  // the amount when it shows up.
+  if (existing?.ok === true && (eventName !== "Purchase" || priorValued || money.value == null)) {
+    if (eventName === "Purchase" && !priorValued && money.value == null) {
+      const held = await deferPurchase(admin, contact, eventName, existing, logged.attempts);
+      if (held === "inflight") return { ok: true, skipped: IN_FLIGHT, event_name: eventName };
+      if (held === "error") return { ok: false, error: "Could not record that this Purchase is waiting for an amount.", event_name: eventName };
+      return { ok: true, skipped: WAITING, event_name: eventName, value_source: "none" };
     }
-    prior = logged.attempts;
+    return { ok: true, skipped: "already sent", event_name: eventName };
+  }
+
+  if (eventName === "Purchase" && money.value == null) {
+    const held = await deferPurchase(admin, contact, eventName, existing, logged.attempts);
+    if (held === "inflight") return { ok: true, skipped: IN_FLIGHT, event_name: eventName };
+    if (held === "error") return { ok: false, error: "Could not record that this Purchase is waiting for an amount.", event_name: eventName };
+    return { ok: true, skipped: WAITING, event_name: eventName, value_source: "none" };
+  }
+
+  // Attempts of a valueless Purchase do not count against the valued payload.
+  const prior = eventName === "Purchase" && !priorValued ? 0 : logged.attempts;
+  const samePayload = eventName !== "Purchase" || priorValued;
+  if (existing && samePayload && (logged.stopped || logged.attempts >= MAX_ATTEMPTS)) {
+    return {
+      ok: false, skipped: "stopped after failed attempts",
+      event_name: eventName, attempts: logged.attempts,
+    };
+  }
+
+  const valueUpdate = existing?.ok === true && eventName === "Purchase" && !priorValued && money.value != null;
+  const claimed = await claimRow(admin, contact, eventName, existing, prior);
+  if (!claimed.owned) {
+    if (claimed.reason === "error") return { ok: false, error: claimed.error ?? "Could not claim the event row.", event_name: eventName };
+    return { ok: true, skipped: IN_FLIGHT, event_name: eventName };
   }
 
   const user_data: Record<string, unknown> = {};
@@ -195,7 +383,7 @@ async function sendOne(
       event_name: eventName,
       event_time: Math.floor(Date.now() / 1000),
       action_source: "system_generated",
-      event_id: `${contact.id}:${eventName}`,
+      event_id: eventIdFor(contact.id, eventName),
       user_data,
       custom_data,
     }],
@@ -218,15 +406,30 @@ async function sendOne(
   }
 
   const stopped = !ok && attempts >= MAX_ATTEMPTS;
-  await admin.from("capi_events")
+  const dedupe = valueUpdate
+    ? "Same event_id as a Purchase already marked sent with no amount. Meta keeps the first event with this event_name and event_id for about 48 hours, so this post may not replace that value."
+    : null;
+  const { data: saved, error: saveErr } = await admin.from("capi_events")
     .update({
       ok,
       response: envelope({
         attempts, value: money.value, currency: money.currency,
-        value_source: money.value_source, meta: responseText, error: err, stopped,
+        value_source: money.value_source, meta: responseText, error: err, stopped, dedupe,
       }),
     })
-    .eq("contact_id", contact.id).eq("event_name", eventName);
+    .eq("contact_id", contact.id).eq("event_name", eventName)
+    .eq("response", claimed.claim)
+    .select("contact_id");
+
+  if (saveErr) {
+    return { ok: false, event_name: eventName, attempts, error: saveErr.message };
+  }
+  if (!saved || saved.length === 0) {
+    return {
+      ok: false, event_name: eventName, attempts,
+      error: "Meta answered, but another send took the row before the result was saved.",
+    };
+  }
 
   return {
     ok, event_name: eventName, attempts,
@@ -236,32 +439,72 @@ async function sendOne(
 }
 
 async function retryFailed(admin: SupabaseClient, companyId: string | null): Promise<Response> {
-  let q = admin.from("capi_events")
+  let failedQ = admin.from("capi_events")
     .select("contact_id, event_name, response")
     .or("ok.eq.false,ok.is.null")
+    .order("ok", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true })
-    .limit(20);
-  if (companyId) q = q.eq("company_id", companyId);
-  const { data, error } = await q;
-  if (error) return json({ ok: false, error: error.message }, 500);
+    .limit(80);
+  if (companyId) failedQ = failedQ.eq("company_id", companyId);
 
-  let sent = 0, still_failed = 0, skipped_cap = 0, tried = 0;
-  for (const row of data ?? []) {
-    const logged = parseLog(row.response as string | null);
-    if (logged.stopped || logged.attempts >= MAX_ATTEMPTS) {
+  // Purchases marked sent with no amount. Newest first: a fresh lock is the
+  // one Retry must still be able to give a value. Rows that already carry
+  // token_amount are left alone.
+  let lockedQ = admin.from("capi_events")
+    .select("contact_id, event_name, response")
+    .eq("event_name", "Purchase")
+    .eq("ok", true)
+    .not("response", "ilike", "%token_amount%")
+    .order("created_at", { ascending: false })
+    .limit(40);
+  if (companyId) lockedQ = lockedQ.eq("company_id", companyId);
+
+  const [failedRes, lockedRes] = await Promise.all([failedQ, lockedQ]);
+  if (failedRes.error) return json({ ok: false, error: failedRes.error.message }, 500);
+
+  type Row = { contact_id: string; event_name: string; response: string | null };
+  const seen = new Set<string>();
+  const rows: Row[] = [];
+  for (const row of [...(failedRes.data ?? []), ...(lockedRes.error ? [] : lockedRes.data ?? [])] as Row[]) {
+    const key = `${row.contact_id}:${row.event_name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push(row);
+  }
+
+  const started = Date.now();
+  let sent = 0, still_failed = 0, skipped_cap = 0, tried = 0, waiting = 0, in_flight = 0;
+  let stopped_early = false;
+  for (const row of rows) {
+    if (tried >= RETRY_POSTS || Date.now() - started > RETRY_BUDGET_MS) {
+      stopped_early = true;
+      break;
+    }
+    const result = await sendOne(admin, String(row.contact_id), undefined, String(row.event_name));
+    if (result.skipped === WAITING) { waiting++; continue; }
+    if (result.skipped === IN_FLIGHT) { in_flight++; continue; }
+    if (result.skipped === "stopped after failed attempts" || result.skipped === "already sent") {
       skipped_cap++;
       continue;
     }
+    if (result.skipped) { skipped_cap++; continue; }
     tried++;
-    const result = await sendOne(admin, String(row.contact_id), undefined, String(row.event_name));
-    if (result.ok && !result.skipped) sent++;
-    else if (result.skipped === "stopped after failed attempts" || result.skipped === "already sent") skipped_cap++;
+    if (result.ok) sent++;
     else still_failed++;
   }
+
+  const note = stopped_early
+    ? "Stopped after this batch. Press Retry again for the rest."
+    : tried === 0 && waiting === 0 && in_flight === 0
+      ? "No failed events to retry."
+      : tried === 0 && in_flight > 0
+        ? "A send is already running. Nothing new was posted."
+        : undefined;
   return json({
     ok: true,
-    tried, sent, still_failed, skipped_cap,
-    note: tried === 0 ? "No failed events to retry." : undefined,
+    tried, sent, still_failed, skipped_cap, waiting, in_flight,
+    locked_error: lockedRes.error?.message ?? null,
+    note,
   });
 }
 

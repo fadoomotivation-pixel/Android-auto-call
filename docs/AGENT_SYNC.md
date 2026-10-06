@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-05 — Cursor (failed recordings, Purchase value, company link)
+
+- WHAT: The recordings page lists failed harvests under the playable table and shows "—" if that read fails. A Purchase is not marked sent until the token amount is above zero, so a missing amount cannot block a later valued send. Overlapping sends claim the row before the Meta post. The event id stays the lead id plus the event name. Facebook, Pulse, X-Ray, and Coach open `?company=` instead of the first company by name. Retry stays disabled while it runs.
+- FILES: recordings page, facebook page and client, pulse, xray, coach, `meta-capi`, `facebook-manage`.
+- WHY: A missed file looked like an empty day. A valueless Purchase with ok=true could not be sent again with an amount. The Facebook link ignored the company in the address.
+- BUILD: admin tsc. No migration. No Android.
+- NEXT/NOTE: Notes below stay.
+
 ## 2026-10-05 — Cursor (today's funnel counts the deal stage)
 
 - WHAT: The today card still has the same six steps. A lead is counted by her deal stage, not by the last call outcome. A no-answer on an Interested lead stays Interested. Token paid today counts as Booked. New means the lead is still in the New stage (assigned, created, or still there today), not "assigned today" under that label. A failed lead read still says "Could not load today's funnel." A morning that loaded and is empty still shows 0. Visit-day chips and the Booked/Lost leave-on-tap stay.

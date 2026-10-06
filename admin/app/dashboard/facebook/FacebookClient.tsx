@@ -231,7 +231,7 @@ export function FacebookClient({
       base().gte("created_at", d7),
       base().gte("created_at", d30),
       scope(supabase.from("capi_events").select("id", { count: "exact", head: true }).eq("ok", true)),
-      scope(supabase.from("capi_events").select("id", { count: "exact", head: true }).eq("ok", false)),
+      scope(supabase.from("capi_events").select("id", { count: "exact", head: true }).or("ok.eq.false,ok.is.null")),
     ]);
     const bad = [t.error, w.error, m.error, conv.error, failedEvents.error].filter(Boolean);
     if (bad.length) {
@@ -255,7 +255,8 @@ export function FacebookClient({
       const why = typeof j.error === "string" && j.error
         ? j.error
         : typeof j.meta === "string" ? j.meta.slice(0, 160) : response.slice(0, 160);
-      const attempts = typeof j.attempts === "number" ? ` · ${j.attempts} attempt${j.attempts === 1 ? "" : "s"}` : "";
+      const attempts = typeof j.attempts === "number" && j.attempts > 0
+        ? ` · ${j.attempts} attempt${j.attempts === 1 ? "" : "s"}` : "";
       return `${name}: ${why}${attempts}`;
     } catch {
       return response ? `${name}: ${response.slice(0, 160)}` : name;
@@ -267,7 +268,7 @@ export function FacebookClient({
     const { count, error: countError } = await supabase.from("capi_events")
       .select("id", { count: "exact", head: true })
       .eq("company_id", company)
-      .eq("ok", false);
+      .or("ok.eq.false,ok.is.null");
     if (countError) {
       setCapiMsg(countError.message);
       return;
@@ -275,7 +276,7 @@ export function FacebookClient({
     const { data, error } = await supabase.from("capi_events")
       .select("event_name, response")
       .eq("company_id", company)
-      .eq("ok", false)
+      .or("ok.eq.false,ok.is.null")
       .order("created_at", { ascending: false })
       .limit(1);
     if (error) {
@@ -286,11 +287,11 @@ export function FacebookClient({
   }
 
   async function retryFailed() {
-    if (!companyId || !companyFailed || companyFailed.n === 0) return;
+    if (capiRetrying || !companyId || !companyFailed || companyFailed.n === 0) return;
     setCapiRetrying(true);
     setCapiMsg(null);
     const { data, error } = await supabase.functions.invoke<{
-      ok: boolean; error?: string; tried?: number; sent?: number; still_failed?: number;
+      ok: boolean; error?: string; tried?: number; sent?: number; still_failed?: number; waiting?: number; note?: string | null;
     }>("facebook-manage", { body: { action: "retry_capi", company_id: companyId } });
     setCapiRetrying(false);
     if (error || !data?.ok) {
@@ -300,9 +301,13 @@ export function FacebookClient({
     const tried = data.tried ?? 0;
     const sent = data.sent ?? 0;
     const still = data.still_failed ?? 0;
-    setCapiMsg(tried === 0
-      ? "No failed events to retry."
-      : `Retried ${tried}. Meta accepted ${sent}. Still failed: ${still}.`);
+    const waiting = data.waiting ?? 0;
+    const waited = waiting > 0 ? ` Waiting for a token amount: ${waiting}.` : "";
+    setCapiMsg(tried === 0 && waiting === 0
+      ? (data.note || "No failed events to retry.")
+      : tried === 0
+        ? `Nothing was posted.${waited}`
+        : `Retried ${tried}. Meta accepted ${sent}. Still failed: ${still}.${waited}${data.note ? ` ${data.note}` : ""}`);
     void loadStats(isSuper, companyId);
   }
 
@@ -537,7 +542,7 @@ export function FacebookClient({
         <FbStat label="Last 7 days" value={stats.d7} tone="#22c55e" loading={countFailed} />
         <FbStat label="Last 30 days" value={stats.d30} tone="#a855f7" loading={countFailed} />
         <FbStat label="Conversions → Meta" value={stats.conversions} tone="#f59e0b" loading={countFailed} />
-        <FbStat label="Failed events" value={stats.failed} tone={stats.failed > 0 ? "#ef4444" : "#86868B"} loading={countFailed} />
+        <FbStat label="Not sent" value={stats.failed} tone={stats.failed > 0 ? "#ef4444" : "#86868B"} loading={countFailed} />
       </div>
       {statsError && <div className="error">Lead counts could not be loaded. {statsError}</div>}
       {integrationError && <div className="error">Facebook setup could not be loaded. {integrationError}</div>}
@@ -849,9 +854,11 @@ export function FacebookClient({
             </div>
             <p style={{ fontSize: 12, color: "var(--muted)", margin: "8px 2px 0" }}>
               Leave a row blank to not send that stage. A successful signal is sent once per lead.
-              A failed one can be retried. Purchase includes the token amount in INR only when that
-              amount is saved on the lead. A budget is not a sale. We do not guess a plot price,
-              and we do not send guaranteed returns — these are housing ads.
+              A failed one can be retried. Purchase is not sent, and is not marked sent, until the
+              lead has a token amount above zero. The event id stays the lead id plus the event name.
+              Meta treats that pair as one event and keeps the first for about 48 hours, so a Purchase
+              with no amount would block the real amount. A budget is not a sale. We do not guess a
+              plot price, and we do not send guaranteed returns — these are housing ads.
             </p>
           </div>
 
@@ -878,13 +885,14 @@ export function FacebookClient({
             >
               {capiTesting ? "Testing…" : "🧪 Test CAPI"}
             </button>
-            {capiMsg && <span style={{ fontSize: 13, color: capiMsg.startsWith("✓") || capiMsg.startsWith("No failed") || /Still failed: 0\b/.test(capiMsg) ? "#22c55e" : "#f87171" }}>{capiMsg}</span>}
+            {capiMsg && <span style={{ fontSize: 13, color: capiMsg.startsWith("✓") || capiMsg.startsWith("No failed") || (/Still failed: 0\b/.test(capiMsg) && !capiMsg.includes("Waiting for a token")) ? "#22c55e" : "#f87171" }}>{capiMsg}</span>}
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={retryFailed}
               disabled={capiRetrying || !companyFailed || companyFailed.n === 0}
+              aria-busy={capiRetrying}
               style={{ background: "rgba(239,68,68,0.10)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.35)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: capiRetrying || !companyFailed || companyFailed.n === 0 ? "default" : "pointer" }}
             >
               {capiRetrying ? "Retrying…" : companyFailed ? `Retry this company's failed (${companyFailed.n})` : "Checking failed events…"}
