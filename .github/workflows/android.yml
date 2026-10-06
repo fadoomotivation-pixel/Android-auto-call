@@ -3,6 +3,7 @@ name: Build Android APK
 on:
   push:
     # cursor/** so a branch build can prove the APK compiles before merge.
+    # A docs-only merge does not match android/**, so this file starts the job.
     branches: [main, "claude/**", "cursor/**"]
     paths:
       - "android/**"

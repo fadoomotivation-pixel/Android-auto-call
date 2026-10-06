@@ -34,6 +34,7 @@ export type Across = {
 export function XrayClient({
   isSuper = false,
   companies = [],
+  initialCompanyId = "",
   initialReport = null,
   initialAt = null,
   initialAcross = null,
@@ -41,6 +42,8 @@ export function XrayClient({
 }: {
   isSuper?: boolean;
   companies?: Company[];
+  /** Company from ?company=. Empty means every company. */
+  initialCompanyId?: string;
   initialReport?: Report | null;
   initialAt?: string | null;
   initialAcross?: Across[] | null;
@@ -54,7 +57,7 @@ export function XrayClient({
   // Super admin picks whose X-Ray to read; regular admin is scoped by RLS.
   // "" = every company at once — the platform owner runs several businesses and
   // should not have to open each one to find which is bleeding.
-  const [companyId, setCompanyId] = useState<string>("");
+  const [companyId, setCompanyId] = useState<string>(initialCompanyId);
   const [across, setAcross] = useState<Across[] | null>(initialAcross);
 
   // Open instantly with the latest stored report (the Monday cron keeps it fresh).

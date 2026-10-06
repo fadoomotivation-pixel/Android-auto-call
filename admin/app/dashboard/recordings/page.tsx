@@ -11,6 +11,14 @@ function fmt(seconds: number | null) {
   return `${m}m ${s.toString().padStart(2, "0")}s`;
 }
 
+function failureLabel(error: string | null): string {
+  const text = error ?? "";
+  if (/recorder folder|no recording file/i.test(text)) return "Harvest missed";
+  if (/did not upload/i.test(text)) return "Upload failed";
+  if (/broken|cannot play/i.test(text)) return "File broken";
+  return "Failed";
+}
+
 function fmtLong(seconds: number) {
   if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
   return fmt(seconds);
@@ -53,17 +61,6 @@ export default async function RecordingsPage({
     company = data;
   }
 
-  // RLS scopes this automatically: telecaller = own, admin = company, super = all.
-  let recQuery = supabase
-    .from("call_logs")
-    .select("*")
-    .eq("recording_status", "ready")
-    .order("started_at", { ascending: false, nullsFirst: false })
-    .limit(500);
-  if (repFilter) recQuery = recQuery.eq("salesperson_id", repFilter);
-  if (dirFilter) recQuery = recQuery.eq("direction", dirFilter);
-  if (coFilter) recQuery = recQuery.eq("company_id", coFilter);
-  if (kindFilter) recQuery = recQuery.eq("off_crm", kindFilter === "offcrm");
   // OFF-CRM RECORDINGS ARE SUPER-ADMIN ONLY.
   //
   // This was the sharpest edge of the whole leak: not a count on a report but
@@ -73,22 +70,62 @@ export default async function RecordingsPage({
   // an employee's other calls. Filtered in the query, so the rows never reach
   // the page. `is.null` is included because rows predating the column are
   // ordinary lead calls.
-  if (!isSuper) recQuery = recQuery.or("off_crm.is.null,off_crm.eq.false");
+  //
   // "Last N days" means the CALL happened in the last N days, not the row. A
   // handset that syncs after three days dark creates a month of rows today, and
   // filtering on created_at dated every one of them today. started_at is
   // nullable, so rows without one still qualify on created_at.
-  if (days) {
-    const since = new Date(Date.now() - days * 864e5).toISOString();
-    recQuery = recQuery.or(`started_at.gte.${since},and(started_at.is.null,created_at.gte.${since})`);
-  }
+  const since = days ? new Date(Date.now() - days * 864e5).toISOString() : "";
+  // The Supabase builder's own generics are recursive. A typed wrapper here
+  // makes tsc give up ("excessively deep"), so the filter is applied through
+  // a small structural cast and the original builder type is put back.
+  type Chain = {
+    eq: (col: string, val: string | boolean) => Chain;
+    or: (filters: string) => Chain;
+  };
+  const applyFilters = <T,>(q: T): T => {
+    let next = q as unknown as Chain;
+    if (repFilter) next = next.eq("salesperson_id", repFilter);
+    if (dirFilter) next = next.eq("direction", dirFilter);
+    if (coFilter) next = next.eq("company_id", coFilter);
+    if (kindFilter) next = next.eq("off_crm", kindFilter === "offcrm");
+    if (!isSuper) next = next.or("off_crm.is.null,off_crm.eq.false");
+    if (since) next = next.or(`started_at.gte.${since},and(started_at.is.null,created_at.gte.${since})`);
+    return next as unknown as T;
+  };
 
-  const [{ data: calls, error }, { data: people }, { data: contacts }, { data: companies }] = await Promise.all([
-    recQuery.returns<CallLog[]>(),
+  // RLS scopes this automatically: telecaller = own, admin = company, super = all.
+  // Ready files and failed harvests are separate reads. A page that only asks
+  // for ready turns a missed file into an empty day.
+  const readyQuery = applyFilters(
+    supabase.from("call_logs").select("*").eq("recording_status", "ready")
+      .order("started_at", { ascending: false, nullsFirst: false }).limit(500),
+  );
+  const failedCountQuery = applyFilters(
+    supabase.from("call_logs").select("id", { count: "exact", head: true }).eq("recording_status", "failed"),
+  );
+  const failedListQuery = applyFilters(
+    supabase.from("call_logs").select("*").eq("recording_status", "failed")
+      .order("started_at", { ascending: false, nullsFirst: false }).limit(100),
+  );
+
+  const [
+    { data: calls, error },
+    { count: failedCount, error: failedCountError },
+    { data: failedCalls, error: failedListError },
+    { data: people },
+    { data: contacts },
+    { data: companies },
+  ] = await Promise.all([
+    readyQuery.returns<CallLog[]>(),
+    failedCountQuery,
+    failedListQuery.returns<CallLog[]>(),
     supabase.from("profiles").select("id, full_name, company_id").returns<(Profile & { company_id: string | null })[]>(),
     supabase.from("contacts").select("id, company_id, name, phone").limit(5000).returns<{ id: string; company_id: string; name: string | null; phone: string }[]>(),
     supabase.from("companies").select("id, name").returns<{ id: string; name: string }[]>(),
   ]);
+  const failedRowsAll = failedCalls ?? [];
+  const failedTotal = failedCountError ? null : (failedCount ?? 0);
 
   const nameById = new Map((people ?? []).map((p) => [p.id, p.full_name]));
   const companyById = new Map((companies ?? []).map((c) => [c.id, c.name]));
@@ -107,13 +144,19 @@ export default async function RecordingsPage({
     leadByPhone.get(`${c.company_id}|${tail10(c.phone)}`) ||
     null;
 
-  let rows = calls ?? [];
-  if (q) {
-    rows = rows.filter((c) => {
-      const n = (leadName(c) ?? "").toLowerCase();
-      return n.includes(q) || c.phone.includes(q) || tail10(c.phone).includes(q.replace(/\D/g, ""));
-    });
-  }
+  const matchesQuery = (c: CallLog) => {
+    if (!q) return true;
+    const n = (leadName(c) ?? "").toLowerCase();
+    return n.includes(q) || c.phone.includes(q) || tail10(c.phone).includes(q.replace(/\D/g, ""));
+  };
+  const rows = (calls ?? []).filter(matchesQuery);
+  const failedRows = failedRowsAll.filter(matchesQuery);
+  // The count is the database total for the filters above. A typed search is
+  // applied here, so the number can be higher than the rows on screen. When
+  // the count itself failed, keep null so the page shows "—" and not a fake 0.
+  const failedShownTotal = (q ? failedListError : failedCountError)
+    ? null
+    : (q ? failedRows.length : failedTotal);
   const totalRecSecs = rows.reduce((a, c) => a + (c.recording_seconds || 0), 0);
   const incomingCount = rows.filter((c) => c.direction === "incoming").length;
 
@@ -155,8 +198,8 @@ export default async function RecordingsPage({
     <>
       <h2>Call recordings</h2>
       <p className="subtitle">
-        Every recorded lead call — outgoing dials and incoming call-backs — with its AI summary.
-        Telecallers hear their own; admins the whole company{isSuper ? "; you see every company" : ""}.
+        Playable lead calls — outgoing dials and incoming call-backs — with the AI summary.
+        A failed harvest is listed under the table. Telecallers hear their own; admins the whole company{isSuper ? "; you see every company" : ""}.
       </p>
 
       {company && <RecordingSetup companyId={company.id} enabled={company.recording_enabled} recordAll={company.record_all_calls} />}
@@ -205,10 +248,16 @@ export default async function RecordingsPage({
       </form>
 
       <div className="metrics">
-        <span><strong>{rows.length}</strong> recordings</span>
-        <span><strong>{fmtLong(totalRecSecs)}</strong> total audio</span>
-        <span><strong>{incomingCount}</strong> incoming call-backs</span>
+        <span><strong>{error ? "—" : rows.length}</strong> playable</span>
+        <span><strong>{failedShownTotal == null ? "—" : failedShownTotal}</strong> failed</span>
+        <span><strong>{error ? "—" : fmtLong(totalRecSecs)}</strong> total audio</span>
+        <span><strong>{error ? "—" : incomingCount}</strong> incoming call-backs</span>
       </div>
+      {!failedListError && q && failedTotal != null && failedRowsAll.length > 0 && failedTotal > failedRowsAll.length && (
+        <p className="subtitle" style={{ marginTop: 0 }}>
+          Search checks the latest {failedRowsAll.length} failed recordings, not all {failedTotal}.
+        </p>
+      )}
 
       {/* Telecaller activity rollup — who is actually on the phone. */}
       {repCards.length > 1 && !repFilter && (
@@ -236,10 +285,22 @@ export default async function RecordingsPage({
       )}
 
       {error && <div className="error">{error.message}</div>}
+      {(failedCountError || failedListError) && (
+        <div className="error">
+          {(failedCountError ?? failedListError)?.message}
+          {" "}The failed-recording check did not finish, so a quiet list above is not a clean day.
+        </div>
+      )}
 
-      {rows.length === 0 ? (
-        <div className="empty">No recordings match these filters yet.</div>
-      ) : (
+      {!error && rows.length === 0 ? (
+        <div className="empty">
+          {failedShownTotal == null
+            ? "No playable recording matches these filters. The failed-recording check did not finish, so this is not a clean day."
+            : failedShownTotal > 0
+              ? "No playable recording matches these filters. Failed captures are listed below."
+              : "No playable recordings match these filters. No failed recordings match either."}
+        </div>
+      ) : !error ? (
         <div className="table-wrap table-responsive">
           <table>
             <thead>
@@ -326,6 +387,64 @@ export default async function RecordingsPage({
             </tbody>
           </table>
         </div>
+      ) : null}
+
+      {failedRows.length > 0 && (
+        <section style={{ marginTop: 28 }}>
+          <h3 style={{ marginBottom: 6 }}>Recordings that did not arrive</h3>
+          <p className="subtitle" style={{ marginTop: 0 }}>
+            These calls have no file. A missed harvest or a failed upload stays listed, so an empty playable table is not a clean day.
+          </p>
+          {failedTotal != null && failedTotal > failedRowsAll.length && (
+            <p className="subtitle" style={{ marginTop: 0 }}>
+              Showing the latest {failedRowsAll.length} of {failedTotal} failed recordings
+              {q ? " — the search only looks at those" : ""}.
+            </p>
+          )}
+          <div className="table-wrap table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  {isSuper && <th>Company</th>}
+                  <th>Telecaller</th>
+                  <th>Lead</th>
+                  <th>Dir</th>
+                  <th className="num">Length</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {failedRows.map((c) => (
+                  <tr key={c.id}>
+                    <td>{new Date(c.started_at ?? c.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
+                    {isSuper && <td>{companyById.get(c.company_id) || "—"}</td>}
+                    <td>{nameById.get(c.salesperson_id) || "—"}</td>
+                    <td>
+                      {isSuper && c.off_crm ? (
+                        <span style={{ color: "var(--bad)", fontWeight: 600 }}>Off-CRM number</span>
+                      ) : (
+                        <strong>{leadName(c) || "Unknown"}</strong>
+                      )}
+                      <div style={{ fontSize: 12, opacity: 0.7 }}>{c.phone}</div>
+                    </td>
+                    <td>{c.direction === "incoming" ? "↙ In" : "↗ Out"}</td>
+                    <td className="num">{fmt(c.recording_seconds)}</td>
+                    <td>
+                      <span className="status-pill" style={{ color: "var(--bad)" }}>
+                        <span className="status-dot" />
+                        {failureLabel(c.recording_error)}
+                      </span>
+                      <div style={{ fontSize: 12.5, marginTop: 6, maxWidth: 360, lineHeight: 1.45 }}>
+                        {c.recording_error?.trim() || "No reason was stored. The recording still did not arrive."}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </>
   );

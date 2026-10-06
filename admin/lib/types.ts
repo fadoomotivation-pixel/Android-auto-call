@@ -63,6 +63,8 @@ export interface CallLog {
   notes: string | null;
   created_at: string;
   recording_status: string;
+  /** Why a recording failed. Null when the file arrived. */
+  recording_error: string | null;
   recording_seconds: number | null;
   /** Length of the recording file, read from its own header at upload.
    *  Null on older rows and when the format has no cheap exact answer.

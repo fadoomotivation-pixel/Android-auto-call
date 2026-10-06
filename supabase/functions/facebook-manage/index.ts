@@ -111,8 +111,8 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: errMsg || `CAPI test failed (${res.status})` });
     }
 
-    // Re-post events whose last attempt failed. Scoped to this company.
-    // Does not send a new kind of event and does not invent a purchase value.
+    // Re-post events whose last attempt failed, plus purchases still waiting
+    // for an amount. Scoped to this company. Does not invent a purchase value.
     if (action === "retry_capi") {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/meta-capi`, {
         method: "POST",
@@ -134,6 +134,8 @@ Deno.serve(async (req) => {
         sent: parsed.sent ?? 0,
         still_failed: parsed.still_failed ?? 0,
         skipped_cap: parsed.skipped_cap ?? 0,
+        waiting: parsed.waiting ?? 0,
+        in_flight: parsed.in_flight ?? 0,
         note: parsed.note ?? null,
       });
     }

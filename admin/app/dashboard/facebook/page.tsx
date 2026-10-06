@@ -8,10 +8,12 @@ import {
   type RecentLead,
 } from "./FacebookClient";
 
-export default function FacebookPage() {
+export default function FacebookPage({
+  searchParams,
+}: { searchParams: Promise<{ company?: string }> }) {
   return (
     <Suspense fallback={<RouteSkeleton title="Facebook Leads" />}>
-      <FacebookData />
+      <FacebookData searchParams={searchParams} />
     </Suspense>
   );
 }
@@ -26,11 +28,14 @@ function istMidnightIso(now = Date.now()): string {
   return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - 5.5 * 3600_000).toISOString();
 }
 
-async function FacebookData() {
-  // fallback "first" is the company the editor opens on. It is not a view of
-  // "all companies" — a Page connection belongs to one tenant. A super admin
-  // still gets the picker and is not pinned to their own profile company.
-  const scope = await resolveScope(undefined, {
+async function FacebookData({
+  searchParams,
+}: { searchParams: Promise<{ company?: string }> }) {
+  // fallback "first" is the company the editor opens on when the link names
+  // none. It is not a view of "all companies" — a Page connection belongs to
+  // one tenant. ?company= wins over that fallback, so a super admin following
+  // a company link does not land on whichever company sorts first by name.
+  const scope = await resolveScope(await searchParams, {
     require: "any",
     withCompanies: true,
     fallback: "first",
@@ -71,6 +76,13 @@ async function FacebookData() {
     if (!isSuper) q = q.eq("company_id", companyId);
     return q;
   };
+  // Failed posts and purchases still waiting for an amount. A waiting row is
+  // ok=null on purpose, so a count of ok=false alone would read as a clean zero.
+  const notSent = () => {
+    let q = supabase.from("capi_events").select("id", { count: "exact", head: true }).or("ok.eq.false,ok.is.null");
+    if (!isSuper) q = q.eq("company_id", companyId);
+    return q;
+  };
 
   const [integ, leads, today, week, month, conv, failedEvents] = await Promise.all([
     supabase.from("facebook_integrations").select("*").eq("company_id", companyId).maybeSingle(),
@@ -84,7 +96,7 @@ async function FacebookData() {
     contacts().gte("created_at", d7),
     contacts().gte("created_at", d30),
     capi(true),
-    capi(false),
+    notSent(),
   ]);
 
   const statsError = [today.error, week.error, month.error, conv.error, failedEvents.error]
