@@ -63,7 +63,19 @@
 -- It is ranking by circumstance instead of by craft, and the page says so in
 -- as many words rather than letting anyone believe a machine has listened.
 --
--- APPLIED TO PRODUCTION BY HAND on <date>.
+-- APPLIED TO PRODUCTION on 2026-10-07. The library came up with 223 calls
+-- across 4 companies, 59 of them showing movement after the call, and none of
+-- them read yet.
+--
+-- One note for whoever applies this somewhere else: the DROP VIEW and DROP
+-- POLICY above were not needed on first application (neither object existed)
+-- and the tooling flags them as destructive. They are kept here because this
+-- file has to be re-runnable, but the REVOKE is the line that matters — run it
+-- even if you skip the drops. Without it anon and authenticated keep INSERT on
+-- training_calls. RLS still refuses them (enabled, with only a SELECT policy,
+-- is deny-by-default for writes), so it is a second lock rather than the only
+-- one, but a verdict table that the page itself could write to is not a thing
+-- to leave lying around.
 
 -- ── The verdict, once something has actually read the call ──────────────────
 

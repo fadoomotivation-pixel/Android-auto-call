@@ -38,9 +38,15 @@
 -- they are read by lead-memory, by win-harvest and by the coach, and a rep is
 -- being told what a buyer said by a machine that is quoting a different buyer.
 --
--- The 28 promises become 'void'. Not 'duplicate' (they are not a repeat of a
--- real obligation) and not deleted (the fact that the system invented them is
--- worth keeping). They leave v_open_promises, which only shows open and missed.
+-- The promises built from that audio become 'void'. Not 'duplicate' (they are
+-- not a repeat of a real obligation) and not deleted (the fact that the system
+-- invented them is worth keeping). They leave v_open_promises, which shows
+-- only open and missed.
+--
+-- 28 promises trace back to a poisoned call; 18 of them were still open or
+-- missed and are the ones this voids. The other 10 had already been settled as
+-- kept or collapsed as duplicates, and rewriting a settled row to chase a
+-- tidier number would be editing history to match a sentence in a header.
 --
 -- STILL TO DO BY HAND, and it is not optional: re-run lead-memory for the 359
 -- affected leads. This migration cannot do it — lead_memory is a distillation,
@@ -53,6 +59,13 @@
 -- time, and recording-upload refuses audio that cannot belong to the call
 -- (see audioBelongsToAnotherCall). Applying this migration without that code
 -- means the next hourly sync re-creates every row it just cleaned.
+--
+-- APPLIED TO PRODUCTION on 2026-10-07, after that code merged in #507.
+-- Result: 2,108 rows quarantined with all 2,108 Drive ids kept, 0 zero-second
+-- calls left holding a recording, 18 promises voided. v_foreign_audio then
+-- held 2 rows — both real connected calls whose audio runs far past them
+-- (38s/496s and 12s/79s, both off-CRM). Those are the second rule, not the
+-- zero-second one, and this migration deliberately does not touch them.
 
 -- ── 1. Keep everything, before changing anything ────────────────────────────
 
