@@ -88,6 +88,7 @@ export function Sidebar({
         {profile?.role !== "admin" && <NavLink href="/dashboard/contacts" icon="book" label="Contacts" />}
         <NavLink href="/dashboard/calls" icon="phone" label="Call logs" />
         <NavLink href="/dashboard/recordings" icon="mic" label="Recordings" />
+        {admin && <NavLink href="/dashboard/training" icon="mic" label="Calls to learn from" />}
 
         <Section label="Analytics" />
         <NavLink href="/dashboard" icon="grid" label="Overview" />
