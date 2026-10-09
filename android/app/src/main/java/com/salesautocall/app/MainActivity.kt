@@ -31,7 +31,14 @@ class MainActivity : ComponentActivity() {
     private val setupOk = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        // Brief exit fade (200ms) so the splash hands over softly. Guarded:
+        // a failing animation must never block the first frame.
+        installSplashScreen().setOnExitAnimationListener { provider ->
+            runCatching {
+                provider.view.animate().alpha(0f).setDuration(200L)
+                    .withEndAction { runCatching { provider.remove() } }.start()
+            }.onFailure { runCatching { provider.remove() } }
+        }
         super.onCreate(savedInstanceState)
 
         // Background sync (call logs + the revenue-critical recording upload).

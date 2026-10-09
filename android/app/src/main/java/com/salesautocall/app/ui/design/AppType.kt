@@ -36,7 +36,7 @@ object AppType {
 
     /** Large Title (34). The title a screen opens with before it scrolls. */
     val largeTitle = TextStyle(
-        fontFamily = Inter, fontSize = 32.sp, lineHeight = 39.sp,
+        fontFamily = Inter, fontSize = 34.sp, lineHeight = 41.sp,
         fontWeight = FontWeight.Bold, letterSpacing = (-0.7).sp,
     )
 
@@ -54,7 +54,7 @@ object AppType {
 
     /** Headline (17 semibold). A row's name, a button in a sheet. */
     val headline = TextStyle(
-        fontFamily = Inter, fontSize = 16.sp, lineHeight = 22.sp,
+        fontFamily = Inter, fontSize = 17.sp, lineHeight = 22.sp,
         fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
     )
 
@@ -66,8 +66,14 @@ object AppType {
 
     /** Subheadline (15). Secondary line under a headline. */
     val subhead = TextStyle(
-        fontFamily = Inter, fontSize = 14.sp, lineHeight = 20.sp,
+        fontFamily = Inter, fontSize = 15.sp, lineHeight = 20.sp,
         fontWeight = FontWeight.Normal, letterSpacing = (-0.1).sp,
+    )
+
+    /** Body (17). Apple's reading size, for sentences on roomy screens. */
+    val iosBody = TextStyle(
+        fontFamily = Inter, fontSize = 17.sp, lineHeight = 22.sp,
+        fontWeight = FontWeight.Normal, letterSpacing = (-0.2).sp,
     )
 
     /** Footnote (13). Helper text, timestamps, group footers. */

@@ -224,7 +224,8 @@ private fun lastCallLine(work: LeadWork?): Pair<String, Color>? {
     val ago = agoLabel(at)
     val many = if (work.callsTotal > 1) " · ${work.callsTotal} calls" else ""
     return if (secs >= 30) {
-        "Talked ${callLen(secs)} · $ago$many" to Green
+        // Quiet grey: success needs no colour on a list. Only "No talk" is tinted.
+        "Talked ${callLen(secs)} · $ago$many" to AppColors.TextSecondary
     } else {
         "No talk (${callLen(secs)}) · $ago$many" to Amber
     }
@@ -2103,7 +2104,15 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
     // question is who to ring. Changed on instruction: the day starts with the
     // leads nobody has touched, and a rep who wants the due pile is one tap
     // away on the row above.
-    var bucket by remember { mutableStateOf("stage:new") }
+    // THREE LANES, ONE QUESTION EACH (founder, Oct 2026). Nine chips in one
+    // sideways-scrolling row got missed: Later, Visit and No step sat off the
+    // edge. Now: Call now / Waiting / Revive cards, always on screen, and the
+    // old filters as a segmented control inside the chosen lane. Every old
+    // filter maps to exactly one lane + segment (see LANE_SUBS). Opens on
+    // Call now › New, which keeps the earlier "day starts on New" instruction.
+    var lane by remember { mutableStateOf("call") }
+    var sub by remember { mutableStateOf("new") }
+    val bucket = laneBucket(sub)
     var stageFilter by remember { mutableStateOf<String?>(null) } // exact stage from the sheet
     var quick by remember { mutableStateOf<String?>(null) }       // "today" | "retry"
     var tempFilter by remember { mutableStateOf<String?>(null) }  // null = all temps
@@ -2207,6 +2216,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
         bucket == "followup" -> queue
         // Character-for-character the rule the deck's newCount uses.
         bucket == "new" -> app.leads.filter { it.stage == "new" }
+        // Same rule as the old Hot chip's count (deck.hotCount).
+        bucket == "hot" -> app.leads.filter { it.temperature == "hot" && !isFinished(app.leadStages, it.stage) }
+        // Same rule as the old Revive count (deck.reviveCount). Never DNC.
+        bucket == "revive" -> app.leads.filter { isReviveLead(it) }
         // Both axes read straight through. There is no client-side re-derivation
         // of either one: the stage is a column, the action state is a view, and
         // a second opinion computed here is exactly the drift being removed.
@@ -2286,10 +2299,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             .filter { it.status !in DEAD_STATUSES }
             .sumOf { parseBudgetRupees(it.budget) }
         // RAG v13 candidates: said-no + tried-and-gone-cold. Never DNC.
-        val reviveCount = app.leads.count {
-            it.status in SAID_NO ||
-                (it.temperature == "cold" && it.attempts >= 2 && it.status !in BOOKED_OR_DNC)
-        }
+        val reviveCount = app.leads.count { isReviveLead(it) }
         DeckStats(dueNow, hotCount, reviveCount, pipelineValue)
     }
     // Same rule as the New stage filter. A summary that disagrees with the list
@@ -2305,7 +2315,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
     }
     // The Next call card is on screen, and it carries the Call now count on
     // its "Call all N" button. The Call now filter then does not repeat it.
-    val heroShown = !selectMode && query.isBlank() && queue.isNotEmpty()
+    val heroShown = lane == "call" && !selectMode && query.isBlank() && queue.isNotEmpty()
 
     // iOS large title: "Leads" scrolls with the list; once it is gone the
     // small centred title and a hairline fade into the slim bar on top.
@@ -2393,7 +2403,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             //
             // Hidden while searching or selecting: both mean the rep is doing
             // something deliberate and does not want to be handed a queue.
-            if (!selectMode && query.isBlank()) {
+            if (lane == "call" && !selectMode && query.isBlank()) {
                 queue.firstOrNull()?.let { next ->
                     item(key = "up_next") { Spacer(Modifier.height(11.dp))
                         val fu = fuOf(next)
@@ -2466,28 +2476,35 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             // every stage is in the filter sheet with the other browsing
             // filters, and the sheet was already showing them.
             item { Spacer(Modifier.height(11.dp))
-                LeadSegments(
-                    actionCounts = actionCounts,
+                val byCode = actionCounts.associate { (a, n) -> a.code to n }
+                val reviveUnion = app.leads.count { app.actionOf(it) == "no_next_step" || isReviveLead(it) }
+                LeadLanes(
+                    lane = lane,
+                    sub = sub,
                     unknown = dueUnknown,
-                    hideCallNowCount = heroShown,
-                    selectedAct = bucket.removePrefix("act:").takeIf {
-                        bucket.startsWith("act:") && stageFilter == null && quick == null
-                    },
-                    onPickAct = { code ->
-                        bucket = if (code == null) "all" else "act:$code"
+                    counts = mapOf(
+                        "call_now" to queue.size,
+                        "overdue" to (byCode["overdue"] ?: 0),
+                        "new" to newCount,
+                        "hot" to deck.hotCount,
+                        "due_today" to (byCode["due_today"] ?: 0),
+                        "scheduled" to (byCode["scheduled"] ?: 0),
+                        "awaiting_visit" to (byCode["awaiting_visit"] ?: 0),
+                        "no_next_step" to (byCode["no_next_step"] ?: 0),
+                        "cold" to deck.reviveCount,
+                    ),
+                    reviveTotal = reviveUnion,
+                    onLane = { l ->
+                        lane = l; sub = LANE_SUBS[l]?.first()?.first ?: "call_now"
                         stageFilter = null; quick = null
                     },
-                    newCount = newCount,
-                    newSelected = (bucket == "new" || bucket == "stage:new") && stageFilter == null && quick == null,
-                    onNew = {
-                        val on = (bucket == "new" || bucket == "stage:new") && stageFilter == null && quick == null
-                        bucket = if (on) "all" else "new"; stageFilter = null; quick = null
-                    },
-                    hotCount = deck.hotCount,
-                    hotSelected = tempFilter == "hot",
-                    onHot = { tempFilter = if (tempFilter == "hot") null else "hot" },
-                    reviveCount = deck.reviveCount,
-                    onRevive = { reviveOpen = true; vm.loadSecondChance() },
+                    onSub = { code -> sub = code; stageFilter = null; quick = null },
+                    // Small text button: dials the segment in view, only where
+                    // dialling is allowed (Call now › All / Overdue). Replaces
+                    // the floating "Call N" button, which repeated Call all.
+                    callAllCount = if (!selectMode && isActionQueue && (sub != "call_now" || !heroShown)) filtered.size else 0,
+                    onCallAll = { vm.callList(filtered, "Leads") },
+                    onSecondChance = { reviveOpen = true; vm.loadSecondChance() },
                 )
             }
             // ONE line explaining whatever is selected.
@@ -2503,6 +2520,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                         ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }?.hint
                     bucket.startsWith("stage:") -> STAGE_HINTS[bucket.removePrefix("stage:")]
                     bucket == "new" -> STAGE_HINTS["new"]
+                    bucket == "hot" -> "Hot leads that are still open. Some are not due yet."
+                    bucket == "revive" -> "Said no, or cold after 2+ tries. Worth one fresh call. Never DNC."
                     else -> "Every lead assigned to you, whatever stage it is at."
                 }
                 if (!hint.isNullOrBlank()) {
@@ -2729,24 +2748,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
         }
     }
 
-    // THE one action on this screen: power-dial whatever is in view.
-    //
-    // On Follow-up that means the calls that are DUE — never the ones booked
-    // for next Tuesday or the ones already done today. "Call 107" on a tab
-    // where 24 are actually due would dial customers at the wrong time, and
-    // ring people the rep has already spoken to today.
-    // Never the whole list. A stage tab is a report, not a call queue.
-    val dialList = if (isActionQueue) filtered else emptyList()
-    if (!selectMode && dialList.isNotEmpty()) {
-        androidx.compose.material3.ExtendedFloatingActionButton(
-            onClick = { vm.callList(dialList, "Leads") },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            icon = { Icon(Icons.Default.Call, contentDescription = null) },
-            text = { Text("Call ${dialList.size}", fontWeight = FontWeight.Bold) },
-        )
-    }
+    // The floating "Call N" button is gone (founder, Oct 2026): it repeated
+    // "Call all N". Call all now sits on the lane header as a text button.
     }
 
     if (todayOpen) {
@@ -3218,10 +3221,9 @@ private fun LeadCard(
     // Tuesday is not urgent and gets nothing, which is what makes the coloured
     // ones mean anything.
     val urgency = when (work?.actionState) {
+        // Restraint (founder, Oct 2026): only late work gets a colour. The
+        // state itself is still written on every row.
         "overdue" -> Red
-        "call_now" -> Amber
-        "due_today" -> Teal
-        "no_next_step" -> Amber.copy(alpha = 0.55f)
         else -> null
     }
     // Inside the Leads inset-grouped list the group draws the white cell and
@@ -5354,5 +5356,118 @@ private fun LeaderboardRowView(rank: Int, r: LeaderboardRow, isMe: Boolean) {
             Text("${r.leads}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             Text("leads", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+
+/** Old filter → (lane, segment). Every filter the chip row had lives here. */
+internal val LANE_SUBS: Map<String, List<Pair<String, String>>> = linkedMapOf(
+    "call" to listOf("call_now" to "All", "overdue" to "Overdue", "new" to "New", "hot" to "Hot"),
+    "wait" to listOf("due_today" to "Today", "scheduled" to "Later", "awaiting_visit" to "Visit"),
+    "revive" to listOf("no_next_step" to "No step", "cold" to "Cold"),
+)
+
+internal fun laneBucket(sub: String): String = when (sub) {
+    "new" -> "new"
+    "hot" -> "hot"
+    "cold" -> "revive"
+    else -> "act:$sub"
+}
+
+/** Said no, or cold after 2+ tries. Never DNC or booked. Same rule as before. */
+internal fun isReviveLead(c: Contact): Boolean =
+    c.status in SAID_NO || (c.temperature == "cold" && c.attempts >= 2 && c.status !in BOOKED_OR_DNC)
+
+/**
+ * Three lane cards in a fixed row (always fully on screen, no sideways
+ * scroll), then the chosen lane's segments. Neutral by default: one blue for
+ * the selected lane, red only when something is overdue.
+ */
+@Composable
+private fun LeadLanes(
+    lane: String,
+    sub: String,
+    unknown: Boolean,
+    counts: Map<String, Int>,
+    reviveTotal: Int,
+    onLane: (String) -> Unit,
+    onSub: (String) -> Unit,
+    callAllCount: Int,
+    onCallAll: () -> Unit,
+    onSecondChance: () -> Unit,
+) {
+    fun n(code: String) = counts[code] ?: 0
+    val overdue = n("overdue")
+    val waitTotal = n("due_today") + n("scheduled") + n("awaiting_visit")
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LaneCard("Call now", if (unknown) "—" else n("call_now").toString(),
+                when { unknown -> "Could not load"; overdue > 0 -> "$overdue overdue"; else -> "Ring these" },
+                urgent = !unknown && overdue > 0, selected = lane == "call",
+                modifier = Modifier.weight(1f)) { onLane("call") }
+            LaneCard("Waiting", if (unknown) "—" else waitTotal.toString(), "Booked for later",
+                urgent = false, selected = lane == "wait",
+                modifier = Modifier.weight(1f)) { onLane("wait") }
+            LaneCard("Revive", reviveTotal.toString(), "Gone quiet",
+                urgent = false, selected = lane == "revive",
+                modifier = Modifier.weight(1f)) { onLane("revive") }
+        }
+        Spacer(Modifier.height(12.dp))
+        val subs = LANE_SUBS[lane].orEmpty()
+        val actCodes = setOf("call_now", "overdue", "due_today", "scheduled", "awaiting_visit", "no_next_step")
+        IosSegmented(
+            options = subs.map { (code, label) ->
+                val c = if (unknown && code in actCodes) "—" else n(code).toString()
+                "$label $c"
+            },
+            selectedIndex = subs.indexOfFirst { it.first == sub },
+            modifier = Modifier.fillMaxWidth(),
+        ) { i -> subs.getOrNull(i)?.let { onSub(it.first) } }
+        if (callAllCount > 0 || lane == "revive") {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                if (lane == "revive") {
+                    TextButton(onClick = onSecondChance) {
+                        Text("Second chance ideas", style = AppType.subhead, color = AppColors.Indigo)
+                    }
+                }
+                if (callAllCount > 0) {
+                    TextButton(onClick = onCallAll) {
+                        Text("Call all $callAllCount", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold),
+                            color = AppColors.Indigo)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LaneCard(
+    title: String,
+    count: String,
+    caption: String,
+    urgent: Boolean,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(AppColors.Surface)
+            .border(
+                width = if (selected) 2.dp else 0.dp,
+                color = if (selected) AppColors.Indigo else Color.Transparent,
+                shape = RoundedCornerShape(14.dp),
+            )
+            .iosPress(scaleTo = 0.96f) { onClick() }
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Text(title.uppercase(), style = AppType.caption, color = if (selected) AppColors.Indigo else AppColors.TextSecondary,
+            maxLines = 1)
+        Spacer(Modifier.height(4.dp))
+        Text(count, style = AppType.title2, color = if (urgent) IosColors.Red else AppColors.TextPrimary, maxLines = 1)
+        Text(caption, style = AppType.footnote, color = if (urgent) IosColors.Red else AppColors.TextSecondary,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
