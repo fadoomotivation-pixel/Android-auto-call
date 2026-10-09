@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { SectionTabs } from "./SectionTabs";
+import { DemoBanner } from "./DemoBanner";
 import { Icon } from "./icons";
 import { locate, visibleNav } from "@/lib/dashboard/nav";
 import type { Company, Profile } from "@/lib/types";
@@ -20,6 +21,7 @@ const TITLES: [string, string][] = [
   ["/dashboard/platform/hq", "Platform HQ"],
   ["/dashboard/platform/companies/new", "Create New Company"],
   ["/dashboard/platform", "Companies"],
+  ["/dashboard/demo", "Demo account"],
   ["/dashboard/actions", "Action Center"],
   ["/dashboard/leads", "Lead Management"],
   ["/dashboard/calls", "Call logs"],
@@ -116,6 +118,9 @@ export function Chrome({
             <SectionTabs sections={sections} />
           </Suspense>
         </header>
+        <Suspense fallback={null}>
+          <DemoBanner />
+        </Suspense>
         {children}
       </div>
     </div>
