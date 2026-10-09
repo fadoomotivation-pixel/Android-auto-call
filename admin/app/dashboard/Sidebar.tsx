@@ -1,15 +1,19 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent } from "react";
-import { NavLink } from "./NavLink";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Icon } from "./icons";
+import { locate, visibleNav, withCompany, type NavSection } from "@/lib/dashboard/nav";
 import type { Company, Profile } from "@/lib/types";
+import type { HealthSummary } from "@/lib/dashboard/healthSignals";
 
-/** A section heading in the sidebar. */
-function Section({ label }: { label: string }) {
-  return <div className="nav-section">{label}</div>;
-}
-
+/**
+ * Ten sections instead of ~37 links. Each section opens its first page; the
+ * other pages of that section are tabs at the top of the page (SectionTabs).
+ * The rules for who sees what live in lib/dashboard/nav.ts, unchanged from the
+ * old flat list.
+ */
 export function Sidebar({
   profile,
   company,
@@ -27,10 +31,10 @@ export function Sidebar({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  // Every link repeated this test; it reads better named once.
   const admin = profile?.role === "admin" || isSuper;
-  const who = profile?.full_name ?? email ?? company?.name ?? "S";
-  const initial = who.trim().charAt(0).toUpperCase() || "S";
+  const who = profile?.full_name ?? email ?? company?.name ?? "C";
+  const initial = who.trim().charAt(0).toUpperCase() || "C";
+  const sections = useMemo(() => visibleNav({ role: profile?.role, isSuper }), [profile?.role, isSuper]);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem("admin-sidebar") === "collapsed");
@@ -56,129 +60,232 @@ export function Sidebar({
   }
 
   return (
+    <aside
+      className={`sidebar${collapsed ? " is-collapsed" : ""}${mobileOpen ? " mobile-open" : ""}`}
+      onClick={() => onMobileOpen?.(false)}
+    >
+      <div className="brand-row">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden>C</span>
+          <span className="brand-name">Call Pro AI</span>
+        </div>
+        <button
+          type="button"
+          className="icon-btn collapse-btn"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={toggleCollapsed}
+        >
+          <Icon name={collapsed ? "menu" : "panel"} />
+        </button>
+      </div>
+
+      {/* useSearchParams needs a Suspense boundary; the fallback is the same
+          list without the ?company= carry, so the nav never flashes empty. */}
+      <Suspense fallback={<NavBody sections={sections} admin={admin} company={null} />}>
+        <NavWithCompany sections={sections} admin={admin} />
+      </Suspense>
+
+      <div className="spacer" />
+
+      <div className="nav-user">
+        <div className="avatar" aria-hidden>{initial}</div>
+        <div className="nav-user-copy">
+          <div className="nav-user-name">{company?.name ?? "No company"}</div>
+          <div className="nav-user-meta">{profile?.full_name ?? email}</div>
+        </div>
+        <button
+          type="button"
+          className="icon-btn theme-btn"
+          aria-label={theme === "light" ? "Use dark mode" : "Use light mode"}
+          title={theme === "light" ? "Use dark mode" : "Use light mode"}
+          onClick={toggleTheme}
+        >
+          {theme === "light" ? <MoonIcon /> : <SunIcon />}
+        </button>
+      </div>
+
+      <form action="/auth/signout" method="post">
+        <button className="link" type="submit" title="Sign out">
+          <span>Sign out</span>
+        </button>
+      </form>
+    </aside>
+  );
+}
+
+function NavWithCompany({ sections, admin }: { sections: NavSection[]; admin: boolean }) {
+  const company = useSearchParams().get("company");
+  return <NavBody sections={sections} admin={admin} company={company} />;
+}
+
+function NavBody({
+  sections, admin, company,
+}: {
+  sections: NavSection[];
+  admin: boolean;
+  company: string | null;
+}) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const here = locate(pathname, sections);
+  const health = useHealth(admin);
+  const [query, setQuery] = useState("");
+  const [cursor, setCursor] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+
+  // "/" or Ctrl/Cmd+K jumps to the search box from anywhere.
+  useEffect(() => {
+    function onKey(e: globalThis.KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+      if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) {
+        e.preventDefault();
+        input.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const words = q.split(/\s+/);
+    return sections.flatMap((s) => s.tabs.map((t) => ({ section: s, tab: t })))
+      .filter(({ section, tab }) => {
+        const hay = `${tab.label} ${section.label} ${tab.hint} ${tab.keywords ?? ""}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      })
+      // Name matches first, then section, then hint.
+      .sort((a, b) => rank(a.tab.label, q) - rank(b.tab.label, q))
+      .slice(0, 8);
+  }, [query, sections]);
+
+  useEffect(() => setCursor(0), [query]);
+
+  function go(href: string) {
+    setQuery("");
+    input.current?.blur();
+    router.push(withCompany(href, company));
+  }
+
+  function onSearchKey(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => Math.min(c + 1, results.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); }
+    else if (e.key === "Enter" && results[cursor]) { e.preventDefault(); go(results[cursor].tab.href); }
+    else if (e.key === "Escape") { setQuery(""); input.current?.blur(); }
+  }
+
+  return (
     <>
-      <aside
-        className={`sidebar${collapsed ? " is-collapsed" : ""}${mobileOpen ? " mobile-open" : ""}`}
-        onClick={() => onMobileOpen?.(false)}
-      >
-        <div className="brand-row">
-          <div className="brand">
-            <span className="brand-mark" aria-hidden>S</span>
-            <span className="brand-name">SalesAutoCall</span>
-          </div>
-          <button
-            type="button"
-            className="icon-btn collapse-btn"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            onClick={toggleCollapsed}
-          >
-            <Icon name={collapsed ? "menu" : "panel"} />
-          </button>
+      <div className="nav-search" onClick={(e) => e.stopPropagation()}>
+        <SearchIcon />
+        <input
+          ref={input}
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onSearchKey}
+          placeholder="Jump to a page"
+          aria-label="Jump to a page"
+          autoComplete="off"
+        />
+        {!query && <kbd aria-hidden>/</kbd>}
+      </div>
+
+      {query ? (
+        <div className="nav-results" role="listbox" aria-label="Pages">
+          {results.length === 0 ? (
+            <div className="nav-results-empty">No page matches “{query.trim()}”.</div>
+          ) : results.map(({ section, tab }, i) => (
+            <Link
+              key={tab.href}
+              href={withCompany(tab.href, company)}
+              role="option"
+              aria-selected={i === cursor}
+              className={`nav-result${i === cursor ? " is-cursor" : ""}`}
+              onClick={() => setQuery("")}
+              onMouseEnter={() => setCursor(i)}
+            >
+              <span className="nav-result-label">{tab.label}</span>
+              <span className="nav-result-meta">{section.label} · {tab.hint}</span>
+            </Link>
+          ))}
         </div>
-        {/* Twenty-eight flat links was the navigation problem — not the number
-            of pages, the absence of any grouping. Five sections, ordered by how
-            often a working day touches them: act, understand, configure, run
-            the platform, diagnose. */}
-        <Section label="Operational" />
-        {admin && <NavLink href="/dashboard/actions" icon="layers" label="Action Center" />}
-        {admin && <NavLink href="/dashboard/leads" icon="target" label="Lead Management" />}
-        {/* Admins manage contacts in Lead Management — the read-only Contacts
-            list was a duplicate for them; it stays for non-admin viewers. */}
-        {profile?.role !== "admin" && <NavLink href="/dashboard/contacts" icon="book" label="Contacts" />}
-        <NavLink href="/dashboard/calls" icon="phone" label="Call logs" />
-        <NavLink href="/dashboard/recordings" icon="mic" label="Recordings" />
-        {admin && <NavLink href="/dashboard/training" icon="mic" label="Calls to learn from" />}
-
-        <Section label="Analytics" />
-        <NavLink href="/dashboard" icon="grid" label="Overview" />
-        {admin && <NavLink href="/dashboard/velocity" icon="zap" label="Sales Velocity" />}
-        {admin && <NavLink href="/dashboard/xray" icon="scan" label="Sales X-Ray" />}
-        {profile?.role === "admin" && <NavLink href="/dashboard/reports" icon="chart" label="Reports" />}
-
-        <Section label="Configuration" />
-        {admin && <NavLink href="/dashboard/automations" icon="sliders" label="Automation Center" />}
-        {admin && <NavLink href="/dashboard/pulse" icon="bell" label="Daily Pulse" />}
-        {admin && <NavLink href="/dashboard/routing" icon="route" label="Lead Routing" />}
-        {admin && <NavLink href="/dashboard/whatsapp" icon="chat" label="WhatsApp" />}
-        {profile?.role === "admin" && <NavLink href="/dashboard/facebook" icon="flag" label="Facebook Leads" />}
-        {admin && <NavLink href="/dashboard/capture" icon="link" label="Lead Capture" />}
-        {admin && <NavLink href="/dashboard/content" icon="library" label="Content Library" />}
-        {admin && <NavLink href="/dashboard/projects" icon="building" label="Buyer Projects" />}
-        {admin && <NavLink href="/dashboard/rag" icon="spark" label="RAG" />}
-
-        <Section label="Team" />
-        <NavLink href="/dashboard/salespeople" icon="users" label="Salespeople" />
-        {profile?.role === "admin" && <NavLink href="/dashboard/attendance" icon="calendar" label="Attendance" />}
-        {admin && <NavLink href="/dashboard/coach" icon="bot" label="AI Coach" />}
-        <NavLink href="/dashboard/apps" icon="download" label="App downloads" />
-
-        {/* THE SECTION THE COMMENT ABOVE PROMISED AND NOBODY BUILT.
-            "act, understand, configure, run the platform, diagnose" — four of
-            those five became sections; "run the platform" did not, and eight
-            working pages were left with no way to reach them. Adding a
-            telecaller is one of them: the page and the server action are both
-            alive at /platform/telecallers/new, the link simply vanished when
-            the sidebar was regrouped, and the only remaining way in was for the
-            rep to self-signup with a company code — which is now failing on
-            Supabase's email rate limit. The admin path sends no email at all.
-            Super admin only: every page here is cross-company by design and
-            already hard-gated on platform_admins (Platform HQ on
-            is_super_admin() inside its RPCs). */}
-        {isSuper && <Section label="Platform" />}
-        {isSuper && <NavLink href="/dashboard/platform/hq" icon="radar" label="Platform HQ" />}
-        {/* Directly under HQ, because the pair is the point: HQ is how busy
-            today was, this is what is rotting regardless. A company can look
-            fine on HQ every day while never touching most of its book. */}
-        {isSuper && <NavLink href="/dashboard/platform/leaks" icon="alert" label="Where leads are dying" />}
-        {/* The people half of the same question. Leaks says which company is
-            rotting; this says which person, across every company, and lets you
-            read the conversations behind the number. */}
-        {isSuper && <NavLink href="/dashboard/platform/telecallers-activity" icon="rows" label="Telecaller activity" />}
-        {/* Leaks says a company is rotting; telecaller activity says which rep;
-            this says which BUYER, by name, when a new site launches somewhere —
-            mined from what they already said on a call or WhatsApp. */}
-        {isSuper && <NavLink href="/dashboard/platform/location-interest" icon="pin" label="Location demand" />}
-        {isSuper && <NavLink href="/dashboard/platform" icon="building" label="Companies" />}
-        {isSuper && <NavLink href="/dashboard/platform/telecallers" icon="userPlus" label="Telecallers · add user" />}
-        {isSuper && <NavLink href="/dashboard/platform/contacts" icon="contacts" label="Contacts (all)" />}
-        {isSuper && <NavLink href="/dashboard/ads" icon="trending" label="Ads Manager" />}
-        {isSuper && <NavLink href="/dashboard/platform/storage" icon="cloud" label="Recording storage" />}
-
-        <Section label="Diagnostics" />
-        {admin && <NavLink href="/dashboard/health" icon="pulse" label="Phone Health" />}
-        {admin && <NavLink href="/dashboard/integrity" icon="shield" label="Integrity check" />}
-
-        <div className="spacer" />
-
-        <div className="nav-user">
-          <div className="avatar" aria-hidden>{initial}</div>
-          <div className="nav-user-copy">
-            <div className="nav-user-name">
-              {company?.name ?? "No company"}
-            </div>
-            <div className="nav-user-meta">
-              {profile?.full_name ?? email}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="icon-btn theme-btn"
-            aria-label={theme === "light" ? "Use dark mode" : "Use light mode"}
-            title={theme === "light" ? "Use dark mode" : "Use light mode"}
-            onClick={toggleTheme}
-          >
-            {theme === "light" ? <MoonIcon /> : <SunIcon />}
-          </button>
-        </div>
-
-        <form action="/auth/signout" method="post">
-          <button className="link" type="submit" title="Sign out">
-            <span>Sign out</span>
-          </button>
-        </form>
-      </aside>
+      ) : (
+        <nav className="nav-sections" aria-label="Main">
+          {sections.map((s) => {
+            const active = here?.section.id === s.id;
+            const dot = s.id === "health" ? health : null;
+            return (
+              <Link
+                key={s.id}
+                href={withCompany(s.tabs[0].href, company)}
+                className={active ? "active" : ""}
+                title={dot?.title ?? s.label}
+                aria-current={active ? "page" : undefined}
+              >
+                <Icon name={s.icon} className="nav-ico" />
+                <span>{s.label}</span>
+                {dot && <i className={`nav-dot is-${dot.state}`} aria-label={dot.title} />}
+              </Link>
+            );
+          })}
+        </nav>
+      )}
     </>
+  );
+}
+
+function rank(label: string, q: string): number {
+  const l = label.toLowerCase();
+  if (l.startsWith(q)) return 0;
+  if (l.includes(q)) return 1;
+  return 2;
+}
+
+type Dot = { state: "bad" | "unknown" | "checking"; title: string };
+
+/**
+ * The Health dot. Red: something is broken. Grey: we could not check, or are
+ * still checking. No dot only after all three signals were read and none is
+ * broken — a failed read never turns into "all clear".
+ */
+function useHealth(admin: boolean): Dot | null {
+  const [dot, setDot] = useState<Dot | null>(admin ? { state: "checking", title: "Checking health" } : null);
+
+  useEffect(() => {
+    if (!admin) return;
+    let alive = true;
+    async function check() {
+      try {
+        const res = await fetch("/api/health-signal", { cache: "no-store" });
+        if (!res.ok) throw new Error(String(res.status));
+        const h = (await res.json()) as HealthSummary;
+        if (!alive) return;
+        const broken = h.signals.filter((s) => s.state === "bad");
+        if (h.state === "bad") setDot({ state: "bad", title: broken.map((s) => `${s.label}: ${s.line}`).join("\n") });
+        else if (h.state === "unknown") setDot({ state: "unknown", title: "Health could not be fully checked. Open Health to see what is unknown." });
+        else setDot(null);
+      } catch {
+        if (alive) setDot({ state: "unknown", title: "Health could not be checked. This is not saying all is well." });
+      }
+    }
+    check();
+    const timer = window.setInterval(check, 3 * 60_000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [admin]);
+
+  return dot;
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4 4" />
+    </svg>
   );
 }
 

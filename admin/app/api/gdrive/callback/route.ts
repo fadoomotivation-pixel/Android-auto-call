@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 // Google OAuth callback: exchange the code for a refresh token, create a
-// "SalesAutoCall Recordings" folder, and store both on the company's
+// "Call Pro AI Recordings" folder, and store both on the company's
 // storage_integrations row (super-admin RLS gates the write).
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
       const f = await fetch("https://www.googleapis.com/drive/v3/files?fields=id", {
         method: "POST",
         headers: { Authorization: `Bearer ${tok.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "SalesAutoCall Recordings", mimeType: "application/vnd.google-apps.folder" }),
+        body: JSON.stringify({ name: "Call Pro AI Recordings", mimeType: "application/vnd.google-apps.folder" }),
       });
       folderId = (await f.json()).id ?? "";
     } catch (_) { /* folder optional */ }

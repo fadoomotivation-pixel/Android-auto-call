@@ -1,4 +1,4 @@
-# SalesAutoCall — Admin Dashboard
+# Call Pro AI — Admin Dashboard
 
 Next.js (App Router) + Supabase. Lets a company admin/owner sign in and see
 **what data is stored on the cloud**: salespeople, their productivity, the

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { loadDashboardSession } from "@/lib/dashboard/scope";
 import { ago, ist } from "@/lib/dashboard/format";
 import { classifyCapture, outageSince, reasonLabel, type CaptureReason } from "@/lib/capture-health";
@@ -31,36 +32,26 @@ export interface DeadRow {
 /** Shown while the session read is in flight. Not green, not "all clear". */
 export function CaptureOutagePending() {
   return (
-    <div className="capture-outage-pending" role="status" aria-live="polite" aria-busy="true">
-      <div className="capture-outage-inner">
-        <strong>Checking WhatsApp capture</strong>
-        <p>Not a result yet. A quiet bar here does not mean capture is up.</p>
-      </div>
-    </div>
+    <a className="capture-notice is-pending" href="/dashboard/health#whatsapp-capture" role="status" aria-live="polite" aria-busy="true">
+      <span className="capture-notice-dot" aria-hidden />
+      <span className="capture-notice-text">
+        <strong>Checking WhatsApp capture.</strong> Not a result yet. A quiet bar here does not mean capture is up.
+      </span>
+    </a>
   );
 }
 
-export async function CaptureOutageBanner() {
+type Outage = { error: string | null; rows: DeadRow[]; total: number };
+
+/** One read, shared by the one-line notice and the Health page in a request. */
+const loadOutage = cache(async (): Promise<Outage> => {
   const { supabase } = await loadDashboardSession();
   const { data, error } = await supabase
     .from("wa_rep_sessions")
     .select("salesperson_id, company_id, status, last_seen_at, last_error")
     .returns<WaRepSession[]>();
 
-  if (error) {
-    return (
-      <BannerShell>
-        <div className="capture-outage-row">
-          <div className="capture-outage-copy">
-            <strong>WhatsApp capture status could not be read</strong>
-            <p>
-              {error.message}. This page is not saying capture is up.
-            </p>
-          </div>
-        </div>
-      </BannerShell>
-    );
-  }
+  if (error) return { error: error.message, rows: [], total: 0 };
 
   const dead = (data ?? [])
     .map((row) => {
@@ -69,7 +60,7 @@ export async function CaptureOutageBanner() {
     })
     .filter((x): x is { row: WaRepSession; verdict: NonNullable<ReturnType<typeof classifyCapture>> } => x !== null);
 
-  if (dead.length === 0) return null;
+  if (dead.length === 0) return { error: null, rows: [], total: (data ?? []).length };
 
   const repIds = dead.map((d) => d.row.salesperson_id);
   const companyIds = [...new Set(dead.map((d) => d.row.company_id))];
@@ -124,6 +115,69 @@ export async function CaptureOutageBanner() {
     return a.repName.localeCompare(b.repName);
   });
 
+  return { error: null, rows, total: (data ?? []).length };
+});
+
+/**
+ * The shell notice: ONE line, on every admin page, linking to Health.
+ *
+ * It used to be a full-width red block that listed every dead session with
+ * its clocks. The founder read it as the page being broken. The facts did not
+ * go away — they moved to the top of Health, where there is room — but the
+ * outage itself stays on every page, because silence must never look like
+ * success.
+ */
+export async function CaptureOutageBanner() {
+  const { error, rows } = await loadOutage();
+  if (error) {
+    return (
+      <a className="capture-notice" href="/dashboard/health#whatsapp-capture" role="status">
+        <span className="capture-notice-dot" aria-hidden />
+        <span className="capture-notice-text">
+          <strong>WhatsApp capture status could not be read.</strong> This is not saying capture is up.
+        </span>
+        <span className="capture-notice-go">Open Health →</span>
+      </a>
+    );
+  }
+  if (rows.length === 0) return null;
+  const names = rows.map((r) => (r.companyName ? `${r.repName} (${r.companyName})` : r.repName));
+  const shown = names.slice(0, 2).join(", ") + (names.length > 2 ? ` and ${names.length - 2} more` : "");
+  return (
+    <a className="capture-notice" href="/dashboard/health#whatsapp-capture" role="status" title={names.join("\n")}>
+      <span className="capture-notice-dot" aria-hidden />
+      <span className="capture-notice-text">
+        <strong>WhatsApp capture is down</strong> for {shown}. Messages sent now are not recorded.
+      </span>
+      <span className="capture-notice-go">Fix in Health →</span>
+    </a>
+  );
+}
+
+/** The full detail, at the top of Health. Same read as the notice. */
+export async function CaptureOutageDetails() {
+  const { error, rows, total } = await loadOutage();
+  if (error) {
+    return (
+      <BannerShell>
+        <div className="capture-outage-row">
+          <div className="capture-outage-copy">
+            <strong>WhatsApp capture status could not be read</strong>
+            <p>{error}. This page is not saying capture is up.</p>
+          </div>
+        </div>
+      </BannerShell>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="subtitle">
+        {total === 0
+          ? "No telecaller has linked WhatsApp yet, so no chats are being captured. Link one from WhatsApp."
+          : `None of the ${total} linked WhatsApp sessions is down. Each is connected or reconnecting.`}
+      </p>
+    );
+  }
   return <CaptureOutageBannerView rows={rows} />;
 }
 

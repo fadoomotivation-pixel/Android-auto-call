@@ -1,9 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Sidebar } from "./Sidebar";
+import { SectionTabs } from "./SectionTabs";
 import { Icon } from "./icons";
+import { locate, visibleNav } from "@/lib/dashboard/nav";
 import type { Company, Profile } from "@/lib/types";
 
 /** Longest prefix wins. Words match the page headings, without the emoji. */
@@ -42,7 +44,7 @@ const TITLES: [string, string][] = [
   ["/dashboard/integrity", "Integrity check"],
   ["/dashboard/ads", "Ads Manager"],
   ["/dashboard/contacts", "Contacts"],
-  ["/dashboard", "Command center"],
+  ["/dashboard", "Overview"],
 ];
 
 function titleFor(path: string) {
@@ -66,6 +68,17 @@ export function Chrome({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const companyName = !isSuper ? company?.name ?? null : null;
+  const sections = useMemo(() => visibleNav({ role: profile?.role, isSuper }), [profile?.role, isSuper]);
+  const here = locate(pathname, sections);
+  const pageTitle = titleFor(pathname);
+  // The big title is the section; the tabs underneath name the page. A page
+  // outside every section (a "new company" form, say) keeps its own title.
+  const heading = here?.section.label ?? pageTitle;
+
+  // Browser tab: "Recordings · Call Pro AI", so ten open tabs are tellable apart.
+  useEffect(() => {
+    document.title = `${pageTitle} · Call Pro AI`;
+  }, [pageTitle]);
 
   return (
     <div className="app">
@@ -89,13 +102,19 @@ export function Chrome({
               >
                 <Icon name={mobileOpen ? "close" : "menu"} />
               </button>
-              <h1>{titleFor(pathname)}</h1>
+              <div className="topbar-heading">
+                <h1>{heading}</h1>
+                {here && <p className="topbar-blurb">{here.section.blurb}</p>}
+              </div>
             </div>
             <div className="topbar-tools">
               {companyName && <span className="topbar-company">{companyName}</span>}
               <div id="company-picker-slot" />
             </div>
           </div>
+          <Suspense fallback={null}>
+            <SectionTabs sections={sections} />
+          </Suspense>
         </header>
         {children}
       </div>

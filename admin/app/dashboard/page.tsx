@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { resolveScope } from "@/lib/dashboard/scope";
+import { MoneyCard, MoneyCardPending } from "./MoneyCard";
 import { duration as fmtDuration, compactNum as fmtNum, minutes as fmtMinutes }
   from "@/lib/dashboard/format";
 import { ModuleLinks } from "./ModuleLinks";
@@ -61,11 +63,18 @@ export default async function OverviewPage({
     <>
       <div className="page-head">
         <div>
-          <h2>Command center</h2>
-          <p className="subtitle">A calm, live view of your team&apos;s calling.</p>
+          <h2>Overview</h2>
+          <p className="subtitle">Money first, then a calm, live view of your team&apos;s calling.</p>
         </div>
         <ExportCalls names={names} />
       </div>
+
+      {/* Admins only: a telecaller lands here too and has no use for spend. */}
+      {(ctx.role === "admin" || ctx.isSuper) && (
+        <Suspense fallback={<MoneyCardPending />}>
+          <MoneyCard scope={ctx} />
+        </Suspense>
+      )}
 
       <div className="cards">
         <Stat label="Salespeople" value={fmtNum(s.salespeople)} />
