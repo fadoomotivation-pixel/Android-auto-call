@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -71,6 +72,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.unit.constrainWidth
+import androidx.compose.ui.unit.constrainHeight
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.salesautocall.app.data.CallLog
@@ -220,7 +225,13 @@ private fun stageLabel(stages: List<LeadStage>, stage: String): String =
 @Composable
 fun LeadDetailScreen(vm: MainViewModel) {
     val app by vm.state.collectAsState()
-    val contact = app.leads.find { it.id == app.leadDetailId } ?: run { vm.closeLeadDetail(); return }
+    // The lead can vanish from the list (reassigned, list refreshed). Closing
+    // is a state write, so it runs as an effect, never mid-composition.
+    val contact = app.leads.find { it.id == app.leadDetailId }
+    if (contact == null) {
+        LaunchedEffect(app.leadDetailId) { vm.closeLeadDetail() }
+        return
+    }
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
 
@@ -350,7 +361,8 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     bottom = (if (bottomBarsPx == 0) 96.dp else bottomInset) + 12.dp,
                 ),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                // iOS groups breathe: 16dp between cards, not 12.
+                verticalArrangement = Arrangement.spacedBy(Space.l),
             ) {
                 // ---- Top bar: back · title · quick call / whatsapp / more ----
                 item {
@@ -363,7 +375,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Ink)
                         }
                         Spacer(Modifier.width(4.dp))
-                        Text("Lead Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Ink)
+                        Text("Lead Details", style = AppType.title, color = Ink)
                         Spacer(Modifier.weight(1f))
                         // ONE Call on this page. The title bar had a second Call
                         // and a second WhatsApp, the same two buttons the bar
@@ -371,7 +383,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         // one screen made the rep stop and choose. More stays:
                         // it holds the things that are not anywhere else.
                         Box {
-                            TopIconButton(Icons.Default.MoreHoriz, SubInk) { moreOpen = true }
+                            TopIconButton(Icons.Default.MoreHoriz, SubInk, size = 40) { moreOpen = true }
                             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                                 DropdownMenuItem(text = { Text("Copy number") }, onClick = { moreOpen = false; copyNumber() })
                                 DropdownMenuItem(text = { Text("Set reminder") }, onClick = { moreOpen = false; scheduleOpen = true })
@@ -511,8 +523,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         val coach = app.leadCoach
                         SectionCard {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("HOW THAT CALL WENT", style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp,
+                                Text("HOW THAT CALL WENT", style = AppType.sectionLabel, color = AppColors.TextSecondary,
                                     modifier = Modifier.weight(1f))
                                 coach?.rating?.let { r ->
                                     Text("⭐".repeat(r.coerceIn(1, 5)) + " $r/5",
@@ -599,8 +610,8 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     if (visitMs != null && visitMs >= System.currentTimeMillis()) {
                         item {
                             Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                                    .clip(RoundedCornerShape(16.dp)).background(WhatsGreen.copy(alpha = 0.10f))
+                                Modifier.fillMaxWidth().padding(horizontal = Space.l)
+                                    .clip(Radii.card).background(WhatsGreen.copy(alpha = 0.10f))
                                     .clickable {
                                         openWhatsAppLocal(context, contact.phone,
                                             visitConfirmationMessage(contact, fmtWhen(visitMs), app.profile?.fullName, app.company?.name))
@@ -626,7 +637,10 @@ fun LeadDetailScreen(vm: MainViewModel) {
 
                 // ---- Voice note ----
                 item { VoiceNoteCard(vm, recording = app.voiceRecording, uploading = app.voiceUploading) }
-                items(app.voiceNotes, key = { it.id ?: it.audioPath }) { n ->
+                // Keyed by position as well as id. Two rows with the same id or
+                // file (an upload seen twice during a refresh) used to be a
+                // duplicate LazyColumn key, which crashes the whole page.
+                itemsIndexed(app.voiceNotes, key = { i, n -> "vn:$i:${n.id ?: n.audioPath}" }) { _, n ->
                     Box(Modifier.padding(horizontal = 16.dp)) {
                         VoiceNoteRow(
                             n = n,
@@ -647,8 +661,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Call, null, tint = BlueL, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("CALLS & RECORDINGS", style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp)
+                            Text("CALLS & RECORDINGS", style = AppType.sectionLabel, color = AppColors.TextSecondary)
                             val n = app.leadDetailCalls.size
                             if (n > 0) {
                                 Spacer(Modifier.width(8.dp))
@@ -672,8 +685,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 item {
                     SectionCard {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("SALES FUNNEL", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
-                                color = Ink, letterSpacing = 0.6.sp)
+                            Text("SALES FUNNEL", style = AppType.sectionLabel, color = AppColors.TextSecondary)
                             Spacer(Modifier.weight(1f))
                             Text(if (funnelExpanded) "Hide steps" else "Show steps", color = IndigoL,
                                 style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
@@ -739,8 +751,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 item {
                     SectionCard {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("QUICK NOTES", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
-                                color = Ink, letterSpacing = 0.6.sp)
+                            Text("QUICK NOTES", style = AppType.sectionLabel, color = AppColors.TextSecondary)
                             Spacer(Modifier.weight(1f))
                             Row(
                                 Modifier.clip(RoundedCornerShape(50)).background(IndigoL.copy(alpha = 0.10f))
@@ -760,11 +771,11 @@ fun LeadDetailScreen(vm: MainViewModel) {
 
                 // ---- Temperature · Journey (2 columns) ----
                 item {
-                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = Space.l), horizontalArrangement = Arrangement.spacedBy(Space.m)) {
                         MiniCard("TEMPERATURE", Modifier.weight(1f).fillMaxHeight()) {
                             TempChips(contact.temperature ?: "") { key -> contact.id?.let { vm.setLeadTemperature(it, key) } }
                         }
-                        MiniCard("JOURNEY", Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(18.dp)).clickable { journeyExpanded = !journeyExpanded }) {
+                        MiniCard("JOURNEY", Modifier.weight(1f).fillMaxHeight().clip(Radii.card).clickable { journeyExpanded = !journeyExpanded }) {
                             val latest = app.leadDetailActivities.firstOrNull()
                             val title = latest?.detail ?: "Lead added"
                             val at = isoMs(latest?.createdAt ?: contact.createdAt)
@@ -791,7 +802,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         contact.createdAt?.let { add(Triple(it, "created", "Lead added")) }
                     }.sortedByDescending { it.first ?: "" }
                     item { SectionCard {
-                        Text("JOURNEY", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp)
+                        Text("JOURNEY", style = AppType.sectionLabel, color = AppColors.TextSecondary)
                         Spacer(Modifier.height(10.dp))
                         if (journey.isEmpty()) Text("Updates you make will show here with date & time.",
                             style = MaterialTheme.typography.bodySmall, color = SubInk)
@@ -802,7 +813,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 // ---- Add note + Save ----
                 item {
                     SectionCard {
-                        Text("ADD NOTE", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Ink, letterSpacing = 0.6.sp)
+                        Text("ADD NOTE", style = AppType.sectionLabel, color = AppColors.TextSecondary)
                         Spacer(Modifier.height(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
@@ -978,9 +989,11 @@ fun LeadDetailScreen(vm: MainViewModel) {
 @Composable
 private fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        // iOS grouped-inset: a white card on the grey canvas, no outline.
+        // One radius (Radii.card), one inset (16dp), one inner padding (16dp)
+        // for every card on this page, so the edges line up down the screen.
+        Modifier.fillMaxWidth().padding(horizontal = Space.l)
             .clip(Radii.card).background(CardBg)
-            .border(1.dp, Hair, Radii.card)
             .padding(Space.l),
         content = content,
     )
@@ -991,8 +1004,7 @@ private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Com
     Column(
         modifier
             .clip(Radii.card).background(CardBg)
-            .border(1.dp, Hair, Radii.card)
-            .heightIn(min = 96.dp).padding(Space.m),
+            .heightIn(min = 96.dp).padding(Space.l),
     ) {
         Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.TextTertiary, maxLines = 1)
         Spacer(Modifier.height(10.dp))
@@ -1005,7 +1017,6 @@ private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
     Box(
         Modifier.size(size.dp)
             .clip(CircleShape).background(CardBg)
-            .border(1.dp, Hair, CircleShape)
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, null, tint = tint, modifier = Modifier.size((size * 0.46f).dp)) }
@@ -1048,7 +1059,7 @@ private fun IdentityBlock(
     lastTalk: Pair<String, Boolean>,
 ) {
     val ring = tempRing(contact.temperature)
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = Space.l)) {
         Row(verticalAlignment = Alignment.Top) {
             Box(
                 Modifier.size(64.dp).clip(CircleShape).border(2.dp, ring.copy(alpha = 0.55f), CircleShape),
@@ -1105,7 +1116,7 @@ private fun IdentityBlock(
         Spacer(Modifier.height(14.dp))
         Row(
             Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Space.m),
         ) {
             val budget = budgetLabel(contact.budget)
             HeroFact(
@@ -1159,13 +1170,12 @@ private fun IdentityBlock(
 @Composable
 private fun HeroFact(label: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
     Column(
-        modifier.clip(RoundedCornerShape(14.dp)).background(CardBg)
-            .border(1.dp, Hair, RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier.clip(Radii.card).background(CardBg)
+            .padding(horizontal = Space.l, vertical = Space.m),
     ) {
-        Text(label, style = AppType.sectionLabel, color = AppColors.TextTertiary, maxLines = 1)
-        Spacer(Modifier.height(4.dp))
-        Text(value, style = AppType.bodyStrong, fontWeight = FontWeight.SemiBold, color = valueColor, maxLines = 2,
+        Text(label, style = AppType.sectionLabel, color = AppColors.TextSecondary, maxLines = 1)
+        Spacer(Modifier.height(Space.xs))
+        Text(value, style = AppType.rowTitle, color = valueColor, maxLines = 2,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
@@ -1312,10 +1322,9 @@ private fun AiCoachCard(
     )
 
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        Modifier.fillMaxWidth().padding(horizontal = Space.l)
             .clip(Radii.card).background(CardBg)
-            .border(1.dp, Hair, Radii.card)
-            .padding(16.dp),
+            .padding(Space.l),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // NOT "AI COACH". A rep does not want a tool, they want to be told
@@ -1643,8 +1652,8 @@ private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
     val wada = call.aiActions ?: return
     val applied = call.wadaState == "applied"
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
-            .background(CardBg).border(1.5.dp, JadeL.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+        Modifier.fillMaxWidth().padding(horizontal = Space.l).clip(Radii.card)
+            .background(CardBg).border(1.5.dp, JadeL.copy(alpha = 0.45f), Radii.card)
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1798,6 +1807,16 @@ private fun HorizontalFunnel(contact: Contact, stages: List<LeadStage>, onTap: (
  * One line of text that never wraps and never breaks a word: it steps the
  * font down from [maxSize] to [minSize] until the word fits the width it was
  * given, and only past that floor does it end with "…".
+ *
+ * WHY THIS IS A PLAIN Layout AND NOT BoxWithConstraints. The first version
+ * measured inside BoxWithConstraints, which is a SubcomposeLayout, and the
+ * "Close this lead" row asks its children for their intrinsic height
+ * (Row.height(IntrinsicSize.Min), so the three buttons are equally tall).
+ * Compose throws IllegalStateException on any intrinsic query that reaches a
+ * SubcomposeLayout, so the lead page crashed the moment the funnel card
+ * scrolled into view. This one measures the text itself inside an ordinary
+ * Layout, which answers intrinsic queries like any Text does, so it is safe
+ * inside any Row or Column, however that parent measures.
  */
 @Composable
 private fun FitOneLine(
@@ -1809,22 +1828,39 @@ private fun FitOneLine(
     modifier: Modifier = Modifier,
 ) {
     val measurer = androidx.compose.ui.text.rememberTextMeasurer()
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
-        val maxPx = constraints.maxWidth
-        val size = remember(text, maxPx, style, maxSize, minSize) {
-            var sz = maxSize.value
-            if (maxPx != androidx.compose.ui.unit.Constraints.Infinity) {
-                while (sz > minSize.value &&
-                    measurer.measure(text, style.copy(fontSize = sz.sp), maxLines = 1, softWrap = false).size.width > maxPx
-                ) sz -= 0.5f
-            }
-            sz.sp
-        }
-        Text(
-            text, style = style.copy(fontSize = size, lineHeight = (size.value + 3).sp), color = color,
-            maxLines = 1, softWrap = false, textAlign = TextAlign.Center,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+    // State, so draw is invalidated whenever measure picks a new size or word.
+    var drawn by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    androidx.compose.ui.layout.Layout(
+        modifier = modifier.drawBehind {
+            val r = drawn ?: return@drawBehind
+            val x = ((size.width - r.size.width) / 2f).coerceAtLeast(0f)
+            val y = ((size.height - r.size.height) / 2f).coerceAtLeast(0f)
+            drawText(r, color = color, topLeft = androidx.compose.ui.geometry.Offset(x, y))
+        },
+    ) { _, constraints ->
+        val bounded = constraints.hasBoundedWidth
+        fun layoutAt(sz: Float, ellipsis: Boolean) = measurer.measure(
+            androidx.compose.ui.text.AnnotatedString(text),
+            style = style.copy(fontSize = sz.sp, lineHeight = (sz + 3f).sp, textAlign = TextAlign.Center),
+            overflow = if (ellipsis) androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                else androidx.compose.ui.text.style.TextOverflow.Clip,
+            softWrap = false,
+            maxLines = 1,
+            constraints = if (bounded) androidx.compose.ui.unit.Constraints(maxWidth = constraints.maxWidth)
+                else androidx.compose.ui.unit.Constraints(),
         )
+        val floor = minSize.value.coerceAtMost(maxSize.value)
+        var sz = maxSize.value
+        var r = layoutAt(sz, ellipsis = false)
+        if (bounded) {
+            while (r.didOverflowWidth && sz > floor) {
+                sz = (sz - 0.5f).coerceAtLeast(floor)
+                r = layoutAt(sz, ellipsis = false)
+            }
+            if (r.didOverflowWidth) r = layoutAt(sz, ellipsis = true)
+        }
+        drawn = r
+        layout(constraints.constrainWidth(r.size.width), constraints.constrainHeight(r.size.height)) {}
     }
 }
 
@@ -1935,10 +1971,10 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
     var seconds by remember { mutableStateOf(0) }
     LaunchedEffect(recording) { seconds = 0; while (recording) { kotlinx.coroutines.delay(1000); seconds++ } }
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(RoundedCornerShape(18.dp))
-            .background(CardBg).border(1.dp, Hair, RoundedCornerShape(18.dp)).padding(14.dp),
+        Modifier.fillMaxWidth().padding(horizontal = Space.l).clip(Radii.card)
+            .background(CardBg).padding(Space.l),
     ) {
-        Text("VOICE NOTE", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = SubInk, letterSpacing = 0.5.sp)
+        Text("VOICE NOTE", style = AppType.sectionLabel, color = AppColors.TextSecondary)
         Spacer(Modifier.height(10.dp))
         when {
             // Save stays locked until there is actually something to save. Reps
@@ -2072,19 +2108,17 @@ private fun LeadActionBar(
     val stripOpen = !dismissed && (pending != null || askNext)
 
     Column(Modifier.fillMaxWidth()) {
-        // The fade is its own fixed 20dp band, not a gradient across the whole
-        // bar. Spread over the bar it was too short to see when the bar was
-        // 44dp — a card scrolling under it looked sliced clean off, which is
-        // what it looked like in the founder's screenshot — and it would have
-        // become a 60dp smear once the outcome strip doubled the bar's height.
-        // A fixed band behaves the same in both states.
-        Box(
-            Modifier.fillMaxWidth().height(20.dp)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, ScreenBg))),
-        )
+        // AN OPAQUE TOOLBAR, NOT A FADE. The 20dp transparent-to-grey band
+        // that used to sit here let the card underneath show through it, so
+        // the "why due" line looked printed on top of "What to say" (the
+        // founder's screenshot). iOS draws a solid bar with one hairline on
+        // top; content scrolls under the hairline and never shows through.
+        // The list's bottom padding is measured from this whole stack, so the
+        // last card still ends above it.
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
         Column(
             Modifier.fillMaxWidth().background(ScreenBg)
-                .padding(horizontal = 12.dp).padding(bottom = 8.dp),
+                .padding(horizontal = Space.m).padding(top = Space.s, bottom = Space.s),
         ) {
             if (stripOpen) {
                 Column(
@@ -2507,8 +2541,8 @@ private fun VoiceNoteRow(
     onRefreshAi: () -> Unit, onApplyDisposition: (String) -> Unit,
 ) {
     Column(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(14.dp))
-            .background(CardBg).border(1.dp, Hair, RoundedCornerShape(14.dp)).padding(12.dp),
+        Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(Radii.card)
+            .background(CardBg).padding(Space.m),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(38.dp).clip(CircleShape).background(if (playing) RedL else IndigoL).clickable { if (playing) onStop() else onPlay() }, contentAlignment = Alignment.Center) {

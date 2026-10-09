@@ -623,100 +623,6 @@ private fun Pill(text: String, fg: Color, bg: Color) {
     }
 }
 
-/**
- * THE WORK GRID — six numbers a rep can see without scrolling.
- *
- * This replaces two horizontally-scrolled chip rows. The problem with those was
- * not that they were ugly: six action chips do not fit on a 360dp phone, so
- * Later, Visit and No step lived off the right edge — three of the six answers
- * to "what do I do now", permanently out of sight behind a swipe nobody makes.
- *
- * Two rows of three fit, always, at any font scale, with the COUNT leading.
- * "Overdue 113" is the sentence a telecaller opens this screen to read, and a
- * count set in the state's own colour says which of the six is on fire without
- * six competing pills.
- *
- * The stage row that used to sit under this is gone from the screen and NOT
- * gone from the app: every stage is already in the filter sheet, where the
- * other browsing filters live. Stage answers "where is this deal", which is a
- * question a rep asks a few times a day — not the one they ask every time the
- * screen opens.
- *
- * Tapping the selected tile clears it, which is how a rep gets back to All
- * without hunting for an All chip.
- */
-@Composable
-private fun WorkGrid(
-    counts: List<Pair<ActionChip, Int>>,
-    selectedCode: String?,
-    onPick: (String?) -> Unit,
-    /** The read failed. Zeros here would be a quiet day. Show a dash. */
-    unknown: Boolean = false,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        counts.chunked(3).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (a, n) ->
-                    val on = selectedCode == a.code
-                    val empty = !unknown && n == 0 && !on
-                    val border = when {
-                        on -> a.color
-                        empty -> MaterialTheme.colorScheme.outlineVariant
-                        else -> MaterialTheme.colorScheme.outline
-                    }
-                    Column(
-                        // heightIn, not height. The tile holds a 19sp number
-                        // over an 11sp word; at a large system font scale those
-                        // two lines need more than 56dp and a fixed box clipped
-                        // the label away, leaving six bare numbers.
-                        Modifier.weight(1f).heightIn(min = 64.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(if (on) a.color.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surface)
-                            .border(1.dp, border, RoundedCornerShape(14.dp))
-                            // An empty state is shown but not offered — hiding it
-                            // would make the grid jump as counts change through
-                            // the day, and leaving it live invites a tap that
-                            // does nothing.
-                            .then(if (empty) Modifier else Modifier.clickable { onPick(if (on) null else a.code) })
-                            .padding(horizontal = 8.dp, vertical = 7.dp),
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        // SIX NUMBERS IN SIX COLOURS IS A CHART, NOT A CHOICE.
-                        //
-                        // Orange, red, teal, indigo, violet and slate, all at
-                        // once, above the lead list — so the eye had nowhere to
-                        // land and "Overdue" shouted no louder than "No step".
-                        // Only the two that mean DO SOMETHING NOW keep a colour;
-                        // the rest are graphite. The chip's own colour still
-                        // rings the tile when it is the selected filter, so
-                        // nothing loses its identity.
-                        val urgent = a.code == "call_now" || a.code == "overdue"
-                        Text(
-                            if (unknown) "—" else n.toString(),
-                            fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold,
-                            color = when {
-                                empty -> AppColors.TextTertiary
-                                urgent -> a.color
-                                else -> AppColors.TextPrimary
-                            },
-                            maxLines = 1,
-                        )
-                        Text(
-                            a.label,
-                            fontSize = 12.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium,
-                            color = if (empty) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                // A short last row keeps its tiles the same width as the row above.
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
 @Composable
 private fun FilterTab(
     label: String,
@@ -1281,33 +1187,37 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                 val why = dueSignal(work, app.focusReason(c.id))
                                 val extra = focusSayLine(app.coachPicks, c.id)
                                     ?: rowMemoryLine(c.id?.let { app.memoryByLead[it] })
-                                val detail = when {
-                                    why != null && extra != null -> "$why · $extra"
-                                    else -> why ?: extra ?: fu?.note
-                                }
+                                // Two lines, not one run-on: WHY first (short), then
+                                // what they said last time, smaller. Same words as
+                                // before; they were joined with " · " into three grey
+                                // lines that read as one block.
+                                val reason = why ?: extra ?: fu?.note
+                                val secondary = if (why != null) extra ?: fu?.note else if (extra != null) fu?.note else null
                                 PlanRow(
-                                    c.name ?: c.phone,
+                                    prettyName(c.name) ?: c.phone,
                                     if (whenIso.isNullOrBlank()) "Due now" else relativeDue(whenIso),
-                                    detail,
+                                    reason,
                                     c.phone,
                                     overdue = whenIso.isNullOrBlank() || (instantMillis(whenIso) ?: Long.MAX_VALUE) <= nowMs,
+                                    secondary = secondary?.takeIf { it != reason },
+                                    contactId = c.id,
                                 )
                             },
-                            more = dueContacts.size - 3, onCall = { vm.dialManual(it) },
+                            more = dueContacts.size - 3, onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
                         )
                         PlanBucket(
                             icon = Icons.Outlined.LocationOn, title = "Site visit fixed", color = Purple,
                             rows = visitsPlanned.take(3).map { (c, _) ->
-                                PlanRow(c.name ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone)
+                                PlanRow(prettyName(c.name) ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone, contactId = c.id)
                             },
-                            more = visitsPlanned.size - 3, onCall = { vm.dialManual(it) },
+                            more = visitsPlanned.size - 3, onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
                         )
                         PlanBucket(
                             icon = Icons.Outlined.CheckCircle, title = "Visit done — close them", color = Teal,
                             rows = visitsDoneShown.take(3).map { (c, _) ->
-                                PlanRow(c.name ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone)
+                                PlanRow(prettyName(c.name) ?: c.phone, dayLabel(c.siteVisitAt), c.siteVisitProject, c.phone, contactId = c.id)
                             },
-                            more = visitsDoneShown.size - 3, onCall = { vm.dialManual(it) },
+                            more = visitsDoneShown.size - 3, onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
                         )
                         visitBoard.error?.let { msg ->
                             Spacer(Modifier.height(10.dp))
@@ -1323,7 +1233,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                 color = Amber,
                                 rows = waiting.take(3),
                                 more = waiting.size - 3,
-                                onCall = { vm.dialManual(it) },
+                                onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
                             )
                         }
                         // Asked, never asserted. Shown only when the pending-visit
@@ -1340,9 +1250,10 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                     // owner is making ad decisions on.
                                     onYes = c.id?.let { id -> { vm.answerVisitHappened(id, c.phone, c.name, true) } },
                                     onNo = c.id?.let { id -> { vm.answerVisitHappened(id, c.phone, c.name, false) } },
+                                    contactId = c.id,
                                 )
                             },
-                            more = visitsUnconfirmed.size - 3, onCall = { vm.dialManual(it) },
+                            more = visitsUnconfirmed.size - 3, onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
                         )
                     }
                 }
@@ -1546,9 +1457,14 @@ private fun QuickAction(label: String, icon: androidx.compose.ui.graphics.vector
 private data class PlanRow(
     val name: String,
     val whenLabel: String,
+    /** The one short reason line under the name. */
     val detail: String?,
     val phone: String,
     val overdue: Boolean = false,
+    /** A quieter second line (what they said last time). Never merged into the reason. */
+    val secondary: String? = null,
+    /** Set when the row can open the lead page, where every line is shown in full. */
+    val contactId: String? = null,
     /**
      * A yes/no the row is ASKING. Set only on "Visit day gone — did they come?",
      * where a Call button alone left the most important question in the funnel
@@ -1588,11 +1504,26 @@ private fun pendingVisitRows(
             overdue = v.daysWaiting > 0,
             onYes = if (canAsk) ({ onAnswer(v.contactId, phone, v.name, true) }) else null,
             onNo = if (canAsk) ({ onAnswer(v.contactId, phone, v.name, false) }) else null,
+            contactId = lead?.id,
         )
     }
 }
 
-/** A titled bucket inside Today's Plan (callbacks / visits fixed / visits done). */
+/**
+ * A titled bucket inside Today's Plan (callbacks / visits fixed / visits done).
+ *
+ * DRAWN LIKE AN iOS GROUPED LIST. Each row used to be its own tinted box with
+ * a 13sp bold name, a coloured label and up to three lines of 11sp grey text
+ * run together with " · ", next to a 48dp solid blue disc. Three of those
+ * stacked read as one dense grey block, which is what the founder pointed at.
+ *
+ * Now: rows sit on the card itself, split by an inset hairline. The name is
+ * the heaviest thing on the row (16sp semibold), the status is a small
+ * tinted tag beside it, then ONE short reason line, then a quieter second
+ * line. The Call button is a soft 40dp circle inside a 48dp touch target, so
+ * it is still easy to hit one-handed but no longer shouts over the names.
+ * Tapping the row opens the lead, where every line is shown in full.
+ */
 @Composable
 private fun PlanBucket(
     icon: ImageVector,
@@ -1601,50 +1532,74 @@ private fun PlanBucket(
     rows: List<PlanRow>,
     more: Int,
     onCall: (String) -> Unit,
+    /** Opens the lead page. Null keeps rows non-tappable (only Call works). */
+    onOpen: ((String) -> Unit)? = null,
 ) {
     if (rows.isEmpty()) return
-    Spacer(Modifier.height(14.dp))
+    Spacer(Modifier.height(Space.l))
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(15.dp))
         Spacer(Modifier.width(6.dp))
         Text(title, style = AppType.metaStrong, color = color)
     }
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(Space.xs))
     rows.forEachIndexed { i, r ->
-        if (i > 0) Spacer(Modifier.height(6.dp))
+        if (i > 0) Box(Modifier.fillMaxWidth().padding(start = Space.xs).height(0.5.dp).background(AppColors.Border))
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                .background(color.copy(alpha = 0.07f))
-                .padding(horizontal = 12.dp, vertical = 9.dp),
+            Modifier.fillMaxWidth()
+                .then(
+                    if (onOpen != null && r.contactId != null) Modifier.clip(RoundedCornerShape(10.dp)).clickable { onOpen(r.contactId) }
+                    else Modifier,
+                )
+                .padding(start = Space.xs, top = Space.m, bottom = Space.m),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(r.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                        Text(r.name, style = AppType.rowTitle, color = AppColors.TextPrimary,
                             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false))
-                        Spacer(Modifier.width(8.dp))
-                        Text(r.whenLabel, style = MaterialTheme.typography.labelSmall,
-                            color = if (r.overdue) Red else color, fontWeight = FontWeight.Bold, maxLines = 1)
+                        if (r.whenLabel.isNotBlank()) {
+                            Spacer(Modifier.width(Space.s))
+                            val tagColor = if (r.overdue) Red else color
+                            Box(
+                                Modifier.clip(RoundedCornerShape(6.dp)).background(tagColor.copy(alpha = 0.10f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(r.whenLabel, style = AppType.tag, color = tagColor, maxLines = 1)
+                            }
+                        }
                     }
                     r.detail?.takeIf { it.isNotBlank() }?.let {
-                        Text(it, style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(3.dp))
+                        Text(it, style = AppType.meta, color = AppColors.TextPrimary.copy(alpha = 0.78f),
+                            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
+                    r.secondary?.takeIf { it.isNotBlank() }?.let {
+                        Spacer(Modifier.height(2.dp))
+                        Text(it, style = AppType.meta.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                            color = AppColors.TextSecondary,
+                            maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     }
                 }
-                // 44dp, not 34. IconButton is 48dp by default precisely so a
-                // thumb can hit it; setting .size(34.dp) threw that away, and
-                // this is the button a rep jabs at while holding a phone in one
-                // hand. There is room on this row — it was small for looks.
-                IconButton(onClick = { onCall(r.phone) }, modifier = Modifier.size(48.dp).clip(CircleShape).background(AppColors.Indigo)) {
-                    Icon(Icons.Default.Call, contentDescription = "Call ${r.name}", tint = AppColors.OnIndigo, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(Space.s))
+                // 48dp touch target, 40dp soft disc. Small to the eye, not to the thumb.
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape).clickable { onCall(r.phone) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(AppColors.IndigoSoft),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Default.Call, contentDescription = "Call ${r.name}", tint = AppColors.Indigo, modifier = Modifier.size(19.dp))
+                    }
                 }
             }
             // The answer, right where the question is asked. Two taps' worth of
             // information — did they turn up, and what now — collapsed into one.
             if (r.onYes != null && r.onNo != null) {
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(Space.s))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(
                         Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
@@ -1671,9 +1626,9 @@ private fun PlanBucket(
         }
     }
     if (more > 0) {
-        Spacer(Modifier.height(5.dp))
-        Text("+$more more", style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+        Box(Modifier.fillMaxWidth().padding(start = Space.xs).height(0.5.dp).background(AppColors.Border))
+        Text("+$more more", style = AppType.meta, color = AppColors.TextSecondary,
+            modifier = Modifier.padding(start = Space.xs, top = Space.s))
     }
 }
 
@@ -1690,22 +1645,12 @@ private fun PlanBucket(
 @Composable
 private fun LeadsDeck(
     app: AppState,
-    dueNow: Int,
-    /** The due read failed. The number must not say 0. */
-    dueUnknown: Boolean,
-    hotCount: Int,
-    newCount: Int,
     pipelineValue: Double,
     scoring: Boolean,
-    reviveCount: Int,
     onRefresh: () -> Unit,
     onScore: () -> Unit,
     onSelect: () -> Unit,
     onToday: () -> Unit,
-    onDueNow: () -> Unit,
-    onHot: () -> Unit,
-    onNew: () -> Unit,
-    onRevive: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val brand = brandColorOf(app.company?.brandColor) ?: AppColors.Indigo
@@ -1766,13 +1711,11 @@ private fun LeadsDeck(
                     }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DeckStat(if (dueUnknown) "—" else dueNow.toString(), "Due", !dueUnknown && dueNow > 0, Modifier.weight(1f), onDueNow)
-                DeckStat(hotCount.toString(), "Hot", false, Modifier.weight(1f), onHot)
-                DeckStat(newCount.toString(), "New", false, Modifier.weight(1f), onNew)
-                if (reviveCount > 0) DeckStat(reviveCount.toString(), "Revive", false, Modifier.weight(1f), onRevive)
-            }
+            // The Due / Hot / New / Revive counters that sat here moved into
+            // the one filter row under the search box. Due was the same number
+            // as the Call now tile AND the Next call card, so a rep read 362
+            // three times before reaching a lead. Every count is still on the
+            // screen, once.
         }
     }
 }
@@ -1819,16 +1762,13 @@ private fun UpNextCard(
     Column(
         Modifier.fillMaxWidth().clip(Radii.card)
             .background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.card)
             .clickable { onOpen() }
-            .padding(horizontal = Space.m, vertical = Space.m),
+            .padding(Space.l),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // The count is NOT repeated here. It lives once, on "Call all N".
             Text("NEXT CALL", style = AppType.sectionLabel, color = AppColors.TextSecondary,
                 modifier = Modifier.weight(1f), maxLines = 1)
-            if (queueSize > 1) {
-                Text("$queueSize waiting", style = AppType.tag, color = AppColors.TextTertiary, maxLines = 1)
-            }
         }
         Spacer(Modifier.height(Space.s))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1856,56 +1796,147 @@ private fun UpNextCard(
             }
         }
         Spacer(Modifier.height(Space.m))
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(Radii.control)
-                .background(AppColors.Indigo)
-                .clickable { onCall() },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            Icon(Icons.Default.Call, contentDescription = null, tint = AppColors.OnIndigo,
-                modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(7.dp))
-            Text("Call $firstName", style = AppType.label, color = AppColors.OnIndigo, maxLines = 1)
-        }
-        if (queueSize > 1) {
-            Spacer(Modifier.height(Space.s))
-            Text(
-                "Or call all $queueSize, one after another",
-                style = AppType.meta, color = AppColors.Indigo,
-                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+        // ONE hero, two buttons: ring this person, or hand the whole Call now
+        // list to the auto-dialler. "Call all N" is the only place the Call
+        // now count appears while this card is on screen.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+            Row(
+                Modifier.weight(1f).heightIn(min = 52.dp).clip(Radii.control)
+                    .background(AppColors.Indigo)
+                    .clickable { onCall() },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(Icons.Default.Call, contentDescription = null, tint = AppColors.OnIndigo,
+                    modifier = Modifier.size(19.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Call $firstName", style = AppType.label, color = AppColors.OnIndigo, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+            if (queueSize > 1) Column(
+                Modifier.weight(1f).heightIn(min = 52.dp).clip(Radii.control)
+                    .background(AppColors.IndigoSoft)
                     .clickable { onCallAll() }
-                    .padding(vertical = 5.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            )
+                    .padding(horizontal = Space.s, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text("Call all $queueSize", style = AppType.label, color = AppColors.Indigo, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text("one after another", style = AppType.tag, color = AppColors.Indigo.copy(alpha = 0.75f), maxLines = 1)
+            }
         }
     }
 }
 
-/** One counter on the deck — a number that is also a one-tap filter.
- *  Due, when it is not zero, stays in the warning colour so an empty-looking
- *  card cannot hide work that is waiting. */
+/**
+ * THE ONE FILTER ROW. Every count on the Leads page, once.
+ *
+ * This replaces two things that said the same numbers: the deck's Due / Hot /
+ * New / Revive counters and the six-tile work grid under the search box. "Due"
+ * on the deck and "Call now" in the grid were the same list (callNowContacts),
+ * and the Next call card said it a third time ("362 waiting") — the founder's
+ * screenshot showed 362 three times before a single lead.
+ *
+ * Now there is one row of compact chips, wrapped so none of them hides off the
+ * right edge (the reason the old chip row was replaced by the grid). Count
+ * first in the chip's colour, label after. Call now leaves out its count while
+ * the Next call card is showing, because "Call all N" on that card is the
+ * same number. When the card is not there (searching, selecting, or nothing
+ * due) the chip shows it. A failed read shows "—", never 0. A 0 chip is shown
+ * faded and is not tappable, exactly like the grid tiles were.
+ */
 @Composable
-private fun DeckStat(value: String, label: String, highlight: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(
-        modifier.heightIn(min = 52.dp).clip(Radii.control)
-            .background(if (highlight) AppColors.WarningSoft else AppColors.SurfaceMuted)
-            .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
+@OptIn(ExperimentalLayoutApi::class)
+private fun LeadSegments(
+    actionCounts: List<Pair<ActionChip, Int>>,
+    unknown: Boolean,
+    hideCallNowCount: Boolean,
+    selectedAct: String?,
+    onPickAct: (String?) -> Unit,
+    newCount: Int,
+    newSelected: Boolean,
+    onNew: () -> Unit,
+    hotCount: Int,
+    hotSelected: Boolean,
+    onHot: () -> Unit,
+    reviveCount: Int,
+    onRevive: () -> Unit,
+) {
+    val byCode = actionCounts.associate { (a, n) -> a.code to (a to n) }
+    @Composable
+    fun act(code: String) {
+        val (a, n) = byCode[code] ?: return
+        val on = selectedAct == code
+        SegChip(
+            label = a.label,
+            count = when {
+                unknown -> "—"
+                code == "call_now" && hideCallNowCount -> null
+                else -> n.toString()
+            },
+            empty = !unknown && n == 0,
+            selected = on,
+            accent = if (code == "call_now" || code == "overdue") a.color else AppColors.Indigo,
+            onClick = { onPickAct(if (on) null else code) },
+        )
+    }
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            value, style = AppType.rowTitle,
-            color = if (highlight) AppColors.Warning else AppColors.TextPrimary,
-            maxLines = 1,
-        )
-        Text(
-            label, style = AppType.tag,
-            color = if (highlight) AppColors.Warning else AppColors.TextSecondary,
-            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-        )
+        // Work first (what to do now), then the two browsing filters a rep
+        // reaches for most, then the rest of the plan.
+        act("call_now")
+        act("overdue")
+        SegChip("New", newCount.toString(), empty = newCount == 0, selected = newSelected, accent = AppColors.Indigo, onClick = onNew)
+        SegChip("Hot", hotCount.toString(), empty = hotCount == 0, selected = hotSelected, accent = AppColors.Danger, onClick = onHot)
+        act("due_today")
+        act("no_next_step")
+        act("scheduled")
+        act("awaiting_visit")
+        if (reviveCount > 0) SegChip("Revive", reviveCount.toString(), empty = false, selected = false, accent = AppColors.Indigo, onClick = onRevive)
+    }
+}
+
+/** One compact filter chip: count (or nothing) then label. iOS-style soft fill. */
+@Composable
+private fun SegChip(
+    label: String,
+    count: String?,
+    empty: Boolean,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    val faded = empty && !selected
+    val bg = when {
+        selected -> accent
+        faded -> AppColors.Surface.copy(alpha = 0.55f)
+        else -> AppColors.Surface
+    }
+    val labelColor = when {
+        selected -> AppColors.OnIndigo
+        faded -> AppColors.TextTertiary
+        else -> AppColors.TextPrimary
+    }
+    val countColor = when {
+        selected -> AppColors.OnIndigo
+        faded -> AppColors.TextTertiary
+        else -> accent
+    }
+    Row(
+        Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(10.dp)).background(bg)
+            .then(if (faded) Modifier else Modifier.clickable { onClick() })
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (count != null) {
+            Text(count, style = AppType.label, color = countColor, maxLines = 1)
+            Spacer(Modifier.width(5.dp))
+        }
+        Text(label, style = AppType.metaStrong, color = labelColor, maxLines = 1)
     }
 }
 
@@ -2257,6 +2288,38 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
 
     fun exitSelect() { selectMode = false; selectedIds = emptySet() }
 
+    // Four full sweeps of the lead list, one of them parsing a rupee string per
+    // lead. None of it changes unless the leads themselves do, so it must not
+    // re-run on every keystroke in the search box or every tap of a filter.
+    val deck = remember(app.leads, app.workByLead, app.workStatesError, app.followUpList, app.leadStages, nowMs / 60_000) {
+        // Same function Home's badge uses — see dueNowCount().
+        val dueNow = vm.dueNowCount()
+        val hotCount = app.leads.count { it.temperature == "hot" && !isFinished(app.leadStages, it.stage) }
+        val pipelineValue = app.leads
+            .filter { it.status !in DEAD_STATUSES }
+            .sumOf { parseBudgetRupees(it.budget) }
+        // RAG v13 candidates: said-no + tried-and-gone-cold. Never DNC.
+        val reviveCount = app.leads.count {
+            it.status in SAID_NO ||
+                (it.temperature == "cold" && it.attempts >= 2 && it.status !in BOOKED_OR_DNC)
+        }
+        DeckStats(dueNow, hotCount, reviveCount, pipelineValue)
+    }
+    // Same rule as the New stage filter. A summary that disagrees with the list
+    // it opens has already caused one "12 vs 8" bug report.
+    val newCount = remember(app.leads) { app.leads.count { it.stage == "new" } }
+    // Counted ONCE per lead-list change, not six times per frame.
+    val actionCounts = remember(app.leads, app.workByLead) {
+        val callNow = callNowContacts(app.leads, app.workByLead).size
+        ACTIONS.map { a ->
+            val n = if (a.code == "call_now") callNow else app.leads.count { app.actionOf(it) == a.code }
+            a to n
+        }
+    }
+    // The Next call card is on screen, and it carries the Call now count on
+    // its "Call all N" button. The Call now filter then does not repeat it.
+    val heroShown = !selectMode && query.isBlank() && queue.isNotEmpty()
+
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Column(Modifier.fillMaxSize()) {
         Refreshable(onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) }, modifier = Modifier.weight(1f)) {
@@ -2281,58 +2344,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     // themselves do, so it must not re-run on every keystroke in
                     // the search box or every tap of a filter chip — which is
                     // what it did, on the main thread, before this remember.
-                    val deck = remember(app.leads, app.workByLead, app.workStatesError, app.followUpList, nowMs / 60_000) {
-                        // Exactly the Follow-up tab's "Call now" rule, because
-                        // that is where this counter now sends the rep. It used
-                        // to count rows in the follow_ups table instead, which
-                        // included callbacks on closed and booked leads — the
-                        // same "summary disagrees with the tab it links to"
-                        // problem the New count below already had to be fixed for.
-                        // Work only — overdue plus due-now. Never the whole tab: a
-                        // count that includes next week's plan cannot go down however
-                        // hard a rep works, and a number that never moves is a number
-                        // nobody reads.
-                        // Same function Home's badge uses — see dueNowCount().
-                        // Two copies of this rule is how the two screens came to
-                        // disagree about the same question.
-                        val dueNow = vm.dueNowCount()
-                        val hotCount = app.leads.count { it.temperature == "hot" && !isFinished(app.leadStages, it.stage) }
-                        val pipelineValue = app.leads
-                            .filter { it.status !in DEAD_STATUSES }
-                            .sumOf { parseBudgetRupees(it.budget) }
-                        // RAG v13 candidates: said-no + tried-and-gone-cold. Never DNC.
-                        val reviveCount = app.leads.count {
-                            it.status in SAID_NO ||
-                                (it.temperature == "cold" && it.attempts >= 2 && it.status !in BOOKED_OR_DNC)
-                        }
-                        DeckStats(dueNow, hotCount, reviveCount, pipelineValue)
-                    }
                     LeadsDeck(
                         app = app,
-                        dueNow = deck.dueNow,
-                        dueUnknown = dueUnknown,
-                        hotCount = deck.hotCount,
-                        // Same rule as the New tab below. These two used to disagree
-                        // (the card counted leads the tab had already drained into
-                        // Today), so the summary said 12 New and the tab showed 8.
-                        // Must stay character-for-character the same rule as the New
-                        // tab below — a summary card that disagrees with the tab it
-                        // links to has already caused one "12 vs 8" bug report.
-                        newCount = app.leads.count { it.stage == "new" },
                         pipelineValue = deck.pipelineValue,
                         scoring = app.aiScoringLeads,
-                        reviveCount = deck.reviveCount,
                         onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
                         onScore = { vm.scoreLeads() },
                         onSelect = { selectMode = true },
                         onToday = { todayOpen = true; vm.loadTodayActivities() },
-                        // "Due now" lands on Follow-up, which opens on Call now
-                        // — the list this number counts. It used to drop the rep
-                        // into New, where none of these leads live any more.
-                        onDueNow = { bucket = "act:call_now"; stageFilter = null; quick = null; tempFilter = null },
-                        onHot = { tempFilter = if (tempFilter == "hot") null else "hot" },
-                        onNew = { bucket = "new"; stageFilter = null; quick = null; tempFilter = null },
-                        onRevive = { reviveOpen = true; vm.loadSecondChance() },
                     )
                     if (dueUnknown) {
                         Spacer(Modifier.height(8.dp))
@@ -2436,26 +2455,28 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
             // every stage is in the filter sheet with the other browsing
             // filters, and the sheet was already showing them.
             item {
-                // Counted ONCE per lead-list change, not six times per frame.
-                // This was six passes over three hundred leads on every
-                // recomposition, and this screen recomposes on every scroll.
-                val actionCounts = remember(app.leads, app.workByLead) {
-                    val callNow = callNowContacts(app.leads, app.workByLead).size
-                    ACTIONS.map { a ->
-                        val n = if (a.code == "call_now") callNow else app.leads.count { app.actionOf(it) == a.code }
-                        a to n
-                    }
-                }
-                WorkGrid(
-                    counts = actionCounts,
+                LeadSegments(
+                    actionCounts = actionCounts,
                     unknown = dueUnknown,
-                    selectedCode = bucket.removePrefix("act:").takeIf {
+                    hideCallNowCount = heroShown,
+                    selectedAct = bucket.removePrefix("act:").takeIf {
                         bucket.startsWith("act:") && stageFilter == null && quick == null
                     },
-                    onPick = { code ->
+                    onPickAct = { code ->
                         bucket = if (code == null) "all" else "act:$code"
                         stageFilter = null; quick = null
                     },
+                    newCount = newCount,
+                    newSelected = (bucket == "new" || bucket == "stage:new") && stageFilter == null && quick == null,
+                    onNew = {
+                        val on = (bucket == "new" || bucket == "stage:new") && stageFilter == null && quick == null
+                        bucket = if (on) "all" else "new"; stageFilter = null; quick = null
+                    },
+                    hotCount = deck.hotCount,
+                    hotSelected = tempFilter == "hot",
+                    onHot = { tempFilter = if (tempFilter == "hot") null else "hot" },
+                    reviveCount = deck.reviveCount,
+                    onRevive = { reviveOpen = true; vm.loadSecondChance() },
                 )
             }
             // ONE line explaining whatever is selected.
@@ -2470,6 +2491,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit) {
                     bucket.startsWith("act:") ->
                         ACTIONS.firstOrNull { it.code == bucket.removePrefix("act:") }?.hint
                     bucket.startsWith("stage:") -> STAGE_HINTS[bucket.removePrefix("stage:")]
+                    bucket == "new" -> STAGE_HINTS["new"]
                     else -> "Every lead assigned to you, whatever stage it is at."
                 }
                 if (!hint.isNullOrBlank()) {
