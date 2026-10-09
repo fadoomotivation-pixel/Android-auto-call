@@ -262,7 +262,7 @@ insert into auth.users (instance_id, id, aud, role, email, encrypted_password, e
                         confirmation_token, recovery_token, email_change_token_new, email_change)
 values
   ('00000000-0000-0000-0000-000000000000', 'de000000-0000-4000-8000-0000000000a1', 'authenticated', 'authenticated',
-   'demo.telecaller@callproai.in', '$2a$10$5XwKeXn7dGIYKwd9KaZdf.ExhN0XY1GPVoBqviCXk3uf25RkHgZ3y', now(),
+   'demo.telecaller@callproai.in', '$2a$10$eCjRrNx2Y1iuL.RRrwlfpu2b2sxidEChYw8o89sRYWIN2KqLFP.Tm', now(),
    '{"provider":"email","providers":["email"]}', '{"full_name":"Neha Sharma (Demo)","role":"salesperson"}',
    now(), now(), '', '', '', ''),
   ('00000000-0000-0000-0000-000000000000', 'de000000-0000-4000-8000-0000000000a2', 'authenticated', 'authenticated',
