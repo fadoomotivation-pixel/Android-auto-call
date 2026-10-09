@@ -354,6 +354,57 @@ data class DayReviewCall(val lead: String?, val rating: Int, val why: String?)
 @Serializable
 data class RatingRow(val rating: Int? = null)
 
+/**
+ * One call the AI coach scored (coach_feedback, written by rep-coach for calls
+ * of 30 s or more with a transcript). Read-only on the phone; RLS returns only
+ * the rep's own rows. [call] is the embedded call_logs row, for the lead.
+ */
+@Serializable
+data class CoachFeedbackRow(
+    @SerialName("call_id") val callId: String,
+    val good: String? = null,
+    val improve: String? = null,
+    val rating: Int? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("call_logs") val call: CoachCallRef? = null,
+)
+
+/** The newest call summary for a lead (call_logs.summary, from the recording). */
+@Serializable
+data class CallSummaryRow(
+    @SerialName("contact_id") val contactId: String? = null,
+    val summary: String? = null,
+    @SerialName("started_at") val startedAt: String? = null,
+)
+
+/** The newest captured WhatsApp message for a lead (wa_observed_messages, Baileys, read-only). */
+@Serializable
+data class WaLatestRow(
+    @SerialName("contact_id") val contactId: String? = null,
+    val direction: String? = null,
+    val body: String? = null,
+    @SerialName("has_media") val hasMedia: Boolean? = null,
+    @SerialName("media_kind") val mediaKind: String? = null,
+    @SerialName("sent_at") val sentAt: String? = null,
+)
+
+@Serializable
+data class CoachCallRef(@SerialName("contact_id") val contactId: String? = null)
+
+/**
+ * A playbook entry from the ONE company brain (knowledge_chunks): the
+ * company's own objection → winning-reply rows plus the platform guide. Read
+ * straight from the table (RLS: own company + global), never copied anywhere.
+ */
+@Serializable
+data class PlaybookChunk(
+    val id: String,
+    val title: String? = null,
+    val content: String = "",
+    @SerialName("source_kind") val sourceKind: String? = null,
+    @SerialName("company_id") val companyId: String? = null,
+)
+
 /** One WhatsApp message (either direction) shown in the in-app chat thread. */
 @Serializable
 data class WhatsAppMessage(

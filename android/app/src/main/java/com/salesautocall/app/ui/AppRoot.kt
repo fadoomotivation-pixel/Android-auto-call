@@ -727,6 +727,9 @@ private fun MainShell(vm: MainViewModel) {
                     // it follows the rep wherever they go next — which is the
                     // whole point: the old popup caught them because it blocked
                     // the screen, and this has to catch them without doing that.
+                    // Coaching time: slides up at the first break after 5+
+                    // calls; hides the moment a call starts. Never blocks.
+                    CoachMomentBar(vm, state)
                     PendingUpdateBar(vm)
                     // The way back out of a mis-tap. Here, next to the nudge
                     // bar, because the sheet that recorded the outcome has

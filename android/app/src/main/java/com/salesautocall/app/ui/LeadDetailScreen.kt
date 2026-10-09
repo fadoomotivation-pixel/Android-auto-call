@@ -238,6 +238,8 @@ fun LeadDetailScreen(vm: MainViewModel) {
     val clipboard = LocalClipboardManager.current
 
     BackHandler { vm.closeLeadDetail() }
+    // The coach's playbook lines (read-only; throttled inside).
+    LaunchedEffect(Unit) { vm.loadCoachFeed() }
     LaunchedEffect(Unit) { vm.loadFollowUps() }
 
     var note by remember(contact.id) { mutableStateOf(contact.notes ?: "") }
@@ -522,11 +524,39 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 // ---- Call Coach — honest rating + guidance from THIS lead's last
                 // real recording. The coach "observes" the call and rates it; a
                 // good call only gets motivation, no forced suggestion. ----
+                // Coach: did the site visit happen? Only when the server's
+                // pending-visit list has this lead. Same writes as the Home card.
+                val visitRow = app.pendingVisits.rows.firstOrNull { it.contactId == contact.id }
+                if (visitRow != null && contact.id != null && contact.siteVisitArrivedAt == null) {
+                    item(key = "coach-visit") {
+                        val cid = contact.id
+                        val phone = visitRow.phone.ifBlank { contact.phone }
+                        val nm = visitRow.name.ifBlank { prettyName(contact.name) ?: phone }
+                        Column(Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface)) {
+                            Row(Modifier.padding(start = Space.l, top = 12.dp, end = Space.l), verticalAlignment = Alignment.CenterVertically) {
+                                CoachOrb(size = 32.dp, active = true, face = true)
+                                Spacer(Modifier.width(10.dp))
+                                Text("Coach", style = AppType.headline, color = AppColors.TextPrimary)
+                            }
+                            VisitCheckBlock(
+                                CoachVisit(cid, phone, nm, contact.siteVisitProject,
+                                    if (visitRow.daysWaiting <= 0) "Today" else "${visitRow.daysWaiting}d ago"),
+                                more = 0,
+                                onYes = { vm.answerVisitHappened(cid, phone, nm, true) },
+                                onNo = { vm.answerVisitHappened(cid, phone, nm, false) },
+                                onMoved = { ms -> vm.coachVisitRescheduled(cid, phone, nm, ms) },
+                                onOpen = null,
+                            )
+                        }
+                    }
+                }
                 if (app.leadCoachLoading || app.leadCoach != null) {
                     item {
                         val coach = app.leadCoach
                         SectionCard {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                CoachOrb(size = 28.dp, active = coach == null, face = true)
+                                Spacer(Modifier.width(8.dp))
                                 Text("HOW THAT CALL WENT", style = AppType.sectionLabel, color = AppColors.TextSecondary,
                                     modifier = Modifier.weight(1f))
                                 coach?.rating?.let { r ->
@@ -556,6 +586,13 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                     Text("🔥 Great call. Keep going like this.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold, color = IndigoL)
+                                }
+                                // One exact line from the company playbook, matched to
+                                // this lead's objection or the coach's "improve" note.
+                                val reply = replyForCall(coach.improve, contact.id?.let { app.memoryByLead[it] }, app.coachPlaybook)
+                                if (reply != null) {
+                                    Spacer(Modifier.height(10.dp))
+                                    SayThisNext(reply, null)
                                 }
                             }
                         }

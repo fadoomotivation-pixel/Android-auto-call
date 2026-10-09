@@ -1066,6 +1066,14 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     ) {
         // Greeting hero
         item { GreetingCard(app, firstName, onOpenAttendance = { onNavigate("attendance") }) }
+        // Morning greeting from the coach: first open of the day before 1 PM,
+        // closed with one tap. See CoachMoments.kt.
+        if (app.morningVisible) {
+            item(key = "coach-morning") {
+                val morningById = remember(app.leads) { app.leads.associateBy { it.id } }
+                MorningGreetingCard(vm, app, morningById)
+            }
+        }
 
         app.workStatesError?.let { msg ->
             item {
@@ -1104,6 +1112,29 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                     }
                 }
             }
+        }
+
+        // THE COACH. Collapsed; opens on a tap, or by itself only when the
+        // rep is idle (see CoachCard.kt). The visit list is the same one
+        // Today's Plan asks about below: the server's pending-visit view when
+        // it loaded, the local "visit day gone" guess when it did not.
+        item {
+            val byId = remember(app.leads) { app.leads.associateBy { it.id } }
+            val coachVisits = if (visitServerReady || showServerVisits) {
+                visitBoard.rows.mapNotNull { v ->
+                    val lead = byId[v.contactId] ?: return@mapNotNull null
+                    val phone = v.phone.ifBlank { lead.phone }
+                    if (lead.siteVisitArrivedAt != null || phone.isBlank()) return@mapNotNull null
+                    CoachVisit(v.contactId, phone, v.name.ifBlank { prettyName(lead.name) ?: phone },
+                        lead.siteVisitProject, if (v.daysWaiting <= 0) "Today" else "${v.daysWaiting}d ago")
+                }
+            } else {
+                visitsUnconfirmed.mapNotNull { (c, _) ->
+                    val id = c.id ?: return@mapNotNull null
+                    CoachVisit(id, c.phone, prettyName(c.name) ?: c.phone, c.siteVisitProject, dayLabel(c.siteVisitAt))
+                }
+            }
+            HomeCoachCard(vm, app, coachVisits, byId)
         }
 
         // "No lead left behind" — interested leads without a reminder, fixed in one tap.
@@ -4566,23 +4597,23 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // so a rep opening this screen saw two callbacks and a lot of decor.
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Follow Ups", style = AppType.display, color = AppColors.TextPrimary,
+                Text("Follow Ups", style = AppType.largeTitle, color = AppColors.TextPrimary,
                     modifier = Modifier.weight(1f), maxLines = 1)
                 IconButton(
                     onClick = { todayOpen = true; vm.loadTodayActivities() },
                     modifier = Modifier.size(44.dp),
                 ) {
                     Icon(Icons.Default.History, contentDescription = "What I did today",
-                        tint = AppColors.TextSecondary, modifier = Modifier.size(22.dp))
+                        tint = IosColors.Blue, modifier = Modifier.size(22.dp))
                 }
                 IconButton(onClick = { vm.loadFollowUps(force = true) }, modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Outlined.Refresh, contentDescription = "Refresh",
-                        tint = AppColors.TextSecondary, modifier = Modifier.size(22.dp))
+                        tint = IosColors.Blue, modifier = Modifier.size(22.dp))
                 }
                 TextButton(
                     onClick = onBack,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                ) { Text("Back", fontSize = 13.sp) }
+                ) { Text("Back", style = AppType.callout, color = IosColors.Blue) }
             }
         }
         // Above the chips, because it overrides them.

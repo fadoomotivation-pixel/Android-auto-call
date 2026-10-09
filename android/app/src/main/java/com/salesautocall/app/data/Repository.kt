@@ -929,6 +929,98 @@ object Repository {
     }
 
     /**
+     * The rep's recent scored calls, newest first, for the Coach card.
+     *
+     * Read-only, straight from coach_feedback (RLS: own rows). The embedded
+     * call_logs row gives the lead; if that embed is ever refused the rows are
+     * re-read without it rather than failing the whole card.
+     */
+    suspend fun recentCoachFeedback(limit: Int = 20): List<CoachFeedbackRow> {
+        val uid = currentUserId() ?: return emptyList()
+        return runCatching {
+            client.from("coach_feedback").select(
+                columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                    "call_id, good, improve, rating, created_at, call_logs(contact_id)",
+                ),
+            ) {
+                filter { eq("salesperson_id", uid) }
+                order("created_at", Order.DESCENDING)
+                limit(limit.toLong())
+            }.decodeList<CoachFeedbackRow>()
+        }.getOrElse {
+            client.from("coach_feedback").select(
+                columns = io.github.jan.supabase.postgrest.query.Columns.raw("call_id, good, improve, rating, created_at"),
+            ) {
+                filter { eq("salesperson_id", uid) }
+                order("created_at", Order.DESCENDING)
+                limit(limit.toLong())
+            }.decodeList<CoachFeedbackRow>()
+        }
+    }
+
+    /** Latest call summary per lead, for the morning greeting. Rep's own calls (RLS). */
+    suspend fun latestCallSummaries(contactIds: List<String>): Map<String, CallSummaryRow> {
+        if (contactIds.isEmpty()) return emptyMap()
+        return client.from("call_logs").select(
+            columns = io.github.jan.supabase.postgrest.query.Columns.raw("contact_id, summary, started_at"),
+        ) {
+            filter {
+                isIn("contact_id", contactIds)
+            }
+            order("started_at", Order.DESCENDING)
+            limit(120L)
+        }.decodeList<CallSummaryRow>()
+            .filter { !it.summary.isNullOrBlank() && it.contactId != null }
+            .groupBy { it.contactId!! }
+            .mapValues { it.value.first() }
+    }
+
+    /**
+     * Latest captured WhatsApp message per lead (the Baileys observer's
+     * wa_observed_messages). Only this rep's own rows; deleted ones skipped.
+     */
+    suspend fun latestWhatsApp(contactIds: List<String>): Map<String, WaLatestRow> {
+        val uid = currentUserId() ?: return emptyMap()
+        if (contactIds.isEmpty()) return emptyMap()
+        return client.from("wa_observed_messages").select(
+            columns = io.github.jan.supabase.postgrest.query.Columns.raw("contact_id, direction, body, has_media, media_kind, sent_at"),
+        ) {
+            filter {
+                eq("salesperson_id", uid)
+                isIn("contact_id", contactIds)
+                exact("deleted_at", null)
+            }
+            order("sent_at", Order.DESCENDING)
+            limit(120L)
+        }.decodeList<WaLatestRow>()
+            .filter { it.contactId != null }
+            .groupBy { it.contactId!! }
+            .mapValues { it.value.first() }
+    }
+
+    /**
+     * The company's objection replies from the one shared brain.
+     *
+     * Same table match_knowledge searches; no copy, no second store. Only rows
+     * that ARE objection replies: an "Objection: …" title or an FAQ row. Kept
+     * to the rep's own company plus the global layer even for a super admin,
+     * whose RLS would otherwise hand over every company's playbook.
+     */
+    suspend fun objectionPlaybook(companyId: String?): List<PlaybookChunk> =
+        client.from("knowledge_chunks").select(
+            columns = io.github.jan.supabase.postgrest.query.Columns.raw("id, title, content, source_kind, company_id"),
+        ) {
+            filter {
+                or {
+                    ilike("title", "Objection%")
+                    eq("source_kind", "faq")
+                }
+            }
+            limit(80)
+        }.decodeList<PlaybookChunk>()
+            .filter { it.companyId == null || companyId == null || it.companyId == companyId }
+
+    /**
      * Per-lead call coach: the coach "observes" THIS lead's last real call
      * (>=30s, transcript ready) and returns an honest 1-5 rating + one guidance
      * line, shown on the lead's own page. Same coach_feedback brain as the

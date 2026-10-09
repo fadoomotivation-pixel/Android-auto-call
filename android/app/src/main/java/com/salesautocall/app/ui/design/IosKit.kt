@@ -552,7 +552,12 @@ fun IosLargeTitle(title: String, subtitle: String? = null, modifier: Modifier = 
  * something new to say). No eyes, no mascot — the same restraint as Siri's orb.
  */
 @Composable
-fun CoachOrb(size: androidx.compose.ui.unit.Dp = 44.dp, active: Boolean = false, modifier: Modifier = Modifier) {
+fun CoachOrb(
+    size: androidx.compose.ui.unit.Dp = 44.dp,
+    active: Boolean = false,
+    modifier: Modifier = Modifier,
+    face: Boolean = false,
+) {
     val t = rememberInfiniteTransition(label = "orb")
     val breathe by t.animateFloat(
         0.94f, 1f,
@@ -568,6 +573,21 @@ fun CoachOrb(size: androidx.compose.ui.unit.Dp = 44.dp, active: Boolean = false,
         0f, 360f,
         infiniteRepeatable(tween(12000, easing = androidx.compose.animation.core.LinearEasing), RepeatMode.Restart),
         label = "swirl",
+    )
+    // Eyes blink every few seconds — only drawn when face = true (the
+    // character for the morning greeting and Coaching time).
+    val blink by t.animateFloat(
+        1f, 1f,
+        infiniteRepeatable(
+            androidx.compose.animation.core.keyframes {
+                durationMillis = 4200
+                1f at 0
+                1f at 3880
+                0.08f at 3980
+                1f at 4100
+            },
+        ),
+        label = "blink",
     )
     Canvas(modifier.size(size)) {
         val c = Offset(this.size.width / 2f, this.size.height / 2f)
@@ -604,5 +624,23 @@ fun CoachOrb(size: androidx.compose.ui.unit.Dp = 44.dp, active: Boolean = false,
             ),
             radius = r * 0.45f, center = Offset(c.x - r * 0.38f, c.y - r * 0.42f),
         )
+        if (face) {
+            val ew = r * 0.17f
+            val eh = r * 0.30f * blink
+            for (dx in listOf(-0.30f, 0.30f)) {
+                drawOval(
+                    color = Color.White,
+                    topLeft = Offset(c.x + r * dx - ew / 2f, c.y - r * 0.12f - eh / 2f),
+                    size = androidx.compose.ui.geometry.Size(ew, eh.coerceAtLeast(1f)),
+                )
+            }
+            drawArc(
+                color = Color.White,
+                startAngle = 20f, sweepAngle = 140f, useCenter = false,
+                topLeft = Offset(c.x - r * 0.32f, c.y - r * 0.05f),
+                size = androidx.compose.ui.geometry.Size(r * 0.64f, r * 0.44f),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = r * 0.09f, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+            )
+        }
     }
 }
