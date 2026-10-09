@@ -246,6 +246,39 @@ object AppPrefs {
     fun clearLastCrash(context: Context) =
         prefs(context).edit().remove(KEY_CRASH).apply()
 
+    // ---- The Coach card's own memory. NOT a scheduler: nothing here fires
+    // anything. The card reads these only to decide whether it may expand
+    // itself while the rep is idle on Home, and to keep Learning time to once
+    // a day. ----
+
+    /** When the coach last opened itself (ms). It may do so once every 3 hours. */
+    fun getCoachRevealAt(context: Context): Long = prefs(context).getLong("coach_reveal_at", 0L)
+    fun setCoachRevealAt(context: Context, v: Long) = prefs(context).edit().putLong("coach_reveal_at", v).apply()
+
+    /** The last scored call the rep has already been shown, so a reveal is only ever for something new. */
+    fun getCoachSeenCall(context: Context): String = prefs(context).getString("coach_seen_call", "") ?: ""
+    fun setCoachSeenCall(context: Context, v: String) = prefs(context).edit().putString("coach_seen_call", v).apply()
+
+    /** The day the rep closed Learning time ("Got it"). It stays closed until tomorrow. */
+    fun getLearningDoneDay(context: Context): String = prefs(context).getString("coach_learning_done", "") ?: ""
+    fun setLearningDoneDay(context: Context, v: String) = prefs(context).edit().putString("coach_learning_done", v).apply()
+
+    /** The day Learning time last opened itself. At most once a day. */
+    fun getLearningShownDay(context: Context): String = prefs(context).getString("coach_learning_shown", "") ?: ""
+    fun setLearningShownDay(context: Context, v: String) = prefs(context).edit().putString("coach_learning_shown", v).apply()
+
+    /** The day the morning greeting was shown. Once a day, on the first open. */
+    fun getMorningDay(context: Context): String = prefs(context).getString("coach_morning_day", "") ?: ""
+    fun setMorningDay(context: Context, v: String) = prefs(context).edit().putString("coach_morning_day", v).apply()
+
+    /** Coaching time: today's call count when it last showed, as "yyyy-mm-dd|count". */
+    fun getMomentBase(context: Context): String = prefs(context).getString("coach_moment_base", "") ?: ""
+    fun setMomentBase(context: Context, v: String) = prefs(context).edit().putString("coach_moment_base", v).apply()
+
+    /** When Coaching time last showed or last looked and found nothing scored (ms). */
+    fun getMomentAt(context: Context): Long = prefs(context).getLong("coach_moment_at", 0L)
+    fun setMomentAt(context: Context, v: Long) = prefs(context).edit().putLong("coach_moment_at", v).apply()
+
     private fun prefs(context: Context) =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 }

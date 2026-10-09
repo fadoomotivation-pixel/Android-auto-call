@@ -119,6 +119,7 @@ import com.salesautocall.app.ui.design.AppSearchField
 import com.salesautocall.app.ui.design.InitialsAvatar
 import com.salesautocall.app.ui.design.StatusTag
 import com.salesautocall.app.ui.design.StatusTone
+import com.salesautocall.app.ui.design.*
 
 // ════════════════════════════════════════════════════════════
 //  Design system — colours, helpers, atoms
@@ -585,7 +586,7 @@ private fun StatTile(emoji: String, value: String, label: String, accent: Color,
         modifier
             .clip(Radii.card)
             .background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.card)
+
             .padding(horizontal = Space.l, vertical = Space.m),
     ) {
         Text(value, style = AppType.metric, color = accent, maxLines = 1)
@@ -651,36 +652,9 @@ private fun FilterTab(
     // A dash is not zero. Zero fades the chip; an unknown count stays tappable
     // and must not look like a quiet empty list.
     val empty = countLabel == null && count == 0 && !selected
-    val bg = when {
-        selected -> accent.copy(alpha = 0.14f)
-        empty -> AppColors.SurfaceMuted.copy(alpha = 0.45f)
-        else -> AppColors.Surface
-    }
-    val fg = when {
-        selected -> accent
-        empty -> AppColors.TextTertiary
-        else -> AppColors.TextSecondary
-    }
-    val edge = when {
-        selected -> accent.copy(alpha = 0.45f)
-        else -> AppColors.Border
-    }
-    Row(
-        Modifier.heightIn(min = 40.dp).clip(RoundedCornerShape(12.dp)).background(bg)
-            .border(1.dp, edge, RoundedCornerShape(12.dp))
-            .then(if (empty) Modifier else Modifier.clickable { onClick() })
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, color = fg, fontSize = 13.sp, maxLines = 1,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
-        Spacer(Modifier.width(6.dp))
-        // The count keeps the chip's own colour even when another chip is
-        // selected, so Call now stays red before anyone taps it. A failed
-        // read shows a dash, never a zero.
-        Text(countLabel ?: "$count", fontSize = 13.sp, maxLines = 1, fontWeight = FontWeight.SemiBold,
-            color = if (empty) fg else accent)
-    }
+    // The app's one chip (design/IosKit). A dash is not zero: an unknown count
+    // stays tappable and never reads as a quiet empty list.
+    IosChip(label = label, count = countLabel ?: "$count", selected = selected, empty = empty, accent = accent, onClick = onClick)
 }
 
 @Composable
@@ -938,7 +912,7 @@ private fun PerformanceCard(app: AppState) {
         Modifier.fillMaxWidth()
             .clip(Radii.card)
             .background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.card),
+,
     ) {
         Column(Modifier.padding(Space.l)) {
             Text("TODAY'S PERFORMANCE", style = AppType.sectionLabel, color = AppColors.TextTertiary)
@@ -1092,6 +1066,14 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
     ) {
         // Greeting hero
         item { GreetingCard(app, firstName, onOpenAttendance = { onNavigate("attendance") }) }
+        // Morning greeting from the coach: first open of the day before 1 PM,
+        // closed with one tap. See CoachMoments.kt.
+        if (app.morningVisible) {
+            item(key = "coach-morning") {
+                val morningById = remember(app.leads) { app.leads.associateBy { it.id } }
+                MorningGreetingCard(vm, app, morningById)
+            }
+        }
 
         app.workStatesError?.let { msg ->
             item {
@@ -1109,7 +1091,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 Column(
                     Modifier.fillMaxWidth().clip(Radii.card)
                         .background(AppColors.Surface)
-                        .border(1.dp, AppColors.Border, Radii.card)
+
                         .padding(Space.l),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1130,6 +1112,29 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                     }
                 }
             }
+        }
+
+        // THE COACH. Collapsed; opens on a tap, or by itself only when the
+        // rep is idle (see CoachCard.kt). The visit list is the same one
+        // Today's Plan asks about below: the server's pending-visit view when
+        // it loaded, the local "visit day gone" guess when it did not.
+        item {
+            val byId = remember(app.leads) { app.leads.associateBy { it.id } }
+            val coachVisits = if (visitServerReady || showServerVisits) {
+                visitBoard.rows.mapNotNull { v ->
+                    val lead = byId[v.contactId] ?: return@mapNotNull null
+                    val phone = v.phone.ifBlank { lead.phone }
+                    if (lead.siteVisitArrivedAt != null || phone.isBlank()) return@mapNotNull null
+                    CoachVisit(v.contactId, phone, v.name.ifBlank { prettyName(lead.name) ?: phone },
+                        lead.siteVisitProject, if (v.daysWaiting <= 0) "Today" else "${v.daysWaiting}d ago")
+                }
+            } else {
+                visitsUnconfirmed.mapNotNull { (c, _) ->
+                    val id = c.id ?: return@mapNotNull null
+                    CoachVisit(id, c.phone, prettyName(c.name) ?: c.phone, c.siteVisitProject, dayLabel(c.siteVisitAt))
+                }
+            }
+            HomeCoachCard(vm, app, coachVisits, byId)
         }
 
         // "No lead left behind" — interested leads without a reminder, fixed in one tap.
@@ -1170,7 +1175,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 Column(
                     Modifier.fillMaxWidth().clip(Radii.card)
                         .background(AppColors.Surface)
-                        .border(1.dp, AppColors.Border, Radii.card)
+
                         .padding(Space.l),
                 ) {
                     Column {
@@ -1303,7 +1308,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
             Column(
                 Modifier.fillMaxWidth().clip(Radii.card)
                     .background(AppColors.Surface)
-                    .border(1.dp, AppColors.Border, Radii.card)
+
                     .padding(Space.l),
             ) {
                 Column {
@@ -1393,7 +1398,7 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
     Column(
         Modifier.fillMaxWidth().clip(Radii.card)
             .background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.card),
+,
     ) {
         Box(Modifier.fillMaxWidth().height(3.dp).background(action))
         Column(Modifier.padding(Space.l)) {
@@ -1660,7 +1665,7 @@ private fun LeadsDeck(
     Column(
         Modifier.fillMaxWidth().clip(Radii.card)
             .background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.card),
+,
     ) {
         Box(Modifier.fillMaxWidth().height(3.dp).background(brand))
         Column(Modifier.padding(horizontal = Space.l, vertical = Space.m)) {
@@ -1676,37 +1681,30 @@ private fun LeadsDeck(
                 }
                 Box(
                     Modifier.size(40.dp).clip(CircleShape).background(AppColors.SurfaceMuted)
-                        .clickable { onRefresh() },
+                        .iosPress(scaleTo = 0.92f) { onRefresh() },
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Outlined.Refresh, contentDescription = "Refresh", tint = AppColors.TextSecondary, modifier = Modifier.size(18.dp)) }
                 Spacer(Modifier.width(8.dp))
                 Box {
                     Box(
                         Modifier.size(40.dp).clip(CircleShape).background(AppColors.SurfaceMuted)
-                            .clickable { menuOpen = true },
+                            .iosPress(scaleTo = 0.92f) { menuOpen = true },
                         contentAlignment = Alignment.Center,
                     ) {
                         if (scoring) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = AppColors.Indigo)
                         else Icon(Icons.Default.MoreVert, contentDescription = "More", tint = AppColors.TextSecondary, modifier = Modifier.size(18.dp))
                     }
-                    androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text(if (scoring) "Scoring…" else "AI Score leads") },
-                            leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
-                            onClick = { menuOpen = false; if (!scoring) onScore() },
-                        )
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Select leads") },
-                            leadingIcon = { Icon(Icons.Default.Checklist, contentDescription = null) },
-                            onClick = { menuOpen = false; onSelect() },
-                        )
-                        // The rep's own day, on the screen where they spend it.
-                        // In the menu rather than on the deck because it is a
-                        // thing you go and check, not a number you work from.
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("What I did today") },
-                            leadingIcon = { Icon(Icons.Default.History, contentDescription = null) },
-                            onClick = { menuOpen = false; onToday() },
+                    // iOS action sheet instead of Material's (purple) dropdown.
+                    // Same three actions, same order.
+                    if (menuOpen) {
+                        IosActionSheet(
+                            onDismiss = { menuOpen = false },
+                            actions = listOf(
+                                SheetAction(if (scoring) "Scoring…" else "AI Score leads", enabled = !scoring) { onScore() },
+                                SheetAction("Select leads") { onSelect() },
+                                // The rep's own day, on the screen where they spend it.
+                                SheetAction("What I did today") { onToday() },
+                            ),
                         )
                     }
                 }
@@ -1910,34 +1908,9 @@ private fun SegChip(
     accent: Color,
     onClick: () -> Unit,
 ) {
-    val faded = empty && !selected
-    val bg = when {
-        selected -> accent
-        faded -> AppColors.Surface.copy(alpha = 0.55f)
-        else -> AppColors.Surface
-    }
-    val labelColor = when {
-        selected -> AppColors.OnIndigo
-        faded -> AppColors.TextTertiary
-        else -> AppColors.TextPrimary
-    }
-    val countColor = when {
-        selected -> AppColors.OnIndigo
-        faded -> AppColors.TextTertiary
-        else -> accent
-    }
-    Row(
-        Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(10.dp)).background(bg)
-            .then(if (faded) Modifier else Modifier.clickable { onClick() })
-            .padding(horizontal = 11.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (count != null) {
-            Text(count, style = AppType.label, color = countColor, maxLines = 1)
-            Spacer(Modifier.width(5.dp))
-        }
-        Text(label, style = AppType.metaStrong, color = labelColor, maxLines = 1)
-    }
+    // The app's one chip (design/IosKit). Same colours and rules as before:
+    // solid when selected, count in the accent, a 0 chip faded and inert.
+    IosChip(label = label, count = count, selected = selected, empty = empty, accent = accent, onClick = onClick)
 }
 
 // FollowUpSection and FollowUpSubHead are gone with the in-page Follow-up
@@ -4624,23 +4597,23 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // so a rep opening this screen saw two callbacks and a lot of decor.
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Follow Ups", style = AppType.display, color = AppColors.TextPrimary,
+                Text("Follow Ups", style = AppType.largeTitle, color = AppColors.TextPrimary,
                     modifier = Modifier.weight(1f), maxLines = 1)
                 IconButton(
                     onClick = { todayOpen = true; vm.loadTodayActivities() },
                     modifier = Modifier.size(44.dp),
                 ) {
                     Icon(Icons.Default.History, contentDescription = "What I did today",
-                        tint = AppColors.TextSecondary, modifier = Modifier.size(22.dp))
+                        tint = IosColors.Blue, modifier = Modifier.size(22.dp))
                 }
                 IconButton(onClick = { vm.loadFollowUps(force = true) }, modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Outlined.Refresh, contentDescription = "Refresh",
-                        tint = AppColors.TextSecondary, modifier = Modifier.size(22.dp))
+                        tint = IosColors.Blue, modifier = Modifier.size(22.dp))
                 }
                 TextButton(
                     onClick = onBack,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                ) { Text("Back", fontSize = 13.sp) }
+                ) { Text("Back", style = AppType.callout, color = IosColors.Blue) }
             }
         }
         // Above the chips, because it overrides them.
@@ -4694,7 +4667,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 Column(
                     Modifier.fillMaxWidth().clip(Radii.card)
                         .background(AppColors.Surface)
-                        .border(1.dp, AppColors.Border, Radii.card)
+
                         .padding(Space.l),
                 ) {
                     Text("Visits waiting on an outcome", style = AppType.rowTitle, color = AppColors.TextPrimary)
@@ -5034,7 +5007,7 @@ private fun FollowUpCard(
     Column(
         Modifier.fillMaxWidth().clip(Radii.card)
             .background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.card)
+
             // TAP THE CARD, OPEN THE LEAD.
             //
             // It did nothing before. Everything a rep might want before ringing

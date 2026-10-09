@@ -138,12 +138,12 @@ fun HairLine(inset: Boolean = true) {
         Modifier
             .fillMaxWidth()
             .padding(start = if (inset) Space.gutter else 0.dp)
-            .height(1.dp)
-            .background(AppColors.Border),
+            .height(0.5.dp)
+            .background(AppColors.Separator),
     )
 }
 
-/** Grouped white container with a hairline outline — used sparingly. */
+/** Grouped white container. No outline: white on the grouped grey is the iOS card. */
 @Composable
 fun AppSurface(
     modifier: Modifier = Modifier,
@@ -155,8 +155,7 @@ fun AppSurface(
         .fillMaxWidth()
         .clip(Radii.card)
         .background(AppColors.Surface)
-        .border(1.dp, AppColors.Border, Radii.card)
-    Box((if (onClick != null) base.clickable { onClick() } else base).padding(padding)) {
+    Box((if (onClick != null) base.iosPress(scaleTo = 0.985f) { onClick() } else base).padding(padding)) {
         content()
     }
 }
@@ -223,7 +222,7 @@ fun PrimaryButton(
             .heightIn(min = Space.touch)
             .clip(Radii.control)
             .background(if (enabled) AppColors.Indigo else AppColors.SurfaceMuted)
-            .clickable(enabled = enabled) { onClick() }
+            .iosPress(enabled = enabled) { onClick() }
             .padding(horizontal = Space.l),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -249,9 +248,9 @@ fun SecondaryButton(
         modifier
             .heightIn(min = Space.touch)
             .clip(Radii.control)
-            .background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.control)
-            .clickable(enabled = enabled) { onClick() }
+            // iOS "gray" button: a quiet fill, no outline.
+            .background(IosColors.Fill)
+            .iosPress(enabled = enabled) { onClick() }
             .padding(horizontal = Space.l),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -298,7 +297,7 @@ fun RoundIconButton(
             .size(size.dp)
             .clip(CircleShape)
             .background(background)
-            .clickable { onClick() },
+            .iosPress(scaleTo = 0.92f) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription, tint = tint, modifier = Modifier.size((size * 0.45f).dp))
@@ -393,29 +392,13 @@ fun ScrollableTabs(
         horizontalArrangement = Arrangement.spacedBy(Space.s),
     ) {
         tabs.forEach { tab ->
-            val active = tab == selected
-            Row(
-                Modifier
-                    .clip(Radii.tag)
-                    .background(if (active) AppColors.TextPrimary else AppColors.SurfaceMuted)
-                    .clickable { onSelect(tab) }
-                    .padding(horizontal = Space.m, vertical = Space.s),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    tab,
-                    style = AppType.label,
-                    color = if (active) AppColors.Surface else AppColors.TextSecondary,
-                )
-                counts[tab]?.takeIf { it > 0 }?.let {
-                    Spacer(Modifier.width(Space.xs))
-                    Text(
-                        it.toString(),
-                        style = AppType.tag,
-                        color = if (active) AppColors.Surface.copy(alpha = 0.75f) else AppColors.TextTertiary,
-                    )
-                }
-            }
+            IosChip(
+                label = tab,
+                count = counts[tab]?.takeIf { it > 0 }?.toString(),
+                selected = tab == selected,
+                accent = AppColors.TextPrimary,
+                onClick = { onSelect(tab) },
+            )
         }
     }
 }
@@ -428,33 +411,8 @@ fun SegmentedTabs(
     modifier: Modifier = Modifier,
     onSelect: (Int) -> Unit,
 ) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(Radii.control)
-            .background(AppColors.SurfaceMuted)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        options.forEachIndexed { index, option ->
-            val active = index == selectedIndex
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(Radii.control)
-                    .background(if (active) AppColors.Surface else Color.Transparent)
-                    .clickable { onSelect(index) }
-                    .padding(vertical = Space.s + Space.xxs),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    option,
-                    style = AppType.label,
-                    color = if (active) AppColors.TextPrimary else AppColors.TextSecondary,
-                )
-            }
-        }
-    }
+    // The one segmented control, with the sliding thumb. See IosKit.
+    IosSegmented(options, selectedIndex, modifier, onSelect)
 }
 
 // ── Metrics ──────────────────────────────────────────────────────

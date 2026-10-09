@@ -88,6 +88,25 @@ data class AppState(
     // right up front on Home. Null until at least one call is rated.
     val callingScore: Double? = null,
     val callingScoreCount: Int = 0,
+    // ---- The Coach card (Home + Lead detail). Read-only inputs. ----
+    /** The rep's recent scored calls, newest first (coach_feedback). */
+    val coachFeed: List<com.salesautocall.app.data.CoachFeedbackRow> = emptyList(),
+    /** The company's objection replies (knowledge_chunks, the one brain). */
+    val coachPlaybook: List<com.salesautocall.app.data.PlaybookChunk> = emptyList(),
+    /** True once a coach read succeeded, including a real empty result. */
+    val coachFeedLoaded: Boolean = false,
+    /** A failed read. Last good rows stay; the card says it could not load. */
+    val coachFeedError: String? = null,
+    /** Morning greeting is showing (decided once, on the first open of the day before 1 PM). */
+    val morningVisible: Boolean = false,
+    /** Latest call summary per lead, for the morning greeting. */
+    val morningSummaries: Map<String, com.salesautocall.app.data.CallSummaryRow> = emptyMap(),
+    /** Latest captured WhatsApp message per lead, for the morning greeting. */
+    val morningWhatsApp: Map<String, com.salesautocall.app.data.WaLatestRow> = emptyMap(),
+    val morningCtxLoaded: Boolean = false,
+    val morningCtxError: String? = null,
+    /** "Coaching time" after a run of calls; null when not showing. */
+    val coachMoment: CoachMoment? = null,
     val followUpInfo: String? = null,
     val followUpDone: Boolean = false,
     val pendingParse: ParseResult? = null,
@@ -1725,6 +1744,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Loads everything the Home tab needs in one go. */
     fun loadHome(force: Boolean = false) {
+        loadCoachFeed(force)
+        decideMorningGreeting()
         loadCapture(force)
         loadToday(force)
         loadAttendance(force)
@@ -1735,6 +1756,169 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 set { it.copy(callingScore = avg, callingScoreCount = n) }
             }
         }
+    }
+
+    // ---------- the Coach card ----------
+
+    private var coachFeedAt = 0L
+
+    /**
+     * The coach's inputs: recent scored calls + the company's objection
+     * replies. Both are plain reads of tables that already exist; nothing here
+     * calls an LLM or writes anything. Throttled to one read per 5 minutes
+     * unless the rep pulls to refresh.
+     */
+    fun loadCoachFeed(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - coachFeedAt < 5 * 60_000L && _state.value.coachFeedLoaded) return
+        coachFeedAt = now
+        viewModelScope.launch {
+            val feed = runCatching { Repository.recentCoachFeedback() }
+            val book = runCatching { Repository.objectionPlaybook(_state.value.profile?.companyId) }
+            set { st ->
+                st.copy(
+                    coachFeed = feed.getOrNull() ?: st.coachFeed,
+                    coachPlaybook = book.getOrNull() ?: st.coachPlaybook,
+                    coachFeedLoaded = st.coachFeedLoaded || feed.isSuccess,
+                    coachFeedError = feed.exceptionOrNull()?.let { "Couldn't load your coach notes. Pull down to try again." },
+                )
+            }
+        }
+    }
+
+    /**
+     * Morning greeting: decided once per day, on the first app open before
+     * 1 PM. Nothing is scheduled — this runs only when the app opens.
+     */
+    fun decideMorningGreeting() {
+        val ctx = getApplication<Application>()
+        val today = java.time.LocalDate.now().toString()
+        if (_state.value.morningVisible) return
+        if (AppPrefs.getMorningDay(ctx) == today) return
+        val hour = java.time.LocalTime.now().hour
+        if (hour < 5 || hour >= 13) return
+        AppPrefs.setMorningDay(ctx, today)
+        set { it.copy(morningVisible = true) }
+    }
+
+    fun dismissMorningGreeting() = set { it.copy(morningVisible = false) }
+
+    private var morningCtxKey: String = ""
+
+    /** Read the last call summary and latest captured WhatsApp for the named leads. Read-only. */
+    fun loadMorningContext(contactIds: List<String>) {
+        val ids = contactIds.filter { it.isNotBlank() }.distinct().take(12)
+        val key = ids.joinToString(",")
+        if (key == morningCtxKey) return
+        morningCtxKey = key
+        if (ids.isEmpty()) { set { it.copy(morningCtxLoaded = true, morningCtxError = null) }; return }
+        viewModelScope.launch {
+            val sums = runCatching { Repository.latestCallSummaries(ids) }
+            val wa = runCatching { Repository.latestWhatsApp(ids) }
+            set { st ->
+                st.copy(
+                    morningSummaries = sums.getOrNull() ?: st.morningSummaries,
+                    morningWhatsApp = wa.getOrNull() ?: st.morningWhatsApp,
+                    morningCtxLoaded = true,
+                    morningCtxError = when {
+                        sums.isFailure && wa.isFailure -> "Couldn't load call summaries or WhatsApp messages."
+                        sums.isFailure -> "Couldn't load call summaries."
+                        wa.isFailure -> "Couldn't load WhatsApp messages."
+                        else -> null
+                    },
+                )
+            }
+        }
+    }
+
+    /**
+     * Between calls: nothing on a call, the Call-all queue stopped or paused,
+     * and no call waiting for its outcome. Coaching time only shows then.
+     */
+    fun coachBetweenCalls(): Boolean {
+        val s = _state.value
+        if (!s.signedIn) return false
+        if (s.postCallContactId != null || s.cloudCallNumber != null || s.update != null) return false
+        if (s.assistantAsk != null || s.pendingUpdates.isNotEmpty()) return false
+        val d = DialerController.state.value
+        if (d.isRunning && !d.paused) return false
+        if (com.salesautocall.app.dialer.SimCallMonitor.state.value != null) return false
+        return true
+    }
+
+    private var momentBusy = false
+
+    /**
+     * Coaching time: after at least 5 more calls today (so it lands at the
+     * first break after 5–7 calls), between calls only, at most every 30 min
+     * and 6 times a day. Built only from today's scored calls; if none are
+     * scored yet it shows nothing and looks again later.
+     */
+    fun maybeCoachMoment() {
+        val s = _state.value
+        if (s.coachMoment != null || momentBusy) return
+        val ctx = getApplication<Application>()
+        val today = java.time.LocalDate.now().toString()
+        val base = AppPrefs.getMomentBase(ctx).split("|")
+        val baseCount = if (base.getOrNull(0) == today) base.getOrNull(1)?.toIntOrNull() ?: 0 else 0
+        val shownToday = if (base.getOrNull(0) == today) base.getOrNull(2)?.toIntOrNull() ?: 0 else 0
+        if (s.todayCalls - baseCount < COACH_MOMENT_CALLS) return
+        if (shownToday >= 6) return
+        if (System.currentTimeMillis() - AppPrefs.getMomentAt(ctx) < 30 * 60_000L) return
+        if (!coachBetweenCalls()) return
+        momentBusy = true
+        viewModelScope.launch {
+            try {
+                val feed = runCatching { Repository.recentCoachFeedback() }.getOrNull()
+                val book = runCatching { Repository.objectionPlaybook(_state.value.profile?.companyId) }.getOrNull()
+                if (feed != null) set { it.copy(coachFeed = feed, coachFeedLoaded = true, coachFeedError = null) }
+                if (book != null) set { it.copy(coachPlaybook = book) }
+                val moment = coachMoment(_state.value.coachFeed, _state.value.coachPlaybook)
+                AppPrefs.setMomentAt(ctx, System.currentTimeMillis())
+                if (moment != null && coachBetweenCalls()) {
+                    AppPrefs.setMomentBase(ctx, "$today|${_state.value.todayCalls}|${shownToday + 1}")
+                    set { it.copy(coachMoment = moment) }
+                }
+            } finally {
+                momentBusy = false
+            }
+        }
+    }
+
+    fun dismissCoachMoment() = set { it.copy(coachMoment = null) }
+
+    /**
+     * Is the rep idle enough for the coach to open up on its own?
+     *
+     * The founder's rule: the coach never interrupts. So: nothing on a call,
+     * no dialler or Call-all queue running, no sheet or question open, no
+     * call waiting for its outcome, and the app has been in front of them for
+     * a few quiet minutes. It never pops anything — the Coach card on Home
+     * just expands in place — and the card itself rate-limits how often.
+     */
+    fun coachIdleNow(): Boolean {
+        val s = _state.value
+        if (!s.signedIn) return false
+        if (s.postCallContactId != null || s.cloudCallNumber != null || s.update != null) return false
+        if (s.leadDetailId != null || s.showAddLead || s.showSettings || s.assistantAsk != null) return false
+        if (s.pendingUpdates.isNotEmpty()) return false
+        if (DialerController.state.value.isRunning) return false
+        if (com.salesautocall.app.dialer.SimCallMonitor.state.value != null) return false
+        return System.currentTimeMillis() - foregroundAt >= COACH_IDLE_MS
+    }
+
+    /**
+     * The site visit moved to a new day, answered from the Coach card.
+     *
+     * Same writes as the assistant's "Moved to a new date": the visit date
+     * changes, the stage does not, the activity log says so, and the ONE
+     * follow-up for this lead is moved to three hours before the new visit.
+     */
+    fun coachVisitRescheduled(contactId: String, phone: String, name: String?, newVisitMillis: Long) {
+        postponeVisit(contactId, phone, name, newVisitMillis)
+        // The scheduler must not ask about this visit again today.
+        val ctx = getApplication<Application>()
+        AppPrefs.markAsked(ctx, java.time.LocalDate.now().toString(), "visit_check:$contactId")
     }
 
     // ---------- lead pipeline ----------
@@ -3415,6 +3599,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Minimum quiet time between any two assistant prompts. */
     private val PROMPT_GAP_MS = 40 * 60_000L
+    /** How long the app must sit in front of the rep, untouched by a call, before the coach opens itself. */
+    private val COACH_IDLE_MS = 3 * 60_000L
+    private val COACH_MOMENT_CALLS = 5
     /** Hard ceiling on prompts in one day. The day review is the only exception. */
     private val PROMPT_DAILY_CAP = 5
     /** A callback has to be properly late before we ask — not "due 3 minutes ago". */
@@ -3805,6 +3992,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ask = _state.value.assistantAsk ?: return
         val contactId = ask.contactId ?: return
         set { it.copy(assistantAsk = null) }
+        postponeVisit(contactId, ask.phone, ask.name, newVisitMillis)
+        logPrompt(ask, answer = "postponed")
+    }
+
+    /** Shared by the assistant and the Coach card: one way to move a visit. */
+    private fun postponeVisit(contactId: String, phone: String?, name: String?, newVisitMillis: Long) {
         val iso = java.time.Instant.ofEpochMilli(newVisitMillis).toString()
         viewModelScope.launch {
             runCatching { Repository.updateContact(contactId, mapOf("site_visit_at" to iso)) }
@@ -3819,16 +4012,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         add("site_visit" to "Visit rescheduled to ${shortWhen(newVisitMillis)}")
                     }
                     scheduleFollowUp(
-                        contactId, ask.phone ?: return@onSuccess, ask.name,
+                        contactId, phone ?: return@onSuccess, name,
                         // Ring the rep three hours before, not on the dot — a visit
                         // needs confirming in the morning, not announcing as it starts.
                         (newVisitMillis - 3 * 3600_000L).coerceAtLeast(System.currentTimeMillis() + 600_000L),
                         "Confirm the site visit", mirrorStatus = false,
                     )
+                    loadPendingVisits()
                 }
                 .onFailure { e -> set { it.copy(error = e.message) } }
         }
-        logPrompt(ask, answer = "postponed")
     }
 
     /**

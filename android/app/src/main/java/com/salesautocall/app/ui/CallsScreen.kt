@@ -68,6 +68,7 @@ import com.salesautocall.app.ui.design.RoundIconButton
 import com.salesautocall.app.ui.design.Space
 import com.salesautocall.app.ui.design.StatusTag
 import com.salesautocall.app.ui.design.StatusTone
+import com.salesautocall.app.ui.design.*
 
 // Paper & ink: jade is the only accent; heat/warnings stay muted, never neon.
 private val WhatsAppGreen = Color(0xFF25D366) // brand — kept recognisable
@@ -187,23 +188,27 @@ fun CallsScreen(vm: MainViewModel) {
             Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Calls", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("Calls", style = AppType.largeTitle, color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
             var periodMenu by remember { mutableStateOf(false) }
             Box {
                 Row(
-                    Modifier.clip(RoundedCornerShape(50))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                        .clickable { periodMenu = true }
+                    Modifier.clip(Radii.tag)
+                        .background(IosColors.Fill)
+                        .iosPress(scaleTo = 0.95f) { periodMenu = true }
                         .padding(horizontal = 12.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(app.callFilter.label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                     Icon(Icons.Default.ArrowDropDown, contentDescription = "Change period", modifier = Modifier.size(18.dp))
                 }
-                DropdownMenu(expanded = periodMenu, onDismissRequest = { periodMenu = false }) {
-                    CallFilter.entries.forEach { f ->
-                        DropdownMenuItem(text = { Text(f.label) }, onClick = { vm.setCallFilter(f); periodMenu = false })
-                    }
+                if (periodMenu) {
+                    IosActionSheet(
+                        title = "Show calls from",
+                        onDismiss = { periodMenu = false },
+                        actions = CallFilter.entries.map { f ->
+                            SheetAction(if (f == app.callFilter) "✓ ${f.label}" else f.label) { vm.setCallFilter(f) }
+                        },
+                    )
                 }
             }
             IconButton(onClick = { vm.loadCalls(force = true); vm.loadDeviceRecents() }) {
@@ -212,14 +217,20 @@ fun CallsScreen(vm: MainViewModel) {
         }
 
         // Phone tab first — it's the fast, native-dialer-style recents everyone reaches for.
-        androidx.compose.material3.ScrollableTabRow(selectedTabIndex = sub, edgePadding = 8.dp) {
-            Tab(selected = sub == 0, onClick = { sub = 0 }, text = { Text("Phone") })
-            Tab(selected = sub == 1, onClick = { sub = 1 }, text = { Text("App") })
-            Tab(selected = sub == 2, onClick = { sub = 2 },
-                text = { Text(if (missed.isEmpty()) "Missed" else "Missed ${missed.size}") })
-            Tab(selected = sub == 3, onClick = { sub = 3 },
-                text = { Text(if (followUps.isEmpty()) "No answer" else "No answer ${followUps.size}") })
-        }
+        // An iOS segmented control instead of Material's underlined tab row.
+        // Same four views, same counts; a label shrinks to fit rather than
+        // ever dropping its number.
+        IosSegmented(
+            options = listOf(
+                "Phone",
+                "App",
+                if (missed.isEmpty()) "Missed" else "Missed ${missed.size}",
+                if (followUps.isEmpty()) "No answer" else "No answer ${followUps.size}",
+            ),
+            selectedIndex = sub,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            onSelect = { sub = it },
+        )
 
         if (sub == 0) {
             // ── PHONE: the device's own call log, native-dialer style ──

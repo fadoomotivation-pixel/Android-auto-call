@@ -90,6 +90,8 @@ import com.salesautocall.app.ui.design.Space
 import com.salesautocall.app.ui.design.StatusTag
 import com.salesautocall.app.ui.design.StatusTone
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import com.salesautocall.app.ui.design.*
 
 // ---- Palette: paper & ink, ONE jade accent — same language as the Leads page.
 // The old rainbow constants keep their names but now resolve to ink/jade (with
@@ -236,6 +238,8 @@ fun LeadDetailScreen(vm: MainViewModel) {
     val clipboard = LocalClipboardManager.current
 
     BackHandler { vm.closeLeadDetail() }
+    // The coach's playbook lines (read-only; throttled inside).
+    LaunchedEffect(Unit) { vm.loadCoachFeed() }
     LaunchedEffect(Unit) { vm.loadFollowUps() }
 
     var note by remember(contact.id) { mutableStateOf(contact.notes ?: "") }
@@ -370,47 +374,49 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(Modifier.size(40.dp).clip(CircleShape).clickable { vm.closeLeadDetail() },
-                            contentAlignment = Alignment.Center) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Ink)
+                        // iOS back: a blue chevron and the word, not a Material arrow.
+                        // The lead's name below is this page's large title.
+                        Row(
+                            Modifier.clip(Radii.chip).iosPress(scaleTo = 0.96f) { vm.closeLeadDetail() }
+                                .padding(end = 10.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Back", tint = IosColors.Blue, modifier = Modifier.size(30.dp))
+                            Text("Leads", style = AppType.body.copy(fontSize = 17.sp), color = IosColors.Blue)
                         }
-                        Spacer(Modifier.width(4.dp))
-                        Text("Lead Details", style = AppType.title, color = Ink)
                         Spacer(Modifier.weight(1f))
                         // ONE Call on this page. The title bar had a second Call
                         // and a second WhatsApp, the same two buttons the bar
                         // pinned at the bottom always shows. Two blue phones on
                         // one screen made the rep stop and choose. More stays:
                         // it holds the things that are not anywhere else.
-                        Box {
-                            TopIconButton(Icons.Default.MoreHoriz, SubInk, size = 40) { moreOpen = true }
-                            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                                DropdownMenuItem(text = { Text("Copy number") }, onClick = { moreOpen = false; copyNumber() })
-                                DropdownMenuItem(text = { Text("Set reminder") }, onClick = { moreOpen = false; scheduleOpen = true })
-                                // WHERE A REP ACTUALLY LOOKS FOR IT.
-                                //
-                                // The hand-over shipped at the bottom of the Update
-                                // sheet, under the name field, the stage chips, the
-                                // temperature chips, budget, notes and two more
-                                // buttons. The founder opened a rep's account looking
-                                // for it and could not find it; a telecaller never
-                                // would either. It stays there for anyone mid-edit,
-                                // and it also lives here — in the menu that already
-                                // holds every other thing you DO to a lead rather
-                                // than type into it.
-                                DropdownMenuItem(text = { Text("Give to a teammate") }, onClick = {
-                                    moreOpen = false; handOverOpen = true
-                                })
-                                DropdownMenuItem(text = { Text("Not interested") }, onClick = {
-                                    moreOpen = false; contact.id?.let { vm.applyLead(it, "not_interested", null, null, null, null, null, null) }
-                                })
-                                DropdownMenuItem(text = { Text("Mark Lost") }, onClick = {
-                                    moreOpen = false; contact.id?.let { vm.applyLead(it, "lost", null, null, null, null, null, null) }
-                                })
-                                DropdownMenuItem(text = { Text("Do Not Call") }, onClick = {
-                                    moreOpen = false; contact.id?.let { vm.applyLead(it, "dnc", null, null, null, null, null, null) }
-                                })
-                            }
+                        TopIconButton(Icons.Default.MoreHoriz, IosColors.Blue, size = 36) { moreOpen = true }
+                        // An iOS action sheet, not Material's dropdown. Same six
+                        // actions, same order. The three that close the lead are
+                        // red, the way iOS marks a destructive choice.
+                        if (moreOpen) {
+                            IosActionSheet(
+                                title = prettyName(contact.name) ?: contact.phone,
+                                onDismiss = { moreOpen = false },
+                                actions = listOf(
+                                    SheetAction("Copy number") { copyNumber() },
+                                    SheetAction("Set reminder") { scheduleOpen = true },
+                                    // WHERE A REP ACTUALLY LOOKS FOR IT: the hand-over
+                                    // also lives at the bottom of the Update sheet,
+                                    // but this menu holds every other thing you DO
+                                    // to a lead rather than type into it.
+                                    SheetAction("Give to a teammate") { handOverOpen = true },
+                                    SheetAction("Not interested", destructive = true) {
+                                        contact.id?.let { vm.applyLead(it, "not_interested", null, null, null, null, null, null) }
+                                    },
+                                    SheetAction("Mark Lost", destructive = true) {
+                                        contact.id?.let { vm.applyLead(it, "lost", null, null, null, null, null, null) }
+                                    },
+                                    SheetAction("Do Not Call", destructive = true) {
+                                        contact.id?.let { vm.applyLead(it, "dnc", null, null, null, null, null, null) }
+                                    },
+                                ),
+                            )
                         }
                     }
                 }
@@ -518,11 +524,39 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 // ---- Call Coach — honest rating + guidance from THIS lead's last
                 // real recording. The coach "observes" the call and rates it; a
                 // good call only gets motivation, no forced suggestion. ----
+                // Coach: did the site visit happen? Only when the server's
+                // pending-visit list has this lead. Same writes as the Home card.
+                val visitRow = app.pendingVisits.rows.firstOrNull { it.contactId == contact.id }
+                if (visitRow != null && contact.id != null && contact.siteVisitArrivedAt == null) {
+                    item(key = "coach-visit") {
+                        val cid = contact.id
+                        val phone = visitRow.phone.ifBlank { contact.phone }
+                        val nm = visitRow.name.ifBlank { prettyName(contact.name) ?: phone }
+                        Column(Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface)) {
+                            Row(Modifier.padding(start = Space.l, top = 12.dp, end = Space.l), verticalAlignment = Alignment.CenterVertically) {
+                                CoachOrb(size = 32.dp, active = true, face = true)
+                                Spacer(Modifier.width(10.dp))
+                                Text("Coach", style = AppType.headline, color = AppColors.TextPrimary)
+                            }
+                            VisitCheckBlock(
+                                CoachVisit(cid, phone, nm, contact.siteVisitProject,
+                                    if (visitRow.daysWaiting <= 0) "Today" else "${visitRow.daysWaiting}d ago"),
+                                more = 0,
+                                onYes = { vm.answerVisitHappened(cid, phone, nm, true) },
+                                onNo = { vm.answerVisitHappened(cid, phone, nm, false) },
+                                onMoved = { ms -> vm.coachVisitRescheduled(cid, phone, nm, ms) },
+                                onOpen = null,
+                            )
+                        }
+                    }
+                }
                 if (app.leadCoachLoading || app.leadCoach != null) {
                     item {
                         val coach = app.leadCoach
                         SectionCard {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                CoachOrb(size = 28.dp, active = coach == null, face = true)
+                                Spacer(Modifier.width(8.dp))
                                 Text("HOW THAT CALL WENT", style = AppType.sectionLabel, color = AppColors.TextSecondary,
                                     modifier = Modifier.weight(1f))
                                 coach?.rating?.let { r ->
@@ -552,6 +586,13 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                     Text("🔥 Great call. Keep going like this.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.SemiBold, color = IndigoL)
+                                }
+                                // One exact line from the company playbook, matched to
+                                // this lead's objection or the coach's "improve" note.
+                                val reply = replyForCall(coach.improve, contact.id?.let { app.memoryByLead[it] }, app.coachPlaybook)
+                                if (reply != null) {
+                                    Spacer(Modifier.height(10.dp))
+                                    SayThisNext(reply, null)
                                 }
                             }
                         }
@@ -1017,7 +1058,7 @@ private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector,
     Box(
         Modifier.size(size.dp)
             .clip(CircleShape).background(CardBg)
-            .clickable { onClick() },
+            .iosPress(scaleTo = 0.92f) { onClick() },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, null, tint = tint, modifier = Modifier.size((size * 0.46f).dp)) }
 }
@@ -1071,8 +1112,8 @@ private fun IdentityBlock(
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(prettyName(contact.name) ?: prettyNum(contact.phone), style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold, color = Ink, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                    Text(prettyName(contact.name) ?: prettyNum(contact.phone), style = AppType.title2,
+                        color = Ink, maxLines = 2, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(8.dp))
                     Box(
                         Modifier.size(30.dp).clip(CircleShape).border(1.dp, Hair, CircleShape).clickable { onEdit() },
@@ -1180,15 +1221,19 @@ private fun HeroFact(label: String, value: String, valueColor: Color, modifier: 
     }
 }
 
-/** A quiet outlined chip for the identity block. */
+/**
+ * A tag in the identity block. Tinted fill, no outline: stage and temperature
+ * carry their colour, everything else is a quiet grey capsule — one chip
+ * style instead of the outlined pills that sat next to filled ones elsewhere.
+ */
 @Composable
 private fun LeadChip(label: String, color: Color) {
-    Box(
-        Modifier.clip(RoundedCornerShape(50)).border(1.dp, color.copy(alpha = 0.35f), RoundedCornerShape(50))
-            .padding(horizontal = 11.dp, vertical = 5.dp),
-    ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = color, fontWeight = FontWeight.SemiBold, maxLines = 1)
-    }
+    val neutral = color == SubInk || color == tempRing(null)
+    IosTag(
+        label,
+        fg = if (neutral) AppColors.TextSecondary else color,
+        bg = if (neutral) AppColors.Surface else color.copy(alpha = 0.12f),
+    )
 }
 
 /** Edit the lead's name and optional second number. */
@@ -1226,9 +1271,13 @@ private fun NextStepBanner(color: Color, title: String, detail: String, cta: Str
     // for a date, a time and a project name without truncating.
     Row(
         Modifier.fillMaxWidth().padding(horizontal = Space.l).clip(Radii.card)
-            .background(color.copy(alpha = 0.10f)).padding(Space.l),
+            .background(CardBg).padding(Space.l),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // A coloured dot keeps the state readable at a glance (amber = nothing
+        // planned, red = due now) on a white card, the iOS way.
+        Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(Space.m))
         Column(Modifier.weight(1f)) {
             Text(title, style = AppType.rowTitle, color = color)
             detail.takeIf { it.isNotBlank() }?.let {
@@ -1236,8 +1285,8 @@ private fun NextStepBanner(color: Color, title: String, detail: String, cta: Str
             }
         }
         Spacer(Modifier.width(Space.m))
-        Box(Modifier.clip(Radii.tag).background(color).clickable { onCta() }.padding(horizontal = Space.l, vertical = Space.s + Space.xxs)) {
-            Text(cta, color = AppColors.OnIndigo, style = AppType.label)
+        Box(Modifier.clip(Radii.tag).background(color.copy(alpha = 0.12f)).iosPress { onCta() }.padding(horizontal = Space.l, vertical = Space.s + Space.xxs)) {
+            Text(cta, color = color, style = AppType.label)
         }
         onDelete?.let {
             Spacer(Modifier.width(Space.s))

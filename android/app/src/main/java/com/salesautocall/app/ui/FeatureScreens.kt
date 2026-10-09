@@ -88,6 +88,7 @@ import com.salesautocall.app.ui.design.StatusTag
 import com.salesautocall.app.ui.design.StatusTone
 import com.salesautocall.app.ui.design.EmptyState
 import com.salesautocall.app.ui.design.Radii
+import com.salesautocall.app.ui.design.*
 
 private fun fmt(seconds: Int): String {
     val m = seconds / 60
@@ -1155,7 +1156,7 @@ private fun PaperCard(
         shape = Radii.card,
         colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, AppColors.Border),
+        border = null,
         content = content,
     )
 }
@@ -1187,21 +1188,16 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
     // System back closes the settings overlay (not the app).
     BackHandler { onBack() }
+    // iOS large title that collapses into the navigation bar on scroll.
+    val scroll = rememberScrollState()
+    val collapsed = scroll.value > with(androidx.compose.ui.platform.LocalDensity.current) { 44.dp.toPx() }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 96.dp),
+        Modifier.fillMaxSize().verticalScroll(scroll)
+            .padding(start = 16.dp, end = 16.dp, top = 48.dp, bottom = 96.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-            Spacer(Modifier.width(4.dp))
-            Text("Settings", style = MaterialTheme.typography.headlineSmall)
-        }
-        Text("Your changes are saved automatically.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(20.dp))
+        IosLargeTitle("Settings", "Your changes are saved automatically.", Modifier.padding(start = 0.dp))
+        Spacer(Modifier.height(16.dp))
 
         // FIRST CARD, ON PURPOSE. When a rep opens Settings it is usually because
         // something is not working, and this is the answer to "sab on hai na?".
@@ -1244,7 +1240,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     SettingHeader(Icons.Default.Pause, "Pause after each call",
                         "Review the call, set an outcome, or WhatsApp before the next number.")
                 }
-                Switch(checked = app.reviewAfterCall, onCheckedChange = { vm.setReviewAfterCall(it) })
+                IosSwitch(checked = app.reviewAfterCall, onCheckedChange = { vm.setReviewAfterCall(it) })
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -1262,7 +1258,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     SettingHeader(Icons.Default.Notifications, "Popup right after a SIM call",
                         "Off: the lead's Update button shakes instead — no waiting for the popup to open.")
                 }
-                Switch(checked = app.postCallPopup, onCheckedChange = { vm.setPostCallPopup(it) })
+                IosSwitch(checked = app.postCallPopup, onCheckedChange = { vm.setPostCallPopup(it) })
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -1279,7 +1275,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     SettingHeader(Icons.Default.Lightbulb, "Let the app ask me things",
                         "A few questions a day: did the customer come to the site, did you make that callback, how did today go.")
                 }
-                Switch(checked = app.assistantOn, onCheckedChange = { vm.setAssistantOn(it) })
+                IosSwitch(checked = app.assistantOn, onCheckedChange = { vm.setAssistantOn(it) })
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -1338,21 +1334,26 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
 
         Spacer(Modifier.height(24.dp))
-        Button(
+        PrimaryButton(
+            "Save settings",
+            modifier = Modifier.fillMaxWidth(),
             onClick = {
                 android.widget.Toast.makeText(context, "✓ Settings saved", android.widget.Toast.LENGTH_SHORT).show()
                 onBack()
             },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Save settings") }
+        )
         Spacer(Modifier.height(10.dp))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
-        Spacer(Modifier.height(16.dp))
-        app.profile?.let {
-            Text("Signed in as ${it.fullName ?: "—"}", style = MaterialTheme.typography.bodySmall)
+        SecondaryButton("Back", modifier = Modifier.fillMaxWidth(), onClick = onBack)
+        Spacer(Modifier.height(24.dp))
+        // Account, as an iOS group: who you are, and a red Sign out row.
+        IosGroup(footer = app.profile?.let { "Signed in as ${it.fullName ?: "—"}" }) {
+            IosRow("Sign out", destructive = true, onClick = { vm.signOut() })
         }
-        OutlinedButton(onClick = { vm.signOut() }) { Text("Sign out") }
     }
+        IosNavBar(
+            title = "Settings", collapsed = collapsed, onBack = onBack,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
         // The app's real bottom navigation, pinned — Settings is an overlay, so it
         // no longer loses the bottom menu.
         Box(Modifier.align(Alignment.BottomCenter)) {
