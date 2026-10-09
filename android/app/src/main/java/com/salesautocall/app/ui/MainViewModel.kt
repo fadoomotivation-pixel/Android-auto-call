@@ -252,6 +252,8 @@ data class AppState(
     /** "Who did what, when" timeline entries for the open lead. */
     val leadDetailActivities: List<com.salesautocall.app.data.LeadActivity> = emptyList(),
     val leadDetailLoading: Boolean = false,
+    /** The lead's call list could not be read. An empty list is then NOT "no calls". */
+    val leadDetailCallsFailed: Boolean = false,
     /** Everything logged against this rep's leads since midnight IST — the
      *  "What I did today" sheet on Leads and Follow Ups. */
     val todayActivities: List<com.salesautocall.app.data.LeadActivity> = emptyList(),
@@ -633,6 +635,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         if (it.leadDetailId != id) it
                         else it.copy(
                             leadDetailCalls = calls,
+                            leadDetailCallsFailed = false,
                             recordingWarnings = if (todayWarning != null)
                                 it.recordingWarnings + (id to todayWarning)
                             else it.recordingWarnings,
@@ -4530,10 +4533,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
-        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadCoach = null, leadCoachLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false, messageDraftReason = null,
+        set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadDetailCallsFailed = false, leadCoach = null, leadCoachLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false, messageDraftReason = null,
             messageDraftId = null, messageVerdict = null, messageSentCount = 0, coachError = null) }
         viewModelScope.launch {
-            val calls = runCatching { Repository.fetchCallsForContact(contactId) }.getOrDefault(emptyList())
+            val callsRead = runCatching { Repository.fetchCallsForContact(contactId) }
+            val calls = callsRead.getOrDefault(emptyList())
             val acts = runCatching { Repository.fetchLeadActivities(contactId) }.getOrDefault(emptyList())
             val notes = runCatching { Repository.fetchVoiceNotes(contactId) }.getOrDefault(emptyList())
             val todayWarning = todayRecordingWarning(calls)
@@ -4544,6 +4548,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         leadDetailActivities = acts,
                         voiceNotes = notes,
                         leadDetailLoading = false,
+                        leadDetailCallsFailed = callsRead.isFailure,
                         recordingWarnings = if (todayWarning != null)
                             it.recordingWarnings + (contactId to todayWarning)
                         else it.recordingWarnings,
