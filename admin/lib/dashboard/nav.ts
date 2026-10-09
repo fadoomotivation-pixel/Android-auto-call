@@ -52,6 +52,7 @@ export const NAV: NavSection[] = [
       { href: "/dashboard", label: "Overview", hint: "Money card, calls and who is ahead", who: "all", keywords: "home command center money spend bookings" },
       { href: "/dashboard/actions", label: "Action Center", hint: "What a person must do right now", who: "admin", keywords: "todo alerts stuck" },
       { href: "/dashboard/pulse", label: "Daily Pulse", hint: "What each telecaller did today", who: "admin", keywords: "report 7pm founder" },
+      { href: "/dashboard/demo", label: "Demo account", hint: "Show Call Pro AI on a made-up builder", who: "super", keywords: "demo present pitch sales example sample" },
     ],
   },
   {

@@ -7,6 +7,8 @@ import { ModuleLinks } from "./ModuleLinks";
 import { connectRate } from "@/lib/dashboard/metrics";
 import { LiveFeed } from "./LiveFeed";
 import { ExportCalls } from "./ExportCalls";
+import Link from "next/link";
+import { DEMO_COMPANY_ID, isDemoCompany, refreshDemo } from "@/lib/dashboard/demo";
 
 type Trend = { d: string; n: number };
 type Outcome = { o: string; n: number };
@@ -34,23 +36,37 @@ export default async function OverviewPage({
   // that must never redirect on role.
   const ctx = await resolveScope(await searchParams, { require: "any" });
   const { supabase } = ctx;
+  // A super admin who picked a company sees that company. Both RPCs already
+  // take p_company and ignore it for anyone who is not the super admin; this
+  // page just never passed it, so a picked company still showed everyone.
+  const company = ctx.isSuper ? ctx.companyId : null;
+  const args = company ? { p_company: company } : {};
+  const demo = isDemoCompany(company);
+  // Bring the demo's dates to today before reading it.
+  if (demo) await refreshDemo(supabase);
+  // The all-companies view must not count the demo company's made-up rows.
+  const subtractDemo = ctx.isSuper && !company;
 
   // One aggregated round trip (was: pulling up to 5000 call rows per load).
   // The RPC returns a single jsonb object; supabase-js types rpc as an array,
   // so cast manually rather than via .returns<>() (which rejects non-array T).
-  const [{ data: statsRaw }, { data: people }, { data: speedRaw }] = await Promise.all([
-    supabase.rpc("get_overview_stats"),
+  const [{ data: statsRaw }, { data: people }, { data: speedRaw }, { data: demoRaw }] = await Promise.all([
+    supabase.rpc("get_overview_stats", args),
     // Only people who actually belong to a company. This project is shared with
     // another product, whose signups land here as company-less 'salesperson'
     // profiles and would otherwise be counted as telecallers on this dashboard.
     supabase.from("profiles").select("id, full_name")
       .eq("role", "salesperson").not("company_id", "is", null),
-    supabase.rpc("get_speed_to_lead"),
+    supabase.rpc("get_speed_to_lead", args),
+    subtractDemo
+      ? supabase.rpc("get_overview_stats", { p_company: DEMO_COMPANY_ID })
+      : Promise.resolve({ data: null }),
   ]);
 
-  const s: Stats = (statsRaw as unknown as Stats | null) ?? {
+  const raw: Stats = (statsRaw as unknown as Stats | null) ?? {
     salespeople: 0, contacts: 0, calls_total: 0, talk_14d: 0, trend: [], outcomes: [], leaderboard: [],
   };
+  const s = withoutDemo(raw, subtractDemo ? (demoRaw as unknown as Stats | null) : null);
   const speed: Speed = (speedRaw as unknown as Speed | null) ?? { reps: [], total_breaching: 0 };
   const names: Record<string, string> = Object.fromEntries(
     (people ?? []).map((p: { id: string; full_name: string | null }) => [p.id, p.full_name ?? "—"]),
@@ -66,7 +82,12 @@ export default async function OverviewPage({
           <h2>Overview</h2>
           <p className="subtitle">Money first, then a calm, live view of your team&apos;s calling.</p>
         </div>
-        <ExportCalls names={names} />
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {ctx.isSuper && !demo && (
+            <Link className="btn-ghost" href="/dashboard/demo">Demo account</Link>
+          )}
+          <ExportCalls names={names} />
+        </div>
       </div>
 
       {/* Admins only: a telecaller lands here too and has no use for spend. */}
@@ -211,4 +232,28 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="value">{value}</div>
     </div>
   );
+}
+
+/**
+ * The all-companies numbers minus the demo company's.
+ *
+ * Every figure in Stats is a sum over companies, so the demo's own figures
+ * can be taken straight off. Cheaper and safer than changing the production
+ * function, and it cannot drift from what that function counts.
+ */
+function withoutDemo(all: Stats, demo: Stats | null): Stats {
+  if (!demo) return all;
+  const minus = (a: number, b: number) => Math.max(0, (a ?? 0) - (b ?? 0));
+  const demoDay = new Map((demo.trend ?? []).map((t) => [t.d, t.n]));
+  const demoOut = new Map((demo.outcomes ?? []).map((o) => [o.o, o.n]));
+  const demoReps = new Set((demo.leaderboard ?? []).map((l) => l.id));
+  return {
+    salespeople: minus(all.salespeople, demo.salespeople),
+    contacts: minus(all.contacts, demo.contacts),
+    calls_total: minus(all.calls_total, demo.calls_total),
+    talk_14d: minus(all.talk_14d, demo.talk_14d),
+    trend: (all.trend ?? []).map((t) => ({ d: t.d, n: minus(t.n, demoDay.get(t.d) ?? 0) })),
+    outcomes: (all.outcomes ?? []).map((o) => ({ o: o.o, n: minus(o.n, demoOut.get(o.o) ?? 0) })).filter((o) => o.n > 0),
+    leaderboard: (all.leaderboard ?? []).filter((l) => !demoReps.has(l.id)),
+  };
 }

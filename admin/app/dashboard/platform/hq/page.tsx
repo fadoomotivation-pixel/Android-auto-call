@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { DEMO_COMPANY_ID } from "@/lib/dashboard/demo";
 import { RecordingPlayer } from "../../recordings/RecordingPlayer";
 
 // Platform HQ — the super admin's whole business on one dashboard page.
@@ -125,12 +126,26 @@ export default async function PlatformHqPage({
       </>
     );
   }
-  const rows = (companiesRaw ?? []) as HqCompany[];
-  const current = co ? rows.find((c) => c.company_id === co) ?? null : null;
+  // The demo company (made-up data, see /dashboard/demo) is not a customer.
+  // It stays out of the list and the platform totals; it can still be opened
+  // by id, where the shell labels it "Demo data".
+  const all = (companiesRaw ?? []) as HqCompany[];
+  const rows = all.filter((c) => c.company_id !== DEMO_COMPANY_ID);
+  const current = co ? all.find((c) => c.company_id === co) ?? null : null;
 
-  // Conversion funnel — for the drilled-in company, else the whole platform.
-  const { data: funnelRaw } = await supabase.rpc("super_hq_funnel", { p_company: current?.company_id ?? null });
-  const funnel = (Array.isArray(funnelRaw) ? funnelRaw[0] : null) as HqFunnel | null;
+  // Conversion funnel — for the drilled-in company, else the whole platform
+  // minus the demo company's own funnel.
+  const [{ data: funnelRaw }, { data: demoFunnelRaw }] = await Promise.all([
+    supabase.rpc("super_hq_funnel", { p_company: current?.company_id ?? null }),
+    current ? Promise.resolve({ data: null }) : supabase.rpc("super_hq_funnel", { p_company: DEMO_COMPANY_ID }),
+  ]);
+  const funnelAll = (Array.isArray(funnelRaw) ? funnelRaw[0] : null) as HqFunnel | null;
+  const funnelDemo = (Array.isArray(demoFunnelRaw) ? demoFunnelRaw[0] : null) as HqFunnel | null;
+  const funnel: HqFunnel | null = funnelAll && funnelDemo
+    ? (Object.fromEntries(Object.entries(funnelAll).map(([k, v]) => [
+        k, typeof v === "number" ? Math.max(0, v - (Number((funnelDemo as Record<string, unknown>)[k]) || 0)) : v,
+      ])) as HqFunnel)
+    : funnelAll;
 
   let reps: HqRep[] = [];
   let calls: HqCall[] = [];
