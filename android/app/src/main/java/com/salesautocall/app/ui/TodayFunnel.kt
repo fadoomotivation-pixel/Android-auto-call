@@ -289,4 +289,4 @@ private fun FunnelStep(label: String, count: Int, modifier: Modifier = Modifier)
 
 private fun Modifier.clipCard(): Modifier = this
     .background(AppColors.Surface, Radii.card)
-    .border(1.dp, AppColors.Border, Radii.card)
+

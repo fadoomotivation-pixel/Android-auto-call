@@ -24,9 +24,11 @@ object AppColors {
     val SurfaceMuted = Color(0xFFE5E5EA)
     val SurfaceSunken = Color(0xFFEFEFF4)
 
-    // Hairlines. Dark enough to show on both the grey canvas and a white card.
+    // Hairlines. iOS separator (opaque): #C6C6C8 drawn at half a point.
+    // Border stays for the few controls that still need an outline (inputs).
     val Border = Color(0xFFD1D1D6)
     val BorderStrong = Color(0xFFC7C7CC)
+    val Separator = Color(0xFFC6C6C8)
 
     // Graphite type ramp
     val TextPrimary = Color(0xFF1C1C1E)
@@ -110,6 +112,40 @@ object AppColors {
         Color(0xFF9A5B18),
         Color(0xFF475569),
     )
+}
+
+/**
+ * Apple's system palette (light), for the places that need a second hue:
+ * destructive actions, a success tick, a warning dot, the coach orb.
+ *
+ * The app's state colours above stay darker on purpose (they are TEXT on
+ * white and need the contrast). These are FILLS and icon tints, the way iOS
+ * uses them. Never use them for body text.
+ */
+object IosColors {
+    val Blue = Color(0xFF007AFF)
+    val Green = Color(0xFF34C759)
+    val Indigo = Color(0xFF5856D6)
+    val Orange = Color(0xFFFF9500)
+    val Pink = Color(0xFFFF2D55)
+    val Purple = Color(0xFFAF52DE)
+    val Red = Color(0xFFFF3B30)
+    val Teal = Color(0xFF30B0C7)
+    val Yellow = Color(0xFFFFCC00)
+    val Gray = Color(0xFF8E8E93)
+    val Gray2 = Color(0xFFAEAEB2)
+    val Gray5 = Color(0xFFE5E5EA)
+    val Gray6 = Color(0xFFF2F2F7)
+
+    /** Grouped table background and its white cells. */
+    val GroupedBg = Color(0xFFF2F2F7)
+    val Cell = Color(0xFFFFFFFF)
+    /** The pressed state of a white cell. */
+    val CellPressed = Color(0xFFE5E5EA)
+    /** Fill behind a segmented control / search field (tertiarySystemFill). */
+    val Fill = Color(0x1F767680)
+    /** The dimmed backdrop behind an action sheet. */
+    val Scrim = Color(0x66000000)
 }
 
 /** Foreground / background pair for a tag or accent. */

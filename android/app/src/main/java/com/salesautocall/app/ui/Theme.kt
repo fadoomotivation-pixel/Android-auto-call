@@ -69,6 +69,18 @@ private val AppColorScheme = lightColorScheme(
     errorContainer = AppColors.DangerSoft,
     onErrorContainer = AppColors.Danger,
     scrim = AppColors.TextPrimary,
+    // THE PURPLE MENU. Material 3 paints menus, sheets, dialogs, date pickers
+    // and navigation drawers from the surfaceContainer family. This scheme
+    // never set it, so every one of those fell back to Material's baseline
+    // lavender (#F3EDF7 and friends) — the purple dropdown the founder sent a
+    // screenshot of. All of them are white or the grouped grey now, like iOS.
+    surfaceBright = AppColors.Surface,
+    surfaceDim = AppColors.Canvas,
+    surfaceContainerLowest = AppColors.Surface,
+    surfaceContainerLow = AppColors.Surface,
+    surfaceContainer = AppColors.Surface,
+    surfaceContainerHigh = AppColors.Surface,
+    surfaceContainerHighest = AppColors.SurfaceMuted,
 )
 
 @Composable

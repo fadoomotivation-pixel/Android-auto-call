@@ -126,6 +126,8 @@ import kotlinx.coroutines.launch
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import com.salesautocall.app.ui.design.*
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -1334,21 +1336,17 @@ private fun NavSlot(label: String, icon: ImageVector, on: Boolean, jade: Color, 
 private data class NavRow(val label: String, val desc: String, val icon: ImageVector, val route: String?, val badge: String? = null)
 private data class QuickAction(val label: String, val icon: ImageVector, val route: String?)
 
-// Premium dark menu palette — one accent, everything else neutral.
-// THE MORE DRAWER STAYS DARK — kept at the founder's request.
+// THE MENU IS LIGHT NOW, LIKE THE REST OF THE APP.
 //
-// It was relit to match the new near-white app and then put back: the drawer is
-// the app's identity surface, it is entered deliberately rather than lived in,
-// and the dark sheet with the gold Premium mark is what the team recognises as
-// Call Pro AI. The light rest of the app is unaffected; this is the one
-// intentional dark surface besides the in-call screens.
-private val MenuBg = Color(0xFF0C1426)
-private val MenuCard = Color(0xFF13203A)
-private val MenuText = Color(0xFFE8EDF7)
-private val MenuMuted = Color(0xFF8A97AE)
-private val MenuDivider = Color(0xFF1B2740)
-private val MenuAccent = Color(0xFF3B82F6)
-private val Gold = Color(0xFFF5B23E)
+// It was a dark navy sheet with a gold "Premium" mark, kept dark at the
+// founder's request in an earlier round. The founder has since asked for the
+// whole app to feel like iOS, and the dark drawer was the first thing in his
+// screenshots that clashed: a navy slab sliding over a light app. iOS menus
+// and sidebars are the grouped grey canvas with white inset groups, so that
+// is what this is. Same rows, same order, same numbers, same Premium tag.
+private val MenuText = AppColors.TextPrimary
+private val MenuMuted = AppColors.TextSecondary
+private val MenuAccent = IosColors.Blue
 
 /** Rough INR value of the open pipeline (excludes won/dead), for the menu card. */
 private fun pipelineValue(leads: List<Contact>, stages: List<LeadStage>): String {
@@ -1421,96 +1419,103 @@ private fun AppDrawer(
         NavRow("Calls & Recordings", "History and recordings", Icons.Default.Call, "calls"),
     )
 
+    // One tile colour per destination, like iOS Settings. Colour helps the
+    // eye find a row; it does not mean anything else.
+    val tileTint = mapOf(
+        "home" to IosColors.Blue, "leads" to IosColors.Green, "dialer" to IosColors.Teal,
+        "ai" to IosColors.Indigo, "team" to IosColors.Orange,
+        "followups" to IosColors.Red, "attendance" to IosColors.Purple, "calls" to IosColors.Green,
+    )
+
     ModalDrawerSheet(
         Modifier.fillMaxWidth(0.86f),
-        drawerContainerColor = MenuBg,
+        drawerContainerColor = AppColors.Canvas,
         drawerContentColor = MenuText,
+        drawerShape = ContinuousShape(16.dp, top = true, bottom = true),
     ) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            // Brand header.
-            Row(
-                Modifier.fillMaxWidth()
-                    .background(Brush.linearGradient(listOf(Color(0xFF1E3A8A), Color(0xFF0C1426))))
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(MenuAccent),
-                    contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp).padding(top = 20.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            // Brand header — the app icon, the name, the Premium tag.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(48.dp).clip(ContinuousShape(12.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFF3B9BFF), IosColors.Blue))),
+                    contentAlignment = Alignment.Center,
+                ) {
                     Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = Color.White, modifier = Modifier.size(24.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Call Pro AI", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
-                    Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.75f))
+                    Text("Call Pro AI", style = AppType.title3, color = MenuText)
+                    Text("Real Estate Sales Simplified", style = AppType.footnote, color = MenuMuted)
                 }
-                Box(Modifier.clip(RoundedCornerShape(50)).background(Gold.copy(alpha = 0.2f)).padding(horizontal = 9.dp, vertical = 3.dp)) {
-                    Text("Premium", style = MaterialTheme.typography.labelSmall, color = Gold, fontWeight = FontWeight.Bold)
+                IosTag("Premium", fg = Color(0xFFB86E00), bg = IosColors.Orange.copy(alpha = 0.14f))
+            }
+
+            // Today's Opportunities — one white group, three numbers.
+            IosGroup(header = "Today's opportunities") {
+                Row(Modifier.fillMaxWidth().padding(16.dp)) {
+                    OppStat(callNow, "Call now", Modifier.weight(1f))
+                    OppStat(siteVisits.toString(), "Site visits", Modifier.weight(1f))
+                    OppStat(pipelineValue, "Pipeline", Modifier.weight(1f))
                 }
             }
 
-            // Today's Opportunities — a single calm card, three quiet stats.
-            Column(Modifier.padding(16.dp)) {
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MenuCard).padding(16.dp)) {
-                    Text("TODAY'S OPPORTUNITIES", style = MaterialTheme.typography.labelSmall, color = MenuMuted, letterSpacing = 1.sp)
-                    Spacer(Modifier.height(12.dp))
-                    Row(Modifier.fillMaxWidth()) {
-                        OppStat(callNow, "Call now", Modifier.weight(1f))
-                        OppStat(siteVisits.toString(), "Site visits", Modifier.weight(1f))
-                        OppStat(pipelineValue, "Pipeline", Modifier.weight(1f))
+            IosGroup(header = "Main") {
+                main.forEachIndexed { i, row ->
+                    if (i > 0) IosSeparator(58.dp)
+                    DrawerNavRow(row, tileTint[row.route] ?: IosColors.Blue, selected = row.route == currentRoute) { open(row.route, row.label) }
+                }
+            }
+
+            Column {
+                Text("QUICK ACTIONS", style = AppType.groupHeader, color = MenuMuted,
+                    modifier = Modifier.padding(start = 16.dp, bottom = 6.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    quick.chunked(2).forEach { pair ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            pair.forEach { q -> QuickTile(q, Modifier.weight(1f)) { open(q.route, q.label) } }
+                            if (pair.size == 1) Spacer(Modifier.weight(1f))
+                        }
                     }
                 }
             }
 
-            DrawerSection("MAIN")
-            main.forEach { row -> DrawerNavRow(row, selected = row.route == currentRoute) { open(row.route, row.label) } }
-
-            Spacer(Modifier.height(16.dp))
-            DrawerSection("QUICK ACTIONS")
-            Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                quick.chunked(2).forEach { pair ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        pair.forEach { q -> QuickTile(q, Modifier.weight(1f)) { open(q.route, q.label) } }
-                        if (pair.size == 1) Spacer(Modifier.weight(1f))
-                    }
+            IosGroup(header = "More") {
+                more.forEachIndexed { i, row ->
+                    if (i > 0) IosSeparator(58.dp)
+                    DrawerMoreRow(row.icon, row.label, tileTint[row.route] ?: IosColors.Gray, selected = row.route == currentRoute) { open(row.route, row.label) }
                 }
+                IosSeparator(58.dp)
+                DrawerMoreRow(Icons.Default.Settings, "Settings", IosColors.Gray, selected = currentRoute == "settings") { onSettings() }
             }
 
-            Spacer(Modifier.height(16.dp))
-            DrawerSection("MORE")
-            more.forEach { row -> DrawerMoreRow(row.icon, row.label, selected = row.route == currentRoute) { open(row.route, row.label) } }
-            DrawerMoreRow(Icons.Default.Settings, "Settings", selected = currentRoute == "settings") { onSettings() }
-
-            Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(1.dp).background(MenuDivider))
-            // Profile footer.
-            Row(
-                Modifier.fillMaxWidth().clickable { onSignOut() }.padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)))), contentAlignment = Alignment.Center) {
-                    Text(userName.trim().take(1).uppercase().ifBlank { "?" }, color = Color.White, fontWeight = FontWeight.Bold)
+            // Profile + sign out, as its own group.
+            IosGroup {
+                Row(
+                    Modifier.fillMaxWidth().clickable { onSignOut() }.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    InitialsAvatar(userName.ifBlank { "?" }, size = 40)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(userName, style = AppType.headline, color = MenuText)
+                        Text(
+                            buildString {
+                                // "Admin", not "Super Admin". Every company's own
+                                // admin was being shown "Super Admin", which is the
+                                // platform owner who sees every company.
+                                append(if (role == "admin") "Admin" else "Telecaller")
+                                companyName?.let { append(" · "); append(it) }
+                            },
+                            style = AppType.footnote, color = MenuMuted,
+                        )
+                    }
+                    Text("Sign out", style = AppType.body, color = IosColors.Red)
                 }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(userName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MenuText)
-                    Text(
-                        buildString {
-                            // "Admin", not "Super Admin".
-                            //
-                            // Every company's own admin was being shown "Super
-                            // Admin", which is a different and much larger thing:
-                            // the platform owner, who sees every company. Telling
-                            // six separate customers they are the super admin of
-                            // the platform is a plain untruth on the first line
-                            // of the menu, and after today's privilege-escalation
-                            // work it is the exact word that must mean one thing.
-                            append(if (role == "admin") "Admin" else "Telecaller")
-                            companyName?.let { append(" · "); append(it) }
-                        },
-                        style = MaterialTheme.typography.bodySmall, color = MenuMuted,
-                    )
-                }
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out", tint = MenuMuted)
             }
         }
     }
@@ -1519,79 +1524,66 @@ private fun AppDrawer(
 @Composable
 private fun OppStat(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(value, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MenuMuted)
+        Text(value, style = AppType.title3, color = MenuText, maxLines = 1)
+        Text(label, style = AppType.footnote, color = MenuMuted)
     }
 }
 
+/** MAIN row: colour tile, label + one-line description, a blue tick of selection. */
 @Composable
-private fun DrawerSection(text: String) {
-    Text(
-        text, style = MaterialTheme.typography.labelSmall, color = MenuMuted,
-        fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp,
-        modifier = Modifier.padding(start = 20.dp, top = 6.dp, bottom = 6.dp),
-    )
-}
-
-/** Prominent MAIN nav row: monochrome icon, label + description, accent highlight when active. */
-@Composable
-private fun DrawerNavRow(item: NavRow, selected: Boolean, onClick: () -> Unit) {
-    val tint = if (selected) MenuAccent else MenuMuted
+private fun DrawerNavRow(item: NavRow, tint: Color, selected: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) MenuAccent.copy(alpha = 0.14f) else Color.Transparent)
+        Modifier.fillMaxWidth()
+            .background(if (selected) IosColors.Blue.copy(alpha = 0.08f) else Color.Transparent)
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(item.icon, contentDescription = item.label, tint = tint, modifier = Modifier.size(22.dp))
+        IosIconTile(item.icon, tint)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(item.label, style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold, color = if (selected) Color.White else MenuText)
+                Text(item.label, style = AppType.headline, color = if (selected) MenuAccent else MenuText)
                 item.badge?.let {
                     Spacer(Modifier.width(8.dp))
-                    Box(Modifier.clip(RoundedCornerShape(50)).background(MenuAccent.copy(alpha = 0.22f)).padding(horizontal = 7.dp, vertical = 1.dp)) {
-                        Text(it, style = MaterialTheme.typography.labelSmall, color = MenuAccent, fontWeight = FontWeight.Bold)
-                    }
+                    IosTag(it, fg = MenuAccent)
                 }
             }
-            Text(item.desc, style = MaterialTheme.typography.bodySmall, color = MenuMuted, maxLines = 1)
+            Text(item.desc, style = AppType.footnote, color = MenuMuted, maxLines = 1)
         }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.TextTertiary, modifier = Modifier.size(20.dp))
     }
 }
 
-/** Compact MORE row — just an icon and a label, no description, no colour. */
+/** MORE row — tile and label, iOS Settings style. */
 @Composable
-private fun DrawerMoreRow(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+private fun DrawerMoreRow(icon: ImageVector, label: String, tint: Color, selected: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 1.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) MenuAccent.copy(alpha = 0.14f) else Color.Transparent)
+        Modifier.fillMaxWidth()
+            .background(if (selected) IosColors.Blue.copy(alpha = 0.08f) else Color.Transparent)
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = label, tint = if (selected) MenuAccent else MenuMuted, modifier = Modifier.size(20.dp))
+        IosIconTile(icon, tint)
         Spacer(Modifier.width(14.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (selected) Color.White else MenuText)
+        Text(label, style = AppType.body.copy(fontSize = 16.sp), color = if (selected) MenuAccent else MenuText, modifier = Modifier.weight(1f))
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.TextTertiary, modifier = Modifier.size(20.dp))
     }
 }
 
-/** Quick-action tile — a small square button in the 2×2 grid. */
+/** Quick-action tile — a white rounded square in the 2×2 grid. */
 @Composable
 private fun QuickTile(item: QuickAction, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(
-        modifier.height(80.dp).clip(RoundedCornerShape(14.dp)).background(MenuCard).clickable { onClick() }
+        modifier.height(80.dp).clip(Radii.card).background(AppColors.Surface).iosPress { onClick() }
             .padding(horizontal = 8.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(item.icon, contentDescription = item.label, tint = MenuAccent, modifier = Modifier.size(22.dp))
         Spacer(Modifier.height(7.dp))
-        Text(item.label, style = MaterialTheme.typography.labelMedium, color = MenuText, maxLines = 1)
+        Text(item.label, style = AppType.metaStrong, color = MenuText, maxLines = 1)
     }
 }
 

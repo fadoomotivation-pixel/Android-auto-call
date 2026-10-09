@@ -132,7 +132,7 @@ private fun Tile(emoji: String, value: String, label: String, accent: Color, mod
         modifier
             .clip(Radii.card)
             .background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.card)
+
             .padding(horizontal = Space.m, vertical = Space.m),
     ) {
         Text(value, style = AppType.metric, color = accent, maxLines = 1)
@@ -507,7 +507,7 @@ private fun CalendarItem(f: FollowUp, state: String, onCall: () -> Unit, onDone:
     }
     Row(
         Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.card)
+
             .padding(Space.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -646,7 +646,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
                 Row(
                     Modifier.fillMaxWidth().clip(Radii.card)
                         .background(AppColors.Surface)
-                        .border(1.dp, AppColors.Border, Radii.card)
+
                         .padding(horizontal = Space.m, vertical = Space.m),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
