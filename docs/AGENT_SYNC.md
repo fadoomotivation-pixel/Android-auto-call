@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-09 — Grok Bot (lead page: funnel labels fit, next step on top)
+
+- WHAT: The lead page's sales funnel no longer breaks "Contacted" / "Interested" mid-word on a ~400dp phone. Each step is as wide as its word needs, and the word stays on one line. It shrinks a little only under a huge system font and never splits. A "Now: <stage> · Step N of 7 · Next: <stage>" line sits above the circles. A lead off the funnel says so in amber. Tapping a step runs the same logic as before. Callback is its own blue button. Not interested, Lost and Do Not Call sit together under "CLOSE THIS LEAD" in red, away from the funnel. The next-step banner moved to right under the name. The hero shows BUDGET and LAST TALK side by side ("Not known yet", "Never called", "No real talk yet · N calls, all under 30s", "Could not load calls"). The title bar lost its second Call and WhatsApp, so Call is only in the pinned bar. Calls under 30s with nothing to play stay listed, but small and grey. Their warning text is still shown in full. Call times are local, not the raw UTC string. Quick notes are a two-column grid. The bottom nav gap is painted, so content no longer shows between the action bar and the nav.
+- FILES: `android/.../ui/LeadDetailScreen.kt`, `android/.../ui/MainViewModel.kt` (one flag: `leadDetailCallsFailed`, so a failed call read is not shown as "No calls logged"), `docs/AGENT_SYNC.md`.
+- WHY: Founder screenshot. Funnel labels were breaking mid-word, a Quick-notes chip showed between Call and Home, and "what do I do now" was a scroll away.
+- BUILD: `assembleStandardDebug` passed locally on JDK 17. No migration and no admin change.
+- NEXT/NOTE: No post-call popup, no fourth Follow-up tab, no second scheduler, no separate knowledge store, no count on the Follow-up chip, no capture-down banner, no Hindi in UI chrome. The notes below stay.
+
 ## 2026-10-05 — Cursor (one Call now, and a quiet failure says so)
 
 - WHAT: Call now is one list everywhere it is named: overdue or call_now, via callNowContacts. The Leads Call now tile, its Call button, Home's due count, the three plan rows, and "+N more" all use that list. Overdue stays a late slice and says those people are already in Call now. Leads and pending follow-ups page past the old 500 and 300 caps. Opening WhatsApp while capture is not live still opens WhatsApp, does not mark the draft opened, and toasts draftWarning. Retry is no-answer or busy inside the due set, not brand-new leads. The drawer opportunities number is Call now, or a dash when that read failed with nothing kept. The Calls tab that was Follow-up is No answer. A lead call with a harvest miss stays on the recordings list; an unlinked call that matches a lead phone is linked, and a failed link does not drop the row. Booked and Lost from the visit prompt set the stage and leave Call now immediately, and come back if the write is rejected.

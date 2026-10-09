@@ -150,7 +150,7 @@ private val FUNNEL = listOf(
  * or if a tenant left a short label blank — never as a competing taxonomy.
  */
 private val FALLBACK_SHORT = mapOf(
-    "new" to "New", "contacted" to "Contact", "interested" to "Interest",
+    "new" to "New", "contacted" to "Contacted", "interested" to "Interested",
     "site_visit" to "Visit", "negotiation" to "Nego", "token_paid" to "Token",
     "won" to "Booked",
 )
@@ -263,6 +263,31 @@ fun LeadDetailScreen(vm: MainViewModel) {
         }
     }
 
+    // "Last talk" for the hero: the latest call that was a real conversation
+    // (30s+, the same line the lead cards draw). A failed read says so; it is
+    // never shown as "never called".
+    val lastTalk: Pair<String, Boolean> = remember(app.leadDetailCalls, app.leadDetailLoading, app.leadDetailCallsFailed) {
+        val calls = app.leadDetailCalls
+        when {
+            app.leadDetailLoading -> "Loading…" to false
+            app.leadDetailCallsFailed -> "Could not load calls" to true
+            calls.isEmpty() -> "Never called" to false
+            else -> {
+                val talk = calls.firstOrNull { it.durationSeconds >= 30 }
+                val ms = isoMs(talk?.startedAt)
+                if (talk != null) {
+                    val s = talk.durationSeconds
+                    val len = if (s >= 60) "${s / 60}m ${s % 60}s" else "${s}s"
+                    (if (ms != null) "$len · ${fmtWhen(ms)}" else len) to false
+                } else {
+                    // The list is capped at 50, so a full list says "last 50".
+                    val n = if (calls.size >= 50) "last ${calls.size}" else "${calls.size}"
+                    "No real talk yet · $n calls, all under 30s" to true
+                }
+            }
+        }
+    }
+
     // Voice-to-text for the "Add Note" shortcut in Quick Notes.
     val latestNote by rememberUpdatedState(note)
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -340,10 +365,11 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         Spacer(Modifier.width(4.dp))
                         Text("Lead Details", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Ink)
                         Spacer(Modifier.weight(1f))
-                        TopIconButton(Icons.Default.Call, BlueL, size = 48) { doCall() }
-                        Spacer(Modifier.width(8.dp))
-                        TopIconButton(Icons.Default.Chat, WhatsGreen) { doWhats() }
-                        Spacer(Modifier.width(8.dp))
+                        // ONE Call on this page. The title bar had a second Call
+                        // and a second WhatsApp, the same two buttons the bar
+                        // pinned at the bottom always shows. Two blue phones on
+                        // one screen made the rep stop and choose. More stays:
+                        // it holds the things that are not anywhere else.
                         Box {
                             TopIconButton(Icons.Default.MoreHoriz, SubInk) { moreOpen = true }
                             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
@@ -386,7 +412,40 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         onNextTap = { scheduleOpen = true },
                         onEdit = { editIdentityOpen = true },
                         onCallAlt = { contact.altPhone?.let { doCallNumber(it) } },
+                        lastTalk = lastTalk,
                     )
+                }
+
+                // ---- Next step, right under who they are ----
+                //
+                // "What do I do now" sat below the whole coaching card, a
+                // scroll away. It is the first question after "who is this",
+                // so it is the second thing on the page.
+                item {
+                    val visitMs = isoMs(contact.siteVisitAt)
+                    val nowMs = System.currentTimeMillis()
+                    val fuMs = followUp?.let { isoMs(it.dueAt) }
+                    // Terminal is a STAGE question, and it now includes `invalid` — a bad
+                    // number was previously treated as still-live work here.
+                    val terminal = app.leadStages.firstOrNull { it.code == contact.stage }?.isTerminal ?: false
+                    when {
+                        followUp != null -> NextStepBanner(
+                            color = if (fuMs != null && fuMs <= nowMs) RedL else IndigoL,
+                            title = if (fuMs != null && fuMs <= nowMs) "Call back — DUE NOW" else "Next: call back",
+                            detail = listOfNotNull(fuMs?.let { fmtWhen(it) }, followUp.note).joinToString(" · ").ifBlank { "Reminder set" },
+                            cta = "Change", onCta = { scheduleOpen = true }, onDelete = { followUp.id?.let { vm.completeFollowUp(it) } },
+                        )
+                        visitMs != null && visitMs >= nowMs -> NextStepBanner(
+                            color = PurpleL, title = "Next: site visit",
+                            detail = listOfNotNull(fmtWhen(visitMs), contact.siteVisitProject?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                            cta = "Change", onCta = { visitOpen = true }, onDelete = { confirmClearVisit = true },
+                        )
+                        !terminal -> NextStepBanner(
+                            color = AmberL, title = "No next step planned",
+                            detail = "Set a reminder so this lead is never forgotten",
+                            cta = "Set Reminder", onCta = { scheduleOpen = true }, onDelete = null,
+                        )
+                    }
                 }
 
                 // THE QUAD OF ACTION TILES IS GONE, BECAUSE ALL FOUR NOW EXIST
@@ -531,34 +590,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     )
                 }
 
-                // ---- Next step banner ----
-                item {
-                    val visitMs = isoMs(contact.siteVisitAt)
-                    val nowMs = System.currentTimeMillis()
-                    val fuMs = followUp?.let { isoMs(it.dueAt) }
-                    // Terminal is a STAGE question, and it now includes `invalid` — a bad
-                    // number was previously treated as still-live work here.
-                    val terminal = app.leadStages.firstOrNull { it.code == contact.stage }?.isTerminal ?: false
-                    when {
-                        followUp != null -> NextStepBanner(
-                            color = if (fuMs != null && fuMs <= nowMs) RedL else IndigoL,
-                            title = if (fuMs != null && fuMs <= nowMs) "Call back — DUE NOW" else "Next: call back",
-                            detail = listOfNotNull(fuMs?.let { fmtWhen(it) }, followUp.note).joinToString(" · ").ifBlank { "Reminder set" },
-                            cta = "Change", onCta = { scheduleOpen = true }, onDelete = { followUp.id?.let { vm.completeFollowUp(it) } },
-                        )
-                        visitMs != null && visitMs >= nowMs -> NextStepBanner(
-                            color = PurpleL, title = "Next: site visit",
-                            detail = listOfNotNull(fmtWhen(visitMs), contact.siteVisitProject?.takeIf { it.isNotBlank() }).joinToString(" · "),
-                            cta = "Change", onCta = { visitOpen = true }, onDelete = { confirmClearVisit = true },
-                        )
-                        !terminal -> NextStepBanner(
-                            color = AmberL, title = "No next step planned",
-                            detail = "Set a reminder so this lead is never forgotten",
-                            cta = "Set Reminder", onCta = { scheduleOpen = true }, onDelete = null,
-                        )
-                    }
-                }
-
                 // ---- Buyer touch: one-tap professional site-visit confirmation ----
                 // When a visit is fixed, let the rep send the customer a clean
                 // WhatsApp confirmation (date, time, project) — the kind of polish
@@ -627,6 +658,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         Spacer(Modifier.height(10.dp))
                         when {
                             app.leadDetailLoading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                            app.leadDetailCallsFailed -> Text("Could not load this lead's calls. Pull down to try again.", style = MaterialTheme.typography.bodySmall, color = AmberL)
                             app.leadDetailCalls.isEmpty() -> Text("No calls logged for this lead yet.", style = MaterialTheme.typography.bodySmall, color = SubInk)
                             else -> app.leadDetailCalls.forEach { call ->
                                 LeadCallRow(call, playing = call.id != null && call.id == app.playingCallId,
@@ -643,12 +675,14 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             Text("SALES FUNNEL", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
                                 color = Ink, letterSpacing = 0.6.sp)
                             Spacer(Modifier.weight(1f))
-                            Text(if (funnelExpanded) "Collapse" else "View All", color = IndigoL,
+                            Text(if (funnelExpanded) "Hide steps" else "Show steps", color = IndigoL,
                                 style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { funnelExpanded = !funnelExpanded }
                                     .padding(horizontal = 6.dp, vertical = 4.dp))
                         }
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(8.dp))
+                        FunnelNowLine(contact, app.leadStages)
+                        Spacer(Modifier.height(14.dp))
                         HorizontalFunnel(contact, app.leadStages) { key ->
                             when (key) {
                                 "site_visit" -> visitOpen = true
@@ -679,8 +713,8 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                 onClearVisit = { confirmClearVisit = true },
                             )
                         }
-                        Spacer(Modifier.height(14.dp))
-                        FlowRowExits(contact.status) { key ->
+                        Spacer(Modifier.height(16.dp))
+                        FunnelExits(contact.status) { key ->
                             if (key == "callback") scheduleOpen = true
                             else contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) }
                         }
@@ -850,6 +884,12 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     app.coachPicks.firstOrNull { it.contactId == contact.id }?.reason,
                 ),
             )
+            // The nav bar is a floating pill inside an 88dp transparent box,
+            // so the page used to show through the gap between it and the
+            // action bar (a Quick-notes chip sat between Call and Home in the
+            // founder's screenshot). Paint the gap; the list's bottom padding
+            // already reserves this whole stack.
+            Box(Modifier.fillMaxWidth().background(ScreenBg)) {
             FloatingCallBar(
                 current = "leads",
                 onTab = { vm.goToTab(it) },
@@ -862,6 +902,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 // guess nine times out of ten.
                 showDial = false,
             )
+            }
         }
     }
 
@@ -1003,6 +1044,8 @@ private fun IdentityBlock(
     onNextTap: () -> Unit,
     onEdit: () -> Unit,
     onCallAlt: () -> Unit,
+    /** "3m 4s · 16 Aug, 8:50 PM", or why there is none. Second = show it as a warning. */
+    lastTalk: Pair<String, Boolean>,
 ) {
     val ring = tempRing(contact.temperature)
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
@@ -1056,14 +1099,35 @@ private fun IdentityBlock(
                 }
             }
         }
+        // The two facts a rep reads before dialling, side by side and big:
+        // what they can spend, and when someone last actually spoke to them.
+        // Budget used to be one chip among eight; a missing one now says so.
         Spacer(Modifier.height(14.dp))
+        Row(
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val budget = budgetLabel(contact.budget)
+            HeroFact(
+                label = "BUDGET",
+                value = budget?.let { "₹ $it" } ?: "Not known yet",
+                valueColor = if (budget != null) Ink else SubInk,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            HeroFact(
+                label = "LAST TALK",
+                value = lastTalk.first,
+                valueColor = if (lastTalk.second) AmberL else Ink,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+        }
+        Spacer(Modifier.height(12.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             LeadChip(stageLabel(stages, contact.stage), tempRing(null))
             contact.temperature?.takeIf { it.isNotBlank() }?.let { t ->
                 val (label, col) = when (t) { "hot" -> "Hot" to RedL; "warm" -> "Warm" to AmberL; else -> "Cold" to ColdL }
                 LeadChip(label, col)
             }
-            budgetLabel(contact.budget)?.let { LeadChip("₹ $it", Ink) }
             // EVERY OTHER ANSWER THEY GAVE THE FORM — not the first three.
             //
             // The list card has room for a few; this is the screen a rep opens
@@ -1088,6 +1152,21 @@ private fun IdentityBlock(
                 Icon(Icons.Default.KeyboardArrowRight, null, tint = JadeL, modifier = Modifier.size(18.dp))
             }
         }
+    }
+}
+
+/** One labelled fact in the hero ("BUDGET", "LAST TALK"). Wraps at spaces, never mid-word. */
+@Composable
+private fun HeroFact(label: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(14.dp)).background(CardBg)
+            .border(1.dp, Hair, RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Text(label, style = AppType.sectionLabel, color = AppColors.TextTertiary, maxLines = 1)
+        Spacer(Modifier.height(4.dp))
+        Text(value, style = AppType.bodyStrong, fontWeight = FontWeight.SemiBold, color = valueColor, maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
 
@@ -1619,10 +1698,55 @@ private fun WadaRow(label: String, value: String) {
     }
 }
 
-/** Horizontal 7-step funnel with a connecting rail — the compact overview. */
+/** The word under a funnel circle: the admin's own short label, the same one
+ *  the dashboard prints, with a fallback only for the seconds before
+ *  lead_stages has loaded. */
+private fun funnelShort(stages: List<LeadStage>, step: FunnelStep): String =
+    stages.firstOrNull { it.code == step.key }
+        ?.let { it.shortLabel.ifBlank { it.label } }
+        ?: FALLBACK_SHORT[step.key] ?: step.label
+
+/**
+ * "Now: Contacted" in words a rep reads at a glance, above the circles.
+ *
+ * The circles say where the lead is only to someone who already knows the
+ * seven steps. This line says it outright, says what comes next, and when the
+ * lead is off the funnel (callback, lost, not interested) it says that too
+ * instead of leaving every circle grey and letting it look like "New".
+ */
+@Composable
+private fun FunnelNowLine(contact: Contact, stages: List<LeadStage>) {
+    val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
+    val now = stageLabel(stages, contact.stage)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Now: ", style = AppType.rowTitle, color = SubInk)
+        Text(now, style = AppType.rowTitle, color = if (idx >= 0) PurpleL else AmberL,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    }
+    val sub = when {
+        idx < 0 -> "Not on the funnel. Tap a step to put the lead back on it."
+        idx == FUNNEL.lastIndex -> "Step ${idx + 1} of ${FUNNEL.size}. Deal done."
+        else -> "Step ${idx + 1} of ${FUNNEL.size}. Next: ${stageLabel(stages, FUNNEL[idx + 1].key)}. Tap a step to move the lead."
+    }
+    Text(sub, style = AppType.meta, color = SubInk)
+}
+
+/**
+ * Horizontal 7-step funnel with a connecting rail — the compact overview.
+ *
+ * WHY THE CELLS ARE NOT EQUAL. Seven equal cells on a ~400dp phone are about
+ * 48dp each, and "Contacted" / "Interested" do not fit in 48dp, so they broke
+ * mid-word ("Contact ed", "Interest ed") — the founder's screenshot. Each cell
+ * is now as wide as its word needs (by letter count, with a floor that keeps
+ * room for the circle), so every label sits on ONE line at a readable size.
+ * The rail is drawn per cell, so it still joins up. [FitOneLine] is the floor
+ * under a huge system font or a long admin-made label: it shrinks the word
+ * a little, and only then ends it with "…" — it never splits a word.
+ */
 @Composable
 private fun HorizontalFunnel(contact: Contact, stages: List<LeadStage>, onTap: (String) -> Unit) {
     val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
+    val labels = FUNNEL.map { funnelShort(stages, it) }
     Row(Modifier.fillMaxWidth()) {
         FUNNEL.forEachIndexed { i, step ->
             val done = i < idx
@@ -1630,7 +1754,9 @@ private fun HorizontalFunnel(contact: Contact, stages: List<LeadStage>, onTap: (
             val circleColor = when { done -> GreenL; current -> PurpleL; else -> Hair }
             val textOnCircle = if (done || current) Color.White else SubInk
             Column(
-                Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { onTap(step.key) },
+                Modifier.weight(labels[i].length.coerceAtLeast(5).toFloat())
+                    .clip(RoundedCornerShape(10.dp)).clickable { onTap(step.key) }
+                    .padding(bottom = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(Modifier.fillMaxWidth().height(36.dp), contentAlignment = Alignment.Center) {
@@ -1643,7 +1769,7 @@ private fun HorizontalFunnel(contact: Contact, stages: List<LeadStage>, onTap: (
                     }
                     // Current step gets a soft halo so "where we are" pops instantly.
                     if (current) {
-                        Box(Modifier.size(36.dp).clip(CircleShape).background(PurpleL.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(36.dp).clip(CircleShape).background(PurpleL.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
                             Box(Modifier.size(28.dp).clip(CircleShape).background(circleColor), contentAlignment = Alignment.Center) {
                                 Text("${i + 1}", color = textOnCircle, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                             }
@@ -1656,61 +1782,126 @@ private fun HorizontalFunnel(contact: Contact, stages: List<LeadStage>, onTap: (
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                // The word under each circle is the admin's own short label,
-                // the same one the dashboard prints. This used to be a private
-                // when-block ("Nego.", "Interest") that drifted the moment a
-                // stage was renamed on the web.
-                //
-                // Seven steps share the width — about 45dp each on a 4-inch
-                // phone. Two lines at 11sp hold "Contacted" whole instead of
-                // hyphen-breaking it mid-word, the height is fixed so short and
-                // long labels keep the row level, and ellipsis is the floor
-                // under a long label a tenant might configure.
-                val short = stages.firstOrNull { it.code == step.key }
-                    ?.let { it.shortLabel.ifBlank { it.label } }
-                    ?: FALLBACK_SHORT[step.key] ?: step.label
-                Text(short,
-                    style = AppType.tag,
-                    fontSize = 10.sp, lineHeight = 12.sp,
+                FitOneLine(
+                    text = labels[i],
+                    style = AppType.tag.copy(fontWeight = if (current) FontWeight.Bold else FontWeight.Medium),
                     color = when { current -> PurpleL; done -> GreenL; else -> SubInk },
-                    textAlign = TextAlign.Center, maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    // heightIn, not height: at a large system font scale two
-                    // lines need more than 24dp and a fixed box would clip them.
-                    modifier = Modifier.heightIn(min = 24.dp).padding(horizontal = 1.dp))
+                    maxSize = 11.sp, minSize = 8.sp,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 1.dp),
+                )
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * One line of text that never wraps and never breaks a word: it steps the
+ * font down from [maxSize] to [minSize] until the word fits the width it was
+ * given, and only past that floor does it end with "…".
+ */
 @Composable
-private fun FlowRowExits(status: String, onPick: (String) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        EXITS.forEach { (key, label) ->
+private fun FitOneLine(
+    text: String,
+    style: androidx.compose.ui.text.TextStyle,
+    color: Color,
+    maxSize: androidx.compose.ui.unit.TextUnit,
+    minSize: androidx.compose.ui.unit.TextUnit,
+    modifier: Modifier = Modifier,
+) {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        val maxPx = constraints.maxWidth
+        val size = remember(text, maxPx, style, maxSize, minSize) {
+            var sz = maxSize.value
+            if (maxPx != androidx.compose.ui.unit.Constraints.Infinity) {
+                while (sz > minSize.value &&
+                    measurer.measure(text, style.copy(fontSize = sz.sp), maxLines = 1, softWrap = false).size.width > maxPx
+                ) sz -= 0.5f
+            }
+            sz.sp
+        }
+        Text(
+            text, style = style.copy(fontSize = size, lineHeight = (size.value + 3).sp), color = color,
+            maxLines = 1, softWrap = false, textAlign = TextAlign.Center,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * The ways a lead leaves the straight path, under the funnel.
+ *
+ * Callback is not a loss — it is "not now, later" — so it stays blue and on
+ * its own. The three that close the lead (Not interested, Lost, Do Not Call)
+ * sit together under their own label, in the warning colour, one row of equal
+ * cells, so a thumb aiming at the funnel never lands on one by accident and a
+ * rep can see at once which taps end the deal.
+ */
+@Composable
+private fun FunnelExits(status: String, onPick: (String) -> Unit) {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
+    Spacer(Modifier.height(12.dp))
+    val cbOn = status == "callback"
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
+            .background(if (cbOn) IndigoL else IndigoL.copy(alpha = 0.10f))
+            .clickable { onPick("callback") }.padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(Icons.Default.CalendarMonth, null, tint = if (cbOn) Color.White else IndigoL, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(EXITS.first { it.first == "callback" }.second + " — pick a time",
+            color = if (cbOn) Color.White else IndigoL, style = AppType.label, maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    }
+    Spacer(Modifier.height(14.dp))
+    Text("CLOSE THIS LEAD", style = AppType.sectionLabel, color = AppColors.TextTertiary, maxLines = 1)
+    Spacer(Modifier.height(8.dp))
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        EXITS.filter { it.first != "callback" }.forEach { (key, label) ->
             val on = status == key
-            val tint = when (key) { "callback" -> IndigoL; "lost" -> RedL; else -> SubInk }
             Box(
-                Modifier.clip(RoundedCornerShape(50))
-                    .background(if (on) tint else tint.copy(alpha = 0.10f))
-                    .clickable { onPick(key) }.padding(horizontal = 14.dp, vertical = 8.dp),
+                Modifier.weight(1f).fillMaxHeight().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
+                    .background(if (on) RedL else Color.Transparent)
+                    .border(1.dp, RedL.copy(alpha = if (on) 1f else 0.35f), RoundedCornerShape(12.dp))
+                    .clickable { onPick(key) }.padding(horizontal = 6.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                Text(label, color = if (on) Color.White else tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                FitOneLine(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (on) Color.White else RedL,
+                    maxSize = 13.sp, minSize = 10.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Quick notes as a tidy two-column grid. The old free-flowing pills made a
+ * ragged edge of different widths that the eye had to hunt along; equal cells
+ * in two columns read like a list. Text wraps at spaces only (every word is
+ * short), so nothing is cut and no word is split.
+ */
 @Composable
 private fun QuickNoteChips(onPick: (String) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        QUICK_NOTES.forEach { q ->
-            Box(
-                Modifier.clip(RoundedCornerShape(50)).border(1.dp, Hair, RoundedCornerShape(50))
-                    .clickable { onPick(q) }.padding(horizontal = 14.dp, vertical = 8.dp),
-            ) {
-                Text("+ $q", style = MaterialTheme.typography.labelMedium, color = Ink)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        QUICK_NOTES.chunked(2).forEach { pair ->
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                pair.forEach { q ->
+                    Box(
+                        Modifier.weight(1f).fillMaxHeight().heightIn(min = 42.dp)
+                            .clip(RoundedCornerShape(12.dp)).border(1.dp, Hair, RoundedCornerShape(12.dp))
+                            .clickable { onPick(q) }.padding(horizontal = 10.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Text("+ $q", style = MaterialTheme.typography.labelMedium, color = Ink)
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -2192,18 +2383,38 @@ internal fun PickWhenDialog(title: String, visitMode: Boolean = false, onDismiss
 
 @Composable
 private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onStop: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (call.direction == "incoming") "📥 Incoming" else "📤 Outgoing", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = Ink)
+    // A ring-out with nothing to play (0s, or under 30s with no recording) is
+    // still a row — the attempt happened and the count must stay true — but
+    // it is drawn small and grey, so the calls where someone actually spoke
+    // are the ones the eye lands on. Its warning, if any, is never dropped.
+    val compact = call.durationSeconds == 0 ||
+        (call.durationSeconds < 30 && call.recordingStatus != "ready")
+    // Local time, not the first 16 characters of the server's UTC string —
+    // that printed 08:02 for a call made at 1:32 PM.
+    val whenText = isoMs(call.startedAt)?.let { fmtWhen(it) } ?: call.startedAt?.take(16)?.replace('T', ' ')
+    val dir = if (call.direction == "incoming") "Incoming" else "Outgoing"
+    val len = call.durationSeconds.let { if (it >= 60) "${it / 60}m ${it % 60}s" else "${it}s" }
+    Column(Modifier.fillMaxWidth().padding(vertical = if (compact) 3.dp else 6.dp)) {
+        if (compact) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(Hair))
+                Spacer(Modifier.width(8.dp))
+                Text("$dir · $len · no talk", style = AppType.tag, color = SubInk, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                whenText?.let { Text(it, style = AppType.tag, color = SubInk, maxLines = 1) }
+            }
+        } else Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(if (call.direction == "incoming") "📥 $dir" else "📤 $dir", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = Ink)
             Spacer(Modifier.width(8.dp))
-            Text("${call.durationSeconds / 60}m ${call.durationSeconds % 60}s", style = MaterialTheme.typography.labelSmall, color = SubInk)
+            Text(len, style = MaterialTheme.typography.labelSmall, color = SubInk)
             Spacer(Modifier.weight(1f))
-            call.startedAt?.let { Text(it.take(16).replace('T', ' '), style = MaterialTheme.typography.labelSmall, color = SubInk) }
+            whenText?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = SubInk) }
         }
         val recordingNote = com.salesautocall.app.dialer.RecordingTruth.warningFor(call)
         if (recordingNote != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(recordingNote, style = MaterialTheme.typography.labelMedium, color = AmberL, maxLines = 3)
+            Spacer(Modifier.height(if (compact) 2.dp else 4.dp))
+            Text(recordingNote, style = if (compact) AppType.tag else MaterialTheme.typography.labelMedium, color = AmberL,
+                modifier = if (compact) Modifier.padding(start = 14.dp) else Modifier)
         }
         // A file the server already marked unfinished cannot play. Offering
         // Play on it is how a broken recording looked like a normal one.
@@ -2249,11 +2460,12 @@ private fun LeadCallRow(call: CallLog, playing: Boolean, onPlay: () -> Unit, onS
             }
         }
         if (!call.summary.isNullOrBlank()) {
-            Spacer(Modifier.height(6.dp))
-            Text(call.summary!!, style = MaterialTheme.typography.bodySmall, color = SubInk)
+            Spacer(Modifier.height(if (compact) 2.dp else 6.dp))
+            Text(call.summary!!, style = if (compact) AppType.tag else MaterialTheme.typography.bodySmall, color = SubInk,
+                modifier = if (compact) Modifier.padding(start = 14.dp) else Modifier)
         }
-        Spacer(Modifier.height(4.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
+        Spacer(Modifier.height(if (compact) 3.dp else 4.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Hair.copy(alpha = if (compact) 0.5f else 1f)))
     }
 }
 
