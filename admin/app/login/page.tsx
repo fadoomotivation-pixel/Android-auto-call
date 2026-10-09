@@ -64,7 +64,7 @@ export default function LoginPage() {
   return (
     <div className="login-wrap">
       <form className="login-box" onSubmit={handleSubmit}>
-        <h1>SalesAutoCall</h1>
+        <h1>Call Pro AI</h1>
         <p>{mode === "signin" ? "Admin sign in" : "Create your company"}</p>
 
         {mode === "signup" && (
