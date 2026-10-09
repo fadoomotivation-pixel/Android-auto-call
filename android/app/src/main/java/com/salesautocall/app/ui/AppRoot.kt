@@ -221,6 +221,16 @@ fun AppRoot(vm: MainViewModel) {
         AddLeadSheet(vm)
     }
 
+    // Coach anywhere: a small orb tucked into the right edge, on every main
+    // screen and the lead page. Never over a call, a post-call sheet, the
+    // assistant's question or Settings. It never opens by itself.
+    if (state.signedIn && state.authResolved && state.cloudCallNumber == null &&
+        state.postCallContactId == null && state.assistantAsk == null &&
+        !state.showSettings && !state.showAddLead && !state.coachOpen
+    ) {
+        CoachDock(vm, state)
+    }
+
     // The in-app SIM call cockpit was removed — it floated over the phone's own
     // in-call screen and was laggy without adding value (the native dialer handles
     // mute/speaker/end, and recordings are harvested automatically after the call).
@@ -661,9 +671,11 @@ private fun MainShell(vm: MainViewModel) {
             )
         },
     ) {
+        val topRoute = nav.currentBackStackEntryAsState().value?.destination?.route
         Scaffold(
             topBar = {
-                TopAppBar(
+                // Leads draws its own iOS large-title bar, so no heavy app bar there.
+                if (topRoute != Tab.Leads.route) TopAppBar(
                     title = {
                         Column {
                             Text("Call Pro AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -777,6 +789,7 @@ private fun MainShell(vm: MainViewModel) {
                     composable(Tab.Leads.route) {
                         LeadsScreen(
                             vm,
+                            onMenu = { scope.launch { drawerState.open() } },
                             onStartCampaign = {
                                 nav.navigate(Tab.Campaign.route) {
                                     popUpTo(nav.graph.findStartDestination().id) { saveState = true }

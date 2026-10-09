@@ -216,7 +216,10 @@ Deno.serve(async (req) => {
       company_id: company, salesperson_id: uid,
       question: question.slice(0, 2000), answer, contact_id: contactId,
     }).catch(() => {});
-    return json({ ok: true, answer: answer ?? "Couldn't write an answer just now. Ask once more." });
+    // facts = how many playbook / guidebook / win notes grounded this answer,
+    // so the app can say plainly when it is general advice.
+    // A failed write is NOT an answer: the app shows its own honest error.
+    return json({ ok: true, answer, facts: facts.length });
   }
 
   // ---------- LEAD mode: rating + guidance for ONE lead's last real call ----

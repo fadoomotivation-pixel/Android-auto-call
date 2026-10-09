@@ -466,6 +466,67 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
+                // ---- Sales funnel ----
+                item {
+                    SectionCard(header = "Sales funnel") {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(Modifier.weight(1f))
+                            Text(if (funnelExpanded) "Hide steps" else "Show steps", color = IndigoL,
+                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { funnelExpanded = !funnelExpanded }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp))
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        FunnelNowLine(contact, app.leadStages)
+                        Spacer(Modifier.height(14.dp))
+                        HorizontalFunnel(contact, app.leadStages) { key ->
+                            when (key) {
+                                "site_visit" -> visitOpen = true
+                                else -> {
+                                    val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
+                                    val tapped = FUNNEL.indexOfFirst { it.key == key }
+                                    if (tapped in 0 until idx) confirmMoveKey = key
+                                    else contact.id?.let {
+                                        vm.applyLead(it, key, null, null, null, null, null,
+                                            if (key == "token_paid") token.ifBlank { null } else null)
+                                    }
+                                }
+                            }
+                        }
+                        if (funnelExpanded) {
+                            Spacer(Modifier.height(14.dp))
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
+                            Spacer(Modifier.height(6.dp))
+                            FunnelStepper(
+                                contact = contact,
+                                stages = app.leadStages,
+                                onSet = { key -> if (key == "site_visit") visitOpen = true else contact.id?.let {
+                                    vm.applyLead(it, key, null, null, null, null, null,
+                                        if (key == "token_paid") token.ifBlank { null } else null)
+                                } },
+                                onMoveBack = { key -> confirmMoveKey = key },
+                                onEditVisit = { visitOpen = true },
+                                onClearVisit = { confirmClearVisit = true },
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        FunnelExits(contact.status, closeRow = false) { key ->
+                            if (key == "callback") scheduleOpen = true
+                            else contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) }
+                        }
+                    }
+                }
+
+                // ---- Close this lead: right under the funnel, near the top ----
+                item {
+                    SectionCard(header = "Close this lead", footer = "Use only when the buyer is truly done. Notes and calls stay safe.") {
+                        FunnelExits(contact.status, closeRow = true) { key ->
+                            contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) }
+                        }
+                    }
+                }
+
+
                 // THE QUAD OF ACTION TILES IS GONE, BECAUSE ALL FOUR NOW EXIST
                 // TWICE ELSEWHERE.
                 //
@@ -483,81 +544,14 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 // at the top of the page and the impression that four different
                 // things are on offer when there are two.
 
-                // ══ THE ASSISTANT, IN ONE BREATH ═════════════════════════════
-                //
-                // These four blocks used to be scattered down the screen with a
-                // funnel and a voice recorder between them: AI Coach at position
-                // 5, Wada at 6, Next step at 7, Call Coach at 10. Four cards, four
-                // headers, four different robots — and a rep who has just hung up
-                // has to work out which one to open.
-                //
-                // They are now contiguous and in the order a person actually
-                // thinks after a call:
-                //
-                //     what was said        → Wada
-                //     how it went          → Call Coach
-                //     what to say next     → the three tabs
-                //     what to do, and when → Next step
-                //
-                // Nothing merged into anything, nothing lost — the same four
-                // composables with the same inputs, read as one voice instead of
-                // four products. The two that announced themselves as tools
-                // ("AI COACH", "CALL COACH") now say what they are FOR.
-                //
-                // ---- Wada: what the AI heard on the latest call. It applies
-                // ITSELF (server-side, or on open) — the card just shows the
-                // receipt: promise set, facts saved, zero typing. ----
-                run {
-                    val wadaCall = app.leadDetailCalls.firstOrNull {
-                        it.aiActions != null && it.wadaState in setOf("pending", "applied")
-                    }
-                    if (wadaCall != null) {
-                        item {
-                            WadaCard(
-                                call = wadaCall,
-                                onDismiss = { vm.dismissWada(wadaCall) },
-                            )
-                        }
-                    }
-                }
-
-                // ---- Call Coach — honest rating + guidance from THIS lead's last
-                // real recording. The coach "observes" the call and rates it; a
-                // good call only gets motivation, no forced suggestion. ----
-                // Coach: did the site visit happen? Only when the server's
-                // pending-visit list has this lead. Same writes as the Home card.
-                val visitRow = app.pendingVisits.rows.firstOrNull { it.contactId == contact.id }
-                if (visitRow != null && contact.id != null && contact.siteVisitArrivedAt == null) {
-                    item(key = "coach-visit") {
-                        val cid = contact.id
-                        val phone = visitRow.phone.ifBlank { contact.phone }
-                        val nm = visitRow.name.ifBlank { prettyName(contact.name) ?: phone }
-                        Column(Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface)) {
-                            Row(Modifier.padding(start = Space.l, top = 12.dp, end = Space.l), verticalAlignment = Alignment.CenterVertically) {
-                                CoachOrb(size = 32.dp, active = true, face = true)
-                                Spacer(Modifier.width(10.dp))
-                                Text("Coach", style = AppType.headline, color = AppColors.TextPrimary)
-                            }
-                            VisitCheckBlock(
-                                CoachVisit(cid, phone, nm, contact.siteVisitProject,
-                                    if (visitRow.daysWaiting <= 0) "Today" else "${visitRow.daysWaiting}d ago"),
-                                more = 0,
-                                onYes = { vm.answerVisitHappened(cid, phone, nm, true) },
-                                onNo = { vm.answerVisitHappened(cid, phone, nm, false) },
-                                onMoved = { ms -> vm.coachVisitRescheduled(cid, phone, nm, ms) },
-                                onOpen = null,
-                            )
-                        }
-                    }
-                }
                 if (app.leadCoachLoading || app.leadCoach != null) {
                     item {
                         val coach = app.leadCoach
-                        SectionCard {
+                        SectionCard(header = "How that call went") {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CoachOrb(size = 28.dp, active = coach == null, face = true)
                                 Spacer(Modifier.width(8.dp))
-                                Text("HOW THAT CALL WENT", style = AppType.sectionLabel, color = AppColors.TextSecondary,
+                                Text("Coach", style = AppType.headline, color = AppColors.TextPrimary,
                                     modifier = Modifier.weight(1f))
                                 coach?.rating?.let { r ->
                                     Text("⭐".repeat(r.coerceIn(1, 5)) + " $r/5",
@@ -642,6 +636,73 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     )
                 }
 
+                // ══ THE ASSISTANT, IN ONE BREATH ═════════════════════════════
+                //
+                // These four blocks used to be scattered down the screen with a
+                // funnel and a voice recorder between them: AI Coach at position
+                // 5, Wada at 6, Next step at 7, Call Coach at 10. Four cards, four
+                // headers, four different robots — and a rep who has just hung up
+                // has to work out which one to open.
+                //
+                // They are now contiguous and in the order a person actually
+                // thinks after a call:
+                //
+                //     what was said        → Wada
+                //     how it went          → Call Coach
+                //     what to say next     → the three tabs
+                //     what to do, and when → Next step
+                //
+                // Nothing merged into anything, nothing lost — the same four
+                // composables with the same inputs, read as one voice instead of
+                // four products. The two that announced themselves as tools
+                // ("AI COACH", "CALL COACH") now say what they are FOR.
+                //
+                // ---- Wada: what the AI heard on the latest call. It applies
+                // ITSELF (server-side, or on open) — the card just shows the
+                // receipt: promise set, facts saved, zero typing. ----
+                run {
+                    val wadaCall = app.leadDetailCalls.firstOrNull {
+                        it.aiActions != null && it.wadaState in setOf("pending", "applied")
+                    }
+                    if (wadaCall != null) {
+                        item {
+                            WadaCard(
+                                call = wadaCall,
+                                onDismiss = { vm.dismissWada(wadaCall) },
+                            )
+                        }
+                    }
+                }
+
+                // ---- Call Coach — honest rating + guidance from THIS lead's last
+                // real recording. The coach "observes" the call and rates it; a
+                // good call only gets motivation, no forced suggestion. ----
+                // Coach: did the site visit happen? Only when the server's
+                // pending-visit list has this lead. Same writes as the Home card.
+                val visitRow = app.pendingVisits.rows.firstOrNull { it.contactId == contact.id }
+                if (visitRow != null && contact.id != null && contact.siteVisitArrivedAt == null) {
+                    item(key = "coach-visit") {
+                        val cid = contact.id
+                        val phone = visitRow.phone.ifBlank { contact.phone }
+                        val nm = visitRow.name.ifBlank { prettyName(contact.name) ?: phone }
+                        Column(Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface)) {
+                            Row(Modifier.padding(start = Space.l, top = 12.dp, end = Space.l), verticalAlignment = Alignment.CenterVertically) {
+                                CoachOrb(size = 32.dp, active = true, face = true)
+                                Spacer(Modifier.width(10.dp))
+                                Text("Coach", style = AppType.headline, color = AppColors.TextPrimary)
+                            }
+                            VisitCheckBlock(
+                                CoachVisit(cid, phone, nm, contact.siteVisitProject,
+                                    if (visitRow.daysWaiting <= 0) "Today" else "${visitRow.daysWaiting}d ago"),
+                                more = 0,
+                                onYes = { vm.answerVisitHappened(cid, phone, nm, true) },
+                                onNo = { vm.answerVisitHappened(cid, phone, nm, false) },
+                                onMoved = { ms -> vm.coachVisitRescheduled(cid, phone, nm, ms) },
+                                onOpen = null,
+                            )
+                        }
+                    }
+                }
                 // ---- Buyer touch: one-tap professional site-visit confirmation ----
                 // When a visit is fixed, let the rep send the customer a clean
                 // WhatsApp confirmation (date, time, project) — the kind of polish
@@ -698,18 +759,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 // voice note, so hearing what was said and recording what it
                 // meant sit together instead of a screen apart. ----
                 item {
-                    SectionCard {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Call, null, tint = BlueL, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("CALLS & RECORDINGS", style = AppType.sectionLabel, color = AppColors.TextSecondary)
-                            val n = app.leadDetailCalls.size
-                            if (n > 0) {
-                                Spacer(Modifier.width(8.dp))
-                                Text("$n", style = MaterialTheme.typography.labelMedium, color = SubInk)
-                            }
-                        }
-                        Spacer(Modifier.height(10.dp))
+                    SectionCard(header = "Calls & recordings" + (app.leadDetailCalls.size.takeIf { it > 0 }?.let { " · $it" } ?: "")) {
                         when {
                             app.leadDetailLoading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             app.leadDetailCallsFailed -> Text("Could not load this lead's calls. Pull down to try again.", style = MaterialTheme.typography.bodySmall, color = AmberL)
@@ -718,58 +768,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                 LeadCallRow(call, playing = call.id != null && call.id == app.playingCallId,
                                     onPlay = { call.id?.let { vm.playRecording(it) } }, onStop = { vm.stopRecording() })
                             }
-                        }
-                    }
-                }
-
-                // ---- Sales funnel ----
-                item {
-                    SectionCard {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("SALES FUNNEL", style = AppType.sectionLabel, color = AppColors.TextSecondary)
-                            Spacer(Modifier.weight(1f))
-                            Text(if (funnelExpanded) "Hide steps" else "Show steps", color = IndigoL,
-                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { funnelExpanded = !funnelExpanded }
-                                    .padding(horizontal = 6.dp, vertical = 4.dp))
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        FunnelNowLine(contact, app.leadStages)
-                        Spacer(Modifier.height(14.dp))
-                        HorizontalFunnel(contact, app.leadStages) { key ->
-                            when (key) {
-                                "site_visit" -> visitOpen = true
-                                else -> {
-                                    val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
-                                    val tapped = FUNNEL.indexOfFirst { it.key == key }
-                                    if (tapped in 0 until idx) confirmMoveKey = key
-                                    else contact.id?.let {
-                                        vm.applyLead(it, key, null, null, null, null, null,
-                                            if (key == "token_paid") token.ifBlank { null } else null)
-                                    }
-                                }
-                            }
-                        }
-                        if (funnelExpanded) {
-                            Spacer(Modifier.height(14.dp))
-                            Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
-                            Spacer(Modifier.height(6.dp))
-                            FunnelStepper(
-                                contact = contact,
-                                stages = app.leadStages,
-                                onSet = { key -> if (key == "site_visit") visitOpen = true else contact.id?.let {
-                                    vm.applyLead(it, key, null, null, null, null, null,
-                                        if (key == "token_paid") token.ifBlank { null } else null)
-                                } },
-                                onMoveBack = { key -> confirmMoveKey = key },
-                                onEditVisit = { visitOpen = true },
-                                onClearVisit = { confirmClearVisit = true },
-                            )
-                        }
-                        Spacer(Modifier.height(16.dp))
-                        FunnelExits(contact.status) { key ->
-                            if (key == "callback") scheduleOpen = true
-                            else contact.id?.let { vm.applyLead(it, key, null, null, null, null, null, null) }
                         }
                     }
                 }
@@ -790,9 +788,8 @@ fun LeadDetailScreen(vm: MainViewModel) {
 
                 // ---- Quick notes ----
                 item {
-                    SectionCard {
+                    SectionCard(header = "Quick notes") {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("QUICK NOTES", style = AppType.sectionLabel, color = AppColors.TextSecondary)
                             Spacer(Modifier.weight(1f))
                             Row(
                                 Modifier.clip(RoundedCornerShape(50)).background(IndigoL.copy(alpha = 0.10f))
@@ -842,9 +839,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         })
                         contact.createdAt?.let { add(Triple(it, "created", "Lead added")) }
                     }.sortedByDescending { it.first ?: "" }
-                    item { SectionCard {
-                        Text("JOURNEY", style = AppType.sectionLabel, color = AppColors.TextSecondary)
-                        Spacer(Modifier.height(10.dp))
+                    item { SectionCard(header = "Journey") {
                         if (journey.isEmpty()) Text("Updates you make will show here with date & time.",
                             style = MaterialTheme.typography.bodySmall, color = SubInk)
                         else journey.forEachIndexed { i, (atIso, type, text) -> JourneyRow(atIso, type, text, last = i == journey.lastIndex) }
@@ -853,9 +848,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
 
                 // ---- Add note + Save ----
                 item {
-                    SectionCard {
-                        Text("ADD NOTE", style = AppType.sectionLabel, color = AppColors.TextSecondary)
-                        Spacer(Modifier.height(10.dp))
+                    SectionCard(header = "Add note") {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
                                 note, { note = it }, placeholder = { Text("Add custom note…") },
@@ -1028,7 +1021,18 @@ fun LeadDetailScreen(vm: MainViewModel) {
 // ---------------- Building blocks ----------------
 
 @Composable
-private fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+private fun SectionCard(
+    header: String? = null,
+    footer: String? = null,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    // iOS inset-grouped: small grey uppercase header OUTSIDE the white card,
+    // optional grey footnote under it.
+    Column(Modifier.fillMaxWidth()) {
+    if (!header.isNullOrBlank()) {
+        Text(header.uppercase(), style = AppType.groupHeader, color = AppColors.TextSecondary,
+            modifier = Modifier.padding(start = Space.l + Space.l, end = Space.l, bottom = 6.dp))
+    }
     Column(
         // iOS grouped-inset: a white card on the grey canvas, no outline.
         // One radius (Radii.card), one inset (16dp), one inner padding (16dp)
@@ -1038,6 +1042,11 @@ private fun SectionCard(content: @Composable androidx.compose.foundation.layout.
             .padding(Space.l),
         content = content,
     )
+    if (!footer.isNullOrBlank()) {
+        Text(footer, style = AppType.footnote, color = AppColors.TextSecondary,
+            modifier = Modifier.padding(start = Space.l + Space.l, end = Space.l, top = 6.dp))
+    }
+    }
 }
 
 @Composable
@@ -1370,59 +1379,47 @@ private fun AiCoachCard(
         "Just thinking about it", "Loan problem", "Cheaper elsewhere",
     )
 
+    Column(Modifier.fillMaxWidth()) {
+    // NOT "AI COACH". A rep wants to be told what to say, so the header names
+    // the job. iOS grouped header outside the card, footnote under the title.
+    Text("WHAT TO SAY", style = AppType.groupHeader, color = AppColors.TextSecondary,
+        modifier = Modifier.padding(start = Space.l + Space.l, end = Space.l, bottom = 6.dp))
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Space.l)
             .clip(Radii.card).background(CardBg)
             .padding(Space.l),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // NOT "AI COACH". A rep does not want a tool, they want to be told
-            // what to say. Naming the robot makes them decide whether to open it;
-            // naming the JOB makes them read it. The three tabs underneath say
-            // what it does, so the header does not have to.
-            Column(Modifier.weight(1f)) {
-                Text("What to say", style = AppType.rowTitle, color = AppColors.TextPrimary)
-                Text("Opening line, the counter to their objection, a message to send",
-                    style = MaterialTheme.typography.labelSmall, color = SubInk)
-            }
-        }
+        Text("Opening line, a reply to their objection, or a message to send.",
+            style = AppType.footnote, color = AppColors.TextSecondary)
 
-        // Already on the server. No new question, no new model call. It stays
-        // on the card through the afternoon because the harvest rewrites it
-        // when the conversation moves, and the phone re-reads it with the queue.
+        // Already on the server. Shown as plain iOS rows with hairlines —
+        // no grey box inside the white card.
         if (!stored.isEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                    .background(SubInk.copy(alpha = 0.06f))
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                stored.leftAt?.let { StoredFact("Left at", it) }
-                stored.theyWant?.let { StoredFact("They want", it) }
-                stored.stoppedBy?.let { StoredFact("Stopped by", it) }
-                stored.stillOwe?.let { StoredFact("You still owe", it) }
-                stored.sayThis?.let { StoredFact("Say this", it) }
+            Spacer(Modifier.height(8.dp))
+            val facts = listOfNotNull(
+                stored.leftAt?.let { "Left at" to it },
+                stored.theyWant?.let { "They want" to it },
+                stored.stoppedBy?.let { "Stopped by" to it },
+                stored.stillOwe?.let { "You still owe" to it },
+                stored.sayThis?.let { "Say this" to it },
+            )
+            facts.forEachIndexed { i, (k, v) ->
+                if (i > 0) Box(Modifier.fillMaxWidth().height(0.5.dp).background(AppColors.Separator))
+                Box(Modifier.padding(vertical = 8.dp)) { StoredFact(k, v) }
             }
         }
 
         // ---- Segmented control: Pitch · Objection · Message ----
         Spacer(Modifier.height(12.dp))
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                .background(SubInk.copy(alpha = 0.08f)).padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            AiModeSegment("Pitch", selected = mode == "pitch", modifier = Modifier.weight(1f)) {
-                chosen = "pitch"
-                if (brief == null && !briefLoading) onGenerate()
-            }
-            AiModeSegment("Objection", selected = mode == "objection", modifier = Modifier.weight(1f)) {
-                chosen = "objection"
-            }
-            AiModeSegment("Message", selected = mode == "message", modifier = Modifier.weight(1f)) {
-                chosen = "message"
-            }
+        // A real iOS segmented control (the kit's one), not three grey boxes.
+        val segModes = listOf("pitch", "objection", "message")
+        IosSegmented(
+            options = listOf("Pitch", "Objection", "Message"),
+            selectedIndex = segModes.indexOf(mode),
+        ) { i ->
+            val m = segModes.getOrNull(i) ?: return@IosSegmented
+            chosen = m
+            if (m == "pitch" && brief == null && !briefLoading) onGenerate()
         }
 
         // A failure shows as its own quiet line — never inside a result box,
@@ -1643,7 +1640,7 @@ private fun AiCoachCard(
         }
     }
 }
-
+}
 
 @Composable
 private fun StoredFact(label: String, value: String) {
@@ -1923,7 +1920,8 @@ private fun FitOneLine(
  * rep can see at once which taps end the deal.
  */
 @Composable
-private fun FunnelExits(status: String, onPick: (String) -> Unit) {
+private fun FunnelExits(status: String, closeRow: Boolean, onPick: (String) -> Unit) {
+    if (!closeRow) {
     Box(Modifier.fillMaxWidth().height(1.dp).background(Hair))
     Spacer(Modifier.height(12.dp))
     val cbOn = status == "callback"
@@ -1940,9 +1938,8 @@ private fun FunnelExits(status: String, onPick: (String) -> Unit) {
             color = if (cbOn) Color.White else IndigoL, style = AppType.label, maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
-    Spacer(Modifier.height(14.dp))
-    Text("CLOSE THIS LEAD", style = AppType.sectionLabel, color = AppColors.TextTertiary, maxLines = 1)
-    Spacer(Modifier.height(8.dp))
+    return
+    }
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         EXITS.filter { it.first != "callback" }.forEach { (key, label) ->
             val on = status == key

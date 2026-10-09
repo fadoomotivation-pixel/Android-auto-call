@@ -37,6 +37,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -273,11 +275,13 @@ fun IosChip(
     selected: Boolean = false,
     empty: Boolean = false,
     accent: Color = AppColors.Indigo,
+    /** Fill when selected. iOS: always systemBlue unless a caller says otherwise. */
+    selectedColor: Color = accent,
     onClick: () -> Unit,
 ) {
     val faded = empty && !selected
     val bg = when {
-        selected -> accent
+        selected -> selectedColor
         faded -> AppColors.Surface.copy(alpha = 0.55f)
         else -> AppColors.Surface
     }
@@ -360,6 +364,8 @@ fun IosSegmented(
     val density = LocalDensity.current
     val pad = 2.dp
     val segW = with(density) { ((widthPx / options.size).toFloat()).toDp() } - pad * 2 / options.size
+    // -1 = nothing chosen yet: no thumb, every label plain.
+    val none = selectedIndex !in options.indices
     val idx = selectedIndex.coerceIn(0, options.size - 1)
     val thumbX by animateDpAsState(
         segW * idx,
@@ -371,7 +377,7 @@ fun IosSegmented(
             .onSizeChanged { widthPx = it.width }
             .padding(pad),
     ) {
-        if (widthPx > 0) {
+        if (widthPx > 0 && !none) {
             Box(
                 Modifier.offset(x = thumbX).width(segW).fillMaxHeight()
                     .shadow(2.dp, ContinuousShape(8.dp), clip = false)
@@ -380,11 +386,11 @@ fun IosSegmented(
         }
         Row(Modifier.fillMaxWidth().fillMaxHeight()) {
             options.forEachIndexed { i, label ->
-                val on = i == idx
+                val on = !none && i == idx
                 Box(
                     Modifier.weight(1f).fillMaxHeight()
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                            if (i != idx) { h.select(); onSelect(i) }
+                            if (!on) { h.select(); onSelect(i) }
                         }
                         .padding(horizontal = 4.dp),
                     contentAlignment = Alignment.Center,
@@ -506,10 +512,14 @@ fun IosNavBar(
     backLabel: String? = "Back",
     onBack: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
 ) {
     val a by animateFloatAsState(if (collapsed) 1f else 0f, tween(180), label = "nav")
     Column(modifier.fillMaxWidth().background(AppColors.Canvas.copy(alpha = 0.96f))) {
         Box(Modifier.fillMaxWidth().height(48.dp)) {
+            if (leading != null && onBack == null) {
+                Box(Modifier.align(Alignment.CenterStart).padding(start = 4.dp)) { leading() }
+            }
             if (onBack != null) {
                 Row(
                     Modifier.align(Alignment.CenterStart).padding(start = 4.dp).clip(Radii.chip)
@@ -641,6 +651,55 @@ fun CoachOrb(
                 size = androidx.compose.ui.geometry.Size(r * 0.64f, r * 0.44f),
                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = r * 0.09f, cap = androidx.compose.ui.graphics.StrokeCap.Round),
             )
+        }
+    }
+}
+
+
+// ── Search field ─────────────────────────────────────────────────
+
+/**
+ * UISearchBar: a 36dp rounded field on the grey system fill, magnifier inside,
+ * grey placeholder, and a clear button once there is text.
+ */
+@Composable
+fun IosSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "Search",
+) {
+    Row(
+        modifier.fillMaxWidth().height(38.dp).clip(ContinuousShape(10.dp)).background(IosColors.Fill)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(androidx.compose.material.icons.Icons.Default.Search, contentDescription = null,
+            tint = IosColors.Gray, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        androidx.compose.foundation.text.BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = AppType.body.copy(fontSize = 17.sp, color = AppColors.TextPrimary),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(IosColors.Blue),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) Text(placeholder, style = AppType.body.copy(fontSize = 17.sp), color = IosColors.Gray, maxLines = 1)
+                    inner()
+                }
+            },
+        )
+        if (value.isNotEmpty()) {
+            Box(
+                Modifier.size(20.dp).clip(CircleShape).background(IosColors.Gray2)
+                    .clickable { onValueChange("") },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(androidx.compose.material.icons.Icons.Default.Close, contentDescription = "Clear search",
+                    tint = Color.White, modifier = Modifier.size(13.dp))
+            }
         }
     }
 }
