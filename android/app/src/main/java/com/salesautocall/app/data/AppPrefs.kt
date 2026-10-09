@@ -90,6 +90,9 @@ object AppPrefs {
     /** The floating AI Coach shrinks to a mini dot for ONE day only — it never
      *  disappears (still one tap away), and returns to full size tomorrow. */
     fun getCoachMiniDate(context: Context): String = prefs(context).getString("coach_hidden_date", "") ?: ""
+    /** Where the edge coach button sits in its band, 0..1 (default a third down). */
+    fun getCoachDockPos(context: Context): Float = prefs(context).getFloat("coach_dock_pos", 0.35f)
+    fun setCoachDockPos(context: Context, v: Float) = prefs(context).edit().putFloat("coach_dock_pos", v.coerceIn(0f, 1f)).apply()
     fun setCoachMiniDate(context: Context, isoDate: String) = prefs(context).edit().putString("coach_hidden_date", isoDate).apply()
     fun clearCoachMini(context: Context) = prefs(context).edit().remove("coach_hidden_date").apply()
     

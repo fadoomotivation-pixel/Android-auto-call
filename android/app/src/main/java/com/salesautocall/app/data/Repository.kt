@@ -1113,6 +1113,27 @@ object Repository {
         return obj["answer"]?.jsonPrimitive?.contentOrNull
     }
 
+    /** Ask Coach's answer plus how many playbook notes grounded it (null when the
+     *  server did not say). Same rep-coach `ask` call — one brain, no new store. */
+    data class CoachAnswer(val answer: String?, val facts: Int?)
+
+    suspend fun coachAskGrounded(question: String, contactId: String? = null): CoachAnswer? {
+        val resp = client.functions.invoke(
+            "rep-coach",
+            buildJsonObject {
+                put("mode", "ask")
+                put("question", question.trim().take(800))
+                if (contactId != null) put("contact_id", contactId)
+            },
+        )
+        val obj = runCatching { resp.body<JsonObject>() }.getOrNull() ?: return null
+        if (obj["ok"]?.jsonPrimitive?.booleanOrNull != true) return null
+        return CoachAnswer(
+            answer = obj["answer"]?.jsonPrimitive?.contentOrNull,
+            facts = obj["facts"]?.jsonPrimitive?.intOrNull,
+        )
+    }
+
     /**
      * RAG v9 — the "objection coach". The customer just said no; this returns
      * the EXACT words to say back, grounded in the company's own playbook (price
