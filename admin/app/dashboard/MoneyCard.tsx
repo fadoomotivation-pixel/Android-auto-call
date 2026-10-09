@@ -14,6 +14,7 @@
 import Link from "next/link";
 import { istToday, rupees } from "@/lib/dashboard/format";
 import type { Scope } from "@/lib/dashboard/scope";
+import { DEMO_COMPANY_ID, isDemoCompany } from "@/lib/dashboard/demo";
 
 type AdRow = { spend: number; crm_booked: number };
 type AdsAnswer = { ok: boolean; error?: string; currency?: string; rows?: AdRow[] };
@@ -83,6 +84,8 @@ export async function MoneyCard({ scope }: { scope: Scope }) {
     let q = supabase.from("contacts").select("id", { count: "exact", head: true }).gte("token_paid_at", from);
     if (to) q = q.lt("token_paid_at", to);
     if (scope.companyId) q = q.eq("company_id", scope.companyId);
+    // Every company means every REAL company: the demo's bookings are made up.
+    else if (scope.isSuper) q = q.neq("company_id", DEMO_COMPANY_ID);
     return q;
   };
   const tokens = await Promise.all([countTokens(curStart, null), countTokens(prevStart, curStart)]);
@@ -94,7 +97,32 @@ export async function MoneyCard({ scope }: { scope: Scope }) {
   let spendCur = 0, spendPrev: number | null = null, bookedCur = 0, bookedPrev: number | null = null;
   let currency = "";
 
-  if (!scope.isSuper) {
+  const demo = scope.isSuper && isDemoCompany(scope.companyId);
+  if (demo) {
+    // The demo cannot be read from Meta, so it carries its own spend rows,
+    // one per day as an offset from the demo's today. Shown only here.
+    const [{ data: st }, { data: ad, error: adErr }] = await Promise.all([
+      supabase.from("demo_state").select("anchor_day").eq("company_id", DEMO_COMPANY_ID)
+        .maybeSingle<{ anchor_day: string }>(),
+      supabase.from("demo_ad_spend").select("day_offset, spend").eq("company_id", DEMO_COMPANY_ID)
+        .returns<Array<{ day_offset: number; spend: number }>>(),
+    ]);
+    if (adErr || !st) {
+      adsWhy = "The demo's ad numbers are not installed.";
+    } else {
+      // Offsets are from the anchor day; today's offset is 0 once refreshed.
+      const shift = Math.round((Date.parse(istToday(0)) - Date.parse(st.anchor_day)) / 86_400_000);
+      const sum = (lo: number, hi: number) => (ad ?? [])
+        .filter((r) => r.day_offset + shift >= lo && r.day_offset + shift <= hi)
+        .reduce((t, r) => t + Number(r.spend), 0);
+      currency = "INR";
+      spendCur = sum(-6, 0);
+      spendPrev = sum(-13, -7);
+      // A demo booking is a Meta lead whose token was paid in the window.
+      bookedCur = tokensCur ?? 0;
+      bookedPrev = tokensPrev;
+    }
+  } else if (!scope.isSuper) {
     adsWhy = "Ads run from one central account. Spend is shown to the platform owner.";
   } else if (scope.companyId) {
     adsWhy = "Spend is for the whole central ad account and cannot be split by one company. Open Today without a company picked to see it.";
@@ -156,12 +184,12 @@ export async function MoneyCard({ scope }: { scope: Scope }) {
     ? { key: "Tokens paid (all leads)", value: DASH, delta: null, why: "Could not read bookings." }
     : { key: "Tokens paid (all leads)", value: String(tokensCur), delta: change(tokensCur, tokensPrev, true) });
 
-  const adsLink = scope.isSuper ? "/dashboard/ads" : null;
+  const adsLink = scope.isSuper && !demo ? "/dashboard/ads" : null;
 
   return (
     <section className="card money-card" aria-label="Money, last 7 days">
       <div className="money-head">
-        <div className="label">Money · last 7 days</div>
+        <div className="label">Money · last 7 days{demo && <span className="demo-pill" style={{ marginLeft: 8 }}>Demo data</span>}</div>
         {adsLink && <Link href={adsLink}>Open Ads Manager →</Link>}
       </div>
       <div className="money-grid">
@@ -174,10 +202,17 @@ export async function MoneyCard({ scope }: { scope: Scope }) {
           </div>
         ))}
       </div>
-      <p className="money-foot">
-        Bookings from ads = leads from Meta ads that came in these 7 days and are Booked now. Tokens paid = any lead
-        whose booking token was recorded in these 7 days.
-      </p>
+      {demo ? (
+        <p className="money-foot">
+          Demo data: the spend is the demo company&apos;s example numbers, not a real ad account. Bookings from ads =
+          demo Meta leads whose token was paid in these 7 days.
+        </p>
+      ) : (
+        <p className="money-foot">
+          Bookings from ads = leads from Meta ads that came in these 7 days and are Booked now. Tokens paid = any lead
+          whose booking token was recorded in these 7 days.
+        </p>
+      )}
     </section>
   );
 }
