@@ -383,6 +383,13 @@ service-bearer auth.
 
 ## LOG (newest first — prepend new entries)
 
+### 2026-10-10 — Grok Bot (cursor/leads-buckets-k4m9)
+- WHAT: Leads page = 3 lane cards (Call now / Waiting / Revive), always on screen, with an iOS segmented control per lane for the old filters. Floating "Call N" button removed; "Call all N" is a text button on the lane header (Call now › All/Overdue only — power-dial still only runs on Call now). New launcher icon (adaptive + monochrome) and Android 12 splash on #F2F2F7 with a 200ms exit fade. Calmer palette (iOS red/green/orange tokens, secondary #6E6E73), iOS type sizes (Large Title 34, Headline 17, Subhead 15, new iosBody 17).
+- FILES: android/.../ui/TelecallerScreens.kt (LeadLanes, LaneCard, LANE_SUBS, laneBucket, isReviveLead), design/AppColors.kt, design/AppType.kt, MainActivity.kt, res/drawable/{ic_launcher_*,splash_icon}.xml, mipmap-anydpi-v26, values/{colors,themes}.xml, flavor colors.
+- WHY: Founder: sideways filter chips got missed; Call 189 duplicated Call all; wanted Apple restraint + a professional icon.
+- BUILD: assembleStandardDebug passes locally. No SQL, no Supabase change.
+- NOTE: Row edge stripe now shows only for overdue; "Talked" line is grey. Every count still reachable — see PR body for the filter→lane map.
+
 ### 2026-10-04 — view fix (pending site visits were counting a prompt kind the app cannot write)
 - WHAT: `v_pending_site_visit_outcomes` counted `rep_prompts.kind = 'site_visit'`
   for `times_asked` and `needs_manager` (`times_asked >= 2`). 0127 only allows

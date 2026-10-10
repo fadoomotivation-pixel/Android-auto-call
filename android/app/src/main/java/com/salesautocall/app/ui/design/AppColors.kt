@@ -32,7 +32,7 @@ object AppColors {
 
     // Graphite type ramp
     val TextPrimary = Color(0xFF1C1C1E)
-    val TextSecondary = Color(0xFF6E6E78)
+    val TextSecondary = Color(0xFF6E6E73)
     val TextTertiary = Color(0xFFA0A0AA)
 
     // The one action colour. Apple system blue (light). Pressed is the same
@@ -43,11 +43,11 @@ object AppColors {
     val OnIndigo = Color(0xFFFFFFFF)
 
     // Semantic (restrained, used for state only)
-    val Positive = Color(0xFF15803D)
+    val Positive = Color(0xFF34C759)
     val PositiveSoft = Color(0xFFE8F5EC)
-    val Warning = Color(0xFFB45309)
+    val Warning = Color(0xFFFF9500)
     val WarningSoft = Color(0xFFFDF3E3)
-    val Danger = Color(0xFFB4232A)
+    val Danger = Color(0xFFFF3B30)
     val DangerSoft = Color(0xFFFBECEC)
     val Info = Color(0xFF1D4ED8)
     val InfoSoft = Color(0xFFEAF0FE)
