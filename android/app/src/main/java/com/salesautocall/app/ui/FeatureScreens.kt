@@ -169,7 +169,7 @@ private fun CreateCampaignView(vm: MainViewModel, app: AppState, onPickLeads: ()
             colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         ) {
             Column(Modifier.padding(16.dp)) {
-                Text("📞 Call your assigned leads", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Call your assigned leads", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("No file needed. Pick the leads your admin gave you and dial them one after another.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(12.dp))
@@ -258,7 +258,7 @@ private fun CloudDialCard(vm: MainViewModel, app: AppState) {
     var number by remember { mutableStateOf("") }
     PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("📞 Cloud dial", style = MaterialTheme.typography.titleMedium)
+            Text("Cloud dial", style = MaterialTheme.typography.titleMedium)
             Text("Call any number through your office phone system — your phone rings first, then the customer connects.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
@@ -542,7 +542,7 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                 ) {
                     Text(
-                        "🎙  Calls on this phone are recorded so the CRM auto-updates for you — " +
+                        "Calls on this phone are recorded so the CRM auto-updates for you — " +
                             "follow-ups, site visits and bookings land on the lead automatically.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
@@ -677,7 +677,7 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
             if (app.company?.recordingEnabled == true) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "🎙️ Calls may be recorded by your company for quality and training. " +
+                    "Calls may be recorded by your company for quality and training. " +
                         "Recordings are kept for 30 days.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -749,7 +749,7 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    if (app.autoAnswer) "⚡ Auto-answer — one tap" else "✋ Manual answer",
+                                    if (app.autoAnswer) "Auto-answer — one tap" else "Manual answer",
                                     style = MaterialTheme.typography.titleSmall,
                                 )
                                 Text(
@@ -772,7 +772,7 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                 var myPhone by remember(app.profile?.phone) { mutableStateOf(app.profile?.phone ?: "") }
                 OutlinedTextField(
                     myPhone, { v -> myPhone = v.filter { it.isDigit() || it == '+' } },
-                    label = { Text("📱 Your mobile number") },
+                    label = { Text("Your mobile number") },
                     supportingText = { Text("CallerDesk rings this phone, then connects the customer.") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
@@ -920,7 +920,7 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
                         style = MaterialTheme.typography.bodyMedium)
                 }
                 savedNote?.takeIf { it.isNotBlank() }?.let {
-                    Text("📝 $it", style = MaterialTheme.typography.bodyMedium)
+                    Text("$it", style = MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -936,7 +936,7 @@ private fun ReviewPanel(vm: MainViewModel, dial: DialerUiState) {
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = {
                         dial.lastContactPhone?.let { vm.cloudCall(it, dial.lastContactId, DialerController.campaignId) }
-                    }) { Text("📞 Cloud call") }
+                    }) { Text("Cloud call") }
                 }
                 app.message?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall) }
                 app.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -1308,7 +1308,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(4.dp))
                 app.update?.let { rel ->
-                    Text("Update available: v${rel.versionName} 🎉", style = MaterialTheme.typography.bodyMedium,
+                    Text("Update available: v${rel.versionName}", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(12.dp))
@@ -1458,7 +1458,7 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
                             )
                             c.notes?.takeIf { it.isNotBlank() }?.let {
                                 Spacer(Modifier.height(4.dp))
-                                Text("📝 $it", style = MaterialTheme.typography.bodySmall)
+                                Text("$it", style = MaterialTheme.typography.bodySmall)
                             }
                             Spacer(Modifier.height(8.dp))
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1477,7 +1477,7 @@ fun CampaignDetailScreen(vm: MainViewModel, onBack: () -> Unit, onStarted: () ->
                                 if (app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank()) {
                                     AssistChip(
                                         onClick = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
-                                        label = { Text("📞 Cloud call") },
+                                        label = { Text("Cloud call") },
                                     )
                                 }
                             }

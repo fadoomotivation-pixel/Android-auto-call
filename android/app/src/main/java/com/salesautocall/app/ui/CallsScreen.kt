@@ -275,7 +275,7 @@ fun CallsScreen(vm: MainViewModel) {
             app.callsLoading -> Box(Modifier.fillMaxWidth().padding(32.dp)) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
             rows.isEmpty() -> Text(
                 when (sub) {
-                    2 -> "No missed calls 🎉"
+                    2 -> "No missed calls"
                     3 -> "No unanswered calls in this period."
                     else -> "No calls in this period yet."
                 },
@@ -598,7 +598,7 @@ private fun CallRow(
                             Spacer(Modifier.width(5.dp))
                         }
                         project?.let {
-                            Text("🏢 $it", style = MaterialTheme.typography.labelSmall,
+                            Text("$it", style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                         }

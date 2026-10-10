@@ -335,12 +335,12 @@ fun AttendanceScreen(vm: MainViewModel, onBack: () -> Unit) {
         item {
             val week = app.attendanceHistory.filter { localDateOf(it.workDate)?.isAfter(LocalDate.now().minusDays(7)) == true }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Tile("✅", week.count { it.punchInAt != null }.toString(), "Days present (7d)", OkGreen, Modifier.weight(1f))
+                Tile("", week.count { it.punchInAt != null }.toString(), "Days present (7d)", OkGreen, Modifier.weight(1f))
                 val totalSec = week.sumOf { r ->
                     val i = ms(r.punchInAt); val o = ms(r.punchOutAt)
                     if (i != null && o != null) (o - i) / 1000 else 0L
                 }
-                Tile("⏱️", dur(totalSec), "Hours (7d)", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                Tile("", dur(totalSec), "Hours (7d)", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
             }
         }
 
@@ -374,7 +374,7 @@ private fun AttendanceHistoryCard(row: Attendance) {
                 Text(row.workDate ?: "—", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text("In ${hhmm(row.punchInAt)} · Out ${hhmm(row.punchOutAt)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 row.locationLabel?.takeIf { it.isNotBlank() }?.let {
-                    Text("📍 $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text("$it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
             }
             val i = ms(row.punchInAt); val o = ms(row.punchOutAt)
@@ -470,10 +470,10 @@ fun CalendarScreen(vm: MainViewModel, onBack: () -> Unit) {
         // Stats
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Tile("📋", total.toString(), "Total", MaterialTheme.colorScheme.primary, Modifier.weight(1f), labelLines = 1)
-                Tile("✅", completed.toString(), "Done", OkGreen, Modifier.weight(1f), labelLines = 1)
-                Tile("🕑", upcoming.toString(), "Upcoming", WarnAmber, Modifier.weight(1f), labelLines = 1)
-                Tile("⚠️", overdue.toString(), "Overdue", BadRed, Modifier.weight(1f), labelLines = 1)
+                Tile("", total.toString(), "Total", MaterialTheme.colorScheme.primary, Modifier.weight(1f), labelLines = 1)
+                Tile("", completed.toString(), "Done", OkGreen, Modifier.weight(1f), labelLines = 1)
+                Tile("", upcoming.toString(), "Upcoming", WarnAmber, Modifier.weight(1f), labelLines = 1)
+                Tile("", overdue.toString(), "Overdue", BadRed, Modifier.weight(1f), labelLines = 1)
             }
         }
         item {
@@ -613,14 +613,14 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
         item { Text("INSIGHTS", style = AppType.sectionLabel, color = AppColors.TextTertiary) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Tile("🔥", hotNew.size.toString(), "Hot leads not contacted", BadRed, Modifier.weight(1f))
-                Tile("⏰", overdueFu.size.toString(), "Follow-ups overdue", WarnAmber, Modifier.weight(1f))
+                Tile("", hotNew.size.toString(), "Hot leads not contacted", BadRed, Modifier.weight(1f))
+                Tile("", overdueFu.size.toString(), "Follow-ups overdue", WarnAmber, Modifier.weight(1f))
             }
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Tile("🏷️", siteVisits.size.toString(), "At site-visit stage", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                Tile("📞", "${app.todayCalls}/${app.dailyGoal}", "Calls vs goal today", OkGreen, Modifier.weight(1f))
+                Tile("", siteVisits.size.toString(), "At site-visit stage", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                Tile("", "${app.todayCalls}/${app.dailyGoal}", "Calls vs goal today", OkGreen, Modifier.weight(1f))
             }
         }
         top?.let {
@@ -640,7 +640,7 @@ fun AiAssistantScreen(vm: MainViewModel, onBack: () -> Unit) {
             interested.take(2).forEach { add(Triple("Nurture ${it.name ?: it.phone}", "Interested — share details", it.phone)) }
         }
         if (recs.isEmpty()) {
-            item { Text("You're all caught up — no urgent actions right now. 🎉", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item { Text("You're all caught up — no urgent actions right now.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             items(recs, key = { it.first + it.third }) { (title, sub, phone) ->
                 Row(

@@ -37,7 +37,7 @@ object AppType {
     /** Large Title (34). The title a screen opens with before it scrolls. */
     val largeTitle = TextStyle(
         fontFamily = Inter, fontSize = 34.sp, lineHeight = 41.sp,
-        fontWeight = FontWeight.Bold, letterSpacing = (-0.7).sp,
+        fontWeight = FontWeight.SemiBold, letterSpacing = (-0.7).sp,
     )
 
     /** Title 2 (22). Sheet titles, a card's single big figure. */

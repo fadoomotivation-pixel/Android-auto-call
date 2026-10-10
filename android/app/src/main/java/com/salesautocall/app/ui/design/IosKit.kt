@@ -296,7 +296,7 @@ fun IosChip(
         else -> accent
     }
     Row(
-        modifier.heightIn(min = 34.dp).clip(Radii.tag).background(bg)
+        modifier.heightIn(min = 32.dp).clip(Radii.chip).background(bg)
             .then(if (faded) Modifier else Modifier.iosPress(scaleTo = 0.95f) { onClick() })
             .padding(horizontal = 13.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,

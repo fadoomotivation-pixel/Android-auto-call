@@ -37,6 +37,26 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-10 — Grok Bot (AI recommendation + Apple restraint + easy demo password)
+
+- **AI recommendation** (`ui/AiRecommendation.kt`, `buildAiReco`): on the Next call card and
+  at the top of the lead page. Deterministic, on the phone, no model call, nothing written.
+  Context = v_lead_workstate (waiting_since / last_call_at / best_call_seconds) + lead_memory.
+  Next step, first match: promise owed → buyer waiting on WhatsApp → awaiting visit →
+  `contacts.ai_next_action` → objection → never connects (3+ tries) → wants → discovery call.
+  One button: WhatsApp steps reuse `vm.sendOwedWhatsApp` (follow-up-draft), else Call.
+  Missing memory is said plainly. No new store, no new scheduler.
+- **Leads**: insight strip is one line ("N things need you"), tap to expand. Buckets are one
+  `IosSegmented` row (Call now / Scheduled / Win back, counts in labels), max 3 sub-segments.
+  "Hot" moved to Filters sheet → "More lists" with its count. Next call card is shorter
+  (queue order behind "Call order").
+- **Restraint**: emojis out of UI chrome (customer WhatsApp templates untouched), coach face
+  in top bars → monochrome sparkle glyph, card radius 12, controls/chips 10, primary buttons
+  10dp radius (not pills), large title SemiBold.
+- **Migration 0223** `the_demo_login_a_founder_can_type` (NOT applied): sets only the demo
+  telecaller's bcrypt hash, scoped by id + email + demo company (is_demo). Re-running 0222
+  restores the old password, so run 0223 after it. Plaintext is not in the repo.
+
 ## 2026-10-10 — Grok Bot (Leads 10/10: compact header, calling hero, AI insights, no floating orb)
 
 - **Header:** the ₹ summary card is gone. Its facts are one line under the large title ("545 leads · ₹14.62 Cr on the table"). Refresh / AI Score / Select / What I did today moved to a More (…) action sheet in the nav bar, next to a coach face and Settings.
