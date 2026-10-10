@@ -1293,10 +1293,10 @@ internal fun FloatingCallBar(
     // washing out in sunlight, which is where a telecaller actually works.
     val unsel = AppColors.TextSecondary
     val ring = MaterialTheme.colorScheme.background
-    Box(Modifier.fillMaxWidth().height(88.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.BottomCenter) {
+    Box(Modifier.fillMaxWidth().height(70.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.BottomCenter) {
         Row(
-            Modifier.fillMaxWidth().height(62.dp).clip(RoundedCornerShape(24.dp))
-                .background(pill).border(1.dp, hair, RoundedCornerShape(24.dp)),
+            Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(22.dp))
+                .background(pill).border(1.dp, hair, RoundedCornerShape(22.dp)),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Follow Ups takes the slot Call history had.
@@ -1311,7 +1311,7 @@ internal fun FloatingCallBar(
             NavSlot("Home", Icons.Outlined.Home, current == "home", jade, unsel, Modifier.weight(1f)) { onTab("home") }
             NavSlot("Leads", Icons.Outlined.People, current == "leads", jade, unsel, Modifier.weight(1f)) { onTab("leads") }
             // The gap goes with the dial, or the bar keeps a hole in its middle.
-            if (showDial) Spacer(Modifier.width(72.dp)) // room for the raised dial
+            if (showDial) Spacer(Modifier.width(64.dp)) // room for the raised dial
             NavSlot("Follow Ups", Icons.Outlined.Schedule, current == "followups", jade, unsel, Modifier.weight(1f)) { onTab("followups") }
             NavSlot("More", Icons.Outlined.Menu, false, jade, unsel, Modifier.weight(1f)) { onMore() }
         }
@@ -1320,11 +1320,11 @@ internal fun FloatingCallBar(
         // a coloured squircle: the Phone-app control, large enough for a thumb.
         if (showDial) {
             Box(
-                Modifier.align(Alignment.TopCenter).size(70.dp).clip(CircleShape).background(ring),
+                Modifier.align(Alignment.TopCenter).size(62.dp).clip(CircleShape).background(ring),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    Modifier.size(58.dp).clip(CircleShape).background(jade).clickable { onDial() },
+                    Modifier.size(52.dp).clip(CircleShape).background(jade).clickable { onDial() },
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Default.Call, contentDescription = "Dial", tint = Color.White, modifier = Modifier.size(26.dp)) }
             }
@@ -1339,7 +1339,7 @@ private fun NavSlot(label: String, icon: ImageVector, on: Boolean, jade: Color, 
     // blue blob this bar used to wear, and it fought the Dial button for the
     // only accent on the screen.
     Column(
-        modifier.clip(RoundedCornerShape(14.dp)).clickable { onClick() }.padding(vertical = 6.dp),
+        modifier.clip(RoundedCornerShape(14.dp)).clickable { onClick() }.padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, contentDescription = label, tint = if (on) jade else unsel, modifier = Modifier.size(22.dp))

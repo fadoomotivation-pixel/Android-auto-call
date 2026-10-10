@@ -390,6 +390,10 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         // pinned at the bottom always shows. Two blue phones on
                         // one screen made the rep stop and choose. More stays:
                         // it holds the things that are not anywhere else.
+                        // Coach in the bar, not a floating orb over the lead.
+                        Box(Modifier.size(40.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
+                            CoachOrb(size = 24.dp, face = true)
+                        }
                         TopIconButton(Icons.Default.MoreHoriz, IosColors.Blue, size = 36) { moreOpen = true }
                         // An iOS action sheet, not Material's dropdown. Same six
                         // actions, same order. The three that close the lead are

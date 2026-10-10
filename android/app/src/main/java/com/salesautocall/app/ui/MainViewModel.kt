@@ -315,6 +315,8 @@ data class AppState(
     // Floating AI Coach (top-right bubble): panel data + open/loading state.
     val coachPanel: com.salesautocall.app.data.CoachPanel? = null,
     val coachOpen: Boolean = false,
+    /** Ask Coach sheet, opened from a top-bar coach face or the Leads insights strip. */
+    val askCoachOpen: Boolean = false,
     val coachLoading: Boolean = false,
     val coachPicks: List<com.salesautocall.app.data.FocusPick> = emptyList(),
     val coachPicksLoading: Boolean = false,
@@ -2679,6 +2681,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         prefetchFocus()
     }
     fun closeCoach() = set { it.copy(coachOpen = false) }
+    fun openAskCoach() = set { it.copy(askCoachOpen = true) }
+    fun closeAskCoach() = set { it.copy(askCoachOpen = false) }
 
     // ---- Ask the coach (open Q&A inside the floating coach) ----
     fun setCoachAsk(text: String) = set { it.copy(coachAsk = text) }
