@@ -100,54 +100,14 @@ internal fun CoachDock(vm: MainViewModel, app: AppState) {
     val onCall = sim != null || app.cloudCallNumber != null || (dialer.isRunning && !dialer.paused)
     val today = remember { java.time.LocalDate.now().toString() }
     var hiddenToday by remember { mutableStateOf(AppPrefs.getCoachMiniDate(context) == today) }
-    var sheetOpen by remember { mutableStateOf(false) }
     // Fraction of the allowed band (0 = top of band, 1 = bottom of band).
-    var bandPos by remember { mutableFloatStateOf(AppPrefs.getCoachDockPos(context)) }
     val haptics = rememberHaptics()
 
     if (!app.signedIn) return
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val density = LocalDensity.current
-        val hPx = with(density) { maxHeight.toPx() }
-        val wPx = with(density) { maxWidth.toPx() }
-        val orb = 52.dp
-        val orbPx = with(density) { orb.toPx() }
-        // Band: from 18% to 62% of the screen. The bottom ~38% holds the
-        // Call bar, nav pill, outcome bars and the Leads "Call N" button.
-        val top = hPx * 0.18f
-        val bottom = hPx * 0.62f - orbPx
-        val y = top + (bottom - top).coerceAtLeast(0f) * bandPos.coerceIn(0f, 1f)
-
-        AnimatedVisibility(
-            visible = !onCall && !hiddenToday && !sheetOpen,
-            enter = fadeIn() + scaleIn(initialScale = 0.6f),
-            exit = fadeOut() + scaleOut(targetScale = 0.6f),
-            modifier = Modifier.offset { IntOffset((wPx - orbPx * 0.62f).roundToInt(), y.roundToInt()) },
-        ) {
-            Box(
-                Modifier.size(orb)
-                    .shadow(8.dp, CircleShape, clip = false)
-                    .clip(CircleShape)
-                    .background(Color.White)
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragEnd = { AppPrefs.setCoachDockPos(context, bandPos) },
-                        ) { change, drag ->
-                            change.consume()
-                            val span = (bottom - top).coerceAtLeast(1f)
-                            bandPos = (bandPos + drag.y / span).coerceIn(0f, 1f)
-                        }
-                    }
-                    .iosPress(scaleTo = 0.9f) { haptics.tap(); sheetOpen = true },
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                CoachOrb(size = 40.dp, face = true, modifier = Modifier.padding(start = 4.dp))
-            }
-        }
-    }
-
-    if (sheetOpen) {
+    // No floating orb any more (it covered lead info). The sheet opens from
+    // the coach face in the top bar or the Leads insights strip.
+    if (app.askCoachOpen && !onCall) {
         val lead = app.leadDetailId?.let { id -> app.leads.firstOrNull { it.id == id } }
         AskCoachSheet(
             vm = vm,
@@ -156,9 +116,9 @@ internal fun CoachDock(vm: MainViewModel, app: AppState) {
             onHideToday = {
                 AppPrefs.setCoachMiniDate(context, today)
                 hiddenToday = true
-                sheetOpen = false
+                vm.closeAskCoach()
             },
-            onDismiss = { sheetOpen = false },
+            onDismiss = { vm.closeAskCoach() },
         )
     }
 }
@@ -173,7 +133,7 @@ private const val HOW_TO_USE =
         "Lead page: Call at the bottom. After the call, tap Update and pick what happened.\n" +
         "Sales funnel on the lead page shows the step. Tap the next step to move it.\n" +
         "What to say: Pitch for an opening line, Objection for a reply, Message for WhatsApp.\n" +
-        "The coach button on the right edge: ask anything. Hold and drag it up or down."
+        "Coach: tap the coach face at the top of Leads or a lead page, or the sparkle on other screens. Ask anything."
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -357,16 +317,8 @@ private fun AskCoachSheet(
             }
 
             Spacer(Modifier.height(Space.xl))
-            Text(
-                "Hide coach button for today",
-                style = AppType.subhead, color = IosColors.Red,
-                modifier = Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface)
-                    .iosPress { onHideToday() }.padding(vertical = 14.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            )
-            Text("It comes back tomorrow. The coach never opens by itself.",
-                style = AppType.footnote, color = AppColors.TextSecondary,
-                modifier = Modifier.padding(start = Space.l, top = 6.dp))
+            Text("The coach never opens by itself.", style = AppType.footnote, color = AppColors.TextSecondary,
+                modifier = Modifier.padding(start = Space.l))
         }
     }
 }

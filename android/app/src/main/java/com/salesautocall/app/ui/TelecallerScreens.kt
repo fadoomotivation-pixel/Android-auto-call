@@ -58,6 +58,8 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
@@ -2111,6 +2113,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
     // filter maps to exactly one lane + segment (see LANE_SUBS). Opens on
     // Call now › New, which keeps the earlier "day starts on New" instruction.
     var lane by remember { mutableStateOf("call") }
+    // Next call "Skip": ids pushed behind the rest of the queue, this session only.
+    var skippedIds by remember { mutableStateOf(listOf<String>()) }
+    var leadsMenuOpen by remember { mutableStateOf(false) }
     var sub by remember { mutableStateOf("new") }
     val bucket = laneBucket(sub)
     var stageFilter by remember { mutableStateOf<String?>(null) } // exact stage from the sheet
@@ -2185,6 +2190,11 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
         callNowContacts(app.leads, app.workByLead)
     }
     val dueUnknown = app.workStatesError != null
+    val liveQueue = remember(queue, skippedIds) {
+        val sk = skippedIds.toSet()
+        queue.filter { it.id !in sk } + queue.filter { it.id in sk }
+    }
+    val skippedInQueue = remember(queue, skippedIds) { queue.count { it.id in skippedIds } }
 
     val base = when {
         stageFilter != null -> app.leads.filter { it.stage == stageFilter }
@@ -2316,6 +2326,27 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
     // The Next call card is on screen, and it carries the Call now count on
     // its "Call all N" button. The Call now filter then does not repeat it.
     val heroShown = lane == "call" && !selectMode && query.isBlank() && queue.isNotEmpty()
+    val calledToday = remember(app.leads, app.workByLead) { app.leads.count { isToday(app.workOf(it)?.lastCallAt) } }
+    // AI insights: real counts only, a 0 row is left out (its number is still on its bucket).
+    val insights = remember(app.leads, app.workByLead, actionCounts, dueUnknown) {
+        val byCode = actionCounts.associate { (a, n) -> a.code to n }
+        val hotNeed = app.leads.count {
+            it.temperature == "hot" && !isFinished(app.leadStages, it.stage) &&
+                app.actionOf(it) in setOf("call_now", "overdue", "no_next_step")
+        }
+        buildList {
+            if (hotNeed > 0) add(LeadInsight("hot", "$hotNeed hot ${if (hotNeed == 1) "lead needs" else "leads need"} attention",
+                "Hot and due, or with no next step", urgent = false))
+            if (!dueUnknown) {
+                val od = byCode["overdue"] ?: 0
+                if (od > 0) add(LeadInsight("overdue", "$od overdue ${if (od == 1) "follow-up" else "follow-ups"} can be recovered",
+                    "The callback time has passed. Call them first.", urgent = true))
+                val v = byCode["awaiting_visit"] ?: 0
+                if (v > 0) add(LeadInsight("awaiting_visit", "$v site ${if (v == 1) "visit needs" else "visits need"} confirmation",
+                    "Ask if they came, or fix a new day", urgent = false))
+            }
+        }
+    }
 
     // iOS large title: "Leads" scrolls with the list; once it is gone the
     // small centred title and a hairline fade into the slim bar on top.
@@ -2334,6 +2365,25 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             },
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Coach lives in the bar now (no floating orb over leads).
+                    Box(Modifier.size(40.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
+                        CoachOrb(size = 24.dp, face = true)
+                    }
+                    Box {
+                        Icon(Icons.Default.MoreHoriz, contentDescription = "More", tint = IosColors.Blue,
+                            modifier = Modifier.size(40.dp).clip(CircleShape).iosPress { leadsMenuOpen = true }.padding(9.dp))
+                        if (leadsMenuOpen) {
+                            IosActionSheet(
+                                onDismiss = { leadsMenuOpen = false },
+                                actions = listOf(
+                                    SheetAction("Refresh") { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
+                                    SheetAction(if (app.aiScoringLeads) "Scoring…" else "AI Score leads", enabled = !app.aiScoringLeads) { vm.scoreLeads() },
+                                    SheetAction("Select leads") { selectMode = true },
+                                    SheetAction("What I did today") { todayOpen = true; vm.loadTodayActivities() },
+                                ),
+                            )
+                        }
+                    }
                     Icon(Icons.Default.Settings, contentDescription = "Settings", tint = IosColors.Blue,
                         modifier = Modifier.size(40.dp).clip(CircleShape).iosPress { vm.openSettings() }.padding(9.dp))
                 }
@@ -2347,15 +2397,23 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             // the bottom is deeper because the card now ENDS in buttons: the
             // last card's Call must never sit under the nav bar or the raised
             // dial button in front of it.
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 140.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 96.dp),
             // 11dp, not 7. The gap is what tells a rep the card has ended;
             // at 7 the list read as one sheet.
             verticalArrangement = Arrangement.Top,
         ) {
             item(key = "large_title") {
-                IosLargeTitle(if (selectMode) "Select leads" else "Leads", modifier = Modifier.padding(bottom = 4.dp))
+                // The ₹ card is gone: its facts are one line under the title.
+                IosLargeTitle(
+                    if (selectMode) "Select leads" else "Leads",
+                    subtitle = if (selectMode) null else buildString {
+                        append("${app.leads.size} leads")
+                        if (deck.pipelineValue > 0) append(" · ${formatRupees(deck.pipelineValue)} on the table")
+                    },
+                    modifier = Modifier.padding(bottom = 2.dp),
+                )
             }
-            item { Spacer(Modifier.height(11.dp))
+            item { Spacer(Modifier.height(4.dp))
                 if (!selectMode) {
                     // The hero: a brand-gradient command deck — pipeline ₹ value
                     // plus three live counters that are also one-tap filters.
@@ -2365,15 +2423,6 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                     // themselves do, so it must not re-run on every keystroke in
                     // the search box or every tap of a filter chip — which is
                     // what it did, on the main thread, before this remember.
-                    LeadsDeck(
-                        app = app,
-                        pipelineValue = deck.pipelineValue,
-                        scoring = app.aiScoringLeads,
-                        onRefresh = { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
-                        onScore = { vm.scoreLeads() },
-                        onSelect = { selectMode = true },
-                        onToday = { todayOpen = true; vm.loadTodayActivities() },
-                    )
                     if (dueUnknown) {
                         Spacer(Modifier.height(8.dp))
                         Text(
@@ -2403,26 +2452,47 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             //
             // Hidden while searching or selecting: both mean the rep is doing
             // something deliberate and does not want to be handed a queue.
+            if (!selectMode && query.isBlank()) {
+                item(key = "insights") { Spacer(Modifier.height(8.dp))
+                    InsightsStrip(
+                        insights = insights,
+                        onPick = { key ->
+                            when (key) {
+                                "hot" -> { lane = "call"; sub = "hot" }
+                                "overdue" -> { lane = "call"; sub = "overdue" }
+                                "awaiting_visit" -> { lane = "wait"; sub = "awaiting_visit" }
+                            }
+                            stageFilter = null; quick = null
+                        },
+                        onCoach = { vm.openAskCoach() },
+                    )
+                }
+            }
             if (lane == "call" && !selectMode && query.isBlank()) {
-                queue.firstOrNull()?.let { next ->
+                liveQueue.firstOrNull()?.let { next ->
                     item(key = "up_next") { Spacer(Modifier.height(11.dp))
                         val fu = fuOf(next)
                         val due = fu?.let { instantMillis(it.dueAt) }
                         val work = app.workOf(next)
-                        UpNextCard(
+                        NextCallHero(
                             lead = next,
                             reason = dueSignal(work, app.focusReason(next.id)) ?: when {
                                 due != null && due <= nowMs -> "Callback was due ${agoLabel(fu.dueAt)}"
                                 due != null -> "Callback due ${relativeDue(fu.dueAt)}"
-                                next.createdAt != null -> "New lead · ${arrivedLabel(next.createdAt!!)}"
+                                next.createdAt != null -> "New lead, arrived ${arrivedLabel(next.createdAt!!)}"
                                 else -> "Nobody has called them yet"
                             },
-                            coachLine = rowMemoryLine(next.id?.let { app.memoryByLead[it] }),
+                            lastContact = lastCallResult(work),
+                            summary = rowMemoryLine(next.id?.let { app.memoryByLead[it] }),
                             sayLine = if (isDueNow(work)) focusSayLine(app.coachPicks, next.id) else null,
-                            queueSize = queue.size,
+                            left = queue.size,
+                            calledToday = calledToday,
+                            skipped = skippedInQueue,
                             onCall = { vm.dialManual(next.phone) },
                             onOpen = { next.id?.let { vm.openLeadDetail(it) } },
-                            onCallAll = { vm.callList(queue, "Due now") },
+                            onSkip = { next.id?.let { id -> skippedIds = skippedIds - id + id } },
+                            // Same auto-dialler as before, only on Call now.
+                            onStart = { vm.callList(liveQueue, "Due now") },
                         )
                     }
                 }
@@ -2521,7 +2591,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                     bucket.startsWith("stage:") -> STAGE_HINTS[bucket.removePrefix("stage:")]
                     bucket == "new" -> STAGE_HINTS["new"]
                     bucket == "hot" -> "Hot leads that are still open. Some are not due yet."
-                    bucket == "revive" -> "Said no, or cold after 2+ tries. Worth one fresh call. Never DNC."
+                    bucket == "revive" -> "Win back: said no, or cold after 2+ tries. Worth one fresh call. Never DNC."
                     else -> "Every lead assigned to you, whatever stage it is at."
                 }
                 if (!hint.isNullOrBlank()) {
@@ -2625,62 +2695,32 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                     }
                 else -> {
                     val leadCard: @Composable (Contact) -> Unit = { c ->
-                        LeadCard(
-                            stages = app.leadStages,
-                            work = app.workOf(c),
-                            memoryLine = if (isDueNow(app.workOf(c))) rowMemoryLine(c.id?.let { app.memoryByLead[it] }) else null,
-                            sayLine = if (isDueNow(app.workOf(c))) focusSayLine(app.coachPicks, c.id) else null,
+                        val work = app.workOf(c)
+                        val fu = fuOf(c)
+                        val fuDue = fu?.let { instantMillis(it.dueAt) }
+                        val note = fu?.note?.trim()?.takeIf { it.isNotEmpty() && it != AUTO_CALLBACK_NOTE }
+                        val isOverdue = app.actionOf(c) == "overdue"
+                        LeadRow(
                             c = c,
+                            reason = dueSignal(work, app.focusReason(c.id)) ?: when {
+                                fuDue != null && fuDue <= nowMs -> "Callback was due ${agoLabel(fu.dueAt)}" + (note?.let { ": $it" } ?: "")
+                                fuDue != null -> "Callback ${relativeDue(fu.dueAt)}" + (note?.let { ": $it" } ?: "")
+                                c.stage == "new" && c.createdAt != null -> "New lead, arrived ${arrivedLabel(c.createdAt!!)}"
+                                app.actionOf(c) == "no_next_step" -> "No next step booked. Call and fix one."
+                                else -> ACTIONS.firstOrNull { it.code == app.actionOf(c) }?.label ?: "Open the lead to see the plan"
+                            },
+                            lastContact = lastCallResult(work),
                             sharesName = (c.name?.trim()?.lowercase() ?: "") in repeatedNames,
-                            followUp = c.id?.let { fuByContact[it] } ?: fuByPhone[c.phone],
-                            cloudOn = app.cloudEnabled || !app.profile?.sipAgentId.isNullOrBlank(),
+                            overdue = isOverdue,
+                            needsUpdate = c.id != null && c.id in pendingUpdateIds,
                             selectMode = selectMode,
                             isSelected = c.id != null && c.id in selectedIds,
-                            needsUpdate = c.id != null && c.id in pendingUpdateIds,
+                            onOpen = { c.id?.let { vm.openLeadDetail(it) } },
                             onToggleSelect = { c.id?.let { id -> selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id } },
                             onCall = { vm.dialManual(c.phone) },
-                            onCloudCall = { c.id?.let { vm.cloudCall(c.phone, it, c.campaignId) } },
-                            // Straight into WhatsApp with the message ready, the
-                            // way the Follow Ups screen already does it.
-                            //
-                            // This used to open an in-app chat sheet that sends
-                            // through the COMPANY's WhatsApp Cloud number — and
-                            // no company on the platform has that token saved,
-                            // so its Send button could not work at all. A rep
-                            // tapping WhatsApp got a dead box instead of
-                            // WhatsApp. The tracked inbox still exists for the
-                            // admin; the row button now just does what it says.
-                            onWhatsApp = {
-                                openRowWhatsApp(
-                                    context, vm, c.id, c.phone, app.workOf(c),
-                                    waTemplate(c.name, c.companyName, app.profile?.fullName,
-                                        app.company?.name, app.profile?.speaksAs),
-                                )
-                            },
-                            whatsAppBusy = c.id != null && c.id == app.waDraftingId,
-                            focusReason = app.focusReason(c.id),
-                            onQuickOutcome = c.id?.takeIf { it in pendingUpdateIds }?.let { id ->
-                                { status: String ->
-                                    vm.disposeFromLead(
-                                        id, c.phone, c.name, status,
-                                        (fuByContact[id] ?: fuByPhone[c.phone])?.id,
-                                    )
-                                }
-                            },
-                            // The same prompt the Follow Ups screen opens, and
-                            // the same one that appears after a call. There is
-                            // exactly one place a stage can be set from, so it
-                            // behaves identically wherever the rep reaches it.
-                            // The lead's pending callback rides along, so picking
-                            // "call back later" here replaces it instead of
-                            // stacking a second one on the same lead.
                             onUpdate = {
-                                c.id?.let { id ->
-                                    vm.openFollowUpUpdate(id, c.phone, c.name,
-                                        (fuByContact[id] ?: fuByPhone[c.phone])?.id)
-                                }
+                                c.id?.let { id -> vm.openFollowUpUpdate(id, c.phone, c.name, (fuByContact[id] ?: fuByPhone[c.phone])?.id) }
                             },
-                            onOpen = { c.id?.let { vm.openLeadDetail(it) } },
                         )
                     }
                     // The Follow-up tab used to be cut into Call now / Done
@@ -2712,7 +2752,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                                 bottomStart = if (i == lastIdx) r else 0.dp, bottomEnd = if (i == lastIdx) r else 0.dp,
                             )
                             Column(Modifier.fillMaxWidth().clip(shape).background(AppColors.Surface)) {
-                                if (i > 0) IosSeparator(startInset = 67.dp)
+                                if (i > 0) IosSeparator(startInset = 14.dp)
                                 androidx.compose.runtime.CompositionLocalProvider(LocalGroupedRow provides true) { leadCard(c) }
                             }
                         }
@@ -5362,9 +5402,9 @@ private fun LeaderboardRowView(rank: Int, r: LeaderboardRow, isMe: Boolean) {
 
 /** Old filter → (lane, segment). Every filter the chip row had lives here. */
 internal val LANE_SUBS: Map<String, List<Pair<String, String>>> = linkedMapOf(
-    "call" to listOf("call_now" to "All", "overdue" to "Overdue", "new" to "New", "hot" to "Hot"),
-    "wait" to listOf("due_today" to "Today", "scheduled" to "Later", "awaiting_visit" to "Visit"),
-    "revive" to listOf("no_next_step" to "No step", "cold" to "Cold"),
+    "call" to listOf("call_now" to "All due", "overdue" to "Overdue", "new" to "New", "hot" to "Hot"),
+    "wait" to listOf("due_today" to "Due today", "scheduled" to "Later days", "awaiting_visit" to "Site visit"),
+    "revive" to listOf("no_next_step" to "No next step", "cold" to "Said no or cold"),
 )
 
 internal fun laneBucket(sub: String): String = when (sub) {
@@ -5384,6 +5424,7 @@ internal fun isReviveLead(c: Contact): Boolean =
  * the selected lane, red only when something is overdue.
  */
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun LeadLanes(
     lane: String,
     sub: String,
@@ -5402,27 +5443,29 @@ private fun LeadLanes(
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             LaneCard("Call now", if (unknown) "—" else n("call_now").toString(),
-                when { unknown -> "Could not load"; overdue > 0 -> "$overdue overdue"; else -> "Ring these" },
+                when { unknown -> "Could not load"; overdue > 0 -> "$overdue overdue"; else -> "Due to ring now" },
                 urgent = !unknown && overdue > 0, selected = lane == "call",
                 modifier = Modifier.weight(1f)) { onLane("call") }
-            LaneCard("Waiting", if (unknown) "—" else waitTotal.toString(), "Booked for later",
+            LaneCard("Scheduled", if (unknown) "—" else waitTotal.toString(), "Callbacks & visits booked",
                 urgent = false, selected = lane == "wait",
                 modifier = Modifier.weight(1f)) { onLane("wait") }
-            LaneCard("Revive", reviveTotal.toString(), "Gone quiet",
+            LaneCard("Win back", reviveTotal.toString(), "Cold or no next step",
                 urgent = false, selected = lane == "revive",
                 modifier = Modifier.weight(1f)) { onLane("revive") }
         }
         Spacer(Modifier.height(12.dp))
         val subs = LANE_SUBS[lane].orEmpty()
         val actCodes = setOf("call_now", "overdue", "due_today", "scheduled", "awaiting_visit", "no_next_step")
-        IosSegmented(
-            options = subs.map { (code, label) ->
+        // Full-word segments that wrap to a second line instead of cutting a
+        // label with "…" on a 360dp phone. Every count stays on its segment.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            subs.forEach { (code, label) ->
                 val c = if (unknown && code in actCodes) "—" else n(code).toString()
-                "$label $c"
-            },
-            selectedIndex = subs.indexOfFirst { it.first == sub },
-            modifier = Modifier.fillMaxWidth(),
-        ) { i -> subs.getOrNull(i)?.let { onSub(it.first) } }
+                IosChip(label = label, count = c, selected = code == sub, empty = false,
+                    accent = if (code == "overdue") IosColors.Red else AppColors.Indigo,
+                    selectedColor = IosColors.Blue) { onSub(code) }
+            }
+        }
         if (callAllCount > 0 || lane == "revive") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (lane == "revive") {
@@ -5461,13 +5504,226 @@ private fun LaneCard(
                 shape = RoundedCornerShape(14.dp),
             )
             .iosPress(scaleTo = 0.96f) { onClick() }
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
     ) {
-        Text(title.uppercase(), style = AppType.caption, color = if (selected) AppColors.Indigo else AppColors.TextSecondary,
-            maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(count, style = AppType.headline, color = if (urgent) IosColors.Red else AppColors.TextPrimary)
+            Spacer(Modifier.width(6.dp))
+            Text(title, style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold),
+                color = if (selected) AppColors.Indigo else AppColors.TextPrimary)
+        }
+        Text(caption, style = AppType.footnote, color = if (urgent) IosColors.Red else AppColors.TextSecondary)
+    }
+}
+
+// ── LEADS, 10/10 PASS (Oct 2026) ─────────────────────────────────────
+//
+// An outside review scored this screen 7/10: a tall ₹ card ate the top half,
+// the floating coach orb sat on lead info, labels were cut with "…", seven
+// font sizes, and the AI was a bubble instead of actions. Four text tokens
+// only on this screen now: largeTitle (page title), headline (names, counts),
+// subhead (reasons, buttons), footnote (secondary facts). Nothing is
+// truncated with an ellipsis: names and reasons wrap.
+
+/** The order callNowContacts() really uses (CallNowQueue.kt tiers 0-4). */
+internal const val QUEUE_ORDER_TEXT =
+    "Order: buyers waiting on WhatsApp, then promises you owe, then people you spoke to, then numbers that never answered."
+
+/** "Not answered" / "Short call 12s" / "Talked 4 min" from the last real dial. */
+internal fun lastCallResult(work: LeadWork?): String? {
+    val at = work?.lastCallAt ?: return null
+    val secs = work.lastCallSeconds
+    val res = when {
+        secs <= 0 -> "Not answered"
+        secs < 30 -> "Short call ${secs}s"
+        else -> "Talked ${(secs + 59) / 60} min"
+    }
+    return "${agoLabel(at)} · $res"
+}
+
+/** One AI insight: a real count, a plain sentence, and where a tap goes. */
+internal data class LeadInsight(val key: String, val title: String, val detail: String, val urgent: Boolean)
+
+/**
+ * The actionable strip under the title. Each row is a real count from data
+ * already on screen; a row with 0 is left out (the same number still sits on
+ * its bucket). The last row is the coach — the orb no longer floats here.
+ */
+@Composable
+private fun InsightsStrip(insights: List<LeadInsight>, onPick: (String) -> Unit, onCoach: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AppColors.Surface)) {
+        insights.forEachIndexed { i, ins ->
+            if (i > 0) IosSeparator(startInset = 40.dp)
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onPick(ins.key) }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(if (ins.urgent) IosColors.Red else IosColors.Blue))
+                Spacer(Modifier.width(16.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(ins.title, style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = AppColors.TextPrimary)
+                    Text(ins.detail, style = AppType.footnote, color = AppColors.TextSecondary)
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = IosColors.Gray, modifier = Modifier.size(20.dp))
+            }
+        }
+        if (insights.isNotEmpty()) IosSeparator(startInset = 40.dp)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onCoach() }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CoachOrb(size = 20.dp, face = true)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Ask coach", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = AppColors.TextPrimary)
+                Text("Opening line, objection reply or WhatsApp message", style = AppType.footnote, color = AppColors.TextSecondary)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = IosColors.Gray, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/**
+ * NEXT CALL, the hero. Who is next and why, when they were last tried and
+ * what happened, one AI line about the last talk, and the calling queue:
+ * Start calling (N) hands the remaining Call now list to the same
+ * DialerController.callList as before. No new scheduler. Skip only moves this
+ * lead behind the others on this screen for this session; nothing is written.
+ */
+@Composable
+private fun NextCallHero(
+    lead: Contact,
+    reason: String,
+    lastContact: String?,
+    summary: String?,
+    sayLine: String?,
+    left: Int,
+    calledToday: Int,
+    skipped: Int,
+    onCall: () -> Unit,
+    onOpen: () -> Unit,
+    onSkip: () -> Unit,
+    onStart: () -> Unit,
+) {
+    val who = prettyName(lead.name) ?: prettyPhone(lead.phone)
+    val firstName = who.trim().substringBefore(' ')
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AppColors.Surface)
+            .clickable { onOpen() }.padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Next call", style = AppType.footnote.copy(fontWeight = FontWeight.SemiBold), color = IosColors.Blue,
+                modifier = Modifier.weight(1f))
+            if (left > 1) Text("Skip", style = AppType.subhead, color = IosColors.Blue,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSkip() }.padding(horizontal = 8.dp, vertical = 4.dp))
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.Top) {
+            InitialsAvatar(lead.name ?: lead.phone)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(who, style = AppType.headline, color = AppColors.TextPrimary)
+                // Why now. Wraps; never cut.
+                Text(reason, style = AppType.subhead, color = AppColors.TextPrimary)
+                Text("Last contact: " + (lastContact ?: "never called"), style = AppType.footnote, color = AppColors.TextSecondary)
+                summary?.let { Text("AI: $it", style = AppType.footnote, color = AppColors.TextSecondary) }
+                sayLine?.let { Text("Say: $it", style = AppType.footnote, color = IosColors.Blue) }
+            }
+            budgetLabel(lead.budget)?.let {
+                Spacer(Modifier.width(8.dp))
+                Text("₹ $it", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = AppColors.TextPrimary)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.weight(1f).heightIn(min = 46.dp).clip(RoundedCornerShape(50)).background(IosColors.Blue)
+                    .iosPress(scaleTo = 0.96f) { onCall() }.padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Call $firstName", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = Color.White,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+            if (left > 1) Row(
+                Modifier.weight(1f).heightIn(min = 46.dp).clip(RoundedCornerShape(50)).background(IosColors.Blue.copy(alpha = 0.12f))
+                    .iosPress(scaleTo = 0.96f) { onStart() }.padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = IosColors.Blue, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Start calling ($left)", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = IosColors.Blue,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+        }
+        if (left > 1) {
+            Spacer(Modifier.height(6.dp))
+            Text(QUEUE_ORDER_TEXT, style = AppType.footnote, color = AppColors.TextSecondary)
+        }
+        Spacer(Modifier.height(10.dp))
+        // Progress today. Called today = leads with a real dial today.
+        val total = (calledToday + left).coerceAtLeast(1)
+        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(IosColors.Fill)) {
+            Box(Modifier.fillMaxWidth(calledToday.toFloat() / total).height(4.dp).background(IosColors.Green))
+        }
         Spacer(Modifier.height(4.dp))
-        Text(count, style = AppType.title2, color = if (urgent) IosColors.Red else AppColors.TextPrimary, maxLines = 1)
-        Text(caption, style = AppType.footnote, color = if (urgent) IosColors.Red else AppColors.TextSecondary,
-            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        Text("Called today $calledToday · Skipped $skipped · Left $left", style = AppType.footnote, color = AppColors.TextSecondary)
+    }
+}
+
+/** Compact iOS lead row: name, budget, one reason, last contact, small Call. */
+@Composable
+private fun LeadRow(
+    c: Contact,
+    reason: String,
+    lastContact: String?,
+    sharesName: Boolean,
+    overdue: Boolean,
+    needsUpdate: Boolean,
+    selectMode: Boolean,
+    isSelected: Boolean,
+    onOpen: () -> Unit,
+    onToggleSelect: () -> Unit,
+    onCall: () -> Unit,
+    onUpdate: () -> Unit,
+) {
+    val name = (prettyName(c.name) ?: prettyPhone(c.phone)) + if (sharesName) " ·${c.phone.takeLast(4)}" else ""
+    Row(
+        Modifier.fillMaxWidth()
+            .background(if (isSelected) IosColors.Blue.copy(alpha = 0.08f) else AppColors.Surface)
+            .clickable { if (selectMode) onToggleSelect() else onOpen() },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // The only stripe left: overdue.
+        Box(Modifier.width(3.dp).height(56.dp).background(if (overdue) IosColors.Red else Color.Transparent))
+        Column(Modifier.weight(1f).padding(start = 11.dp, top = 10.dp, bottom = 10.dp, end = 8.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Text(name, style = AppType.headline, color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
+                budgetLabel(c.budget)?.let {
+                    Spacer(Modifier.width(6.dp))
+                    Text("₹ $it", style = AppType.subhead, color = AppColors.TextPrimary)
+                }
+            }
+            Text(reason, style = AppType.subhead, color = if (overdue) IosColors.Red else AppColors.TextSecondary)
+            Text(lastContact?.let { "Last contact $it" } ?: "Never called", style = AppType.footnote, color = AppColors.TextSecondary)
+            if (needsUpdate) Text("Call ended with no result. Tap to add it.", style = AppType.footnote.copy(fontWeight = FontWeight.SemiBold),
+                color = IosColors.Orange, modifier = Modifier.clickable { onUpdate() }.padding(top = 2.dp))
+        }
+        if (selectMode) {
+            Icon(if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked, contentDescription = null,
+                tint = if (isSelected) IosColors.Blue else IosColors.Gray, modifier = Modifier.padding(end = 14.dp).size(24.dp))
+        } else {
+            Box(
+                Modifier.padding(end = 10.dp).size(48.dp).clip(CircleShape).clickable { onCall() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(Modifier.size(36.dp).clip(CircleShape).background(IosColors.Blue.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Call, contentDescription = "Call", tint = IosColors.Blue, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
     }
 }

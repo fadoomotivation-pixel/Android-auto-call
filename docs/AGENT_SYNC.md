@@ -37,6 +37,18 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-10 — Grok Bot (Leads 10/10: compact header, calling hero, AI insights, no floating orb)
+
+- **Header:** the ₹ summary card is gone. Its facts are one line under the large title ("545 leads · ₹14.62 Cr on the table"). Refresh / AI Score / Select / What I did today moved to a More (…) action sheet in the nav bar, next to a coach face and Settings.
+- **Coach:** the floating `CoachDock` orb is removed everywhere (it covered lead info). `AppState.askCoachOpen` + `vm.openAskCoach()/closeAskCoach()` open the same Ask Coach sheet (`rep-coach` mode ask). Entry points: coach face in the Leads nav bar, coach face in the lead page top bar, the "Ask coach" row in the Leads insights strip. Other tabs keep the existing sparkle icon in the app bar (`vm.openCoach`). Nothing opens by itself; no scheduler.
+- **Insights strip:** up to 3 rows from data already loaded: hot leads that are due or have no next step, overdue follow-ups, site visits waiting for an outcome. A row with 0 is left out; the same counts stay on the buckets. Tap applies that lane + segment.
+- **Next call hero (`NextCallHero`):** name, why now, last contact (when + Not answered / Short call / Talked N min from `v_lead_workstate`), one AI line (`lead_memory`), focus opener, Call <name>, Start calling (N) = the same `vm.callList` on the Call now queue, with the real queue order spelled out (CallNowQueue tiers). Progress: Called today / Skipped / Left. Skip only reorders on screen for this session; nothing is written.
+- **Buckets:** Call now / Scheduled (was Waiting, "Callbacks & visits booked") / Win back (was Revive, "Cold or no next step"). Segments are full words in a wrapping chip row (All due, Overdue, New, Hot, Due today, Later days, Site visit, No next step, Said no or cold). Every count kept. Auto-dial still only on Call now.
+- **Rows (`LeadRow`):** name (bold), budget, one reason line (wraps), last contact, small Call. Red stripe only for overdue. "Call ended with no result" stays on the row (opens the same update sheet). WhatsApp moved off the row; it is on the lead page.
+- **Type:** Leads uses four tokens: largeTitle, headline, subhead, footnote. No ellipsis on names, reasons or labels.
+- **Tab bar:** 70dp (was 88), pill 52dp, dial 52dp.
+- BUILD: `assembleStandardDebug` passed locally on JDK 17. No migration, no Supabase write, no edge-function change.
+
 ## 2026-10-10 — Grok Bot (iOS Leads + lead page, Ask Coach from anywhere)
 
 - **Leads:** no Material app bar on this tab (MainShell skips `TopAppBar` for `Tab.Leads`). `IosNavBar` (new `leading` slot: menu; trailing: settings) + `IosLargeTitle("Leads")` that collapses on scroll. New `IosSearchField` in IosKit. Filter chips are ONE horizontally scrolling capsule row (`IosChip(selectedColor = systemBlue)`), every count kept. Lead rows are an inset-grouped list (`LocalGroupedRow` makes `LeadCard` flat; group draws corners + hairlines). Same numbers, filters, queues, Call all / Call N.
