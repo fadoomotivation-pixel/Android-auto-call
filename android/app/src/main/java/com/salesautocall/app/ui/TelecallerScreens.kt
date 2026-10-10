@@ -402,7 +402,7 @@ private val SETTABLE_STAGES = listOf(
     "interested" to "Interested",
     "site_visit" to "Site Visit",
     "negotiation" to "Negotiation",
-    "token_paid" to "Token Paid 💰",
+    "token_paid" to "Token Paid",
     "booked" to "Booked / Won",
     "callback" to "Callback",
     "not_interested" to "Not interested",
@@ -410,7 +410,7 @@ private val SETTABLE_STAGES = listOf(
     "dnc" to "Do Not Call",
 )
 
-private val TEMPERATURES = listOf("hot" to "🔥 Hot", "warm" to "🌤 Warm", "cold" to "❄️ Cold")
+private val TEMPERATURES = listOf("hot" to "Hot", "warm" to "Warm", "cold" to "Cold")
 
 /** The deck's four counters, computed together and cached as one value. */
 private data class DeckStats(
@@ -627,7 +627,7 @@ private fun SectionHeader(title: String, actionLabel: String? = null, onAction: 
 
 @Composable
 private fun Pill(text: String, fg: Color, bg: Color) {
-    Box(Modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 9.dp, vertical = 3.dp)) {
+    Box(Modifier.clip(RoundedCornerShape(10.dp)).background(bg).padding(horizontal = 9.dp, vertical = 3.dp)) {
         Text(text, color = fg, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
     }
 }
@@ -1276,22 +1276,22 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // Stat tiles 2×2
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile("📞", app.todayCalls.toString(), "Calls today", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                StatTile("⏱️", fmtSec(app.todayTalk), "Talk time", Cyan, Modifier.weight(1f))
+                StatTile("", app.todayCalls.toString(), "Calls today", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                StatTile("", fmtSec(app.todayTalk), "Talk time", Cyan, Modifier.weight(1f))
             }
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile("✨", newLeads.toString(), "New leads", Amber, Modifier.weight(1f))
-                StatTile("💰", formatRupees(pipelineValue), "Pipeline value", Green, Modifier.weight(1f))
+                StatTile("", newLeads.toString(), "New leads", Amber, Modifier.weight(1f))
+                StatTile("", formatRupees(pipelineValue), "Pipeline value", Green, Modifier.weight(1f))
             }
         }
         // Token / booking money actually collected — the bottom of the funnel.
         if (tokenCollected > 0) {
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatTile("🧾", formatRupees(tokenCollected), "Token collected", Teal, Modifier.weight(1f))
-                    StatTile("🏆", app.leads.count { it.status == "booked" }.toString(), "Booked", Green, Modifier.weight(1f))
+                    StatTile("", formatRupees(tokenCollected), "Token collected", Teal, Modifier.weight(1f))
+                    StatTile("", app.leads.count { it.status == "booked" }.toString(), "Booked", Green, Modifier.weight(1f))
                 }
             }
         }
@@ -1341,11 +1341,11 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                         color = if (n > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 Spacer(Modifier.height(5.dp))
-                                Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50))
+                                Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(10.dp))
                                     .background(MaterialTheme.colorScheme.surfaceVariant)) {
                                     if (n > 0) {
                                         Box(Modifier.fillMaxWidth(n / maxCount.toFloat()).fillMaxHeight()
-                                            .clip(RoundedCornerShape(50)).background(stageColor))
+                                            .clip(RoundedCornerShape(10.dp)).background(stageColor))
                                     }
                                 }
                             }
@@ -1453,7 +1453,7 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
 @Composable
 private fun QuickAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, accent: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(
-        modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
+        modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }.padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -1811,7 +1811,7 @@ private fun UpNextCard(
         // now count appears while this card is on screen.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
             Row(
-                Modifier.weight(1f).heightIn(min = 50.dp).clip(RoundedCornerShape(50))
+                Modifier.weight(1f).heightIn(min = 50.dp).clip(RoundedCornerShape(10.dp))
                     .background(IosColors.Blue)
                     .iosPress(scaleTo = 0.96f) { onCall() },
                 verticalAlignment = Alignment.CenterVertically,
@@ -1824,7 +1824,7 @@ private fun UpNextCard(
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             if (queueSize > 1) Column(
-                Modifier.weight(1f).heightIn(min = 50.dp).clip(RoundedCornerShape(50))
+                Modifier.weight(1f).heightIn(min = 50.dp).clip(RoundedCornerShape(10.dp))
                     .background(IosColors.Blue.copy(alpha = 0.12f))
                     .iosPress(scaleTo = 0.96f) { onCallAll() }
                     .padding(horizontal = Space.s, vertical = 6.dp),
@@ -1939,7 +1939,7 @@ private fun SegChip(
 private fun FollowUpAllClear(laterCount: Int) {
     Column(
         Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(Green.copy(alpha = 0.10f))
             .padding(horizontal = 16.dp, vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -2367,7 +2367,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Coach lives in the bar now (no floating orb over leads).
                     Box(Modifier.size(40.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
-                        CoachOrb(size = 24.dp, face = true)
+                        SparkleGlyph(20.dp)
                     }
                     Box {
                         Icon(Icons.Default.MoreHoriz, contentDescription = "More", tint = IosColors.Blue,
@@ -2453,7 +2453,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             // Hidden while searching or selecting: both mean the rep is doing
             // something deliberate and does not want to be handed a queue.
             if (!selectMode && query.isBlank()) {
-                item(key = "insights") { Spacer(Modifier.height(8.dp))
+                if (insights.isNotEmpty()) item(key = "insights") { Spacer(Modifier.height(8.dp))
                     InsightsStrip(
                         insights = insights,
                         onPick = { key ->
@@ -2470,7 +2470,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             }
             if (lane == "call" && !selectMode && query.isBlank()) {
                 liveQueue.firstOrNull()?.let { next ->
-                    item(key = "up_next") { Spacer(Modifier.height(11.dp))
+                    item(key = "up_next") { Spacer(Modifier.height(8.dp))
                         val fu = fuOf(next)
                         val due = fu?.let { instantMillis(it.dueAt) }
                         val work = app.workOf(next)
@@ -2483,8 +2483,10 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                                 else -> "Nobody has called them yet"
                             },
                             lastContact = lastCallResult(work),
-                            summary = rowMemoryLine(next.id?.let { app.memoryByLead[it] }),
+                            reco = buildAiReco(next, work, next.id?.let { app.memoryByLead[it] }),
                             sayLine = if (isDueNow(work)) focusSayLine(app.coachPicks, next.id) else null,
+                            waBusy = next.id != null && next.id == app.waDraftingId,
+                            onWhatsApp = { next.id?.let { vm.sendOwedWhatsApp(it, next.phone) } },
                             left = queue.size,
                             calledToday = calledToday,
                             skipped = skippedInQueue,
@@ -2618,7 +2620,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                         }
                         add(Triple("quick", ql) { quick = null })
                     }
-                    tempFilter?.let { t -> add(Triple("temp", when (t) { "hot" -> "🔥 Hot"; "warm" -> "🌤 Warm"; else -> "❄️ Cold" }) { tempFilter = null }) }
+                    tempFilter?.let { t -> add(Triple("temp", when (t) { "hot" -> "Hot"; "warm" -> "Warm"; else -> "Cold" }) { tempFilter = null }) }
                     if (sortBy != "default") add(Triple("sort", if (sortBy == "score") "AI Score ↓" else "Newest first") { sortBy = "default" })
                 }
                 if (active.isNotEmpty()) {
@@ -2626,7 +2628,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             active.forEach { (_, label, clear) ->
                                 Row(
-                                    Modifier.clip(RoundedCornerShape(50))
+                                    Modifier.clip(RoundedCornerShape(10.dp))
                                         .background(MaterialTheme.colorScheme.secondaryContainer)
                                         .clickable { clear() }
                                         .padding(horizontal = 12.dp, vertical = 7.dp),
@@ -2809,6 +2811,14 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                     Text("Filters", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     TextButton(onClick = { stageFilter = null; tempFilter = null; quick = null; sortBy = "default" }) { Text("Clear all") }
                 }
+                // Lists that left the segmented row (max 3 per bucket) live here,
+                // with their counts, so nothing is lost.
+                Text("More lists", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterTab("Hot (open)", deck.hotCount, lane == "call" && sub == "hot", IosColors.Blue) {
+                        lane = "call"; sub = "hot"; stageFilter = null; quick = null; sheetOpen = false
+                    }
+                }
                 Text("Stage", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     app.leadStages.filter { it.repVisible }.forEach { st ->
@@ -2824,7 +2834,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                     listOf("hot" to "Hot", "warm" to "Warm", "cold" to "Cold").forEach { (key, label) ->
                         val on = tempFilter == key
                         Box(
-                            Modifier.clip(RoundedCornerShape(50))
+                            Modifier.clip(RoundedCornerShape(10.dp))
                                 .background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { tempFilter = if (on) null else key }
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -2844,7 +2854,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                     ).forEach { (key, label) ->
                         val on = quick == key
                         Box(
-                            Modifier.clip(RoundedCornerShape(50))
+                            Modifier.clip(RoundedCornerShape(10.dp))
                                 .background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { quick = if (on) null else key; stageFilter = null }
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -2860,7 +2870,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                     listOf("default" to "Default", "score" to "AI Score ↓", "recent" to "Newest").forEach { (key, label) ->
                         val on = sortBy == key
                         Box(
-                            Modifier.clip(RoundedCornerShape(50))
+                            Modifier.clip(RoundedCornerShape(10.dp))
                                 .background(if (on) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable { sortBy = key }
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -2912,7 +2922,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                         app.revivePicks.forEach { p ->
                             val c = leadsById[p.id] ?: return@forEach
                             Column(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
                                     .padding(12.dp),
                             ) {
@@ -2941,7 +2951,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                                 Spacer(Modifier.height(9.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
-                                        Modifier.clip(RoundedCornerShape(50)).background(Green)
+                                        Modifier.clip(RoundedCornerShape(10.dp)).background(Green)
                                             .clickable { vm.dialManual(c.phone) }.padding(horizontal = 18.dp, vertical = 8.dp),
                                     ) { Text("Call", color = Color.White, style = AppType.label) }
                                     Spacer(Modifier.width(12.dp))
@@ -3070,7 +3080,7 @@ private fun WhatsAppChatDialog(
                         "Meeting" to "Hi $who, shall we schedule a site visit? Please let me know a convenient date and time.",
                     ).forEach { (label, template) ->
                         Box(
-                            Modifier.clip(RoundedCornerShape(50))
+                            Modifier.clip(RoundedCornerShape(10.dp))
                                 .background(Color(0xFF25D366).copy(alpha = 0.12f))
                                 .clickable { draft = template }
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
@@ -3101,7 +3111,7 @@ private fun WhatsAppChatDialog(
 @Composable
 private fun LeadMiniChip(label: String, color: Color) {
     Box(
-        Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.12f))
+        Modifier.clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.12f))
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -3273,8 +3283,8 @@ private fun LeadCard(
         Modifier.fillMaxWidth()
             .then(
                 if (grouped) Modifier.background(container)
-                else Modifier.clip(RoundedCornerShape(14.dp)).background(container)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(14.dp)),
+                else Modifier.clip(RoundedCornerShape(12.dp)).background(container)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
             )
             .then(if (selectMode) Modifier.clickable { onToggleSelect() } else Modifier.clickable { onOpen() })
             .height(IntrinsicSize.Min),
@@ -3613,7 +3623,7 @@ private fun LeadActionSheet(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SETTABLE_STAGES.forEach { (key, label) ->
                         val on = (stage ?: c.status) == key
-                        Box(Modifier.clip(RoundedCornerShape(50))
+                        Box(Modifier.clip(RoundedCornerShape(10.dp))
                             .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
                             .clickable { stage = key }.padding(horizontal = 10.dp, vertical = 6.dp)) {
                             Text(label, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
@@ -3627,7 +3637,7 @@ private fun LeadActionSheet(
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     TEMPERATURES.forEach { (key, label) ->
                         val on = (temp ?: c.temperature) == key
-                        Box(Modifier.clip(RoundedCornerShape(50))
+                        Box(Modifier.clip(RoundedCornerShape(10.dp))
                             .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
                             .clickable { temp = key }.padding(horizontal = 10.dp, vertical = 6.dp)) {
                             Text(label, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
@@ -3661,7 +3671,7 @@ private fun LeadActionSheet(
                             cal.get(java.util.Calendar.DAY_OF_MONTH)
                         ).show()
                     }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (svAt.isBlank()) "📅 Pick Date & Time" else "📅 Scheduled: ${svAt.substring(0, 16).replace('T', ' ')}")
+                        Text(if (svAt.isBlank()) "Pick Date & Time" else "Scheduled: ${svAt.substring(0, 16).replace('T', ' ')}")
                     }
                     Spacer(Modifier.height(8.dp))
                     // Geo-fenced arrival: verifies the rep is physically at the project.
@@ -3669,12 +3679,12 @@ private fun LeadActionSheet(
                         onClick = onArrived,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = Teal),
-                    ) { Text("📍 Arrived at Site (verify GPS)") }
+                    ) { Text("Arrived at Site (verify GPS)") }
                     if (c.siteVisitArrivedAt != null) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            if (c.siteVisitVerified == true) "✅ Verified on site${c.siteVisitDistanceM?.let { " · ${it} m from pin" } ?: ""}"
-                            else "⚠️ Last check-in was off-site${c.siteVisitDistanceM?.let { " · ${it} m away" } ?: ""}",
+                            if (c.siteVisitVerified == true) "Verified on site${c.siteVisitDistanceM?.let { " · ${it} m from pin" } ?: ""}"
+                            else "Last check-in was off-site${c.siteVisitDistanceM?.let { " · ${it} m away" } ?: ""}",
                             style = MaterialTheme.typography.labelMedium,
                             color = if (c.siteVisitVerified == true) Green else Red,
                         )
@@ -3727,15 +3737,15 @@ private fun LeadActionSheet(
                     modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onProjects, modifier = Modifier.weight(1f)) { Text("🏢 Projects") }
-                    OutlinedButton(onClick = onShareContent, modifier = Modifier.weight(1f)) { Text("📚 Share content") }
+                    OutlinedButton(onClick = onProjects, modifier = Modifier.weight(1f)) { Text("Projects") }
+                    OutlinedButton(onClick = onShareContent, modifier = Modifier.weight(1f)) { Text("Share content") }
                 }
                 Spacer(Modifier.height(8.dp))
                 // Hand the lead to a colleague. On leave, on a site visit, or
                 // simply the wrong person for this customer — a rep should be
                 // able to pass it on without ringing the office.
                 OutlinedButton(onClick = onHandOver, modifier = Modifier.fillMaxWidth()) {
-                    Text("🤝 Give to a teammate")
+                    Text("Give to a teammate")
                 }
             }
         },
@@ -3812,7 +3822,7 @@ internal fun HandOverDialog(vm: MainViewModel, c: Contact, onDismiss: () -> Unit
                                     .padding(horizontal = 12.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text("👤", style = MaterialTheme.typography.titleMedium)
+                                Text("", style = MaterialTheme.typography.titleMedium)
                                 Spacer(Modifier.width(10.dp))
                                 Text(t.fullName, style = MaterialTheme.typography.bodyLarge)
                             }
@@ -3994,13 +4004,13 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                         ) {
                             if (budget != null || place != null) {
                                 Text(
-                                    listOfNotNull(budget?.let { "💰 ₹ $it" }, place?.let { "📍 $it" }).joinToString("   "),
+                                    listOfNotNull(budget?.let { "₹ $it" }, place?.let { "$it" }).joinToString("   "),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             lastNote?.let {
-                                Text("📝 $it", style = MaterialTheme.typography.bodySmall, maxLines = 2,
+                                Text("$it", style = MaterialTheme.typography.bodySmall, maxLines = 2,
                                     color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
@@ -4136,9 +4146,9 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                             // grey slab. Three filled slabs read as a pile of
                             // buttons rather than a question you can skip.
                             Box(
-                                Modifier.weight(1f).clip(RoundedCornerShape(50))
+                                Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
                                     .background(if (on) AppColors.Indigo else AppColors.Surface)
-                                    .border(1.dp, if (on) AppColors.Indigo else AppColors.Border, RoundedCornerShape(50))
+                                    .border(1.dp, if (on) AppColors.Indigo else AppColors.Border, RoundedCornerShape(10.dp))
                                     .clickable { temp = if (on) null else key }.padding(vertical = 9.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -4180,13 +4190,13 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             DispoButton("Cancel", Slate.copy(alpha = 0.12f), Slate, Modifier.weight(1f)) { vm.cancelVoiceNote() }
                             DispoButton(
-                                "⏹  Stop & save  %d:%02d".format(secs / 60, secs % 60),
+                                "Stop & save  %d:%02d".format(secs / 60, secs % 60),
                                 Green.copy(alpha = 0.16f), Green, Modifier.weight(1f),
                             ) { vm.finishPostCallVoiceNote() }
                         }
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "🔴 Recording — say what the customer told you.",
+                            "Recording — say what the customer told you.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Red,
                         )
@@ -4204,7 +4214,7 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center,
                         ) {
-                            Text("🎤", fontSize = 13.sp)
+                            Text("", fontSize = 13.sp)
                             Spacer(Modifier.width(8.dp))
                             Text("Record voice note", style = AppType.label, color = AppColors.Indigo, maxLines = 1)
                         }
@@ -4249,7 +4259,7 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                     // Connected call → no Skip. The lead must not stay "new";
                     // an outcome tap above is the only exit.
                     Text(
-                        "⚠ Pick one option above",
+                        "Pick one option above",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 8.dp),
@@ -4338,7 +4348,7 @@ private fun DispoButton(label: String, bg: Color, fg: Color, modifier: Modifier 
     Box(
         modifier
             .height(52.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(bg)
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
@@ -4486,7 +4496,7 @@ private fun QuickScheduleChips(
         // real date was to save a wrong time and go fix it somewhere else.
         Spacer(Modifier.height(8.dp))
         Text(
-            "📅 Pick another time",
+            "Pick another time",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary,
@@ -5382,7 +5392,7 @@ private fun LeaderboardCard(vm: MainViewModel, app: AppState, compact: Boolean) 
 
 @Composable
 private fun LeaderboardRowView(rank: Int, r: LeaderboardRow, isMe: Boolean) {
-    val medal = when (rank) { 1 -> "🥇"; 2 -> "🥈"; 3 -> "🥉"; else -> "$rank." }
+    val medal = "$rank."
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(medal, modifier = Modifier.width(34.dp))
         Column(Modifier.weight(1f)) {
@@ -5402,7 +5412,8 @@ private fun LeaderboardRowView(rank: Int, r: LeaderboardRow, isMe: Boolean) {
 
 /** Old filter → (lane, segment). Every filter the chip row had lives here. */
 internal val LANE_SUBS: Map<String, List<Pair<String, String>>> = linkedMapOf(
-    "call" to listOf("call_now" to "All due", "overdue" to "Overdue", "new" to "New", "hot" to "Hot"),
+    // Hot moved to the Filters sheet ("More lists") — max 3 segments per bucket.
+    "call" to listOf("call_now" to "All due", "overdue" to "Overdue", "new" to "New"),
     "wait" to listOf("due_today" to "Due today", "scheduled" to "Later days", "awaiting_visit" to "Site visit"),
     "revive" to listOf("no_next_step" to "No next step", "cold" to "Said no or cold"),
 )
@@ -5440,31 +5451,31 @@ private fun LeadLanes(
     fun n(code: String) = counts[code] ?: 0
     val overdue = n("overdue")
     val waitTotal = n("due_today") + n("scheduled") + n("awaiting_visit")
+    val actCodes = setOf("call_now", "overdue", "due_today", "scheduled", "awaiting_visit", "no_next_step")
+    fun cnt(code: String) = if (unknown && code in actCodes) "—" else n(code).toString()
+    val lanes = listOf("call", "wait", "revive")
     Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LaneCard("Call now", if (unknown) "—" else n("call_now").toString(),
-                when { unknown -> "Could not load"; overdue > 0 -> "$overdue overdue"; else -> "Due to ring now" },
-                urgent = !unknown && overdue > 0, selected = lane == "call",
-                modifier = Modifier.weight(1f)) { onLane("call") }
-            LaneCard("Scheduled", if (unknown) "—" else waitTotal.toString(), "Callbacks & visits booked",
-                urgent = false, selected = lane == "wait",
-                modifier = Modifier.weight(1f)) { onLane("wait") }
-            LaneCard("Win back", reviveTotal.toString(), "Cold or no next step",
-                urgent = false, selected = lane == "revive",
-                modifier = Modifier.weight(1f)) { onLane("revive") }
-        }
-        Spacer(Modifier.height(12.dp))
+        // ONE compact segmented row for the 3 buckets, counts in the labels.
+        IosSegmented(
+            options = listOf(
+                "Call now " + (if (unknown) "—" else n("call_now").toString()),
+                "Scheduled " + (if (unknown) "—" else waitTotal.toString()),
+                "Win back $reviveTotal",
+            ),
+            selectedIndex = lanes.indexOf(lane),
+        ) { i -> onLane(lanes[i]) }
         val subs = LANE_SUBS[lane].orEmpty()
-        val actCodes = setOf("call_now", "overdue", "due_today", "scheduled", "awaiting_visit", "no_next_step")
-        // Full-word segments that wrap to a second line instead of cutting a
-        // label with "…" on a 360dp phone. Every count stays on its segment.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            subs.forEach { (code, label) ->
-                val c = if (unknown && code in actCodes) "—" else n(code).toString()
-                IosChip(label = label, count = c, selected = code == sub, empty = false,
-                    accent = if (code == "overdue") IosColors.Red else AppColors.Indigo,
-                    selectedColor = IosColors.Blue) { onSub(code) }
-            }
+        if (subs.size > 1) {
+            Spacer(Modifier.height(8.dp))
+            IosSegmented(
+                options = subs.map { (code, label) -> "$label ${cnt(code)}" },
+                selectedIndex = subs.indexOfFirst { it.first == sub },
+            ) { i -> onSub(subs[i].first) }
+        }
+        if (lane == "call" && !unknown && overdue > 0) {
+            Spacer(Modifier.height(4.dp))
+            Text("$overdue overdue. Their callback time has passed.", style = AppType.footnote, color = IosColors.Red,
+                modifier = Modifier.padding(horizontal = 4.dp))
         }
         if (callAllCount > 0 || lane == "revive") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -5496,12 +5507,12 @@ private fun LaneCard(
 ) {
     Column(
         modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(AppColors.Surface)
             .border(
                 width = if (selected) 2.dp else 0.dp,
                 color = if (selected) AppColors.Indigo else Color.Transparent,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
             )
             .iosPress(scaleTo = 0.96f) { onClick() }
             .padding(horizontal = 10.dp, vertical = 10.dp),
@@ -5551,36 +5562,47 @@ internal data class LeadInsight(val key: String, val title: String, val detail: 
  */
 @Composable
 private fun InsightsStrip(insights: List<LeadInsight>, onPick: (String) -> Unit, onCoach: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AppColors.Surface)) {
-        insights.forEachIndexed { i, ins ->
-            if (i > 0) IosSeparator(startInset = 40.dp)
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onPick(ins.key) }
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(if (ins.urgent) IosColors.Red else IosColors.Blue))
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(ins.title, style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = AppColors.TextPrimary)
-                    Text(ins.detail, style = AppType.footnote, color = AppColors.TextSecondary)
-                }
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = IosColors.Gray, modifier = Modifier.size(20.dp))
-            }
-        }
-        if (insights.isNotEmpty()) IosSeparator(startInset = 40.dp)
+    // Collapsed to ONE line by default ("3 things need you ›"). Tap to see each
+    // count; nothing is hidden, it is one tap away.
+    var open by remember { mutableStateOf(false) }
+    val urgent = insights.any { it.urgent }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AppColors.Surface)) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onCoach() }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { open = !open }.padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CoachOrb(size = 20.dp, face = true)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Ask coach", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = AppColors.TextPrimary)
-                Text("Opening line, objection reply or WhatsApp message", style = AppType.footnote, color = AppColors.TextSecondary)
+            SparkleGlyph(16.dp, tint = if (urgent) IosColors.Red else IosColors.Blue)
+            Spacer(Modifier.width(8.dp))
+            val n = insights.size
+            Text("$n ${if (n == 1) "thing needs" else "things need"} you", style = AppType.subhead.copy(fontWeight = FontWeight.Medium),
+                color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
+            Icon(if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = null,
+                tint = IosColors.Gray, modifier = Modifier.size(20.dp))
+        }
+        if (open) {
+            insights.forEach { ins ->
+                IosSeparator(startInset = 40.dp)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { onPick(ins.key) }
+                        .padding(start = 40.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(ins.title, style = AppType.subhead, color = if (ins.urgent) IosColors.Red else AppColors.TextPrimary)
+                        Text(ins.detail, style = AppType.footnote, color = AppColors.TextSecondary)
+                    }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = IosColors.Gray2, modifier = Modifier.size(18.dp))
+                }
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = IosColors.Gray, modifier = Modifier.size(20.dp))
+            IosSeparator(startInset = 40.dp)
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { onCoach() }
+                    .padding(start = 40.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Ask coach: opening line, objection reply or WhatsApp message", style = AppType.subhead,
+                    color = IosColors.Blue, modifier = Modifier.weight(1f))
+            }
         }
     }
 }
@@ -5597,80 +5619,90 @@ private fun NextCallHero(
     lead: Contact,
     reason: String,
     lastContact: String?,
-    summary: String?,
+    reco: AiReco,
     sayLine: String?,
+    waBusy: Boolean,
     left: Int,
     calledToday: Int,
     skipped: Int,
     onCall: () -> Unit,
+    onWhatsApp: () -> Unit,
     onOpen: () -> Unit,
     onSkip: () -> Unit,
     onStart: () -> Unit,
 ) {
     val who = prettyName(lead.name) ?: prettyPhone(lead.phone)
     val firstName = who.trim().substringBefore(' ')
+    var showOrder by remember { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AppColors.Surface)
-            .clickable { onOpen() }.padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AppColors.Surface)
+            .clickable { onOpen() }.padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Next call", style = AppType.footnote.copy(fontWeight = FontWeight.SemiBold), color = IosColors.Blue,
-                modifier = Modifier.weight(1f))
+            Text("NEXT CALL", style = AppType.caption, color = AppColors.TextSecondary, modifier = Modifier.weight(1f))
             if (left > 1) Text("Skip", style = AppType.subhead, color = IosColors.Blue,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSkip() }.padding(horizontal = 8.dp, vertical = 4.dp))
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSkip() }.padding(horizontal = 8.dp, vertical = 2.dp))
         }
-        Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.Top) {
-            InitialsAvatar(lead.name ?: lead.phone)
-            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(who, style = AppType.headline, color = AppColors.TextPrimary)
-                // Why now. Wraps; never cut.
-                Text(reason, style = AppType.subhead, color = AppColors.TextPrimary)
-                Text("Last contact: " + (lastContact ?: "never called"), style = AppType.footnote, color = AppColors.TextSecondary)
-                summary?.let { Text("AI: $it", style = AppType.footnote, color = AppColors.TextSecondary) }
-                sayLine?.let { Text("Say: $it", style = AppType.footnote, color = IosColors.Blue) }
+                // Why now · last contact. Wraps; never cut.
+                Text(reason + " · " + (lastContact ?: "never called"), style = AppType.footnote, color = AppColors.TextSecondary)
             }
             budgetLabel(lead.budget)?.let {
                 Spacer(Modifier.width(8.dp))
-                Text("₹ $it", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = AppColors.TextPrimary)
+                Text("₹ $it", style = AppType.subhead.copy(fontWeight = FontWeight.Medium), color = AppColors.TextPrimary)
             }
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(AppColors.Separator))
+        Spacer(Modifier.height(8.dp))
+        // The call button below is the primary action, so the block only adds
+        // its own button when the step is WhatsApp.
+        AiRecommendationBlock(
+            reco = reco, firstName = firstName, busy = waBusy,
+            onCall = onCall, onWhatsApp = onWhatsApp,
+            showButton = reco.action == RecoAction.WHATSAPP,
+        )
+        sayLine?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(it, style = AppType.footnote, color = AppColors.TextSecondary)
         }
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(
-                Modifier.weight(1f).heightIn(min = 46.dp).clip(RoundedCornerShape(50)).background(IosColors.Blue)
-                    .iosPress(scaleTo = 0.96f) { onCall() }.padding(horizontal = 10.dp),
+                Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp)).background(IosColors.Blue)
+                    .iosPress(scaleTo = 0.97f) { onCall() }.padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Call $firstName", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = Color.White,
+                Text("Call $firstName", style = AppType.subhead.copy(fontWeight = FontWeight.Medium), color = Color.White,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
-            if (left > 1) Row(
-                Modifier.weight(1f).heightIn(min = 46.dp).clip(RoundedCornerShape(50)).background(IosColors.Blue.copy(alpha = 0.12f))
-                    .iosPress(scaleTo = 0.96f) { onStart() }.padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+            if (left > 1) Box(
+                Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
+                    .iosPress(scaleTo = 0.97f) { onStart() },
+                contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = IosColors.Blue, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Start calling ($left)", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = IosColors.Blue,
+                Text("Start calling ($left)", style = AppType.subhead.copy(fontWeight = FontWeight.Medium), color = IosColors.Blue,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
         }
-        if (left > 1) {
-            Spacer(Modifier.height(6.dp))
-            Text(QUEUE_ORDER_TEXT, style = AppType.footnote, color = AppColors.TextSecondary)
-        }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         // Progress today. Called today = leads with a real dial today.
         val total = (calledToday + left).coerceAtLeast(1)
-        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(IosColors.Fill)) {
-            Box(Modifier.fillMaxWidth(calledToday.toFloat() / total).height(4.dp).background(IosColors.Green))
+        Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(1.dp)).background(IosColors.Fill)) {
+            Box(Modifier.fillMaxWidth(calledToday.toFloat() / total).height(2.dp).background(IosColors.Blue))
         }
         Spacer(Modifier.height(4.dp))
-        Text("Called today $calledToday · Skipped $skipped · Left $left", style = AppType.footnote, color = AppColors.TextSecondary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Called today $calledToday · Skipped $skipped · Left $left", style = AppType.footnote, color = AppColors.TextSecondary,
+                modifier = Modifier.weight(1f))
+            if (left > 1) Text(if (showOrder) "Hide order" else "Call order", style = AppType.footnote, color = IosColors.Blue,
+                modifier = Modifier.clickable { showOrder = !showOrder }.padding(start = 8.dp, top = 2.dp, bottom = 2.dp))
+        }
+        if (showOrder && left > 1) Text(QUEUE_ORDER_TEXT, style = AppType.footnote, color = AppColors.TextSecondary)
     }
 }
 

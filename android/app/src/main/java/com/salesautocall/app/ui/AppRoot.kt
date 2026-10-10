@@ -260,7 +260,7 @@ private fun MinimizedUpdateChip(progress: Float, onExpand: () -> Unit) {
     val pct = (progress * 100).toInt().coerceIn(0, 100)
     Box(Modifier.fillMaxSize().padding(bottom = 96.dp), contentAlignment = Alignment.BottomCenter) {
         Surface(
-            shape = RoundedCornerShape(50),
+            shape = RoundedCornerShape(10.dp),
             color = MaterialTheme.colorScheme.secondaryContainer,
             tonalElevation = 6.dp,
             shadowElevation = 8.dp,
@@ -342,7 +342,7 @@ private fun BootSplash() {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                Modifier.size(64.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.primary),
+                Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(34.dp))
@@ -977,7 +977,7 @@ private fun CoachSheet(
             // the app bar there is nothing to minimise, and a button that does
             // nothing is worse than no button.
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🎯 AI Coach", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("AI Coach", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
             }
             Spacer(Modifier.height(8.dp))
@@ -999,13 +999,13 @@ private fun CoachSheet(
                             Column(Modifier.padding(14.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        "📞 Last call" + (c.leadName?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                                        "Last call" + (c.leadName?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
                                         style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
                                         modifier = Modifier.weight(1f),
                                     )
                                     c.rating?.let { r ->
                                         Text(
-                                            "⭐".repeat(r.coerceIn(1, 5)) + " $r/5",
+                                            "$r/5",
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary,
@@ -1014,18 +1014,18 @@ private fun CoachSheet(
                                 }
                                 c.good?.takeIf { it.isNotBlank() }?.let {
                                     Spacer(Modifier.height(6.dp))
-                                    Text("✅ $it", style = MaterialTheme.typography.bodyMedium)
+                                    Text("$it", style = MaterialTheme.typography.bodyMedium)
                                 }
                                 // Only shown when the coach actually has a useful suggestion —
                                 // a good call gets pure motivation, no forced "improve".
                                 c.improve?.takeIf { it.isNotBlank() }?.let {
                                     Spacer(Modifier.height(6.dp))
-                                    Text("💡 $it", style = MaterialTheme.typography.bodyMedium)
+                                    Text("$it", style = MaterialTheme.typography.bodyMedium)
                                 }
                                 if ((c.rating ?: 0) >= 4 && c.improve.isNullOrBlank()) {
                                     Spacer(Modifier.height(6.dp))
                                     Text(
-                                        "🔥 Great call. Keep going like this.",
+                                        "Great call. Keep going like this.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.SemiBold,
@@ -1040,7 +1040,7 @@ private fun CoachSheet(
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(
-                                    if (b.slot == "morning") "🌅 Yesterday" else "🌆 Today",
+                                    if (b.slot == "morning") "Yesterday" else "Today",
                                     style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
                                 )
                                 Spacer(Modifier.height(6.dp))
@@ -1058,7 +1058,7 @@ private fun CoachSheet(
                         ) {
                             Column(Modifier.padding(14.dp)) {
                                 Text(
-                                    "💡 Today's tip",
+                                    "Today's tip",
                                     style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
@@ -1085,7 +1085,7 @@ private fun CoachSheet(
             // ---- "Aaj ke 5" — the AI sales manager's next-best calls, each with
             // a ready-to-speak opener. One tap = dialing. THE founder-demo moment.
             Spacer(Modifier.height(14.dp))
-            Text("🔥 Today's 5 — call these first", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Today's 5 — call these first", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             when {
                 picksLoading -> Box(Modifier.fillMaxWidth().padding(18.dp), contentAlignment = Alignment.Center) {
@@ -1140,7 +1140,7 @@ private fun CoachSheet(
                             if (p.opener.isNotBlank()) {
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    "🗣️ \"${p.opener}\"",
+                                    "\"${p.opener}\"",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -1182,7 +1182,7 @@ private fun CoachSheet(
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp)) {
                         Text(
-                            "COACH 🎯", style = MaterialTheme.typography.labelMedium,
+                            "COACH", style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
                         )
                         Spacer(Modifier.height(6.dp))
@@ -1201,7 +1201,7 @@ private fun CoachSheet(
             // RAG-grounded (company ke apne prices/offers/closing lines se), kisi
             // bhi screen se mid-call. Kisi open lead ki zaroorat nahi.
             Spacer(Modifier.height(16.dp))
-            Text("🛡️ Objection Buster", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Objection Buster", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "Customer said no? Tap or type it and get the reply to use.",
                 style = MaterialTheme.typography.bodySmall,
@@ -1339,7 +1339,7 @@ private fun NavSlot(label: String, icon: ImageVector, on: Boolean, jade: Color, 
     // blue blob this bar used to wear, and it fought the Dial button for the
     // only accent on the screen.
     Column(
-        modifier.clip(RoundedCornerShape(14.dp)).clickable { onClick() }.padding(vertical = 4.dp),
+        modifier.clip(RoundedCornerShape(12.dp)).clickable { onClick() }.padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, contentDescription = label, tint = if (on) jade else unsel, modifier = Modifier.size(22.dp))

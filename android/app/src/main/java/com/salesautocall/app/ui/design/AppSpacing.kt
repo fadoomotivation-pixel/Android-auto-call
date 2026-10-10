@@ -37,8 +37,8 @@ object Space {
 object Radii {
     val tag = RoundedCornerShape(999.dp)
     val chip = ContinuousShape(10.dp)
-    val control = ContinuousShape(12.dp)
-    val card = ContinuousShape(14.dp)
+    val control = ContinuousShape(10.dp)
+    val card = ContinuousShape(12.dp)
     val sheet = ContinuousShape(16.dp)
     /** Top corners only, for a sheet that rises from the bottom edge. */
     val sheetTop = ContinuousShape(16.dp, bottom = false)
