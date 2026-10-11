@@ -158,6 +158,15 @@ only for the telecaller who made that call.
 every super-admin screen must be cross-company — never pinned to
 `profiles.company_id`.
 
+**One look: the Apple family.** After an iOS pass and a gradient "brand"
+restyle (#523), the founder picked, screen by screen from mockups: Leads with
+a Next call focus card, Lead detail with a dots-only stepper and one
+filterable Activity timeline, the menu and Settings as iOS grouped lists,
+Home as daily goal rings (calls / connected / site visits), Follow Ups as
+iOS Reminders (Overdue / Today / Upcoming, the check circle opens Update).
+`#F2F2F7`, white cards, one blue, monochrome icons, four type sizes. A paint
+change never removes a handler, count, tab or warning.
+
 **Always leave an open PR.** A branch push ships nothing: Vercel and the edge
 functions only deploy from `main`.
 

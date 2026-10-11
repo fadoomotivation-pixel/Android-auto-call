@@ -5,50 +5,49 @@ import androidx.compose.ui.graphics.Color
 /**
  * Single source of truth for colour in the app.
  *
- * Brand restyle (Oct 2026): soft blue-grey canvas, white cards with soft
- * coloured shadows, slate type, and an indigo-to-sky brand gradient
- * (see [Brand]) for app bars, the primary call button and hero cards. Nothing here is
+ * Apple family (Oct 2026, replaces the gradient look of #523): grouped grey
+ * canvas #F2F2F7, white cards, graphite type #1C1C1E, ONE blue accent
+ * #007AFF, monochrome icons. [Brand] keeps its API but paints flat. Nothing here is
  * decorative — the action blue means "you can act on this", status colours
  * mean "this is the state".
  *
  * The token is still named Indigo. Hundreds of screens already say
  * `AppColors.Indigo` for "the one action colour", and renaming it would be a
- * logic-looking diff for a paint change. The paint itself is the brand
- * indigo (#5B5BF0), where the brand gradient starts.
+ * logic-looking diff for a paint change. The paint is now system blue #007AFF.
  *
  * UI layer only: no business logic, no models.
  */
 object AppColors {
     // Canvas & surfaces. Grouped grey, white cards — the Settings read.
-    val Canvas = Color(0xFFF3F5FB)
+    val Canvas = Color(0xFFF2F2F7)
     val Surface = Color(0xFFFFFFFF)
-    val SurfaceMuted = Color(0xFFEEF1F7)
-    val SurfaceSunken = Color(0xFFF0F2F8)
+    val SurfaceMuted = Color(0xFFF2F2F7)
+    val SurfaceSunken = Color(0xFFF2F2F7)
 
     // Hairlines. iOS separator (opaque): #C6C6C8 drawn at half a point.
     // Border stays for the few controls that still need an outline (inputs).
-    val Border = Color(0xFFE5E7EB)
-    val BorderStrong = Color(0xFFD1D5DB)
-    val Separator = Color(0xFFE8EBF2)
+    val Border = Color(0xFFE5E5EA)
+    val BorderStrong = Color(0xFFD1D1D6)
+    val Separator = Color(0xFFE5E5EA)
 
     // Graphite type ramp
-    val TextPrimary = Color(0xFF0F172A)
-    val TextSecondary = Color(0xFF64748B)
-    val TextTertiary = Color(0xFF94A3B8)
+    val TextPrimary = Color(0xFF1C1C1E)
+    val TextSecondary = Color(0xFF8E8E93)
+    val TextTertiary = Color(0xFFAEAEB2)
 
     // The one action colour. Brand indigo. Pressed is the same
     // blue, a step darker, so a tap reads without introducing a second hue.
-    val Indigo = Color(0xFF5B5BF0)
-    val IndigoPressed = Color(0xFF4747D6)
-    val IndigoSoft = Color(0xFFEDEDFE)
+    val Indigo = Color(0xFF007AFF)
+    val IndigoPressed = Color(0xFF0062CC)
+    val IndigoSoft = Color(0xFFE5F1FF)
     val OnIndigo = Color(0xFFFFFFFF)
 
     // Semantic (restrained, used for state only)
-    val Positive = Color(0xFF16A34A)
+    val Positive = Color(0xFF248A3D)
     val PositiveSoft = Color(0xFFE7F8EE)
-    val Warning = Color(0xFFD97706)
+    val Warning = Color(0xFFC93400)
     val WarningSoft = Color(0xFFFEF5E4)
-    val Danger = Color(0xFFEF4444)
+    val Danger = Color(0xFFFF3B30)
     val DangerSoft = Color(0xFFFDEDED)
     val Info = Color(0xFF1D4ED8)
     val InfoSoft = Color(0xFFEAF0FE)
@@ -97,21 +96,21 @@ object AppColors {
 
     /** Deterministic, low-saturation avatar tints. */
     val avatarTints = listOf(
-        Color(0xFFEDEEFB),
-        Color(0xFFE9F1FB),
-        Color(0xFFE7F3F0),
-        Color(0xFFF3EEFA),
-        Color(0xFFFBF0E8),
-        Color(0xFFF1F2F5),
+        Color(0xFFE5E5EA),
+        Color(0xFFE5E5EA),
+        Color(0xFFE5E5EA),
+        Color(0xFFE5E5EA),
+        Color(0xFFE5E5EA),
+        Color(0xFFE5E5EA),
     )
 
     val avatarInk = listOf(
-        Color(0xFF5B5BF0),
-        Color(0xFF3B82F6),
-        Color(0xFF0D9488),
-        Color(0xFF7C3AED),
-        Color(0xFFDB2777),
-        Color(0xFF0891B2),
+        Color(0xFF3A3A3C),
+        Color(0xFF3A3A3C),
+        Color(0xFF3A3A3C),
+        Color(0xFF3A3A3C),
+        Color(0xFF3A3A3C),
+        Color(0xFF3A3A3C),
     )
 }
 
@@ -124,7 +123,7 @@ object AppColors {
  * uses them. Never use them for body text.
  */
 object IosColors {
-    val Blue = Color(0xFF5B5BF0)
+    val Blue = Color(0xFF007AFF)
     val Green = Color(0xFF34C759)
     val Indigo = Color(0xFF5856D6)
     val Orange = Color(0xFFFF9500)
@@ -136,15 +135,15 @@ object IosColors {
     val Gray = Color(0xFF8E8E93)
     val Gray2 = Color(0xFFAEAEB2)
     val Gray5 = Color(0xFFE5E5EA)
-    val Gray6 = Color(0xFFF3F5FB)
+    val Gray6 = Color(0xFFF2F2F7)
 
     /** Grouped table background and its white cells. */
-    val GroupedBg = Color(0xFFF3F5FB)
+    val GroupedBg = Color(0xFFF2F2F7)
     val Cell = Color(0xFFFFFFFF)
     /** The pressed state of a white cell. */
-    val CellPressed = Color(0xFFEEF1F7)
+    val CellPressed = Color(0xFFE5E5EA)
     /** Fill behind a segmented control / search field (tertiarySystemFill). */
-    val Fill = Color(0xFFEEF1F7)
+    val Fill = Color(0xFFE9E9EE)
     /** The dimmed backdrop behind an action sheet. */
     val Scrim = Color(0x66000000)
 }

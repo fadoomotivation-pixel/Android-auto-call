@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Shield
@@ -603,7 +605,7 @@ private fun StatTile(emoji: String, value: String, label: String, accent: Color,
 
             .padding(horizontal = Space.l, vertical = Space.m),
     ) {
-        Text(value, style = AppType.metric, color = accent, maxLines = 1)
+        Text(value, style = AppType.metric, color = AppColors.TextPrimary, maxLines = 1)
         Spacer(Modifier.height(Space.xxs))
         Text(label, style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
     }
@@ -620,7 +622,7 @@ private fun StatTile(emoji: String, value: String, label: String, accent: Color,
 @Composable
 private fun SectionHeader(title: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.TextTertiary)
+        Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.TextSecondary)
         if (actionLabel != null && onAction != null) {
             Text(
                 actionLabel, style = AppType.label, color = AppColors.Indigo,
@@ -887,8 +889,9 @@ private fun perfScore(app: AppState): Int {
 
 @Composable
 private fun ScoreGauge(score: Int, modifier: Modifier = Modifier) {
-    val color = when { score >= 75 -> Green; score >= 50 -> Amber; else -> Red }
-    val track = MaterialTheme.colorScheme.surfaceVariant
+    // One accent: the score ring is the blue, the number graphite.
+    val color = AppColors.Indigo
+    val track = AppColors.SurfaceMuted
     Box(modifier.size(104.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(104.dp)) {
             val stroke = 11.dp.toPx()
@@ -896,7 +899,7 @@ private fun ScoreGauge(score: Int, modifier: Modifier = Modifier) {
             drawArc(color = color, startAngle = 135f, sweepAngle = 270f * (score.coerceIn(0, 100) / 100f), useCenter = false, style = Stroke(stroke, cap = StrokeCap.Round))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("$score", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = color)
+            Text("$score", style = AppType.title, color = AppColors.TextPrimary)
             Text("Score", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -908,7 +911,7 @@ private fun PerfBar(label: String, value: Int, target: Int, color: Color) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = AppType.meta, color = AppColors.TextSecondary)
-            Text("$value / $target", style = AppType.metaStrong, color = color)
+            Text("$value / $target", style = AppType.metaStrong, color = AppColors.TextPrimary)
         }
         Spacer(Modifier.height(Space.xs + Space.xxs))
         Box(Modifier.fillMaxWidth().height(6.dp).clip(Radii.tag).background(AppColors.SurfaceMuted)) {
@@ -929,13 +932,13 @@ private fun PerformanceCard(app: AppState) {
 ,
     ) {
         Column(Modifier.padding(Space.m)) {
-            Text("TODAY'S PERFORMANCE", style = AppType.sectionLabel, color = AppColors.TextTertiary)
+            Text("TODAY'S PERFORMANCE", style = AppType.sectionLabel, color = AppColors.TextSecondary)
             Spacer(Modifier.height(Space.m))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     PerfBar("Calls made", app.todayCalls, app.dailyGoal, MaterialTheme.colorScheme.primary)
-                    PerfBar("Connected", app.todayConnected, app.todayCalls.coerceAtLeast(1), Green)
-                    PerfBar("Follow-ups", app.followUpList.size, (app.followUpList.size).coerceAtLeast(1), Amber)
+                    PerfBar("Connected", app.todayConnected, app.todayCalls.coerceAtLeast(1), com.salesautocall.app.ui.design.Brand.Ink)
+                    PerfBar("Follow-ups", app.followUpList.size, (app.followUpList.size).coerceAtLeast(1), com.salesautocall.app.ui.design.Brand.Ink)
                 }
                 Spacer(Modifier.width(16.dp))
                 ScoreGauge(perfScore(app))
@@ -1072,10 +1075,25 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         )
     }
 
+    // Home ring 3. A visit counts only when something SAYS it happened today:
+    // the rep's geofenced "Arrived on site" stamp. A visit date that falls
+    // today is a plan, not a visit. Until the leads have loaded we do not
+    // know, so the ring shows "—" rather than a quiet 0.
+    val visitsToday: Int? = remember(app.leads, app.leadsFetched) {
+        if (!app.leadsFetched) null else {
+            val zone = java.time.ZoneId.systemDefault()
+            val day = java.time.LocalDate.now(zone)
+            app.leads.count { c ->
+                val ms = c.siteVisitArrivedAt?.let { instantMillis(it) } ?: return@count false
+                java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate() == day
+            }
+        }
+    }
+
     Refreshable(onRefresh = { vm.loadHome(force = true); vm.loadLeads(force = true) }, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+        Modifier.fillMaxSize().background(AppColors.Canvas),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Greeting hero
@@ -1092,106 +1110,12 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 dailyGoal = app.dailyGoal,
                 onAttendance = { onNavigate("attendance") },
                 onStartCalling = onOpenLeads,
+                connectedToday = app.todayConnected,
+                connectedGoal = app.connectedGoal,
+                visitsToday = visitsToday,
+                visitsGoal = app.visitsGoal,
             )
         }
-        // Morning greeting from the coach: first open of the day before 1 PM,
-        // closed with one tap. See CoachMoments.kt.
-        if (app.morningVisible) {
-            item(key = "coach-morning") {
-                val morningById = remember(app.leads) { app.leads.associateBy { it.id } }
-                if (app.coachOn) MorningGreetingCard(vm, app, morningById)
-            }
-        }
-
-        app.workStatesError?.let { msg ->
-            item {
-                Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-
-        item { TodayFunnelCard(funnel, onOpenFollowUps) }
-
-        // Calling Score — front and centre. The AI listens to the rep's calls and
-        // gives an honest average score, so they see their calling quality first.
-        app.callingScore?.let { score ->
-            item {
-                val stars = Math.round(score).toInt().coerceIn(1, 5)
-                Column(
-                    Modifier.fillMaxWidth().clip(Radii.card)
-                        .background(AppColors.Surface)
-
-                        .padding(Space.m),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(44.dp).clip(CircleShape).background(AppColors.IndigoSoft), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Outlined.Star, contentDescription = null, tint = AppColors.Indigo, modifier = Modifier.size(20.dp))
-                        }
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Calling Score", style = AppType.rowTitle, color = AppColors.TextPrimary)
-                            Text("AI listened to your ${app.callingScoreCount} call${if (app.callingScoreCount == 1) "" else "s"}",
-                                style = AppType.meta, color = AppColors.TextSecondary)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(String.format(java.util.Locale.US, "%.1f", score),
-                                style = AppType.metric, color = AppColors.TextPrimary)
-                            Text("$stars of 5", style = AppType.meta, color = AppColors.TextSecondary)
-                        }
-                    }
-                }
-            }
-        }
-
-        // THE COACH. Collapsed; opens on a tap, or by itself only when the
-        // rep is idle (see CoachCard.kt). The visit list is the same one
-        // Today's Plan asks about below: the server's pending-visit view when
-        // it loaded, the local "visit day gone" guess when it did not.
-        item {
-            val byId = remember(app.leads) { app.leads.associateBy { it.id } }
-            val coachVisits = if (visitServerReady || showServerVisits) {
-                visitBoard.rows.mapNotNull { v ->
-                    val lead = byId[v.contactId] ?: return@mapNotNull null
-                    val phone = v.phone.ifBlank { lead.phone }
-                    if (lead.siteVisitArrivedAt != null || phone.isBlank()) return@mapNotNull null
-                    CoachVisit(v.contactId, phone, v.name.ifBlank { prettyName(lead.name) ?: phone },
-                        lead.siteVisitProject, if (v.daysWaiting <= 0) "Today" else "${v.daysWaiting}d ago")
-                }
-            } else {
-                visitsUnconfirmed.mapNotNull { (c, _) ->
-                    val id = c.id ?: return@mapNotNull null
-                    CoachVisit(id, c.phone, prettyName(c.name) ?: c.phone, c.siteVisitProject, dayLabel(c.siteVisitAt))
-                }
-            }
-            if (app.coachOn) HomeCoachCard(vm, app, coachVisits, byId)
-        }
-
-        // "No lead left behind" — interested leads without a reminder, fixed in one tap.
-        if (unprotected.isNotEmpty()) {
-            item {
-                Column(
-                    Modifier.fillMaxWidth().clip(Radii.card)
-                        .background(AppColors.WarningSoft)
-                        .border(1.dp, Amber.copy(alpha = 0.35f), Radii.card)
-                        .clickable { vm.protectLeads(unprotected) }
-                        .padding(Space.m),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Shield, contentDescription = null, tint = Amber, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "${unprotected.size} interested lead${if (unprotected.size == 1) "" else "s"} without a reminder",
-                                style = AppType.rowTitle, color = AppColors.TextPrimary,
-                            )
-                            Text("Tap to protect all — follow-up tomorrow 10 AM",
-                                style = AppType.meta, color = AppColors.TextSecondary)
-                        }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Amber)
-                    }
-                }
-            }
-        }
-
         // TODAY'S PLAN — the rep's whole day, by what the customer said:
         // who asked for a callback, whose site visit is fixed, whose visit
         // happened (and now needs closing). Names first, statuses never.
@@ -1288,6 +1212,104 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                             },
                             more = visitsUnconfirmed.size - 3, onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
                         )
+                    }
+                }
+            }
+        }
+
+        // Morning greeting from the coach: first open of the day before 1 PM,
+        // closed with one tap. See CoachMoments.kt.
+        if (app.morningVisible) {
+            item(key = "coach-morning") {
+                val morningById = remember(app.leads) { app.leads.associateBy { it.id } }
+                if (app.coachOn) MorningGreetingCard(vm, app, morningById)
+            }
+        }
+
+        app.workStatesError?.let { msg ->
+            item {
+                Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        item { TodayFunnelCard(funnel, onOpenFollowUps) }
+
+        // Calling Score — front and centre. The AI listens to the rep's calls and
+        // gives an honest average score, so they see their calling quality first.
+        app.callingScore?.let { score ->
+            item {
+                val stars = Math.round(score).toInt().coerceIn(1, 5)
+                Column(
+                    Modifier.fillMaxWidth().clip(Radii.card)
+                        .background(AppColors.Surface)
+
+                        .padding(Space.m),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(AppColors.IndigoSoft), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.Star, contentDescription = null, tint = AppColors.Indigo, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Calling Score", style = AppType.rowTitle, color = AppColors.TextPrimary)
+                            Text("AI listened to your ${app.callingScoreCount} call${if (app.callingScoreCount == 1) "" else "s"}",
+                                style = AppType.meta, color = AppColors.TextSecondary)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(String.format(java.util.Locale.US, "%.1f", score),
+                                style = AppType.metric, color = AppColors.TextPrimary)
+                            Text("$stars of 5", style = AppType.meta, color = AppColors.TextSecondary)
+                        }
+                    }
+                }
+            }
+        }
+
+        // THE COACH. Collapsed; opens on a tap, or by itself only when the
+        // rep is idle (see CoachCard.kt). The visit list is the same one
+        // Today's Plan asks about below: the server's pending-visit view when
+        // it loaded, the local "visit day gone" guess when it did not.
+        item {
+            val byId = remember(app.leads) { app.leads.associateBy { it.id } }
+            val coachVisits = if (visitServerReady || showServerVisits) {
+                visitBoard.rows.mapNotNull { v ->
+                    val lead = byId[v.contactId] ?: return@mapNotNull null
+                    val phone = v.phone.ifBlank { lead.phone }
+                    if (lead.siteVisitArrivedAt != null || phone.isBlank()) return@mapNotNull null
+                    CoachVisit(v.contactId, phone, v.name.ifBlank { prettyName(lead.name) ?: phone },
+                        lead.siteVisitProject, if (v.daysWaiting <= 0) "Today" else "${v.daysWaiting}d ago")
+                }
+            } else {
+                visitsUnconfirmed.mapNotNull { (c, _) ->
+                    val id = c.id ?: return@mapNotNull null
+                    CoachVisit(id, c.phone, prettyName(c.name) ?: c.phone, c.siteVisitProject, dayLabel(c.siteVisitAt))
+                }
+            }
+            if (app.coachOn) HomeCoachCard(vm, app, coachVisits, byId)
+        }
+
+        // "No lead left behind" — interested leads without a reminder, fixed in one tap.
+        if (unprotected.isNotEmpty()) {
+            item {
+                Column(
+                    Modifier.fillMaxWidth().clip(Radii.card)
+                        .background(AppColors.WarningSoft)
+                        .border(1.dp, Amber.copy(alpha = 0.35f), Radii.card)
+                        .clickable { vm.protectLeads(unprotected) }
+                        .padding(Space.m),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Shield, contentDescription = null, tint = Amber, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${unprotected.size} interested lead${if (unprotected.size == 1) "" else "s"} without a reminder",
+                                style = AppType.rowTitle, color = AppColors.TextPrimary,
+                            )
+                            Text("Tap to protect all — follow-up tomorrow 10 AM",
+                                style = AppType.meta, color = AppColors.TextSecondary)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Amber)
                     }
                 }
             }
@@ -1572,9 +1594,10 @@ private fun PlanBucket(
     if (rows.isEmpty()) return
     Spacer(Modifier.height(Space.l))
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(15.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(title, style = AppType.metaStrong, color = color)
+        // Monochrome bucket label — colour is kept for the state (overdue red).
+        Icon(icon, contentDescription = null, tint = AppColors.TextSecondary, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(Space.s))
+        Text(title, style = AppType.metaStrong, color = AppColors.TextSecondary)
     }
     Spacer(Modifier.height(Space.xs))
     rows.forEachIndexed { i, r ->
@@ -1595,7 +1618,7 @@ private fun PlanBucket(
                             modifier = Modifier.weight(1f, fill = false))
                         if (r.whenLabel.isNotBlank()) {
                             Spacer(Modifier.width(Space.s))
-                            val tagColor = if (r.overdue) Red else color
+                            val tagColor = if (r.overdue) Red else AppColors.TextSecondary
                             Box(
                                 Modifier.clip(RoundedCornerShape(6.dp)).background(tagColor.copy(alpha = 0.10f))
                                     .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -1622,12 +1645,7 @@ private fun PlanBucket(
                     Modifier.size(48.dp).clip(CircleShape).clickable { onCall(r.phone) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(AppColors.IndigoSoft),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Default.Call, contentDescription = "Call ${r.name}", tint = AppColors.Indigo, modifier = Modifier.size(19.dp))
-                    }
+                    Icon(Icons.Outlined.Call, contentDescription = "Call ${r.name}", tint = AppColors.Indigo, modifier = Modifier.size(22.dp))
                 }
             }
             // The answer, right where the question is asked. Two taps' worth of
@@ -4724,37 +4742,36 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
     }
 
     LazyColumn(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxSize().background(AppColors.Canvas),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // ONE header line. It used to be a headline, a subtitle that said
-        // nothing ("Never miss a follow-up"), and then a row of three stat
-        // tiles whose numbers were repeated verbatim by the chips directly
-        // underneath. Between them they ate the top third of a small phone,
-        // so a rep opening this screen saw two callbacks and a lot of decor.
+        // iOS Reminders header: Back on the left, history + refresh on the
+        // right, then the large title. Same three actions as before.
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Follow Ups", style = AppType.largeTitle, color = AppColors.TextPrimary,
-                    modifier = Modifier.weight(1f), maxLines = 1)
-                IconButton(
-                    onClick = { todayOpen = true; vm.loadTodayActivities() },
-                    modifier = Modifier.size(44.dp),
-                ) {
-                    Icon(Icons.Default.History, contentDescription = "What I did today",
-                        tint = IosColors.Blue, modifier = Modifier.size(22.dp))
+            Column {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Back", style = AppType.body, color = AppColors.Indigo,
+                        modifier = Modifier.clip(Radii.control).clickable { onBack() }.padding(vertical = 8.dp),
+                    )
+                    Spacer(Modifier.weight(1f))
+                    IconButton(
+                        onClick = { todayOpen = true; vm.loadTodayActivities() },
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        Icon(Icons.Default.History, contentDescription = "What I did today",
+                            tint = AppColors.TextPrimary, modifier = Modifier.size(22.dp))
+                    }
+                    IconButton(onClick = { vm.loadFollowUps(force = true) }, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Outlined.Refresh, contentDescription = "Refresh",
+                            tint = AppColors.TextPrimary, modifier = Modifier.size(22.dp))
+                    }
                 }
-                IconButton(onClick = { vm.loadFollowUps(force = true) }, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "Refresh",
-                        tint = IosColors.Blue, modifier = Modifier.size(22.dp))
-                }
-                TextButton(
-                    onClick = onBack,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp),
-                ) { Text("Back", style = AppType.callout, color = IosColors.Blue) }
+                Text("Follow Ups", style = AppType.title, color = AppColors.TextPrimary, maxLines = 1)
             }
         }
-        // Above the chips, because it overrides them.
+        // Above the tabs, because it overrides them.
         item {
             AppSearchField(
                 value = query,
@@ -4763,37 +4780,28 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        // The chips ARE the counts. Same row, same look, same behaviour as the
-        // Leads screen — one line of "Call now 24 · Later today 3 · Tomorrow 6"
-        // with the fade at the right edge showing there is more to scroll.
-        //
-        // Still no Morning/Afternoon/Overdue: those were slices of the same
-        // callbacks under different names, which is what made this screen hard
-        // to trust. Each chip here is a different WHEN, and the line underneath
-        // spells out whichever one is selected.
+        // The five tabs ARE the counts — a segmented control, count under each
+        // label. Still no Morning/Afternoon/Overdue tab and no fourth
+        // Follow-up tab: each segment is a different WHEN, and the line
+        // underneath spells out whichever one is selected.
         item {
             Column {
                 if (dueUnknown) {
-                    Text(
-                        app.workStatesError ?: "",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Spacer(Modifier.height(6.dp))
+                    Text(app.workStatesError ?: "", color = AppColors.Danger, style = AppType.meta)
+                    Spacer(Modifier.height(8.dp))
                 }
-                CompactFilterRow {
-                    FilterTab(
-                        "Call now", toCall.size, filter == "tocall", Red,
-                        countLabel = if (dueUnknown) "—" else null,
-                    ) { picked = "tocall" }
-                    FilterTab("Later today", laterToday.size, filter == "later", MaterialTheme.colorScheme.primary) { picked = "later" }
-                    FilterTab("Tomorrow", tomorrow.size, filter == "tomorrow", Amber) { picked = "tomorrow" }
-                    FilterTab("This week", weekList.size, filter == "week", Indigo) { picked = "week" }
-                    FilterTab("All", all.size, filter == "all", MaterialTheme.colorScheme.primary) { picked = "all" }
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(blurb, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FollowUpTabs(
+                    listOf(
+                        Triple("tocall", "Call now", if (dueUnknown) "—" else toCall.size.toString()),
+                        Triple("later", "Later today", laterToday.size.toString()),
+                        Triple("tomorrow", "Tomorrow", tomorrow.size.toString()),
+                        Triple("week", "This week", weekList.size.toString()),
+                        Triple("all", "All", all.size.toString()),
+                    ),
+                    selected = filter,
+                ) { picked = it }
+                Spacer(Modifier.height(8.dp))
+                Text(blurb, style = AppType.meta, color = AppColors.TextSecondary)
             }
         }
         // Visits waiting on an outcome. Not a chip and not a fourth tab —
@@ -4802,13 +4810,14 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
         // not draw a zero.
         if (app.pendingVisits.rows.isNotEmpty() || app.pendingVisits.error != null) {
             item {
+                Column {
+                Text("VISITS WAITING ON AN OUTCOME", style = AppType.sectionLabel, color = AppColors.TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp))
                 Column(
                     Modifier.fillMaxWidth().clip(Radii.card)
                         .background(AppColors.Surface)
-
-                        .padding(Space.m),
+                        .padding(start = Space.l, end = Space.l, bottom = Space.m),
                 ) {
-                    Text("Visits waiting on an outcome", style = AppType.rowTitle, color = AppColors.TextPrimary)
                     app.pendingVisits.error?.let { msg ->
                         Spacer(Modifier.height(6.dp))
                         Text(msg, color = MaterialTheme.colorScheme.error, style = AppType.meta)
@@ -4824,6 +4833,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                         more = waiting.size - 5,
                         onCall = { vm.dialManual(it) },
                     )
+                }
                 }
             }
         }
@@ -4849,13 +4859,13 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 Column {
                     if (showCallAll) {
                         Row(
-                            Modifier.fillMaxWidth().height(56.dp).clip(Radii.control)
+                            Modifier.fillMaxWidth().height(48.dp).clip(Radii.control)
                                 .background(AppColors.Indigo)
                                 .clickable { vm.callList(dueContacts, "Due follow-ups") },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center,
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null,
+                            Icon(Icons.Outlined.Call, contentDescription = null,
                                 tint = Color.White, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("Call all ${dueContacts.size} due, one after another",
@@ -4866,6 +4876,8 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                             "After each call, tap what happened. The next number starts on its own.",
                             style = AppType.meta,
                             color = AppColors.TextSecondary,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         )
                     }
                     if (showMoveOverdue) {
@@ -4880,10 +4892,9 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                         // Bordered row, graphite text: it reads as the quiet
                         // secondary action it is, next to the filled Call all.
                         Row(
-                            Modifier.fillMaxWidth().heightIn(min = 40.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                            Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                                .clip(Radii.control)
                                 .background(AppColors.Surface)
-                                .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
                                 .clickable {
                                     val tomorrow10 = java.time.ZonedDateTime.now().plusDays(1)
                                         .withHour(10).withMinute(0).withSecond(0).toInstant().toEpochMilli()
@@ -4894,8 +4905,9 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                         ) {
                             Text(
                                 "Move ${overdueStrict.size} left over from before today to tomorrow 10 AM",
-                                fontSize = 11.5.sp, color = AppColors.TextPrimary,
-                                fontWeight = FontWeight.Medium, lineHeight = 15.sp,
+                                style = AppType.label, color = AppColors.Indigo,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             )
                         }
                     }
@@ -4921,12 +4933,29 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 )
             }
         } else {
-            itemsIndexed(shown, key = { _, it -> it.id ?: it.contactId ?: it.phone }) { idx, f ->
+            // iOS Reminders: the list on screen, split into Overdue / Today /
+            // Upcoming by its due time. Same rows, same order inside a group.
+            val groups = listOf(
+                "Overdue" to shown.filter { val ms = instantMillis(it.dueAt) ?: Long.MAX_VALUE; ms < now && dayLabel(it.dueAt) != "Today" },
+                "Today" to shown.filter { dayLabel(it.dueAt) == "Today" },
+                "Upcoming" to shown.filter { val ms = instantMillis(it.dueAt) ?: Long.MAX_VALUE; ms >= now && dayLabel(it.dueAt) != "Today" },
+            )
+            groups.forEach { (title, rows) ->
+                if (rows.isEmpty()) return@forEach
+                item(key = "hdr_$title") {
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(title, style = AppType.headline,
+                            color = if (title == "Overdue") AppColors.Danger else AppColors.TextPrimary,
+                            modifier = Modifier.weight(1f))
+                        Text(rows.size.toString(), style = AppType.body, color = AppColors.TextSecondary)
+                    }
+                }
+                itemsIndexed(rows, key = { _, it -> "${title}_${it.id ?: it.contactId ?: it.phone}" }) { idx, f ->
                 val cid = f.contactId
                 FollowUpCard(
                     f = f,
                     groupFirst = idx == 0,
-                    groupLast = idx == shown.lastIndex,
+                    groupLast = idx == rows.lastIndex,
                     now = now,
                     onCall = { vm.dialManual(f.phone) },
                     onWhatsApp = {
@@ -4957,6 +4986,13 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     work = cid?.let { workByLead[it] },
                     memoryLine = rowMemoryLine(cid?.let { app.memoryByLead[it] }),
                     sayLine = if (isDueNow(cid?.let { workByLead[it] })) focusSayLine(app.coachPicks, cid) else null,
+                )
+                }
+            }
+            item(key = "fu_footer") {
+                Text(
+                    "Tap the circle to open Update. Tap a name to open the lead.",
+                    style = AppType.meta, color = AppColors.TextSecondary,
                 )
             }
         }
@@ -5148,11 +5184,19 @@ private fun FollowUpCard(
     val accent = if (overdue && !appInvented) Red else if (overdue) muted else jade
     val who = f.name?.takeIf { it.isNotBlank() } ?: prettyPhone(f.phone)
 
-    val groupGap = 12.dp
+    // iOS REMINDERS ROW. The check circle is the "I dealt with this" control,
+    // and it opens Update — never a silent tick: Done recorded nothing, which
+    // is how an "interested, call Friday" ended up as a closed callback on a
+    // lead that never moved. A row not linked to a lead has no funnel, so for
+    // it the circle (and the Done link) closes the callback, as before.
+    val groupGap = 16.dp
+    val signal = dueSignal(work, focusReason)
+    val hardSignal = work?.waitingSince != null ||
+        (work?.promiseDueSince != null && !work.promiseText.isNullOrBlank())
     Column(
         Modifier.fillMaxWidth()
             // Joined rows: pull every row after the first up over the list's
-            // 12dp gap so the callbacks read as ONE inset group.
+            // gap so the callbacks read as ONE inset group.
             .then(if (groupFirst) Modifier else Modifier.layout { m, c ->
                 val g = groupGap.roundToPx()
                 val pl = m.measure(c)
@@ -5160,198 +5204,117 @@ private fun FollowUpCard(
             })
             .clip(ContinuousShape(12.dp, top = groupFirst, bottom = groupLast))
             .background(AppColors.Surface)
-
-            // TAP THE CARD, OPEN THE LEAD.
-            //
-            // It did nothing before. Everything a rep might want before ringing
-            // — the last call, what the AI heard, the notes, the funnel — is on
-            // the lead's page, and from here the only way in was to leave for
-            // the Leads tab and find the name again. The buttons below still
-            // win their own taps; Compose gives the press to the innermost
-            // clickable, so Call, WhatsApp and Update are unaffected.
-            .then(if (onOpen == null) Modifier else Modifier.clickable { onOpen() })
     ) {
-        if (!groupFirst) IosSeparator(startInset = 64.dp)
-        Column(Modifier.padding(horizontal = Space.m, vertical = Space.m)) {
-        Row(verticalAlignment = Alignment.Top) {
-            // The shared circular avatar. It was a rounded square filled with 8%
-            // grey — the only avatar shape in the app, and the only one that did
-            // not tint itself per person, so a column of them was six identical
-            // grey squares.
-            InitialsAvatar(f.name ?: f.phone)
-            Spacer(Modifier.width(Space.m))
-            Column(Modifier.weight(1f)) {
-                Text(who, style = AppType.headline.copy(fontSize = 20.sp), color = AppColors.TextPrimary,
-                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                // The 📞 was decoration: this is a phone number, on a card whose
-                // main button is Call.
-                Text(prettyPhone(f.phone), style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
-            }
-            Spacer(Modifier.width(Space.s))
-            Column(horizontalAlignment = Alignment.End) {
-                StatusTag(
-                    if (appInvented && overdue) "Not called ${agoLabel(f.dueAt)}" else relativeDue(f.dueAt),
-                    StatusTone(accent, accent.copy(alpha = 0.12f)),
+        if (!groupFirst) IosSeparator(startInset = 56.dp)
+        Row(
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            // The check circle: 48dp target, 22dp ring. Amber + wobble while a
+            // finished call is waiting to be written up.
+            Box(
+                Modifier.nudgeShake(needsUpdate).size(48.dp).clip(CircleShape)
+                    .clickable { if (onUpdate != null) onUpdate() else onDone() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier.size(22.dp).clip(CircleShape)
+                        .border(1.5.dp, if (needsUpdate) Amber else AppColors.BorderStrong, CircleShape),
                 )
-                Spacer(Modifier.height(Space.xxs))
-                Text("${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}", style = AppType.tag,
-                    color = AppColors.TextTertiary, maxLines = 1)
             }
+            Column(
+                Modifier.weight(1f)
+                    .then(if (onOpen == null) Modifier else Modifier.clickable { onOpen() })
+                    .padding(top = 12.dp, bottom = 12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(who, style = AppType.label, color = AppColors.TextPrimary,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(Space.s))
+                    Text(
+                        if (appInvented && overdue) "Not called ${agoLabel(f.dueAt)}"
+                        else if (overdue) relativeDue(f.dueAt)
+                        else "${dayLabel(f.dueAt)} ${timeOnly(f.dueAt)}",
+                        style = AppType.tag, color = if (overdue) accent else AppColors.TextSecondary, maxLines = 1,
+                    )
+                }
+                // WHY this callback is here — the real reason wins over the
+                // app's own note. Grey, not a pink alarm; red only for a buyer
+                // waiting or an unkept promise.
+                Text(
+                    signal ?: whyThisCallback(f),
+                    style = AppType.meta,
+                    color = if (signal != null && hardSignal) Red else AppColors.TextSecondary,
+                    maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                listOfNotNull(memoryLine, sayLine).forEach { line ->
+                    Text(line, style = AppType.meta, color = AppColors.TextTertiary,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                Text(prettyPhone(f.phone), style = AppType.meta, color = AppColors.TextTertiary, maxLines = 1)
+            }
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).clickable { onCall() },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.Call, contentDescription = "Call $who", tint = jade, modifier = Modifier.size(22.dp)) }
         }
-        // WHY this callback is sitting here, in one line, on every card.
-        //
-        // A rep opening Follow Ups saw a name, a phone and a time and had to
-        // remember what any of it was about — so the honest reaction was "this
-        // shouldn't be here". It is never a mystery to the app: either the rep
-        // booked it themselves, or the AI booked it from a voice note, or the
-        // attempt ladder booked it because nobody picked up.
-        Spacer(Modifier.height(8.dp))
-        // GREY, NOT A PINK ALARM.
-        //
-        // This panel took the card's accent, so on an overdue callback it was a
-        // full-width pink box of red text. The "Overdue 12d" pill three
-        // centimetres above already says the same thing, and saying it twice in
-        // the same red is how a card ends up with four different reds on it and
-        // none of them meaning anything. The note is context, not an alarm —
-        // urgency is the pill's job on this card and nothing else's.
-        Row(Modifier.fillMaxWidth().padding(start = 52.dp)) {
-            // THE REAL REASON WINS OVER THE APP'S OWN NOTE.
-            //
-            // Sorting these rows to the top without saying why would be the
-            // worst of both: a rep who cannot see the rule assumes the list is
-            // random again. So when there IS a real reason, it replaces
-            // "No call time was set, so we booked one for 11 AM" — which on
-            // these rows was never true anyway.
-            // Pulled into locals rather than tested through the safe call
-            // inline: a local val is smart-cast with no !! and this line is
-            // read far more often than it is written.
-            val signal = dueSignal(work, focusReason)
-            val hardSignal = work?.waitingSince != null ||
-                (work?.promiseDueSince != null && !work.promiseText.isNullOrBlank())
-            Text(
-                signal ?: whyThisCallback(f),
-                style = AppType.meta,
-                color = when {
-                    signal != null && hardSignal -> Red
-                    signal != null -> muted
-                    else -> AppColors.TextSecondary
-                },
-                maxLines = 3,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            )
-        }
-        listOfNotNull(memoryLine, sayLine).forEach { line ->
-            Spacer(Modifier.height(4.dp))
-            Text(
-                line,
-                style = AppType.meta,
-                color = AppColors.TextSecondary,
-                modifier = Modifier.padding(start = 52.dp),
-                maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
         if (needsUpdate && onQuickOutcome != null) {
-            Text("What happened?", style = AppType.meta, color = muted)
-            Spacer(Modifier.height(6.dp))
-            QuickOutcomeChips(onQuickOutcome)
-            Spacer(Modifier.height(8.dp))
-        }
-        // Update REPLACES the old "Done".
-        //
-        // Done ticked the callback off and recorded nothing — which is exactly
-        // how a customer who said "interested, call Friday" ended up as a closed
-        // callback on a lead that never moved. Update asks the one question and
-        // then does all of it: the stage moves, the note and temperature save,
-        // the next callback books itself, and THIS callback closes.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (onUpdate != null) {
-                // A just-finished call turns it amber and sets it wobbling —
-                // the same reminder the Leads list gives, in the place a rep
-                // ringing their callbacks is actually looking.
-                // ONE FILLED BUTTON PER CARD, AND IT IS CALL.
-                //
-                // These three were a lavender tint, a green tint and a solid
-                // blue — three weights competing for the same glance, on top of
-                // a pink note and a red pill. The secondary two are hairlines on
-                // white now, the way the Update sheet's tiles are, and Call
-                // keeps the only fill. Amber still wins on Update while a call
-                // is waiting to be written up: that is a state, and states are
-                // the one thing allowed to colour this card.
-                val needsInk = if (needsUpdate) Amber else AppColors.TextPrimary
-                Row(
-                    Modifier.nudgeShake(needsUpdate).weight(1f).height(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (needsUpdate) Amber.copy(alpha = 0.14f) else IosColors.Fill)
-                        .clickable { onUpdate() },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Text(if (needsUpdate) "Update call" else "Update", fontSize = 14.sp,
-                        color = needsInk, fontWeight = FontWeight.Medium, maxLines = 1)
-                }
-            } else {
-                // Not linked to a lead, so there is no funnel to move — ticking
-                // the callback off is genuinely all this can do.
-                Row(
-                    Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(10.dp))
-                        .background(IosColors.Fill)
-                        .clickable { onDone() },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Text("Done", fontSize = 13.sp, color = AppColors.TextPrimary,
-                        fontWeight = FontWeight.Medium, maxLines = 1)
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            Row(
-                Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(10.dp))
-                    .background(IosColors.Fill)
-                    .clickable(enabled = !whatsAppBusy) { onWhatsApp() },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                // WhatsApp's green survives as the icon only — it is a brand
-                // mark, which is worth keeping, not a reason to tint the button.
-                if (whatsAppBusy) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = WaGreen)
-                    Spacer(Modifier.width(5.dp))
-                    Text("Writing…", fontSize = 13.sp, color = AppColors.TextSecondary, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                } else {
-                    Icon(Icons.Default.Chat, contentDescription = null, tint = WaGreen, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(5.dp))
-                    Text("WhatsApp", fontSize = 13.sp, color = AppColors.TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1)
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            Row(
-                Modifier.weight(1.35f).height(40.dp).clip(RoundedCornerShape(10.dp))
-                    .background(jade)
-                    .clickable { onCall() },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Call", fontSize = 15.sp, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Column(Modifier.padding(start = 52.dp, end = 16.dp, bottom = 8.dp)) {
+                Text("What happened?", style = AppType.meta, color = muted)
+                Spacer(Modifier.height(8.dp))
+                QuickOutcomeChips(onQuickOutcome)
             }
         }
-        // "Not now" lives here — small, plain and out of the way of the three
-        // buttons that move work forward.
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("In 1 hour", style = AppType.meta, color = muted,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onSnooze() }
-                    .padding(horizontal = 8.dp, vertical = 8.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Pick another time", style = AppType.meta, color = muted,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onReschedule() }
-                    .padding(horizontal = 8.dp, vertical = 8.dp))
+        // The quiet actions, as text links under the row — every one still
+        // one tap away: Update · WhatsApp · Done (unlinked rows) · In 1 hour ·
+        // Pick another time.
+        Row(
+            Modifier.fillMaxWidth().padding(start = 44.dp, end = 8.dp, bottom = 4.dp)
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            @Composable fun link(label: String, color: Color = jade, enabled: Boolean = true, onClick: () -> Unit) {
+                Text(label, style = AppType.metaStrong, color = if (enabled) color else AppColors.TextTertiary, maxLines = 1,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = enabled) { onClick() }
+                        .padding(horizontal = 8.dp, vertical = 8.dp))
+            }
+            if (onUpdate != null) link(if (needsUpdate) "Update call" else "Update", if (needsUpdate) Amber else jade) { onUpdate() }
+            else link("Done") { onDone() }
+            if (whatsAppBusy) {
+                CircularProgressIndicator(Modifier.padding(horizontal = 8.dp).size(14.dp), strokeWidth = 2.dp, color = WaGreen)
+                Text("Writing…", style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
+            } else link("WhatsApp", enabled = true) { onWhatsApp() }
+            link("In 1 hour", muted) { onSnooze() }
+            link("Pick another time", muted) { onReschedule() }
         }
     }
+}
+
+/** Follow Ups' five tabs as one segmented control, the count under each label. */
+@Composable
+private fun FollowUpTabs(tabs: List<Triple<String, String, String>>, selected: String, onPick: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(IosColors.Fill).padding(2.dp),
+    ) {
+        tabs.forEach { (code, label, count) ->
+            val on = code == selected
+            Column(
+                Modifier.weight(1f)
+                    .then(if (on) Modifier.shadow(1.dp, RoundedCornerShape(8.dp)) else Modifier)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (on) AppColors.Surface else Color.Transparent)
+                    .clickable { onPick(code) }
+                    .padding(vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                ShrinkText(label, style = AppType.tag.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                    color = AppColors.TextPrimary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(count, style = AppType.tag,
+                    color = if (on && code == "tocall") AppColors.Danger else AppColors.TextSecondary, maxLines = 1)
+            }
         }
+    }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -5496,14 +5459,33 @@ private fun LeadLanes(
     val lanes = listOf("call", "wait", "revive")
     Column(Modifier.fillMaxWidth()) {
         // ONE compact segmented row for the 3 buckets, counts in the labels.
-        IosSegmented(
-            options = listOf(
-                "Call now " + (if (unknown) "—" else n("call_now").toString()),
-                "Scheduled " + (if (unknown) "—" else waitTotal.toString()),
-                "Win back $reviveTotal",
-            ),
-            selectedIndex = lanes.indexOf(lane),
-        ) { i -> onLane(lanes[i]) }
+        // Leads B: three underline tabs, the count in grey beside each label.
+        val laneTabs = listOf(
+            Triple("call", "Call now", if (unknown) "—" else n("call_now").toString()),
+            Triple("wait", "Scheduled", if (unknown) "—" else waitTotal.toString()),
+            Triple("revive", "Win back", reviveTotal.toString()),
+        )
+        Column {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                laneTabs.forEach { (code, label, count) ->
+                    val on = code == lane
+                    Column(
+                        Modifier.clickable { if (!on) onLane(code) }.padding(top = 8.dp),
+                        horizontalAlignment = Alignment.Start,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, style = AppType.headline.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal),
+                                color = if (on) AppColors.TextPrimary else AppColors.TextSecondary, maxLines = 1)
+                            Spacer(Modifier.width(6.dp))
+                            Text(count, style = AppType.headline.copy(fontWeight = FontWeight.Normal), color = AppColors.TextSecondary, maxLines = 1)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Box(Modifier.height(2.dp).fillMaxWidth().background(if (on) AppColors.TextPrimary else Color.Transparent))
+                    }
+                }
+            }
+            Box(Modifier.fillMaxWidth().height(0.5.dp).background(AppColors.Separator))
+        }
         // ONE segmented level. The lane's sub-filters are small chips in
         // the list header (wrap, never cut off), each with its count.
         val subs = LANE_SUBS[lane].orEmpty()
@@ -5517,15 +5499,15 @@ private fun LeadLanes(
                 subs.forEach { (code, label) ->
                     val on = code == sub
                     Box(
-                        Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(12.dp))
-                            .then(if (on) Modifier.background(AppColors.IndigoSoft).border(1.dp, AppColors.Indigo.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
-                                  else Modifier.background(AppColors.Surface).border(1.dp, AppColors.Border, RoundedCornerShape(12.dp)))
+                        Modifier.heightIn(min = 32.dp).clip(com.salesautocall.app.ui.design.Radii.chip)
+                            .then(if (on) Modifier.background(AppColors.TextPrimary)
+                                  else Modifier.background(AppColors.Surface).border(1.dp, AppColors.Border, com.salesautocall.app.ui.design.Radii.chip))
                             .clickable { if (!on) onSub(code) }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text("$label ${cnt(code)}", style = AppType.footnote.copy(fontWeight = FontWeight.Medium),
-                            color = if (on) AppColors.Indigo else AppColors.TextPrimary, maxLines = 1)
+                        Text("$label ${cnt(code)}", style = AppType.footnote.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (on) Color.White else AppColors.TextPrimary, maxLines = 1)
                     }
                 }
             }
@@ -5701,12 +5683,13 @@ private fun NextCallHero(
     var more by remember { mutableStateOf(false) }
     val ellipsis = androidx.compose.ui.text.style.TextOverflow.Ellipsis
     Column(
-        Modifier.fillMaxWidth().softCard()
-            .border(1.dp, AppColors.Indigo.copy(alpha = 0.18f), com.salesautocall.app.ui.design.Radii.card)
+        Modifier.fillMaxWidth().softCard(com.salesautocall.app.ui.design.Radii.hero)
             .clickable { onOpen() }.padding(16.dp),
     ) {
+        Text("NEXT CALL", style = AppType.sectionLabel, color = AppColors.Indigo)
+        Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(who, style = AppType.headline, color = AppColors.TextPrimary, maxLines = 1, overflow = ellipsis,
+            Text(who, style = AppType.title, color = AppColors.TextPrimary, maxLines = 1, overflow = ellipsis,
                 modifier = Modifier.weight(1f))
             budgetLabel(lead.budget)?.let {
                 Spacer(Modifier.width(8.dp))
@@ -5714,17 +5697,21 @@ private fun NextCallHero(
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text("Next call · " + (lastContact?.let { "Last $it" } ?: "Never called"),
+        Text(lastContact?.let { "Last contact $it" } ?: "Never called",
             style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1, overflow = ellipsis)
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.Top) {
-            Box(Modifier.padding(top = 2.dp)) { SparkleGlyph(16.dp, tint = AppColors.TextSecondary) }
-            Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                Text("Why: $reason", style = AppType.subhead, color = AppColors.TextPrimary,
+                Text(androidx.compose.ui.text.buildAnnotatedString {
+                    withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Why ") }
+                    append(reason)
+                }, style = AppType.meta, color = AppColors.TextSecondary,
                     maxLines = if (more) Int.MAX_VALUE else 1, overflow = ellipsis)
-                Text("Next step: ${reco.nextStep}", style = AppType.subhead.copy(fontWeight = FontWeight.Medium),
-                    color = AppColors.TextPrimary, maxLines = if (more) Int.MAX_VALUE else 1, overflow = ellipsis)
+                Text(androidx.compose.ui.text.buildAnnotatedString {
+                    withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Next step ") }
+                    append(reco.nextStep)
+                }, style = AppType.meta, color = AppColors.TextSecondary,
+                    maxLines = if (more) Int.MAX_VALUE else 1, overflow = ellipsis)
                 if (more) {
                     Spacer(Modifier.height(4.dp))
                     Text(reco.context, style = AppType.footnote, color = AppColors.TextSecondary)
@@ -5739,30 +5726,33 @@ private fun NextCallHero(
         }
         Spacer(Modifier.height(12.dp))
         Row(
-            Modifier.fillMaxWidth().height(48.dp).gradientCard(RoundedCornerShape(14.dp), com.salesautocall.app.ui.design.Brand.gradientHorizontal, elevation = 8.dp)
+            Modifier.fillMaxWidth().height(48.dp).clip(com.salesautocall.app.ui.design.Radii.control).background(AppColors.Indigo)
                 .iosPress(scaleTo = 0.97f) { onCall() },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
         ) {
             Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Call $firstName", style = AppType.subhead.copy(fontWeight = FontWeight.SemiBold), color = Color.White, maxLines = 1)
+            Text("Call $firstName", style = AppType.label, color = Color.White, maxLines = 1)
         }
+        Spacer(Modifier.height(8.dp))
         // Secondary actions: text only, one row, leading / centre / trailing.
-        Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Box(Modifier.fillMaxHeight().clickable(enabled = !waBusy) { onWhatsApp() }, contentAlignment = Alignment.CenterStart) {
-                Text(if (waBusy) "Writing…" else "WhatsApp", style = AppType.subhead,
-                    color = if (waBusy) AppColors.TextSecondary else IosColors.Blue, maxLines = 1)
+        // Secondary actions: quiet tinted buttons, one row.
+        Row(Modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            @Composable fun quiet(label: String, w: Float, enabled: Boolean = true, onClick: () -> Unit) {
+                Box(
+                    Modifier.weight(w).fillMaxHeight().clip(RoundedCornerShape(10.dp)).background(AppColors.SurfaceMuted)
+                        .clickable(enabled = enabled) { onClick() },
+                    contentAlignment = Alignment.Center,
+                ) { Text(label, style = AppType.metaStrong.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (enabled) AppColors.Indigo else AppColors.TextSecondary, maxLines = 1) }
             }
+            quiet(if (waBusy) "Writing…" else "WhatsApp", 1f, enabled = !waBusy) { onWhatsApp() }
             if (left > 1) {
-                Box(Modifier.fillMaxHeight().clickable { onStart() }.padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
-                    Text("Start calling $left", style = AppType.subhead, color = IosColors.Blue, maxLines = 1)
-                }
-                Box(Modifier.fillMaxHeight().clickable { onSkip() }.padding(start = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                    Text("Skip", style = AppType.subhead, color = IosColors.Blue, maxLines = 1)
-                }
+                quiet("Start calling $left", 1.3f) { onStart() }
+                quiet("Skip", 0.7f) { onSkip() }
             }
         }
+        Spacer(Modifier.height(8.dp))
         Text("Called today $calledToday · Skipped $skipped · Left $left",
             style = AppType.footnote, color = AppColors.TextTertiary, maxLines = 1, overflow = ellipsis)
     }
@@ -5791,19 +5781,18 @@ private fun LeadRow(
             .clickable { if (selectMode) onToggleSelect() else onOpen() },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // The only stripe left: overdue.
-        Box(Modifier.width(4.dp).height(72.dp).background(if (overdue) AppColors.Danger else Color.Transparent))
-        Box(Modifier.padding(start = 12.dp)) { InitialsAvatar(prettyName(c.name) ?: c.phone, size = 44) }
-        Column(Modifier.weight(1f).heightIn(min = 56.dp).padding(start = 12.dp, top = 14.dp, bottom = 14.dp, end = 8.dp), verticalArrangement = Arrangement.Center) {
+        // Leads B: a plain row — name, one reason line (red when overdue),
+        // last contact; the soft call circle on the right.
+        Column(Modifier.weight(1f).heightIn(min = 56.dp).padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalArrangement = Arrangement.Center) {
             Row(verticalAlignment = Alignment.Top) {
-                Text(name, style = AppType.headline.copy(fontSize = 16.sp), color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
+                Text(name, style = AppType.label, color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
                 budgetLabel(c.budget)?.let {
                     Spacer(Modifier.width(8.dp))
                     Text("₹ $it", style = AppType.subhead, color = AppColors.TextSecondary)
                 }
             }
-            Text(reason, style = AppType.subhead, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = if (overdue) IosColors.Red else AppColors.TextSecondary)
-            Text(lastContact?.let { "Last contact $it" } ?: "Never called", style = AppType.footnote, color = AppColors.TextSecondary)
+            Text(reason, style = AppType.meta, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = if (overdue) IosColors.Red else AppColors.TextSecondary)
+            Text(lastContact?.let { "Last contact $it" } ?: "Never called", style = AppType.meta, color = AppColors.TextTertiary)
             if (needsUpdate) Text("Call ended with no result. Tap to add it.", style = AppType.footnote.copy(fontWeight = FontWeight.SemiBold),
                 color = IosColors.Orange, modifier = Modifier.clickable { onUpdate() }.padding(top = 2.dp))
         }
@@ -5815,8 +5804,8 @@ private fun LeadRow(
                 Modifier.padding(end = 12.dp).size(44.dp).clip(CircleShape).clickable { onCall() },
                 contentAlignment = Alignment.Center,
             ) {
-                Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(com.salesautocall.app.ui.design.Brand.gradient), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(18.dp))
+                Box(Modifier.size(40.dp).clip(CircleShape).background(AppColors.IndigoSoft), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Call, contentDescription = "Call", tint = AppColors.Indigo, modifier = Modifier.size(18.dp))
                 }
             }
         }

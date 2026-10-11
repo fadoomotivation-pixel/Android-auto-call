@@ -1,5 +1,12 @@
 package com.salesautocall.app.ui
 
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.activity.compose.BackHandler
@@ -374,17 +381,20 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 item {
                     Row(
                         Modifier.fillMaxWidth()
-                            .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
-                            .background(com.salesautocall.app.ui.design.Brand.gradient)
-                            .heightIn(min = 60.dp)
-                            .padding(horizontal = 8.dp),
+                            .background(ScreenBg)
+                            .heightIn(min = 44.dp)
+                            .padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // iOS back: a blue chevron and the word, not a Material arrow.
                         // The lead's name below is this page's large title.
-                        com.salesautocall.app.ui.design.GlassIconButton(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Back") { vm.closeLeadDetail() }
-                        Spacer(Modifier.width(8.dp))
-                        Text("Leads", style = AppType.headline, color = Color.White)
+                        Row(
+                            Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(8.dp)).iosPress { vm.closeLeadDetail() }.padding(end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Back", tint = AppColors.Indigo, modifier = Modifier.size(28.dp))
+                            Text("Leads", style = AppType.body, color = AppColors.Indigo)
+                        }
                         Spacer(Modifier.weight(1f))
                         // ONE Call on this page. The title bar had a second Call
                         // and a second WhatsApp, the same two buttons the bar
@@ -394,7 +404,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         // Coach in the bar, not a floating orb over the lead.
                         if (app.coachOn) com.salesautocall.app.ui.design.GlassBox {
                             Box(Modifier.size(44.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
-                                SparkleGlyph(20.dp, tint = Color.White)
+                                SparkleGlyph(20.dp, tint = AppColors.TextPrimary)
                             }
                         }
                         com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.MoreHoriz, "More") { moreOpen = true }
@@ -439,57 +449,6 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         onCallAlt = { contact.altPhone?.let { doCallNumber(it) } },
                         lastTalk = lastTalk,
                     )
-                }
-
-                // ---- AI recommendation: same block as the Next call card ----
-                item {
-                    val work = contact.id?.let { app.workByLead[it] }
-                    val reco = buildAiReco(contact, work, contact.id?.let { app.memoryByLead[it] })
-                    val first = (prettyName(contact.name) ?: contact.phone).trim().substringBefore(' ')
-                    Box(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-                            .clip(RoundedCornerShape(12.dp)).background(Color.White)
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                    ) {
-                        AiRecommendationBlock(
-                            reco = reco, firstName = first,
-                            busy = contact.id != null && contact.id == app.waDraftingId,
-                            onCall = { vm.dialManual(contact.phone) },
-                            onWhatsApp = { contact.id?.let { vm.sendOwedWhatsApp(it, contact.phone) } },
-                        )
-                    }
-                }
-
-                // ---- Next step, right under who they are ----
-                //
-                // "What do I do now" sat below the whole coaching card, a
-                // scroll away. It is the first question after "who is this",
-                // so it is the second thing on the page.
-                item {
-                    val visitMs = isoMs(contact.siteVisitAt)
-                    val nowMs = System.currentTimeMillis()
-                    val fuMs = followUp?.let { isoMs(it.dueAt) }
-                    // Terminal is a STAGE question, and it now includes `invalid` — a bad
-                    // number was previously treated as still-live work here.
-                    val terminal = app.leadStages.firstOrNull { it.code == contact.stage }?.isTerminal ?: false
-                    when {
-                        followUp != null -> NextStepBanner(
-                            color = if (fuMs != null && fuMs <= nowMs) RedL else IndigoL,
-                            title = if (fuMs != null && fuMs <= nowMs) "Call back — DUE NOW" else "Next: call back",
-                            detail = listOfNotNull(fuMs?.let { fmtWhen(it) }, followUp.note).joinToString(" · ").ifBlank { "Reminder set" },
-                            cta = "Change", onCta = { scheduleOpen = true }, onDelete = { followUp.id?.let { vm.completeFollowUp(it) } },
-                        )
-                        visitMs != null && visitMs >= nowMs -> NextStepBanner(
-                            color = PurpleL, title = "Next: site visit",
-                            detail = listOfNotNull(fmtWhen(visitMs), contact.siteVisitProject?.takeIf { it.isNotBlank() }).joinToString(" · "),
-                            cta = "Change", onCta = { visitOpen = true }, onDelete = { confirmClearVisit = true },
-                        )
-                        !terminal -> NextStepBanner(
-                            color = AmberL, title = "No next step planned",
-                            detail = "Set a reminder so this lead is never forgotten",
-                            cta = "Set Reminder", onCta = { scheduleOpen = true }, onDelete = null,
-                        )
-                    }
                 }
 
                 // ---- Sales funnel ----
@@ -544,6 +503,57 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 }
 
                 // ---- Close this lead: right under the funnel, near the top ----
+                // ---- AI recommendation: same block as the Next call card ----
+                item {
+                    val work = contact.id?.let { app.workByLead[it] }
+                    val reco = buildAiReco(contact, work, contact.id?.let { app.memoryByLead[it] })
+                    val first = (prettyName(contact.name) ?: contact.phone).trim().substringBefore(' ')
+                    Box(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(12.dp)).background(Color.White)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    ) {
+                        AiRecommendationBlock(
+                            reco = reco, firstName = first,
+                            busy = contact.id != null && contact.id == app.waDraftingId,
+                            onCall = { vm.dialManual(contact.phone) },
+                            onWhatsApp = { contact.id?.let { vm.sendOwedWhatsApp(it, contact.phone) } },
+                        )
+                    }
+                }
+
+                // ---- Next step, right under who they are ----
+                //
+                // "What do I do now" sat below the whole coaching card, a
+                // scroll away. It is the first question after "who is this",
+                // so it is the second thing on the page.
+                item {
+                    val visitMs = isoMs(contact.siteVisitAt)
+                    val nowMs = System.currentTimeMillis()
+                    val fuMs = followUp?.let { isoMs(it.dueAt) }
+                    // Terminal is a STAGE question, and it now includes `invalid` — a bad
+                    // number was previously treated as still-live work here.
+                    val terminal = app.leadStages.firstOrNull { it.code == contact.stage }?.isTerminal ?: false
+                    when {
+                        followUp != null -> NextStepBanner(
+                            color = if (fuMs != null && fuMs <= nowMs) RedL else IndigoL,
+                            title = if (fuMs != null && fuMs <= nowMs) "Call back — DUE NOW" else "Next: call back",
+                            detail = listOfNotNull(fuMs?.let { fmtWhen(it) }, followUp.note).joinToString(" · ").ifBlank { "Reminder set" },
+                            cta = "Change", onCta = { scheduleOpen = true }, onDelete = { followUp.id?.let { vm.completeFollowUp(it) } },
+                        )
+                        visitMs != null && visitMs >= nowMs -> NextStepBanner(
+                            color = PurpleL, title = "Next: site visit",
+                            detail = listOfNotNull(fmtWhen(visitMs), contact.siteVisitProject?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                            cta = "Change", onCta = { visitOpen = true }, onDelete = { confirmClearVisit = true },
+                        )
+                        !terminal -> NextStepBanner(
+                            color = AmberL, title = "No next step planned",
+                            detail = "Set a reminder so this lead is never forgotten",
+                            cta = "Set Reminder", onCta = { scheduleOpen = true }, onDelete = null,
+                        )
+                    }
+                }
+
                 item {
                     SectionCard(header = "Close this lead", footer = "Use only when the buyer is truly done. Notes and calls stay safe.") {
                         FunnelExits(contact.status, closeRow = true) { key ->
@@ -781,21 +791,24 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                // ---- Calls & recordings — always open, and directly under the
-                // voice note, so hearing what was said and recording what it
-                // meant sit together instead of a screen apart. ----
+                // ---- Activity: ONE filterable timeline (Lead detail D) ----
+                //
+                // Calls (with their recordings — same LeadCallRow, same play /
+                // stop), WhatsApp, notes and visits used to live in three
+                // places: Calls & recordings, the Journey card, and the saved
+                // notes. Same data, now one list, newest first, with a filter.
                 item {
-                    SectionCard(header = "Calls & recordings" + (app.leadDetailCalls.size.takeIf { it > 0 }?.let { " · $it" } ?: "")) {
-                        when {
-                            app.leadDetailLoading -> Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                            app.leadDetailCallsFailed -> Text("Could not load this lead's calls. Pull down to try again.", style = MaterialTheme.typography.bodySmall, color = AmberL)
-                            app.leadDetailCalls.isEmpty() -> Text("No calls logged for this lead yet.", style = MaterialTheme.typography.bodySmall, color = SubInk)
-                            else -> app.leadDetailCalls.forEach { call ->
-                                LeadCallRow(call, playing = call.id != null && call.id == app.playingCallId,
-                                    onPlay = { call.id?.let { vm.playRecording(it) } }, onStop = { vm.stopRecording() })
-                            }
-                        }
-                    }
+                    LeadTimeline(
+                        contact = contact,
+                        calls = app.leadDetailCalls,
+                        activities = app.leadDetailActivities,
+                        loading = app.leadDetailLoading,
+                        callsFailed = app.leadDetailCallsFailed,
+                        playingCallId = app.playingCallId,
+                        onPlay = { vm.playRecording(it) },
+                        onStop = { vm.stopRecording() },
+                        onAddNote = { startVoice() },
+                    )
                 }
 
                 // ---- Token amount (only when at Token Paid) ----
@@ -833,43 +846,11 @@ fun LeadDetailScreen(vm: MainViewModel) {
                     }
                 }
 
-                // ---- Temperature · Journey (2 columns) ----
+                // ---- Temperature (the Journey now lives in the Activity timeline) ----
                 item {
-                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = Space.l), horizontalArrangement = Arrangement.spacedBy(Space.m)) {
-                        MiniCard("TEMPERATURE", Modifier.weight(1f).fillMaxHeight()) {
-                            TempChips(contact.temperature ?: "") { key -> contact.id?.let { vm.setLeadTemperature(it, key) } }
-                        }
-                        MiniCard("JOURNEY", Modifier.weight(1f).fillMaxHeight().clip(Radii.card).clickable { journeyExpanded = !journeyExpanded }) {
-                            val latest = app.leadDetailActivities.firstOrNull()
-                            val title = latest?.detail ?: "Lead added"
-                            val at = isoMs(latest?.createdAt ?: contact.createdAt)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.size(9.dp).clip(CircleShape).background(GreenL))
-                                Spacer(Modifier.width(8.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
-                                        color = Ink, maxLines = 1)
-                                    at?.let { Text(fmtWhen(it), style = MaterialTheme.typography.labelSmall, color = SubInk) }
-                                }
-                                Icon(Icons.Default.KeyboardArrowRight, null, tint = SubInk, modifier = Modifier.size(18.dp))
-                            }
-                        }
+                    SectionCard(header = "Temperature") {
+                        TempChips(contact.temperature ?: "") { key -> contact.id?.let { vm.setLeadTemperature(it, key) } }
                     }
-                }
-
-                // ---- Expanded Journey ----
-                if (journeyExpanded) {
-                    val journey = buildList {
-                        addAll(app.leadDetailActivities.map { a ->
-                            Triple(a.createdAt, a.type, a.detail + (a.actorName?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""))
-                        })
-                        contact.createdAt?.let { add(Triple(it, "created", "Lead added")) }
-                    }.sortedByDescending { it.first ?: "" }
-                    item { SectionCard(header = "Journey") {
-                        if (journey.isEmpty()) Text("Updates you make will show here with date & time.",
-                            style = MaterialTheme.typography.bodySmall, color = SubInk)
-                        else journey.forEachIndexed { i, (atIso, type, text) -> JourneyRow(atIso, type, text, last = i == journey.lastIndex) }
-                    } }
                 }
 
                 // ---- Add note + Save ----
@@ -1057,15 +1038,15 @@ private fun SectionCard(
     Column(Modifier.fillMaxWidth()) {
     if (!header.isNullOrBlank()) {
         com.salesautocall.app.ui.design.AccentHeader(header,
-            Modifier.padding(start = Space.l + Space.xs, end = Space.l, bottom = Space.s))
+            Modifier.padding(start = Space.l, end = Space.l, bottom = Space.s))
     }
     Column(
         // iOS grouped-inset: a white card on the grey canvas, no outline.
         // One radius (Radii.card), one inset (16dp), one inner padding (16dp)
         // for every card on this page, so the edges line up down the screen.
         Modifier.fillMaxWidth().padding(horizontal = Space.l)
-            .softCard(color = CardBg)
-            .padding(Space.m),
+            .clip(Radii.card).background(CardBg)
+            .padding(Space.l),
         content = content,
     )
     if (!footer.isNullOrBlank()) {
@@ -1079,7 +1060,7 @@ private fun SectionCard(
 private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
         modifier
-            .softCard(color = CardBg)
+            .clip(Radii.card).background(CardBg)
             .heightIn(min = 96.dp).padding(Space.m),
     ) {
         Text(title, style = AppType.label, color = AppColors.TextSecondary, maxLines = 1)
@@ -1137,18 +1118,9 @@ private fun IdentityBlock(
     val ring = tempRing(contact.temperature)
     Column(Modifier.fillMaxWidth().padding(horizontal = Space.l)) {
         Row(verticalAlignment = Alignment.Top) {
-            Box(
-                Modifier.size(64.dp)
-                    .gradientCard(RoundedCornerShape(20.dp), androidx.compose.ui.graphics.Brush.linearGradient(listOf(ring, ring.copy(alpha = 0.7f))), elevation = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text((contact.name ?: contact.phone).firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "#",
-                    color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall)
-            }
-            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(prettyName(contact.name) ?: prettyNum(contact.phone), style = AppType.title2,
+                    Text(prettyName(contact.name) ?: prettyNum(contact.phone), style = AppType.title,
                         color = Ink, maxLines = 2, modifier = Modifier.weight(1f, fill = false))
                     Spacer(Modifier.width(8.dp))
                     Box(
@@ -1158,7 +1130,7 @@ private fun IdentityBlock(
                 }
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(prettyNum(contact.phone), style = MaterialTheme.typography.titleMedium, color = SubInk)
+                    Text(prettyNum(contact.phone), style = AppType.body, color = SubInk)
                     Spacer(Modifier.width(8.dp))
                     Icon(Icons.Default.ContentCopy, "Copy", tint = Color(0xFF9AA0A8),
                         modifier = Modifier.size(16.dp).clip(CircleShape).clickable { onCopy() })
@@ -1247,7 +1219,7 @@ private fun IdentityBlock(
 @Composable
 private fun HeroFact(label: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
     Column(
-        modifier.softCard(color = CardBg)
+        modifier.clip(Radii.card).background(CardBg)
             .padding(horizontal = Space.l, vertical = Space.m),
     ) {
         Text(label.lowercase().replaceFirstChar { it.uppercase() }, style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1)
@@ -1801,14 +1773,18 @@ private fun FunnelNowLine(contact: Contact, stages: List<LeadStage>) {
     val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
     val now = stageLabel(stages, contact.stage)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Now: ", style = AppType.rowTitle, color = SubInk)
-        Text(now, style = AppType.rowTitle, color = if (idx >= 0) PurpleL else AmberL,
+        Text(now, style = AppType.label, color = if (idx >= 0) AppColors.Indigo else AmberL,
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        if (idx >= 0) Text(" · Step ${idx + 1} of ${FUNNEL.size}", style = AppType.meta, color = SubInk, maxLines = 1)
+        Spacer(Modifier.weight(1f))
+        if (idx >= 0 && idx < FUNNEL.lastIndex) {
+            Text("Next: ${stageLabel(stages, FUNNEL[idx + 1].key)}", style = AppType.meta, color = SubInk, maxLines = 1)
+        }
     }
     val sub = when {
         idx < 0 -> "Not on the funnel. Tap a step to put the lead back on it."
-        idx == FUNNEL.lastIndex -> "Step ${idx + 1} of ${FUNNEL.size}. Deal done."
-        else -> "Step ${idx + 1} of ${FUNNEL.size}. Next: ${stageLabel(stages, FUNNEL[idx + 1].key)}. Tap a step to move the lead."
+        idx == FUNNEL.lastIndex -> "Deal done."
+        else -> "Tap a dot to move the lead."
     }
     Text(sub, style = AppType.meta, color = SubInk)
 }
@@ -1827,50 +1803,36 @@ private fun FunnelNowLine(contact: Contact, stages: List<LeadStage>) {
  */
 @Composable
 private fun HorizontalFunnel(contact: Contact, stages: List<LeadStage>, onTap: (String) -> Unit) {
+    // DOTS ONLY. Seven labels under seven steps collided ("Contacted" ran into
+    // "Interested") at any width a phone has. The line above names the current
+    // step and the next one in full words; each dot is still a 44dp tap target
+    // with its stage as the content description, so moving the lead is unchanged.
     val idx = FUNNEL.indexOfFirst { it.key == contact.stage }
-    val labels = FUNNEL.map { funnelShort(stages, it) }
-    Row(Modifier.fillMaxWidth()) {
-        FUNNEL.forEachIndexed { i, step ->
-            val done = i < idx
-            val current = i == idx
-            val circleColor = when { done -> GreenL; current -> PurpleL; else -> Hair }
-            val textOnCircle = if (done || current) Color.White else SubInk
-            Column(
-                Modifier.weight(labels[i].length.coerceAtLeast(5).toFloat())
-                    .clip(RoundedCornerShape(10.dp)).clickable { onTap(step.key) }
-                    .padding(bottom = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Box(Modifier.fillMaxWidth().height(36.dp), contentAlignment = Alignment.Center) {
-                    // Rail behind the circle: left + right halves.
-                    Row(Modifier.fillMaxWidth().height(3.dp)) {
-                        Box(Modifier.weight(1f).fillMaxHeight().background(
-                            if (i == 0) Color.Transparent else if (i <= idx) GreenL else Hair))
-                        Box(Modifier.weight(1f).fillMaxHeight().background(
-                            if (i == FUNNEL.lastIndex) Color.Transparent else if (i < idx) GreenL else Hair))
-                    }
-                    // Current step gets a soft halo so "where we are" pops instantly.
-                    if (current) {
-                        Box(Modifier.size(36.dp).clip(CircleShape).background(PurpleL.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-                            Box(Modifier.size(28.dp).clip(CircleShape).background(circleColor), contentAlignment = Alignment.Center) {
-                                Text("${i + 1}", color = textOnCircle, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                            }
+    Box(Modifier.fillMaxWidth().height(44.dp), contentAlignment = Alignment.Center) {
+        // Rail: grey track, graphite fill up to the current step.
+        Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp).height(2.dp).background(Hair))
+        if (idx > 0) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp)) {
+                Box(Modifier.weight(idx.toFloat()).height(2.dp).background(Ink))
+                if (FUNNEL.lastIndex - idx > 0) Spacer(Modifier.weight((FUNNEL.lastIndex - idx).toFloat()))
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            FUNNEL.forEachIndexed { i, step ->
+                val label = funnelShort(stages, step)
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).clickable { onTap(step.key) }
+                        .semantics { contentDescription = "Move to $label" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when {
+                        i == idx -> Box(Modifier.size(16.dp).clip(CircleShape).background(AppColors.Indigo.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                            Box(Modifier.size(10.dp).clip(CircleShape).background(AppColors.Indigo))
                         }
-                    } else {
-                        Box(Modifier.size(28.dp).clip(CircleShape).background(circleColor), contentAlignment = Alignment.Center) {
-                            Text(if (done) "✓" else "${i + 1}", color = textOnCircle,
-                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                        }
+                        i < idx -> Box(Modifier.size(10.dp).clip(CircleShape).background(Ink))
+                        else -> Box(Modifier.size(10.dp).clip(CircleShape).background(CardBg).border(1.5.dp, Hair, CircleShape))
                     }
                 }
-                Spacer(Modifier.height(6.dp))
-                FitOneLine(
-                    text = labels[i],
-                    style = AppType.tag.copy(fontWeight = if (current) FontWeight.SemiBold else FontWeight.Medium),
-                    color = when { current -> PurpleL; done -> GreenL; else -> SubInk },
-                    maxSize = 11.sp, minSize = 8.sp,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 1.dp),
-                )
             }
         }
     }
@@ -2690,5 +2652,141 @@ private fun visitConfirmationMessage(contact: Contact, whenLabel: String, agent:
         append("📅 $whenLabel\n\n")
         append("Hum aapka wahan intezaar karenge. Koi badlav ho to please bata dijiyega.\n\n")
         append("— $sign")
+    }
+}
+
+
+// ---------------- Lead detail D: the combined activity timeline ----------------
+
+private enum class TlKind { CALL, WHATSAPP, NOTE, VISIT, OTHER }
+
+private data class TlItem(val atMs: Long?, val kind: TlKind, val title: String, val detail: String?, val call: CallLog? = null)
+
+/** Builds the timeline from data the page already loads — nothing new is fetched. */
+private fun buildTimeline(contact: Contact, calls: List<CallLog>, activities: List<com.salesautocall.app.data.LeadActivity>): List<TlItem> {
+    val out = ArrayList<TlItem>()
+    calls.forEach { c -> out += TlItem(isoMs(c.startedAt), TlKind.CALL, "", null, call = c) }
+    activities.forEach { a ->
+        val kind = when (a.type) {
+            "whatsapp" -> TlKind.WHATSAPP
+            "note" -> TlKind.NOTE
+            "site_visit" -> TlKind.VISIT
+            // A "call" activity is the same call the call log already shows.
+            "call" -> return@forEach
+            else -> TlKind.OTHER
+        }
+        val who = a.actorName?.takeIf { it.isNotBlank() }
+        out += TlItem(isoMs(a.createdAt), kind, a.detail, who)
+    }
+    contact.siteVisitArrivedAt?.let { out += TlItem(isoMs(it), TlKind.VISIT, "Arrived on site", contact.siteVisitProject) }
+    contact.siteVisitAt?.let { iso ->
+        val ms = isoMs(iso)
+        if (ms != null && ms > System.currentTimeMillis()) out += TlItem(ms, TlKind.VISIT, "Site visit booked", contact.siteVisitProject)
+    }
+    contact.createdAt?.let { out += TlItem(isoMs(it), TlKind.OTHER, "Lead added", null) }
+    out.sortByDescending { it.atMs ?: Long.MIN_VALUE }
+    // Saved notes carry no time of their own; they sit at the end, as written.
+    contact.notes?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }?.forEach {
+        out += TlItem(null, TlKind.NOTE, "Note", it)
+    }
+    return out
+}
+
+@Composable
+private fun LeadTimeline(
+    contact: Contact,
+    calls: List<CallLog>,
+    activities: List<com.salesautocall.app.data.LeadActivity>,
+    loading: Boolean,
+    callsFailed: Boolean,
+    playingCallId: String?,
+    onPlay: (String) -> Unit,
+    onStop: () -> Unit,
+    onAddNote: () -> Unit,
+) {
+    var filter by rememberSaveable { mutableStateOf("All") }
+    val all = remember(contact, calls, activities) { buildTimeline(contact, calls, activities) }
+    val shown = when (filter) {
+        "Calls" -> all.filter { it.kind == TlKind.CALL }
+        "WhatsApp" -> all.filter { it.kind == TlKind.WHATSAPP }
+        "Notes" -> all.filter { it.kind == TlKind.NOTE }
+        "Visits" -> all.filter { it.kind == TlKind.VISIT }
+        else -> all
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = Space.l), verticalAlignment = Alignment.CenterVertically) {
+            Text("ACTIVITY", style = AppType.sectionLabel, color = SubInk, modifier = Modifier.weight(1f))
+            Text("Add note", style = AppType.label, color = AppColors.Indigo,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAddNote() }.padding(horizontal = 4.dp, vertical = 4.dp))
+        }
+        Spacer(Modifier.height(Space.s))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Space.l),
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
+        ) {
+            listOf("All", "Calls", "WhatsApp", "Notes", "Visits").forEach { f ->
+                val on = f == filter
+                Box(
+                    Modifier.heightIn(min = 32.dp).clip(Radii.chip)
+                        .background(if (on) Ink else CardBg)
+                        .clickable { filter = f }.padding(horizontal = 12.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text(f, style = AppType.metaStrong, color = if (on) Color.White else Ink) }
+            }
+        }
+        Spacer(Modifier.height(Space.s))
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = Space.l).clip(Radii.card).background(CardBg)
+                .padding(horizontal = Space.l, vertical = Space.s),
+        ) {
+            if ((filter == "All" || filter == "Calls") && loading && calls.isEmpty()) {
+                Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            }
+            if ((filter == "All" || filter == "Calls") && callsFailed) {
+                Text("Could not load this lead's calls. Pull down to try again.", style = AppType.meta, color = AmberL,
+                    modifier = Modifier.padding(vertical = Space.s))
+            }
+            if (shown.isEmpty()) {
+                Text(
+                    when (filter) {
+                        "Calls" -> if (callsFailed) "" else "No calls logged for this lead yet."
+                        "WhatsApp" -> "No WhatsApp messages logged yet."
+                        "Notes" -> "No notes yet. Tap Add note to record one."
+                        "Visits" -> "No site visit yet."
+                        else -> "Updates you make will show here with date & time."
+                    },
+                    style = AppType.meta, color = SubInk, modifier = Modifier.padding(vertical = Space.m),
+                )
+            }
+            shown.forEachIndexed { i, it ->
+                if (i > 0) Box(Modifier.fillMaxWidth().padding(start = 28.dp).height(0.5.dp).background(AppColors.Separator))
+                val c = it.call
+                if (c != null) {
+                    LeadCallRow(c, playing = c.id != null && c.id == playingCallId,
+                        onPlay = { c.id?.let(onPlay) }, onStop = onStop)
+                } else {
+                    Row(Modifier.fillMaxWidth().padding(vertical = Space.m), verticalAlignment = Alignment.Top) {
+                        Icon(
+                            when (it.kind) {
+                                TlKind.WHATSAPP -> Icons.Default.Chat
+                                TlKind.NOTE -> Icons.Default.Edit
+                                TlKind.VISIT -> Icons.Default.LocationOn
+                                else -> Icons.Default.Info
+                            },
+                            contentDescription = null, tint = com.salesautocall.app.ui.design.Brand.Ink,
+                            modifier = Modifier.padding(top = 2.dp).size(16.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Row {
+                                Text(it.title, style = AppType.label, color = Ink, maxLines = 2, modifier = Modifier.weight(1f))
+                                it.atMs?.let { ms -> Text(fmtWhen(ms), style = AppType.meta, color = SubInk, maxLines = 1) }
+                            }
+                            it.detail?.takeIf { d -> d.isNotBlank() }?.let { d -> Text(d, style = AppType.meta, color = SubInk) }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
