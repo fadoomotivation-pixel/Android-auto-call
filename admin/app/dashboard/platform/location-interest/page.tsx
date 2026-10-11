@@ -100,8 +100,8 @@ export default async function LocationInterestPage({
                 color: c.city === city ? "#fff" : "inherit",
               }}
             >
-              <span style={{ fontSize: 20, fontWeight: 700 }}>{c.leads}</span>
-              <span style={{ fontSize: 13 }}>{c.city}</span>
+              <span style={{ fontSize: "var(--text-title3)", fontWeight: "var(--weight-bold)" }}>{c.leads}</span>
+              <span style={{ fontSize: "var(--text-footnote)" }}>{c.city}</span>
             </a>
           ))}
         </div>
@@ -132,16 +132,16 @@ export default async function LocationInterestPage({
                   <tr key={`${l.contact_id}-${l.source}-${i}`}>
                     <td>
                       <strong>{l.lead_name || "Lead"}</strong>
-                      <div className="subtitle" style={{ fontSize: 12 }}>{l.lead_phone}</div>
+                      <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>{l.lead_phone}</div>
                     </td>
-                    <td style={{ fontSize: 13 }}>{l.company_name.trim()}</td>
-                    <td style={{ fontSize: 13 }}>{l.rep_name || "Unassigned"}</td>
-                    <td style={{ fontSize: 13 }}>{l.stage || "—"}</td>
-                    <td style={{ fontSize: 12.5, maxWidth: 340 }}>
+                    <td style={{ fontSize: "var(--text-footnote)" }}>{l.company_name.trim()}</td>
+                    <td style={{ fontSize: "var(--text-footnote)" }}>{l.rep_name || "Unassigned"}</td>
+                    <td style={{ fontSize: "var(--text-footnote)" }}>{l.stage || "—"}</td>
+                    <td style={{ fontSize: "var(--text-caption1)", maxWidth: 340 }}>
                       <span style={{ opacity: 0.7 }}>{l.source === "call" ? "📞" : "💬"}</span>{" "}
                       {l.evidence || <span style={{ opacity: 0.4 }}>—</span>}
                     </td>
-                    <td className="subtitle" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                    <td className="subtitle" style={{ fontSize: "var(--text-caption1)", whiteSpace: "nowrap" }}>
                       {ago(l.detected_at)}
                     </td>
                   </tr>
@@ -152,7 +152,7 @@ export default async function LocationInterestPage({
         </>
       )}
 
-      <p className="subtitle" style={{ marginTop: 16, fontSize: 12.5 }}>
+      <p className="subtitle" style={{ marginTop: 16, fontSize: "var(--text-caption1)" }}>
         Read from plain keywords in calls and WhatsApp text, not AI — a city name mentioned once is
         one entry here, so a rep confirming &ldquo;yes, Noida is what they want&rdquo; and a rep just
         repeating the buyer&apos;s own words both count. Treat this as a shortlist to call, not a

@@ -53,7 +53,7 @@ export default async function HealthPage() {
         missed and off-CRM calls only arrive if the phone&apos;s background sync is alive. When it isn&apos;t,
         this names the phone and gives the exact settings fix — a phone change, not an app release.
       </p>
-      <p className="subtitle" style={{ marginTop: -8, fontSize: 12.5 }}>
+      <p className="subtitle" style={{ marginTop: -8, fontSize: "var(--text-caption1)" }}>
         For what a rep actually did today see <a href="/dashboard/pulse" style={{ color: "var(--accent)" }}>Daily Pulse</a>.
       </p>
       <PhoneHealth isSuper={isSuper} />

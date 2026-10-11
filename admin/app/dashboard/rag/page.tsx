@@ -65,7 +65,7 @@ export default async function RagPage({
       <AskConsole />
       <div className="card" style={{ marginTop: 20, background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.2)" }}>
         <strong style={{ color: "var(--accent)" }}>How to feed a company&apos;s brain</strong>
-        <ol style={{ margin: "8px 0 0", paddingLeft: 20, color: "rgba(255,255,255,0.8)", lineHeight: 1.7, fontSize: 14 }}>
+        <ol style={{ margin: "8px 0 0", paddingLeft: 20, color: "rgba(255,255,255,0.8)", lineHeight: 1.7, fontSize: "var(--text-subheadline)" }}>
           <li>Open <strong>AI Coach</strong> → <strong>AI Knowledge base</strong>.</li>
           <li>Tap <strong>&ldquo;Learn from my won calls + library&rdquo;</strong> — it auto-builds from real closed deals.</li>
           <li>Paste price lists / brochures / FAQ answers for anything not captured yet.</li>
@@ -96,7 +96,7 @@ async function RagBody({ isSuper }: { isSuper: boolean }) {
   const companies = rows.map((r) => ({ id: r.company_id, name: r.company_name }));
 
   const stat: CSSProperties = { background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 20px", flex: 1, minWidth: 150 };
-  const th: CSSProperties = { textAlign: "left", padding: "10px 12px", fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)" };
+  const th: CSSProperties = { textAlign: "left", padding: "10px 12px", fontSize: "var(--text-caption2)", letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--muted)" };
   const td: CSSProperties = { padding: "10px 12px", borderTop: "1px solid var(--border)" };
 
   return (
@@ -106,19 +106,19 @@ async function RagBody({ isSuper }: { isSuper: boolean }) {
 
       {!error && <div style={{ display: "flex", gap: 12, flexWrap: "wrap", margin: "16px 0" }}>
         <div style={stat}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "var(--text)" }}>{totalChunks}</div>
+          <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", color: "var(--text)" }}>{totalChunks}</div>
           <div className="subtitle">company facts learned</div>
         </div>
         <div style={stat}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "var(--good)" }}>{globalError ? "—" : (globalChunks ?? 0)}</div>
+          <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", color: "var(--good)" }}>{globalError ? "—" : (globalChunks ?? 0)}</div>
           <div className="subtitle">🌐 global facts (shared to all)</div>
         </div>
         <div style={stat}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "var(--text)" }}>{liveCompanies}<span style={{ fontSize: 16, color: "var(--muted)" }}>/{rows.length}</span></div>
+          <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", color: "var(--text)" }}>{liveCompanies}<span style={{ fontSize: "var(--text-callout)", color: "var(--muted)" }}>/{rows.length}</span></div>
           <div className="subtitle">companies with a brain</div>
         </div>
         <div style={stat}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: totalGaps > 0 ? "var(--warn)" : "var(--good)" }}>{totalGaps}</div>
+          <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", color: totalGaps > 0 ? "var(--warn)" : "var(--good)" }}>{totalGaps}</div>
           <div className="subtitle">open questions the AI couldn&apos;t answer</div>
         </div>
       </div>}
@@ -151,11 +151,11 @@ async function RagBody({ isSuper }: { isSuper: boolean }) {
                 return (
                   <tr key={r.company_id}>
                     <td style={td}><strong style={{ color: "var(--text)" }}>{r.company_name || "—"}</strong></td>
-                    <td style={td}><span style={{ color: h.color, fontWeight: 600, fontSize: 13 }}>● {h.label}</span></td>
+                    <td style={td}><span style={{ color: h.color, fontWeight: "var(--weight-semibold)", fontSize: "var(--text-footnote)" }}>● {h.label}</span></td>
                     <td style={td}><strong>{r.chunks}</strong></td>
-                    <td style={{ ...td, fontSize: 13, color: "var(--muted)" }}>{parts || "—"}</td>
-                    <td style={td}>{Number(r.open_gaps) > 0 ? <span style={{ color: "var(--warn)", fontWeight: 600 }}>{r.open_gaps}</span> : "0"}</td>
-                    <td style={{ ...td, fontSize: 13, color: "var(--muted)" }}>{istDate(r.last_learned, "never")}</td>
+                    <td style={{ ...td, fontSize: "var(--text-footnote)", color: "var(--muted)" }}>{parts || "—"}</td>
+                    <td style={td}>{Number(r.open_gaps) > 0 ? <span style={{ color: "var(--warn)", fontWeight: "var(--weight-semibold)" }}>{r.open_gaps}</span> : "0"}</td>
+                    <td style={{ ...td, fontSize: "var(--text-footnote)", color: "var(--muted)" }}>{istDate(r.last_learned, "never")}</td>
                   </tr>
                 );
               })}

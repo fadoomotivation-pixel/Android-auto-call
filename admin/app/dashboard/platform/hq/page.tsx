@@ -54,9 +54,9 @@ function Funnel({ f }: { f: HqFunnel }) {
           const conv = prev > 0 ? Math.round((s.value / prev) * 100) : 0;
           return (
             <div key={s.label}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 3 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-footnote)", marginBottom: 3 }}>
                 <span>{s.label}{i > 0 && <span style={{ opacity: 0.55 }}> · {conv}% of prev</span>}</span>
-                <strong>{s.value} <span style={{ opacity: 0.6, fontWeight: 400 }}>({pct}%)</span></strong>
+                <strong>{s.value} <span style={{ opacity: 0.6, fontWeight: "var(--weight-regular)" }}>({pct}%)</span></strong>
               </div>
               <div style={{ height: 8, borderRadius: 8, background: "var(--tint)", overflow: "hidden" }}>
                 <div style={{ width: `${Math.max(pct, 1.5)}%`, height: "100%", borderRadius: 8, background: s.color }} />
@@ -168,8 +168,8 @@ export default async function PlatformHqPage({
 
   const stat = (v: string | number, label: string) => (
     <div className="card" style={{ flex: 1, minWidth: 120, textAlign: "center", padding: "14px 8px" }}>
-      <div style={{ fontSize: 22, fontWeight: 700 }}>{v}</div>
-      <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>{label}</div>
+      <div style={{ fontSize: "var(--text-title2)", fontWeight: "var(--weight-bold)" }}>{v}</div>
+      <div className="subtitle" style={{ margin: 0, fontSize: "var(--text-caption1)" }}>{label}</div>
     </div>
   );
 
@@ -226,15 +226,15 @@ export default async function PlatformHqPage({
                 style={{ textDecoration: "none", color: "inherit", display: "block" }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <strong style={{ flex: 1, fontSize: 16 }}>{c.company_name.trim()}</strong>
+                  <strong style={{ flex: 1, fontSize: "var(--text-callout)" }}>{c.company_name.trim()}</strong>
                   {c.calls_today === 0 && c.telecallers > 0 && (
-                    <span style={{ color: "var(--warn)", fontSize: 13 }}>😴 idle</span>
+                    <span style={{ color: "var(--warn)", fontSize: "var(--text-footnote)" }}>😴 idle</span>
                   )}
                 </div>
-                <div className="subtitle" style={{ margin: "2px 0 10px", fontSize: 13 }}>
+                <div className="subtitle" style={{ margin: "2px 0 10px", fontSize: "var(--text-footnote)" }}>
                   {c.telecallers} telecallers · {c.leads_total} leads ({c.leads_new} new)
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-footnote)" }}>
                   <span><strong>{c.calls_today}</strong> calls</span>
                   <span><strong>{c.connected_today}</strong> connected</span>
                   <span><strong>{fmtTalk(c.talk_today)}</strong> talk</span>
@@ -278,7 +278,7 @@ export default async function PlatformHqPage({
                   const trend7 = trend.reduce((a, b) => a + b, 0);
                   return (
                   <tr key={r.rep_id}>
-                    <td><strong>{r.rep_name ?? "—"}</strong>{r.rep_phone ? <div style={{ fontSize: 12, opacity: 0.6 }}>{r.rep_phone}</div> : null}</td>
+                    <td><strong>{r.rep_name ?? "—"}</strong>{r.rep_phone ? <div style={{ fontSize: "var(--text-caption1)", opacity: 0.6 }}>{r.rep_phone}</div> : null}</td>
                     <td>{r.leads_assigned}</td>
                     <td>{r.calls_today}</td>
                     <td>{r.connected_today}</td>
@@ -286,8 +286,8 @@ export default async function PlatformHqPage({
                     <td>{r.recordings_today}</td>
                     <td>
                       {trend7 > 0
-                        ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Sparkline values={trend} /><span style={{ fontSize: 12, opacity: 0.7 }}>{trend7}</span></div>
-                        : <span style={{ fontSize: 12, opacity: 0.5 }}>—</span>}
+                        ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Sparkline values={trend} /><span style={{ fontSize: "var(--text-caption1)", opacity: 0.7 }}>{trend7}</span></div>
+                        : <span style={{ fontSize: "var(--text-caption1)", opacity: 0.5 }}>—</span>}
                     </td>
                     <td>
                       {!r.is_active ? <span style={{ color: "var(--bad)" }}>inactive</span>
@@ -318,14 +318,14 @@ export default async function PlatformHqPage({
                     <td>{c.rep_name ?? "—"}</td>
                     <td>
                       {c.off_crm
-                        ? <span style={{ color: "var(--bad)", fontWeight: 600 }}>⚠ Off-CRM number</span>
+                        ? <span style={{ color: "var(--bad)", fontWeight: "var(--weight-semibold)" }}>⚠ Off-CRM number</span>
                         : <strong>{c.lead_name ?? "Unknown"}</strong>}
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>{c.phone}</div>
+                      <div style={{ fontSize: "var(--text-caption1)", opacity: 0.7 }}>{c.phone}</div>
                     </td>
                     <td>{c.direction === "incoming" ? "↙ In" : "↗ Out"}</td>
                     <td>{fmtTalk(c.duration_seconds)}</td>
                     <td>{c.recording_status === "ready" ? <RecordingPlayer callId={c.call_id} canDelete={true} /> : "—"}</td>
-                    <td style={{ maxWidth: 320, fontSize: 13 }}>{c.summary ?? "—"}</td>
+                    <td style={{ maxWidth: 320, fontSize: "var(--text-footnote)" }}>{c.summary ?? "—"}</td>
                   </tr>
                 ))}
                 {calls.length === 0 && <tr><td colSpan={7}>No calls logged yet.</td></tr>}

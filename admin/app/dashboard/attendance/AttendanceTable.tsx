@@ -94,7 +94,7 @@ export function AttendanceTable({
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button className="button" onClick={() => handleMonthChange(-1)}>{"<"}</button>
-          <strong style={{ fontSize: 16 }}>{currentMonth}</strong>
+          <strong style={{ fontSize: "var(--text-callout)" }}>{currentMonth}</strong>
           <button className="button" onClick={() => handleMonthChange(1)}>{">"}</button>
         </div>
         <button className="button" onClick={downloadCsv}>⬇️ Export CSV</button>
@@ -142,13 +142,13 @@ export function AttendanceTable({
                 return (
                   <tr key={r.id}>
                     <td>{r.work_date}</td>
-                    <td style={{ fontWeight: 500 }}>{r.profiles?.full_name || "—"}</td>
+                    <td style={{ fontWeight: "var(--weight-medium)" }}>{r.profiles?.full_name || "—"}</td>
                     <td><span className={`badge ${r.status}`}>{r.status}</span></td>
                     <td>{formatTime(r.punch_in_at)}</td>
                     <td>{r.punch_out_at ? formatTime(r.punch_out_at) : <span style={{color: "var(--muted)"}}>On shift</span>}</td>
                     <td>{calculateHours(r.punch_in_at, r.punch_out_at)}</td>
                     <td>{late ? <span style={{color: "var(--error)"}}>🔴 Yes</span> : "—"}</td>
-                    <td style={{ fontSize: 12, maxWidth: 150, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={r.location_label || ""}>
+                    <td style={{ fontSize: "var(--text-caption1)", maxWidth: 150, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={r.location_label || ""}>
                       {r.location_label || "—"}
                     </td>
                     <td>

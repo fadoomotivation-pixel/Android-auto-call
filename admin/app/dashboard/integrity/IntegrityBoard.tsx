@@ -135,9 +135,9 @@ export function IntegrityBoard({ isSuper }: { isSuper: boolean }) {
       {byRep.map((rep) => (
         <div key={rep.name + rep.company} style={card}>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <strong style={{ color: "var(--text)", fontSize: 16 }}>{rep.name}</strong>
-            {isSuper && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>· {rep.company}</span>}
-            <span style={{ marginLeft: "auto", fontSize: 12.5, color: "var(--muted)" }}>
+            <strong style={{ color: "var(--text)", fontSize: "var(--text-callout)" }}>{rep.name}</strong>
+            {isSuper && <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>· {rep.company}</span>}
+            <span style={{ marginLeft: "auto", fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
               {rep.flags.length} things worth a look
             </span>
           </div>
@@ -150,22 +150,22 @@ export function IntegrityBoard({ isSuper }: { isSuper: boolean }) {
                 <div key={f.flag} style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
                     <span style={{
-                      fontSize: 11, fontWeight: 700, color: meta.tone,
+                      fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", color: meta.tone,
                       border: `1px solid ${meta.tone}`, borderRadius: 999, padding: "2px 8px",
                     }}>{f.n}</span>
-                    <strong style={{ color: "var(--text)", fontSize: 14 }}>{meta.title}</strong>
-                    <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: "auto" }}>
+                    <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>{meta.title}</strong>
+                    <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginLeft: "auto" }}>
                       last: {ist(f.last_at)}
                     </span>
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4, lineHeight: 1.55 }}>
+                  <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", marginTop: 4, lineHeight: 1.55 }}>
                     {meta.why}
                     {f.sample && <> <span style={{ color: "var(--text)" }}>For example: <strong>{f.sample}</strong>.</span></>}
                   </div>
-                  <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.55 }}>
+                  <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 4, lineHeight: 1.55 }}>
                     🤔 Could be: {meta.innocent}
                   </div>
-                  <div style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.55, color: "var(--good)" }}>
+                  <div style={{ fontSize: "var(--text-caption1)", marginTop: 4, lineHeight: 1.55, color: "var(--good)" }}>
                     ✅ {meta.action}
                   </div>
                 </div>
@@ -176,7 +176,7 @@ export function IntegrityBoard({ isSuper }: { isSuper: boolean }) {
       ))}
 
       <div style={{ ...card, borderColor: "var(--border)" }}>
-        <strong style={{ color: "var(--text)", fontSize: 14.5 }}>How to read this</strong>
+        <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>How to read this</strong>
         <p className="subtitle" style={{ margin: "6px 0 0", lineHeight: 1.65 }}>
           Every item here is a <strong>question</strong>, not <strong>proof</strong>. Each flag can have a simple
           reason. The recorder missed a file. The customer really said no. There was no network at the site.

@@ -59,13 +59,13 @@ export default async function AppsPage() {
             <div key={c.tag} className="card" style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
               <div style={{ fontSize: 30 }}>{c.emoji}</div>
               <div style={{ flex: 1, minWidth: 180 }}>
-                <div style={{ fontWeight: 700 }}>
+                <div style={{ fontWeight: "var(--weight-bold)" }}>
                   {c.brand}{" "}
                   {versions[i] && (
-                    <span style={{ fontWeight: 400, opacity: 0.7, fontSize: 13 }}>v{versions[i]}</span>
+                    <span style={{ fontWeight: "var(--weight-regular)", opacity: 0.7, fontSize: "var(--text-footnote)" }}>v{versions[i]}</span>
                   )}
                 </div>
-                <div className="subtitle" style={{ margin: 0, fontSize: 13 }}>{c.note}</div>
+                <div className="subtitle" style={{ margin: 0, fontSize: "var(--text-footnote)" }}>{c.note}</div>
               </div>
               <a
                 className="primary"

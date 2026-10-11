@@ -158,7 +158,7 @@ export default async function TrainingPage({
                 <tr key={r.call_id}>
                   <td style={{ color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{i + 1}</td>
                   <td>
-                    <div style={{ fontWeight: 600 }}>
+                    <div style={{ fontWeight: "var(--weight-semibold)" }}>
                       {r.contact_id ? (
                         <a href={withScope(`/dashboard/leads/${r.contact_id}`, scope)}>
                           {r.lead_name ?? "Unnamed lead"}

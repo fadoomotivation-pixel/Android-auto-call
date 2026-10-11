@@ -121,7 +121,7 @@ export function WhatsAppInbox({
         <div className="chat-sidebar-header">Active Conversations</div>
         <div className="chat-list">
           {chats.length === 0 ? (
-            <div style={{ padding: 16, color: "var(--muted)", fontSize: 13 }}>No conversations yet.</div>
+            <div style={{ padding: 16, color: "var(--muted)", fontSize: "var(--text-footnote)" }}>No conversations yet.</div>
           ) : (
             chats.map(([counterparty, msgs]) => {
               const lastMsg = msgs[msgs.length - 1];
@@ -148,7 +148,7 @@ export function WhatsAppInbox({
         {activeChat ? (
           <>
             <div className="chat-header">
-              <strong style={{ fontSize: 16, color: "var(--text)" }}>
+              <strong style={{ fontSize: "var(--text-callout)", color: "var(--text)" }}>
                 {getChatName(activeChat, activeMessages)}
               </strong>
             </div>

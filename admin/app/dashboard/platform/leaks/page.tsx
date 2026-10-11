@@ -166,12 +166,12 @@ async function LeaksBody({
                   <td>
                     <strong>{r.rep_name || "Telecaller"}</strong>
                     {r.silent && (
-                      <div style={{ color: "var(--bad)", fontSize: 12, fontWeight: 600 }}>
+                      <div style={{ color: "var(--bad)", fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)" }}>
                         No call in 3 days
                       </div>
                     )}
                     {!r.is_active && (
-                      <div className="subtitle" style={{ fontSize: 12 }}>Inactive account</div>
+                      <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>Inactive account</div>
                     )}
                   </td>
                   <td style={{ textAlign: "right" }}>{r.leads_assigned}</td>
@@ -182,8 +182,8 @@ async function LeaksBody({
                       ? <strong style={{ color: "var(--bad)" }}>0</strong>
                       : r.calls_7d}
                   </td>
-                  <td className="subtitle" style={{ fontSize: 12.5 }}>{ago(r.last_call_at)}</td>
-                  <td className="subtitle" style={{ fontSize: 12.5 }}>
+                  <td className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>{ago(r.last_call_at)}</td>
+                  <td className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
                     {r.wa_last_seen_at === null
                       ? <span style={{ opacity: 0.4 }}>not watched</span>
                       : Date.now() - new Date(r.wa_last_seen_at).getTime() < 2 * 3600_000
@@ -196,12 +196,12 @@ async function LeaksBody({
           </table>
         )}
 
-        <p className="subtitle" style={{ marginTop: 16, fontSize: 12.5 }}>
+        <p className="subtitle" style={{ marginTop: 16, fontSize: "var(--text-caption1)" }}>
           <strong>Never called</strong> counts leads assigned to that rep, older than a week, with
           no call ever logged. <strong>Broke callback</strong> counts leads whose promised callback
           time passed over 24 hours ago and was never marked done.
         </p>
-        <p className="subtitle" style={{ fontSize: 12.5 }}>
+        <p className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
           Open <a href={`/dashboard/platform/hq?co=${current.company_id}`}>Platform HQ</a> to hear
           the actual calls.
         </p>
@@ -220,26 +220,26 @@ async function LeaksBody({
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "12px 0 18px" }}>
         <div className="card" style={{ flex: 1, minWidth: 150, padding: "14px 12px" }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: totalRisk > 0 ? "var(--bad)" : undefined }}>
+          <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", color: totalRisk > 0 ? "var(--bad)" : undefined }}>
             {totalRisk}
           </div>
-          <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
+          <div className="subtitle" style={{ margin: 0, fontSize: "var(--text-caption1)" }}>
             leads going nowhere · {Math.round((100 * totalRisk) / Math.max(totalLeads, 1))}% of {totalLeads}
           </div>
         </div>
         <div className="card" style={{ flex: 1, minWidth: 150, padding: "14px 12px" }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: totalSilent > 0 ? "var(--bad)" : undefined }}>
+          <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", color: totalSilent > 0 ? "var(--bad)" : undefined }}>
             {totalSilent}/{totalReps}
           </div>
-          <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
+          <div className="subtitle" style={{ margin: 0, fontSize: "var(--text-caption1)" }}>
             telecallers with no call in 3 days
           </div>
         </div>
         <div className="card" style={{ flex: 1, minWidth: 150, padding: "14px 12px" }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: totalNoOwner > 0 ? "var(--warn)" : undefined }}>
+          <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", color: totalNoOwner > 0 ? "var(--warn)" : undefined }}>
             {totalNoOwner}
           </div>
-          <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
+          <div className="subtitle" style={{ margin: 0, fontSize: "var(--text-caption1)" }}>
             leads with no owner at all
           </div>
         </div>
@@ -278,7 +278,7 @@ async function LeaksBody({
                 <a href={`/dashboard/platform/leaks?co=${r.company_id}`}>
                   <strong>{r.company_name.trim()}</strong>
                 </a>
-                <div className="subtitle" style={{ fontSize: 12 }}>
+                <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
                   {r.leads_total} leads · {r.telecallers} telecaller{r.telecallers === 1 ? "" : "s"}
                   {r.wa_watched > 0 && ` · ${r.wa_watched} on WhatsApp${r.wa_stale > 0 ? ` (${r.wa_stale} stale)` : ""}`}
                 </div>
@@ -286,13 +286,13 @@ async function LeaksBody({
               <td style={{ textAlign: "right" }}>
                 <strong
                   style={{
-                    fontSize: 15,
+                    fontSize: "var(--text-subheadline)",
                     color: r.at_risk_pct >= 70 ? "var(--bad)" : r.at_risk_pct >= 40 ? "var(--warn)" : undefined,
                   }}
                 >
                   {r.at_risk}
                 </strong>
-                <div className="subtitle" style={{ fontSize: 12 }}>{r.at_risk_pct}%</div>
+                <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>{r.at_risk_pct}%</div>
               </td>
               <td style={{ textAlign: "right" }}><Num n={r.no_owner} warn={20} bad={100} /></td>
               <td style={{ textAlign: "right" }}><Num n={r.cold} warn={30} bad={150} /></td>
@@ -302,7 +302,7 @@ async function LeaksBody({
                   ? <span style={{ opacity: 0.3 }}>—</span>
                   : <strong style={{ color: "var(--bad)" }}>{r.silent_reps}/{r.telecallers}</strong>}
               </td>
-              <td className="subtitle" style={{ fontSize: 12.5 }}>
+              <td className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
                 {r.last_call_at
                   ? new Date(r.last_call_at).toLocaleString("en-IN", {
                       ...IST, day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
@@ -323,12 +323,12 @@ async function LeaksBody({
         </div>
       )}
 
-      <p className="subtitle" style={{ marginTop: 16, fontSize: 12.5 }}>
+      <p className="subtitle" style={{ marginTop: 16, fontSize: "var(--text-caption1)" }}>
         <strong>Going nowhere</strong> counts each lead once, however many ways it is failing — a
         lead with no owner is usually also one nobody called, and adding the columns up would
         report more bad leads than the company has.
       </p>
-      <p className="subtitle" style={{ fontSize: 12.5 }}>
+      <p className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
         <strong>Never called</strong> = older than 7 days with no call ever logged.{" "}
         <strong>Broke callback</strong> = a promised callback time passed over 24 hours ago and was
         never marked done. <strong>Silent reps</strong> = no call logged in 3 days.

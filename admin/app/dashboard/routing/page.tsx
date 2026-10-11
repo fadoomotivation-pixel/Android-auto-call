@@ -35,7 +35,7 @@ export default async function RoutingPage() {
         at the office — one lead each, in turn — and anyone already sitting on a pile of untouched leads
         gets skipped.
       </p>
-      <p className="subtitle" style={{ marginTop: -8, fontSize: 12.5 }}>
+      <p className="subtitle" style={{ marginTop: -8, fontSize: "var(--text-caption1)" }}>
         To see what the waiting is costing you, open <a href="/dashboard/velocity" style={{ color: "var(--accent)" }}>Sales Velocity</a>.
       </p>
       <RoutingBoard isSuper={isSuper} />

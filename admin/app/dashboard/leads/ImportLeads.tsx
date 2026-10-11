@@ -203,7 +203,7 @@ export function ImportLeads({
     outline: "none",
     backdropFilter: "blur(12px)",
   };
-  const thCell: React.CSSProperties = { textAlign: "left", padding: "8px 10px", fontSize: 11, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--muted)", fontWeight: 600 };
+  const thCell: React.CSSProperties = { textAlign: "left", padding: "8px 10px", fontSize: "var(--text-caption2)", letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--muted)", fontWeight: "var(--weight-semibold)" };
   const tdCell: React.CSSProperties = { padding: "7px 10px", color: "var(--text)" };
 
   return (
@@ -260,7 +260,7 @@ export function ImportLeads({
             style={{ border: `2px dashed ${dragging ? "var(--accent)" : "rgba(255,255,255,0.15)"}`, borderRadius: 16, padding: "50px 16px", textAlign: "center", cursor: "pointer", background: dragging ? "rgba(99,102,241,0.08)" : "rgba(255,255,255,0.01)", transition: "all 0.2s" }}
           >
             <div style={{ fontSize: 32, opacity: 0.8 }}>📁</div>
-            <div style={{ fontWeight: 600, marginTop: 8 }}>{fileName ?? "Click to upload"}</div>
+            <div style={{ fontWeight: "var(--weight-semibold)", marginTop: 8 }}>{fileName ?? "Click to upload"}</div>
             <div className="subtitle" style={{ marginTop: 4 }}>Drag &amp; drop or click · .csv, .xlsx, .xls</div>
             <input
               ref={fileRef}
@@ -289,11 +289,11 @@ export function ImportLeads({
           <div style={{ marginTop: 14 }}>
             {/* Stat strip — ready vs skipped, at a glance. */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-              <span style={{ padding: "4px 12px", borderRadius: 999, background: "rgba(16,185,129,0.12)", color: "var(--good)", fontWeight: 700, fontSize: 14 }}>
+              <span style={{ padding: "4px 12px", borderRadius: 999, background: "rgba(16,185,129,0.12)", color: "var(--good)", fontWeight: "var(--weight-bold)", fontSize: "var(--text-subheadline)" }}>
                 ✓ {parsed.length} ready
               </span>
               {skipped > 0 && (
-                <span style={{ padding: "4px 12px", borderRadius: 999, background: "rgba(148,163,184,0.12)", color: "var(--muted)", fontSize: 13 }}>
+                <span style={{ padding: "4px 12px", borderRadius: 999, background: "rgba(148,163,184,0.12)", color: "var(--muted)", fontSize: "var(--text-footnote)" }}>
                   {skipped} skipped (no phone / duplicate)
                 </span>
               )}
@@ -301,9 +301,9 @@ export function ImportLeads({
 
             {/* Which fields we understood — trust signal. */}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-              <span style={{ fontSize: 12, color: "var(--muted)", alignSelf: "center" }}>We read:</span>
+              <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", alignSelf: "center" }}>We read:</span>
               {mappedFields.map((f) => (
-                <span key={f} style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12, background: "rgba(99,102,241,0.12)", color: "var(--accent)", textTransform: "capitalize", fontWeight: 600 }}>
+                <span key={f} style={{ padding: "3px 10px", borderRadius: 999, fontSize: "var(--text-caption1)", background: "rgba(99,102,241,0.12)", color: "var(--accent)", textTransform: "capitalize", fontWeight: "var(--weight-semibold)" }}>
                   {f}
                 </span>
               ))}
@@ -312,7 +312,7 @@ export function ImportLeads({
             {/* Live preview table — the admin SEES exactly what's coming in. */}
             <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
               <div style={{ maxHeight: 220, overflow: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-footnote)" }}>
                   <thead>
                     <tr style={{ position: "sticky", top: 0, background: "rgba(20,20,24,0.98)", backdropFilter: "blur(8px)" }}>
                       <th style={thCell}>#</th>
@@ -338,7 +338,7 @@ export function ImportLeads({
                 </table>
               </div>
               {parsed.length > 50 && (
-                <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--muted)", background: "var(--tint)", borderTop: "1px solid var(--border)" }}>
+                <div style={{ padding: "8px 12px", fontSize: "var(--text-caption1)", color: "var(--muted)", background: "var(--tint)", borderTop: "1px solid var(--border)" }}>
                   Showing first 50 of {parsed.length} — all {parsed.length} will import.
                 </div>
               )}
@@ -371,7 +371,7 @@ export function ImportLeads({
             <p className="subtitle" style={{ marginTop: 4 }}>
               These numbers already exist in your system or appear multiple times in your file.
             </p>
-            <div style={{ marginTop: 8, fontSize: 13, color: "var(--muted)", maxHeight: 80, overflow: "auto" }}>
+            <div style={{ marginTop: 8, fontSize: "var(--text-footnote)", color: "var(--muted)", maxHeight: 80, overflow: "auto" }}>
               {duplicateConflicts.slice(0, 10).map((l, i) => <div key={i}>{l.name || l.phone} ({l.phone})</div>)}
               {duplicateConflicts.length > 10 ? <div>...and {duplicateConflicts.length - 10} more</div> : null}
             </div>
@@ -399,7 +399,7 @@ export function ImportLeads({
                 answers the second one, and was read as answering both. */}
             {companies && companies.length > 0 && (
               <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: targetCompany ? "var(--muted)" : "var(--warn)", minWidth: 132 }}>
+                <span style={{ fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", color: targetCompany ? "var(--muted)" : "var(--warn)", minWidth: 132 }}>
                   Which company? *
                 </span>
                 <select
@@ -423,13 +423,13 @@ export function ImportLeads({
               </div>
             )}
             {needsCompany && (
-              <div style={{ fontSize: 12.5, color: "var(--warn)", marginBottom: 10 }}>
+              <div style={{ fontSize: "var(--text-caption1)", color: "var(--warn)", marginBottom: 10 }}>
                 These {parsed.length} leads need a company before they can import.
                 “Leave unassigned” below only means no rep is given the leads — it does not answer this.
               </div>
             )}
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", paddingBottom: 12 }}>
-              <span style={{ fontSize: 13, color: "var(--muted)", minWidth: 132 }}>Which rep? (optional)</span>
+              <span style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", minWidth: 132 }}>Which rep? (optional)</span>
               {/* A DISABLED CONTROL HAS TO SAY WHY IT IS DISABLED.
                   This greys out until a company is chosen, because only that
                   company's reps may receive its leads. When there is no company
@@ -470,7 +470,7 @@ export function ImportLeads({
             find is indistinguishable from a button that did nothing. */}
         {progress && (
           <div style={{ paddingBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-footnote)", color: "var(--muted)", marginBottom: 6 }}>
               <span>Importing…</span>
               <span>{progress.done} / {progress.total}</span>
             </div>

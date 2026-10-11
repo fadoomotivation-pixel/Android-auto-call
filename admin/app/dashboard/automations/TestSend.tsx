@@ -142,7 +142,7 @@ export function TestSend({
         {preview && (
           <button onClick={() => void run("preview")} disabled={!!busy || blockedPreview}
             style={{
-              fontSize: 13, fontWeight: 600, padding: "7px 15px", borderRadius: 8,
+              fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", padding: "7px 15px", borderRadius: 8,
               border: "1px solid var(--border-strong)", background: "transparent",
               color: blockedPreview ? "var(--muted)" : "#fff",
               cursor: blockedPreview ? "not-allowed" : "pointer", opacity: busy === "preview" ? 0.6 : 1,
@@ -153,7 +153,7 @@ export function TestSend({
         {send && !confirming && (
           <button onClick={() => setConfirming(true)} disabled={!!busy || blockedSend}
             style={{
-              fontSize: 13, fontWeight: 600, padding: "7px 15px", borderRadius: 8,
+              fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", padding: "7px 15px", borderRadius: 8,
               border: "1px solid var(--accent)", background: blockedSend ? "transparent" : "var(--accent)",
               color: blockedSend ? "var(--muted)" : "#fff",
               cursor: blockedSend ? "not-allowed" : "pointer",
@@ -165,21 +165,21 @@ export function TestSend({
           <>
             <button onClick={() => void run("send")} disabled={!!busy}
               style={{
-                fontSize: 13, fontWeight: 700, padding: "7px 15px", borderRadius: 8,
+                fontSize: "var(--text-footnote)", fontWeight: "var(--weight-bold)", padding: "7px 15px", borderRadius: 8,
                 border: "1px solid var(--bad)", background: "var(--bad)", color: "#fff", cursor: "pointer",
               }}>
               {busy === "send" ? "Sending…" : "Yes — send it for real"}
             </button>
             <button onClick={() => setConfirming(false)}
               style={{
-                fontSize: 13, padding: "7px 13px", borderRadius: 8, cursor: "pointer",
+                fontSize: "var(--text-footnote)", padding: "7px 13px", borderRadius: 8, cursor: "pointer",
                 border: "1px solid var(--border-strong)", background: "transparent", color: "var(--muted)",
               }}>
               Cancel
             </button>
           </>
         )}
-        <span style={{ fontSize: 12, color: "var(--muted)", flex: "1 1 240px", minWidth: 0 }}>
+        <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", flex: "1 1 240px", minWidth: 0 }}>
           {blockReason ?? (confirming ? "This goes to a real phone." : note)}
         </span>
       </div>
@@ -187,7 +187,7 @@ export function TestSend({
       {out && (
         <>
           <div style={{
-            marginTop: 10, fontSize: 12.5, padding: "8px 11px", borderRadius: 8,
+            marginTop: 10, fontSize: "var(--text-caption1)", padding: "8px 11px", borderRadius: 8,
             background: out.ok ? "rgba(34,197,94,0.10)" : "rgba(248,113,113,0.10)",
             color: out.ok ? "var(--good)" : "var(--bad)",
           }}>
@@ -195,7 +195,7 @@ export function TestSend({
           </div>
           {out.preview && (
             <pre style={{
-              margin: "9px 0 0", whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.55,
+              margin: "9px 0 0", whiteSpace: "pre-wrap", fontSize: "var(--text-caption1)", lineHeight: 1.55,
               background: "rgba(37,211,102,0.06)", border: "1px solid rgba(37,211,102,0.22)",
               borderRadius: 12, padding: "11px 13px", fontFamily: "inherit",
             }}>{out.preview}</pre>

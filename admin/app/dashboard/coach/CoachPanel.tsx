@@ -34,8 +34,8 @@ export function CoachPanel({ companyId = null }: { companyId?: string | null }) 
         style={{
           width: "100%",
           padding: "16px 24px",
-          fontSize: 16,
-          fontWeight: 700,
+          fontSize: "var(--text-callout)",
+          fontWeight: "var(--weight-bold)",
           letterSpacing: "0.5px",
           background: "linear-gradient(135deg, var(--accent), var(--good))",
           boxShadow: "0 8px 32px rgba(16, 185, 129, 0.4)",
@@ -47,7 +47,7 @@ export function CoachPanel({ companyId = null }: { companyId?: string | null }) 
       >
         {busy ? "Generating…" : "✨ Generate today's digest"}
       </button>
-      {error && <span className="error" style={{ fontSize: 13 }}>{error}</span>}
+      {error && <span className="error" style={{ fontSize: "var(--text-footnote)" }}>{error}</span>}
     </div>
   );
 }

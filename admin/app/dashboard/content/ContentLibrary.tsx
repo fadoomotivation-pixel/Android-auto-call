@@ -50,7 +50,7 @@ const input: React.CSSProperties = {
   background: "var(--tint)", color: "var(--text)", width: "100%", outline: "none",
 };
 const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
-const lbl: React.CSSProperties = { fontSize: 13, color: "var(--muted)", fontWeight: 500 };
+const lbl: React.CSSProperties = { fontSize: "var(--text-footnote)", color: "var(--muted)", fontWeight: "var(--weight-medium)" };
 
 export function ContentLibrary(
   { companyId, assets, isSuper = false }: { companyId: string; assets: Asset[]; isSuper?: boolean },
@@ -250,17 +250,17 @@ export function ContentLibrary(
             accept=".pdf,.txt,image/png,image/jpeg,image/webp,video/mp4,video/quicktime"
             style={{ ...input, padding: "8px 10px" }}
           />
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>
+          <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
             PDF, image or video, up to 50 MB. {file ? `Selected: ${file.name}` : "Or paste a link below instead."}
           </div>
         </div>
 
         {file && isReadable(file) && (
-          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "var(--text)" }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: "var(--text-footnote)", color: "var(--text)" }}>
             <input type="checkbox" checked={teach} onChange={(e) => setTeach(e.target.checked)} style={{ marginTop: 3 }} />
             <span>
               Also teach the AI from this file
-              <div style={{ color: "var(--muted)", fontSize: 12 }}>
+              <div style={{ color: "var(--muted)", fontSize: "var(--text-caption1)" }}>
                 Its text goes into this company&apos;s brain, so the AI Coach can quote it to reps.
                 Scanned PDFs have no text to read.
               </div>
@@ -282,8 +282,8 @@ export function ContentLibrary(
           <label style={lbl}>Description (optional)</label>
           <input style={input} value={form.description} onChange={(e) => set("description", e.target.value)} />
         </div>
-        {err && <div style={{ color: "var(--bad)", fontSize: 13 }}>{err}</div>}
-        {note && <div style={{ color: "var(--warn)", fontSize: 13 }}>{note}</div>}
+        {err && <div style={{ color: "var(--bad)", fontSize: "var(--text-footnote)" }}>{err}</div>}
+        {note && <div style={{ color: "var(--warn)", fontSize: "var(--text-footnote)" }}>{note}</div>}
         <div>
           <button className="primary" onClick={add} disabled={saving}>
             {saving ? (step ?? "Adding…") : "Add to library"}
@@ -298,7 +298,7 @@ export function ContentLibrary(
           : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
+                <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "var(--text-caption1)" }}>
                   <th style={{ padding: "6px 4px" }}>Type</th>
                   <th style={{ padding: "6px 4px" }}>Title</th>
                   <th style={{ padding: "6px 4px" }}>In the AI brain</th>
@@ -314,13 +314,13 @@ export function ContentLibrary(
                     </td>
                     <td style={{ padding: "8px 4px" }}>
                       <a href={a.url} target="_blank" rel="noreferrer" style={{ color: "var(--text)" }}>{a.title}</a>
-                      {a.description && <div style={{ color: "var(--muted)", fontSize: 12 }}>{a.description}</div>}
+                      {a.description && <div style={{ color: "var(--muted)", fontSize: "var(--text-caption1)" }}>{a.description}</div>}
                     </td>
                     {/* Three states, never two. "No" and "we never tried" are
                         different answers to "why doesn't the AI know this?" */}
-                    <td style={{ padding: "8px 4px", fontSize: 13 }}>
+                    <td style={{ padding: "8px 4px", fontSize: "var(--text-footnote)" }}>
                       {a.trained === true
-                        ? <span style={{ color: "var(--good)", fontWeight: 600 }}>🧠 Yes</span>
+                        ? <span style={{ color: "var(--good)", fontWeight: "var(--weight-semibold)" }}>🧠 Yes</span>
                         : a.trained === false
                         ? <span style={{ color: "var(--warn)" }} title="No readable text — likely a scan">No text to read</span>
                         : <span style={{ color: "var(--muted)" }}>—</span>}

@@ -316,15 +316,15 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
   return (
     <section className="card" style={{ padding: "15px 17px", marginBottom: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h3 style={{ margin: 0, fontSize: 16.5 }}>
+        <h3 style={{ margin: 0, fontSize: "var(--text-callout)" }}>
           {DOT[worst]} Automation Health
-          <span style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 400, marginLeft: 9 }}>
+          <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", fontWeight: "var(--weight-regular)", marginLeft: 9 }}>
             {companyId ? companyName : "all companies"}
           </span>
         </h3>
         <button onClick={() => void load()} disabled={busy}
           style={{
-            fontSize: 12, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+            fontSize: "var(--text-caption1)", padding: "5px 12px", borderRadius: 8, cursor: "pointer",
             border: "1px solid var(--border-strong)", background: "transparent", color: "var(--muted)",
           }}>
           {busy ? "Checking…" : "Re-check"}
@@ -332,13 +332,13 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
       </div>
 
       {err && (
-        <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--bad)" }}>
+        <div style={{ marginTop: 10, fontSize: "var(--text-caption1)", color: "var(--bad)" }}>
           Could not read health: {err}
         </div>
       )}
 
       {busy && !db && (
-        <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--muted)" }}>
+        <div style={{ marginTop: 10, fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
           Reading the crons, the queue and the WhatsApp worker…
         </div>
       )}
@@ -348,13 +348,13 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
           <div key={c.label} style={{
             display: "grid", gridTemplateColumns: "22px minmax(140px,168px) 1fr", gap: 10,
             alignItems: "baseline", padding: "8px 0",
-            borderTop: "1px solid var(--border)", fontSize: 13,
+            borderTop: "1px solid var(--border)", fontSize: "var(--text-footnote)",
           }}>
             <span aria-hidden>{DOT[c.level]}</span>
-            <strong style={{ fontWeight: 600 }}>{c.label}</strong>
+            <strong style={{ fontWeight: "var(--weight-semibold)" }}>{c.label}</strong>
             <span style={{
               color: c.level === "bad" ? "var(--bad)" : c.level === "warn" ? "var(--warn)" : "var(--muted)",
-              fontSize: 12.5, lineHeight: 1.5,
+              fontSize: "var(--text-caption1)", lineHeight: 1.5,
             }}>
               {c.reason}
               {c.fix && (
@@ -366,7 +366,7 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
       </div>
 
       {db && (
-        <div style={{ marginTop: 11, fontSize: 11.5, color: "var(--muted)" }}>
+        <div style={{ marginTop: 11, fontSize: "var(--text-caption2)", color: "var(--muted)" }}>
           Checked {istFmt(db.checked_at)}. Crons, queue depth and response codes come from the database;
           the WhatsApp line is a live question put to the worker just now.
         </div>

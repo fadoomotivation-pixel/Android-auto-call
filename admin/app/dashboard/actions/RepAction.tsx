@@ -84,7 +84,7 @@ export function RepAction({
   // An unassigned lead has nobody to remind. Saying so is more useful than a
   // button that fails when pressed — the fix is to assign it, not to retry.
   if (!userId) {
-    return <span style={{ fontSize: 11.5, color: "var(--muted)" }}>unassigned</span>;
+    return <span style={{ fontSize: "var(--text-caption2)", color: "var(--muted)" }}>unassigned</span>;
   }
 
   /** The one sentence every channel starts from, so they cannot disagree. */
@@ -156,7 +156,7 @@ export function RepAction({
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 8, position: "relative" }}>
       {sentAt && (
-        <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", whiteSpace: "nowrap" }}>
           🔔 Last reminded: {agoLabel(sentAt)}
         </span>
       )}
@@ -165,7 +165,7 @@ export function RepAction({
         disabled={state === "busy"}
         title={why ?? "Choose what to do about this lead"}
         style={{
-          fontSize: 11.5, padding: "3px 10px", borderRadius: 8, cursor: "pointer",
+          fontSize: "var(--text-caption2)", padding: "3px 10px", borderRadius: 8, cursor: "pointer",
           border: "1px solid var(--border-strong)",
           background: open ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
           color: state === "error" ? "var(--bad)" : "var(--text)",
@@ -185,7 +185,7 @@ export function RepAction({
             boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
           }}
         >
-          <div style={{ fontSize: 11, color: "var(--muted)", padding: "2px 6px 7px" }}>
+          <div style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", padding: "2px 6px 7px" }}>
             {context}
             {repName ? ` · ${repName}` : ""}
           </div>
@@ -200,7 +200,7 @@ export function RepAction({
               hint="Opens your WhatsApp, message already written"
               onClick={() => { void log("WhatsApp opened to the rep", { via: "whatsapp_rep" }); setOpen(false); }} />
           ) : (
-            <div style={{ padding: "7px 6px", fontSize: 12, color: "var(--muted)" }}>
+            <div style={{ padding: "7px 6px", fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
               💬 WhatsApp the rep —{" "}
               <Link href="/dashboard/automations" style={{ color: "var(--accent)" }}>
                 add their number
@@ -220,7 +220,7 @@ export function RepAction({
             hint="10:30 AM, straight onto the rep's Follow-up tab" />
 
           {why && (
-            <div style={{ fontSize: 11.5, color: "var(--bad)", padding: "6px 6px 2px" }}>{why}</div>
+            <div style={{ fontSize: "var(--text-caption2)", color: "var(--bad)", padding: "6px 6px 2px" }}>{why}</div>
           )}
         </div>
       )}
@@ -237,8 +237,8 @@ function Item({
 }) {
   const inner = (
     <>
-      <span style={{ fontSize: 13 }}>{icon} {label}</span>
-      <span style={{ display: "block", fontSize: 11, color: "var(--muted)", marginTop: 1 }}>{hint}</span>
+      <span style={{ fontSize: "var(--text-footnote)" }}>{icon} {label}</span>
+      <span style={{ display: "block", fontSize: "var(--text-caption2)", color: "var(--muted)", marginTop: 1 }}>{hint}</span>
     </>
   );
   const style: React.CSSProperties = {

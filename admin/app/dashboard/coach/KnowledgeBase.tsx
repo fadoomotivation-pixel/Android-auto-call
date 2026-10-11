@@ -106,8 +106,8 @@ export function KnowledgeBase() {
   return (
     <div style={card}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <strong style={{ fontSize: 16, color: "var(--text)" }}>📚 AI Knowledge base</strong>
-        <span style={{ fontSize: 13, color: "var(--muted)" }}>
+        <strong style={{ fontSize: "var(--text-callout)", color: "var(--text)" }}>📚 AI Knowledge base</strong>
+        <span style={{ fontSize: "var(--text-footnote)", color: "var(--muted)" }}>
           {count === null ? "Counting learned facts…" : `${count} chunk${count === 1 ? "" : "s"} learned`}
         </span>
       </div>
@@ -119,15 +119,15 @@ export function KnowledgeBase() {
           how often the team asked. Answer one and the coach knows it forever. */}
       {gaps.length > 0 && (
         <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.25)" }}>
-          <strong style={{ color: "var(--warn)", fontSize: 14 }}>🧩 Your team asked — the AI didn&apos;t know</strong>
+          <strong style={{ color: "var(--warn)", fontSize: "var(--text-subheadline)" }}>🧩 Your team asked — the AI didn&apos;t know</strong>
           <p className="subtitle" style={{ marginTop: 2 }}>Answer these and the coach will have them forever.</p>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
             {gaps.map((g) => (
               <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 12, background: "var(--tint)", border: "1px solid var(--border)" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--warn)", minWidth: 34 }}>{g.ask_count}×</span>
-                <span style={{ flex: 1, fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.question}</span>
-                <button className="link" style={{ fontSize: 12, color: "var(--good)", fontWeight: 600 }} onClick={() => answerGap(g)}>Answer</button>
-                <button className="link" style={{ fontSize: 12, color: "var(--muted)" }} onClick={() => dismissGap(g.id)}>Dismiss</button>
+                <span style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-bold)", color: "var(--warn)", minWidth: 34 }}>{g.ask_count}×</span>
+                <span style={{ flex: 1, fontSize: "var(--text-footnote)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.question}</span>
+                <button className="link" style={{ fontSize: "var(--text-caption1)", color: "var(--good)", fontWeight: "var(--weight-semibold)" }} onClick={() => answerGap(g)}>Answer</button>
+                <button className="link" style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }} onClick={() => dismissGap(g.id)}>Dismiss</button>
               </div>
             ))}
           </div>
@@ -139,11 +139,11 @@ export function KnowledgeBase() {
         <button
           onClick={learnFromData}
           disabled={syncing}
-          style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(16,185,129,0.35)", background: "rgba(16,185,129,0.10)", color: "var(--good)", fontWeight: 600, cursor: syncing ? "default" : "pointer" }}
+          style={{ padding: "9px 16px", borderRadius: 12, border: "1px solid rgba(16,185,129,0.35)", background: "rgba(16,185,129,0.10)", color: "var(--good)", fontWeight: "var(--weight-semibold)", cursor: syncing ? "default" : "pointer" }}
         >
           {syncing ? "Learning from your data…" : "✨ Learn from my won calls + library"}
         </button>
-        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+        <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
           Auto-builds knowledge from deals that actually closed — no typing.
         </span>
       </div>
@@ -164,19 +164,19 @@ export function KnowledgeBase() {
         <button className="primary" style={{ width: "auto", padding: "9px 18px" }} disabled={busy || !text.trim()} onClick={ingest}>
           {busy ? "Teaching the AI…" : "Add to knowledge"}
         </button>
-        {msg && <span style={{ fontSize: 13, color: msg.startsWith("✓") ? "var(--good)" : "var(--bad)" }}>{msg}</span>}
+        {msg && <span style={{ fontSize: "var(--text-footnote)", color: msg.startsWith("✓") ? "var(--good)" : "var(--bad)" }}>{msg}</span>}
       </div>
 
       {items.length > 0 && (
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 6 }}>
           {items.map((it) => (
             <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 12, background: "var(--tint)", border: "1px solid var(--border)" }}>
-              <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--accent)", background: "rgba(99,102,241,0.12)", padding: "2px 8px", borderRadius: 999 }}>{it.source_kind}</span>
-              <span style={{ flex: 1, fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.title || "Untitled"}</span>
-              <button className="link" style={{ fontSize: 12, color: "var(--bad)" }} onClick={() => remove(it.id)}>Remove</button>
+              <span style={{ fontSize: "var(--text-caption2)", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--accent)", background: "rgba(99,102,241,0.12)", padding: "2px 8px", borderRadius: 999 }}>{it.source_kind}</span>
+              <span style={{ flex: 1, fontSize: "var(--text-footnote)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.title || "Untitled"}</span>
+              <button className="link" style={{ fontSize: "var(--text-caption1)", color: "var(--bad)" }} onClick={() => remove(it.id)}>Remove</button>
             </div>
           ))}
-          {count !== null && count > items.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>Showing latest 20 of {count}.</span>}
+          {count !== null && count > items.length && <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>Showing latest 20 of {count}.</span>}
         </div>
       )}
     </div>

@@ -159,14 +159,14 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
 
   const box: React.CSSProperties = {
     padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-strong)",
-    background: "var(--panel)", color: "var(--text)", fontSize: 13,
+    background: "var(--panel)", color: "var(--text)", fontSize: "var(--text-footnote)",
   };
 
   return (
     <div className="card" style={{ marginBottom: 14 }}>
       <div className="toolbar">
-        <strong style={{ color: "var(--text)", fontSize: 15 }}>Send this to WhatsApp automatically</strong>
-        <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+        <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>Send this to WhatsApp automatically</strong>
+        <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
           {!known
             ? "Checking who gets this report. Not an empty list."
             : subs.length === 0
@@ -201,37 +201,37 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
           <button className="primary" onClick={add} disabled={busy} style={{ background: "#25D366", color: "#032b17" }}>
             {busy ? "Saving…" : "Save"}
           </button>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>Indian numbers: 10 digits is enough, 91 is added for you.</span>
+          <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>Indian numbers: 10 digits is enough, 91 is added for you.</span>
         </div>
       )}
 
       {subs.map((s) => (
         <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-          <span style={{ fontSize: 13, color: "var(--text)" }}>
+          <span style={{ fontSize: "var(--text-footnote)", color: "var(--text)" }}>
             <strong>{s.label}</strong> · {s.phone}
-            <span style={{ color: "var(--muted)", fontSize: 12 }}>
+            <span style={{ color: "var(--muted)", fontSize: "var(--text-caption1)" }}>
               {" "}· {s.salesperson_id ? "own report" : "whole team"}
             </span>
           </span>
           <select value={s.send_hour_ist} onChange={(e) => patch(s.id, { send_hour_ist: Number(e.target.value) })} style={box}>
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
           </select>
-          <label style={{ fontSize: 12.5, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
+          <label style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
             <input type="checkbox" checked={s.active} onChange={(e) => patch(s.id, { active: e.target.checked })} />
             On
           </label>
           <button onClick={() => sendNow(s)} disabled={sendingId === s.id}
-            style={{ fontSize: 12, padding: "5px 12px", borderRadius: 8, border: "none", background: "#25D366", color: "#032b17", fontWeight: 600, cursor: "pointer" }}>
+            style={{ fontSize: "var(--text-caption1)", padding: "5px 12px", borderRadius: 8, border: "none", background: "#25D366", color: "#032b17", fontWeight: "var(--weight-semibold)", cursor: "pointer" }}>
             {sendingId === s.id ? "Sending…" : "Send now"}
           </button>
           <button onClick={() => remove(s.id)}
-            style={{ fontSize: 12, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "transparent", color: "var(--muted)", cursor: "pointer" }}>
+            style={{ fontSize: "var(--text-caption1)", padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "transparent", color: "var(--muted)", cursor: "pointer" }}>
             Remove
           </button>
           {s.last_sent_at && (() => {
             const v = verdict(s.last_status);
             return (
-              <span style={{ fontSize: 12, color: v.color }} title={v.hint}>
+              <span style={{ fontSize: "var(--text-caption1)", color: v.color }} title={v.hint}>
                 {v.label}{" "}
                 {ist(s.last_sent_at)}
               </span>
@@ -243,7 +243,7 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
               out for a week. This line stays amber until WhatsApp itself says
               delivered. */}
           {s.last_status === "accepted" && (
-            <div style={{ flexBasis: "100%", fontSize: 12.5, color: "var(--warn)", lineHeight: 1.5 }}>
+            <div style={{ flexBasis: "100%", fontSize: "var(--text-caption1)", color: "var(--warn)", lineHeight: 1.5 }}>
               WhatsApp took this message but hasn&apos;t confirmed it reached the phone. If it didn&apos;t
               arrive, it&apos;s almost always the 24-hour rule: ask them to send any message to your
               WhatsApp business number, then press Send now again.
@@ -254,20 +254,20 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
               next to the number it happened to, is the difference between a
               feature they fix and one they quietly give up on. */}
           {s.last_status === "queued" && (
-            <div style={{ flexBasis: "100%", fontSize: 12.5, color: "var(--accent)", lineHeight: 1.5 }}>
+            <div style={{ flexBasis: "100%", fontSize: "var(--text-caption1)", color: "var(--accent)", lineHeight: 1.5 }}>
               WhatsApp wasn&apos;t reachable, so this report is being held and retried every few minutes.
               {s.last_error ? ` (${s.last_error})` : ""}
             </div>
           )}
           {s.last_status === "failed" && s.last_error && (
-            <div style={{ flexBasis: "100%", fontSize: 12.5, color: "var(--bad)", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
+            <div style={{ flexBasis: "100%", fontSize: "var(--text-caption1)", color: "var(--bad)", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
               {s.last_error}
             </div>
           )}
         </div>
       ))}
 
-      {msg && <div style={{ marginTop: 10, fontSize: 12.5, color: msg.startsWith("Handed") ? "var(--warn)" : "var(--bad)" }}>{msg}</div>}
+      {msg && <div style={{ marginTop: 10, fontSize: "var(--text-caption1)", color: msg.startsWith("Handed") ? "var(--warn)" : "var(--bad)" }}>{msg}</div>}
     </div>
   );
 }

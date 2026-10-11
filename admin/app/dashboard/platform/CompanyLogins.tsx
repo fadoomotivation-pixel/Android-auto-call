@@ -9,7 +9,7 @@ export type CompanyAdmin = { id: string; full_name: string | null; company_id: s
 const init: ActionResult = { ok: false };
 const btn: React.CSSProperties = {
   padding: "4px 10px", borderRadius: 8, border: "1px solid var(--border)",
-  background: "transparent", color: "inherit", cursor: "pointer", fontSize: 13,
+  background: "transparent", color: "inherit", cursor: "pointer", fontSize: "var(--text-footnote)",
 };
 
 function SetBtn() {
@@ -29,7 +29,7 @@ function AdminReset({ admin }: { admin: CompanyAdmin }) {
     <form action={action} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 0" }}>
       <input type="hidden" name="user_id" value={admin.id} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{admin.full_name || "Admin"}</div>
+        <div style={{ fontWeight: "var(--weight-semibold)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{admin.full_name || "Admin"}</div>
       </div>
       <input
         name="password" value={pw} onChange={(e) => setPw(e.target.value)}
@@ -60,7 +60,7 @@ export default function CompanyLogins({ name, admins }: { name: string; admins: 
             style={{ width: "min(460px, 100%)", maxHeight: "90vh", overflow: "auto", background: "var(--panel, #16181d)", border: "1px solid var(--border)", borderRadius: 16, padding: 22 }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <strong style={{ fontSize: 16 }}>Login · {name}</strong>
+              <strong style={{ fontSize: "var(--text-callout)" }}>Login · {name}</strong>
               <button type="button" onClick={() => setOpen(false)} style={{ ...btn, border: "none" }}>✕</button>
             </div>
             <p className="subtitle" style={{ marginTop: 0, marginBottom: 12 }}>Set a new password for this company&apos;s admin login (min 6 characters).</p>

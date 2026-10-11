@@ -75,7 +75,7 @@ export function RecordingPlayer({ callId, canDelete }: { callId: string; canDele
           Delete
         </button>
       )}
-      {err && <span className="error" style={{ fontSize: 12 }}>{err}</span>}
+      {err && <span className="error" style={{ fontSize: "var(--text-caption1)" }}>{err}</span>}
     </div>
   );
 }

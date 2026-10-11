@@ -217,7 +217,7 @@ export default async function AutomationsPage({
         when it last failed, and exactly where it stopped.
       </p>
       {trackingSince && (
-        <p style={{ fontSize: 12, color: "var(--muted)", margin: "-4px 0 0" }}>
+        <p style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", margin: "-4px 0 0" }}>
           Send history starts {ist(trackingSince)} — messages only began recording which
           automation produced them then. Anything older is real but untagged.
         </p>
@@ -225,14 +225,14 @@ export default async function AutomationsPage({
 
       {isSuper && companyList.length > 0 && (
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", margin: "14px 0 18px" }}>
-          <span style={{ fontSize: 11.5, color: "var(--muted)", marginRight: 2 }}>Showing:</span>
+          <span style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", marginRight: 2 }}>Showing:</span>
           {[{ id: null as string | null, name: "All companies" }, ...companyList].map((c) => {
             const on = scope === c.id;
             return (
               <Link key={c.id ?? "all"}
                 href={c.id ? `/dashboard/automations?company=${c.id}` : "/dashboard/automations"}
                 style={{
-                  padding: on ? "6px 15px" : "5px 12px", borderRadius: 999, fontSize: 12.5,
+                  padding: on ? "6px 15px" : "5px 12px", borderRadius: 999, fontSize: "var(--text-caption1)",
                   textDecoration: "none", fontWeight: on ? 800 : 500,
                   background: on ? "var(--accent)" : "transparent",
                   color: on ? "#fff" : "var(--muted)",
@@ -250,18 +250,18 @@ export default async function AutomationsPage({
           message going out over the unofficial account and costing the number
           that leads reply to. */}
       <section className="card" style={{ padding: "13px 16px", marginBottom: 20 }}>
-        <h3 style={{ margin: "0 0 3px", fontSize: 15.5 }}>🔀 Which number sends what</h3>
-        <p style={{ margin: "0 0 9px", fontSize: 12, color: "var(--muted)" }}>
+        <h3 style={{ margin: "0 0 3px", fontSize: "var(--text-subheadline)" }}>🔀 Which number sends what</h3>
+        <p style={{ margin: "0 0 9px", fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
           No ambiguity, by design. Customer traffic never touches Baileys.
         </p>
         {ROUTING.map((r) => (
           <div key={r.what} style={{
             display: "grid", gridTemplateColumns: "minmax(150px,1fr) minmax(120px,150px) 2fr",
-            gap: 10, alignItems: "baseline", padding: "7px 0", fontSize: 12.5,
+            gap: 10, alignItems: "baseline", padding: "7px 0", fontSize: "var(--text-caption1)",
             borderTop: "1px solid var(--border)",
           }}>
-            <strong style={{ fontWeight: 600 }}>{r.what}</strong>
-            <span style={{ color: TRANSPORT[r.transport].colour, fontWeight: 650, whiteSpace: "nowrap" }}>
+            <strong style={{ fontWeight: "var(--weight-semibold)" }}>{r.what}</strong>
+            <span style={{ color: TRANSPORT[r.transport].colour, fontWeight: "var(--weight-semibold)", whiteSpace: "nowrap" }}>
               → {TRANSPORT[r.transport].short}
             </span>
             <span style={{ color: "var(--muted)" }}>{r.why}</span>
@@ -272,8 +272,8 @@ export default async function AutomationsPage({
       {queued.length > 0 && (
         <div className="card" style={{ padding: "11px 15px", marginBottom: 16,
           border: "1px solid rgba(245,158,11,0.4)", background: "rgba(245,158,11,0.08)" }}>
-          <strong style={{ fontSize: 13.5 }}>⏳ {queued.length} message{queued.length > 1 ? "s" : ""} held in the outbox</strong>
-          <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>
+          <strong style={{ fontSize: "var(--text-footnote)" }}>⏳ {queued.length} message{queued.length > 1 ? "s" : ""} held in the outbox</strong>
+          <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 3 }}>
             WhatsApp was unreachable when these were sent. The drain cron retries every five
             minutes for about two hours, then gives up and records why.
             {queued[0]?.last_error ? ` Last reason: ${queued[0].last_error}` : ""}
@@ -285,11 +285,11 @@ export default async function AutomationsPage({
         const rows = AUTOMATIONS.filter((a) => a.audience === aud);
         return (
           <section key={aud} style={{ marginBottom: 26 }}>
-            <h3 style={{ margin: "22px 0 2px", fontSize: 17 }}>
+            <h3 style={{ margin: "22px 0 2px", fontSize: "var(--text-body)" }}>
               {AUDIENCE_EMOJI[aud]} {AUDIENCE_LABEL[aud]}
-              <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 400 }}> · {rows.length}</span>
+              <span style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", fontWeight: "var(--weight-regular)" }}> · {rows.length}</span>
             </h3>
-            <p className="subtitle" style={{ margin: "0 0 12px", fontSize: 12.5, maxWidth: "72ch" }}>
+            <p className="subtitle" style={{ margin: "0 0 12px", fontSize: "var(--text-caption1)", maxWidth: "72ch" }}>
               {AUDIENCE_NOTE[aud]}
             </p>
 
@@ -314,14 +314,14 @@ export default async function AutomationsPage({
                 <details key={a.id} className="card" style={{ padding: "12px 15px", marginBottom: 9 }}>
                   <summary style={{ cursor: "pointer", listStyle: "none", display: "flex",
                     justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 14.5, fontWeight: 650 }}>
+                    <span style={{ fontSize: "var(--text-subheadline)", fontWeight: "var(--weight-semibold)" }}>
                       {a.name}
                       <span style={{
-                        fontSize: 11, fontWeight: 650, color: t.colour, marginLeft: 9,
+                        fontSize: "var(--text-caption2)", fontWeight: "var(--weight-semibold)", color: t.colour, marginLeft: 9,
                         border: `1px solid ${t.colour}55`, borderRadius: 999, padding: "1px 8px",
                       }}>{t.short}</span>
                     </span>
-                    <span style={{ fontSize: 12, color: current.colour, whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: "var(--text-caption1)", color: current.colour, whiteSpace: "nowrap" }}>
                       {current.text}
                     </span>
                   </summary>
@@ -330,24 +330,24 @@ export default async function AutomationsPage({
                       and how it ended last time. */}
                   <div style={{
                     marginTop: 12, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
-                    fontSize: 12, padding: "9px 11px", borderRadius: 8,
+                    fontSize: "var(--text-caption1)", padding: "9px 11px", borderRadius: 8,
                     background: "var(--tint)", border: "1px solid var(--border)",
                   }}>
                     {a.path.map((step, i) => (
                       <span key={step} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                         {i > 0 && <span style={{ color: "var(--muted)" }}>↓</span>}
-                        <code style={{ fontSize: 11.5 }}>{step}</code>
+                        <code style={{ fontSize: "var(--text-caption2)" }}>{step}</code>
                       </span>
                     ))}
                     <span style={{ color: "var(--muted)" }}>↓</span>
                     <strong style={{
-                      fontSize: 11.5,
+                      fontSize: "var(--text-caption2)",
                       color: a.blind ? "var(--warn)" : current.colour === "var(--bad)" ? "var(--bad)" : "var(--good)",
                     }}>
                       {a.blind ? "NOT RECORDED" : current.colour === "var(--bad)" ? "FAILED" : st.sent ? "Delivered" : "Nothing yet"}
                     </strong>
                     {st.err && (
-                      <span style={{ fontSize: 11.5, color: "var(--bad)", flexBasis: "100%" }}>
+                      <span style={{ fontSize: "var(--text-caption2)", color: "var(--bad)", flexBasis: "100%" }}>
                         Reason: {st.err}
                       </span>
                     )}
@@ -360,7 +360,7 @@ export default async function AutomationsPage({
                       <Field k="Recipient" v={a.recipient} />
                       <Field k="Sender" v={t.label} />
                       <Field k="Function" v={<code>{a.sentBy}</code>} />
-                      <Field k="Template" v={<code style={{ fontSize: 11.5 }}>{a.template}</code>} />
+                      <Field k="Template" v={<code style={{ fontSize: "var(--text-caption2)" }}>{a.template}</code>} />
                       <Field k="Last sent" v={a.blind ? "not recorded anywhere" : ist(st.sent)} />
                       <Field k="Last failed" v={st.fail
                         ? `${ist(st.fail.created_at)} — ${st.err ?? "no reason recorded"}`
@@ -368,7 +368,7 @@ export default async function AutomationsPage({
                       <Field k="Status" v={<span style={{ color: current.colour }}>{current.text}</span>} />
                       {a.livePreview && (
                         <div style={{ marginTop: 8 }}>
-                          <Link href={a.livePreview.href} style={{ fontSize: 12.5 }}>
+                          <Link href={a.livePreview.href} style={{ fontSize: "var(--text-caption1)" }}>
                             {a.livePreview.label} →
                           </Link>
                         </div>
@@ -378,7 +378,7 @@ export default async function AutomationsPage({
                     <div>
                       <Label>Preview</Label>
                       <pre style={{
-                        margin: 0, whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.55,
+                        margin: 0, whiteSpace: "pre-wrap", fontSize: "var(--text-caption1)", lineHeight: 1.55,
                         background: "rgba(37,211,102,0.06)", border: "1px solid rgba(37,211,102,0.22)",
                         borderRadius: 12, padding: "11px 13px", fontFamily: "inherit",
                       }}>{a.preview}</pre>
@@ -391,7 +391,7 @@ export default async function AutomationsPage({
                       {events.map((e, i) => (
                         <div key={`${e.at}-${i}`} style={{
                           display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7,
-                          padding: "6px 0", fontSize: 12,
+                          padding: "6px 0", fontSize: "var(--text-caption1)",
                           borderTop: i ? "1px solid rgba(255,255,255,0.05)" : "none",
                         }}>
                           <span style={{ color: "var(--muted)", minWidth: 96 }}>{ist(e.at)}</span>
@@ -406,11 +406,11 @@ export default async function AutomationsPage({
                               </span>
                             </span>
                           ))}
-                          {e.to && <span style={{ color: "var(--muted)", fontSize: 11.5 }}>· {e.to}</span>}
-                          {e.error && <span style={{ color: "var(--bad)", flexBasis: "100%", fontSize: 11.5 }}>{e.error}</span>}
+                          {e.to && <span style={{ color: "var(--muted)", fontSize: "var(--text-caption2)" }}>· {e.to}</span>}
+                          {e.error && <span style={{ color: "var(--bad)", flexBasis: "100%", fontSize: "var(--text-caption2)" }}>{e.error}</span>}
                         </div>
                       ))}
-                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 5 }}>
+                      <div style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", marginTop: 5 }}>
                         A message that went straight out has one moment, not three — only messages the
                         outbox had to hold record a Queued and a retry.
                       </div>
@@ -418,7 +418,7 @@ export default async function AutomationsPage({
                   )}
 
                   {(a.blind || a.caveat) && (
-                    <div style={{ marginTop: 13, fontSize: 12.5, color: "var(--muted)",
+                    <div style={{ marginTop: 13, fontSize: "var(--text-caption1)", color: "var(--muted)",
                       borderLeft: `3px solid ${a.blind ? "var(--warn)" : "rgba(255,255,255,0.18)"}`,
                       paddingLeft: 11 }}>
                       {a.blind ?? a.caveat}
@@ -433,7 +433,7 @@ export default async function AutomationsPage({
                         alertKind={a.id === "alert-site-visit-fixed" ? "site_visit_fixed" : undefined}
                       />
                     : (
-                      <div style={{ marginTop: 13, fontSize: 12, color: "var(--muted)",
+                      <div style={{ marginTop: 13, fontSize: "var(--text-caption1)", color: "var(--muted)",
                         borderTop: "1px solid var(--border)", paddingTop: 11 }}>
                         No test button on purpose. Firing this would push a real notification to a
                         real person — that is not a test, it is the thing happening.
@@ -450,8 +450,8 @@ export default async function AutomationsPage({
           review reaches telecallers automatically — which makes "why did this
           rep get nothing" the only question worth answering here. */}
       <section style={{ marginTop: 28 }}>
-        <h3 style={{ fontSize: 17 }}>🎧 Telecallers reached by the daily review</h3>
-        <p className="subtitle" style={{ margin: "0 0 10px", fontSize: 12.5, maxWidth: "72ch" }}>
+        <h3 style={{ fontSize: "var(--text-body)" }}>🎧 Telecallers reached by the daily review</h3>
+        <p className="subtitle" style={{ margin: "0 0 10px", fontSize: "var(--text-caption1)", maxWidth: "72ch" }}>
           No subscriber list — every active telecaller with a phone number is enrolled
           automatically, in every company, the day they are created.
           {" "}<strong>{enrolledReps.length} of {reps.length}</strong> are reachable right now.
@@ -476,20 +476,20 @@ export default async function AutomationsPage({
             marginBottom: 12, padding: "11px 14px", borderRadius: 12,
             border: "1px solid rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.07)",
           }}>
-            <strong style={{ fontSize: 13.5 }}>
+            <strong style={{ fontSize: "var(--text-footnote)" }}>
               ➕ {noPhone.length} telecaller{noPhone.length === 1 ? "" : "s"} need a number
             </strong>
-            <div style={{ fontSize: 12, color: "var(--muted)", margin: "3px 0 9px" }}>
+            <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", margin: "3px 0 9px" }}>
               Add it here — nothing else is required to enrol them.
             </div>
             {noPhone.map((r) => (
               <div key={r.salesperson_id} style={{
                 display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
-                padding: "7px 0", fontSize: 13.5,
+                padding: "7px 0", fontSize: "var(--text-footnote)",
                 borderTop: "1px solid var(--border)",
               }}>
                 <strong>{r.full_name ?? "Unnamed"}</strong>
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>{r.company_name}</span>
+                <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>{r.company_name}</span>
                 <span style={{ marginLeft: "auto" }}>
                   <AddPhone salespersonId={r.salesperson_id}
                     name={r.full_name ?? "this telecaller"} current={null} />
@@ -503,16 +503,16 @@ export default async function AutomationsPage({
           ? <div className="empty">No active telecallers in this company.</div>
           : reps.map((r) => (
             <div key={r.salesperson_id} style={{ display: "flex", gap: 12, flexWrap: "wrap",
-              alignItems: "center", padding: "8px 0", fontSize: 13.5,
+              alignItems: "center", padding: "8px 0", fontSize: "var(--text-footnote)",
               borderTop: "1px solid var(--border)" }}>
               <strong>{r.enrolled && r.device_trustworthy ? "✅" : "⚠️"} {r.full_name ?? "Unnamed"}</strong>
-              {!scope && <span style={{ fontSize: 12, color: "var(--muted)" }}>{r.company_name}</span>}
-              <span style={{ color: "var(--muted)", fontSize: 12.5 }}>
+              {!scope && <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>{r.company_name}</span>}
+              <span style={{ color: "var(--muted)", fontSize: "var(--text-caption1)" }}>
                 {r.has_phone ? r.phone : "no phone number"}
               </span>
               <AddPhone salespersonId={r.salesperson_id}
                 name={r.full_name ?? "this telecaller"} current={r.has_phone ? r.phone : null} />
-              <span style={{ fontSize: 12, marginLeft: "auto",
+              <span style={{ fontSize: "var(--text-caption1)", marginLeft: "auto",
                 color: r.enrolled && r.device_trustworthy ? "var(--good)" : "var(--warn)" }}>
                 {!r.enrolled
                   ? (!r.has_phone ? "needs a phone number"
@@ -529,8 +529,8 @@ export default async function AutomationsPage({
           second place to change a phone number. This is the read-only truth of
           who is currently subscribed. */}
       <section style={{ marginTop: 28 }}>
-        <h3 style={{ fontSize: 17 }}>📇 Who is subscribed right now</h3>
-        <p className="subtitle" style={{ margin: "0 0 10px", fontSize: 12.5 }}>
+        <h3 style={{ fontSize: "var(--text-body)" }}>📇 Who is subscribed right now</h3>
+        <p className="subtitle" style={{ margin: "0 0 10px", fontSize: "var(--text-caption1)" }}>
           Managed on <Link href={`/dashboard/pulse${q}`}>Daily Pulse</Link> — shown here so the
           delivery state and the recipient list can be read together.
         </p>
@@ -538,14 +538,14 @@ export default async function AutomationsPage({
           ? <div className="empty">Nobody is subscribed. The reports and alerts go to no one.</div>
           : subRows.map((s) => (
             <div key={s.id} style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center",
-              padding: "9px 0", borderTop: "1px solid var(--border)", fontSize: 13.5 }}>
+              padding: "9px 0", borderTop: "1px solid var(--border)", fontSize: "var(--text-footnote)" }}>
               <strong>{s.salesperson_id ? "👤" : "👑"} {s.label}</strong>
               <span style={{ color: "var(--muted)" }}>{s.phone}</span>
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>
+              <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
                 {s.salesperson_id ? "own report" : "whole team"} · {s.send_hour_ist}:00 IST
                 {!s.salesperson_id && (s.alerts_on ? " · alerts on" : " · alerts off")}
               </span>
-              <span style={{ fontSize: 12, marginLeft: "auto",
+              <span style={{ fontSize: "var(--text-caption1)", marginLeft: "auto",
                 color: !s.active ? "var(--muted)"
                   : s.last_status === "failed" ? "var(--bad)"
                   : s.last_status ? "var(--good)" : "var(--muted)" }}>
@@ -564,14 +564,14 @@ export default async function AutomationsPage({
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em",
+    <div style={{ fontSize: "var(--text-caption2)", textTransform: "uppercase", letterSpacing: ".06em",
       color: "var(--muted)", marginBottom: 5 }}>{children}</div>
   );
 }
 
 function Field({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", gap: 10, fontSize: 12.5, padding: "3px 0" }}>
+    <div style={{ display: "flex", gap: 10, fontSize: "var(--text-caption1)", padding: "3px 0" }}>
       <span style={{ color: "var(--muted)", minWidth: 84, flexShrink: 0 }}>{k}</span>
       <span style={{ minWidth: 0, wordBreak: "break-word" }}>{v}</span>
     </div>

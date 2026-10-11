@@ -60,7 +60,7 @@ export function WhatsAppHealth({ isSuper, companyId }: { isSuper: boolean; compa
 
   const card: CSSProperties = { marginBottom: 16 };
   const pill = (state: string): CSSProperties => ({
-    fontSize: 11, fontWeight: 700, color: TONE[state] ?? "var(--muted)",
+    fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", color: TONE[state] ?? "var(--muted)",
     border: `1px solid ${TONE[state] ?? "var(--border)"}`, borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap",
   });
 
@@ -71,11 +71,11 @@ export function WhatsAppHealth({ isSuper, companyId }: { isSuper: boolean; compa
   return (
     <div className="card" style={card}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <strong style={{ color: "var(--text)", fontSize: 15 }}>Connection check</strong>
+        <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>Connection check</strong>
         {all && (
-          <span style={{ fontSize: 13, color: "var(--muted)" }}>
-            <span style={{ color: "var(--good)", fontWeight: 700 }}>{working} working</span>
-            {broken > 0 && <> · <span style={{ color: "var(--bad)", fontWeight: 700 }}>{broken} broken</span></>}
+          <span style={{ fontSize: "var(--text-footnote)", color: "var(--muted)" }}>
+            <span style={{ color: "var(--good)", fontWeight: "var(--weight-bold)" }}>{working} working</span>
+            {broken > 0 && <> · <span style={{ color: "var(--bad)", fontWeight: "var(--weight-bold)" }}>{broken} broken</span></>}
             {missing > 0 && <> · {missing} not set up</>}
           </span>
         )}
@@ -91,8 +91,8 @@ export function WhatsAppHealth({ isSuper, companyId }: { isSuper: boolean; compa
         <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
           <span style={pill(one.state)}>{LABEL[one.state] ?? one.state}</span>
           <div>
-            <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 600 }}>{one.headline}</div>
-            {one.fix && <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>👉 {one.fix}</div>}
+            <div style={{ color: "var(--text)", fontSize: "var(--text-subheadline)", fontWeight: "var(--weight-semibold)" }}>{one.headline}</div>
+            {one.fix && <div style={{ color: "var(--muted)", fontSize: "var(--text-footnote)", marginTop: 4 }}>👉 {one.fix}</div>}
           </div>
         </div>
       )}
@@ -104,13 +104,13 @@ export function WhatsAppHealth({ isSuper, companyId }: { isSuper: boolean; compa
             <div key={c.company_id} style={{ display: "flex", gap: 10, alignItems: "flex-start", paddingTop: 8, borderTop: "1px solid var(--border)" }}>
               <span style={pill(c.state)}>{LABEL[c.state] ?? c.state}</span>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ color: "var(--text)", fontSize: 13.5, fontWeight: 600 }}>
+                <div style={{ color: "var(--text)", fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)" }}>
                   {c.company_name ?? "Company"}
-                  {c.number && <span style={{ color: "var(--muted)", fontWeight: 400 }}> · {c.number}</span>}
+                  {c.number && <span style={{ color: "var(--muted)", fontWeight: "var(--weight-regular)" }}> · {c.number}</span>}
                 </div>
-                {!c.ok && <div style={{ color: "var(--muted)", fontSize: 12.5, marginTop: 3 }}>{c.headline} {c.fix ? `👉 ${c.fix}` : ""}</div>}
+                {!c.ok && <div style={{ color: "var(--muted)", fontSize: "var(--text-caption1)", marginTop: 3 }}>{c.headline} {c.fix ? `👉 ${c.fix}` : ""}</div>}
               </div>
-              <a href={`/dashboard/whatsapp?company=${c.company_id}`} style={{ fontSize: 12.5, color: "var(--accent)", whiteSpace: "nowrap" }}>Open</a>
+              <a href={`/dashboard/whatsapp?company=${c.company_id}`} style={{ fontSize: "var(--text-caption1)", color: "var(--accent)", whiteSpace: "nowrap" }}>Open</a>
             </div>
           ))}
         </div>

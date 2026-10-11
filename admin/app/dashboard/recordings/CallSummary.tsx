@@ -25,14 +25,14 @@ export function CallSummary({ callId, initial }: { callId: string; initial: stri
   }
 
   if (summary) {
-    return <div style={{ fontSize: 13, whiteSpace: "pre-wrap", maxWidth: 360 }}>{summary}</div>;
+    return <div style={{ fontSize: "var(--text-footnote)", whiteSpace: "pre-wrap", maxWidth: 360 }}>{summary}</div>;
   }
   return (
     <div>
       <button className="link" style={{ color: "var(--accent)" }} onClick={run} disabled={busy}>
         {busy ? "Summarizing…" : "✨ AI summary"}
       </button>
-      {error && <div className="error" style={{ fontSize: 12, marginTop: 4 }}>{error}</div>}
+      {error && <div className="error" style={{ fontSize: "var(--text-caption1)", marginTop: 4 }}>{error}</div>}
     </div>
   );
 }

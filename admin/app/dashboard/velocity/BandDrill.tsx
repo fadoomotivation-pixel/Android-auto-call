@@ -93,32 +93,32 @@ export function BandDrill({
         display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
         padding: "11px 14px", borderBottom: "1px solid var(--border)",
       }}>
-        <strong style={{ fontSize: 14.5 }}>
+        <strong style={{ fontSize: "var(--text-subheadline)" }}>
           {bandLabel(band)}
-          <span style={{ color: "var(--muted)", fontWeight: 400 }}>
+          <span style={{ color: "var(--muted)", fontWeight: "var(--weight-regular)" }}>
             {rows ? ` · ${sorted.length} lead${sorted.length === 1 ? "" : "s"}` : " · loading…"}
           </span>
         </strong>
-        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+        <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
           Oldest first — the one that has waited longest is the one to ring.
         </span>
         <button onClick={onClose} style={{
-          marginLeft: "auto", fontSize: 12, padding: "4px 11px", borderRadius: 8,
+          marginLeft: "auto", fontSize: "var(--text-caption1)", padding: "4px 11px", borderRadius: 8,
           cursor: "pointer", border: "1px solid var(--border-strong)",
           background: "transparent", color: "var(--muted)",
         }}>Close</button>
       </div>
 
-      {err && <div style={{ padding: 14, fontSize: 12.5, color: "var(--bad)" }}>{err}</div>}
+      {err && <div style={{ padding: 14, fontSize: "var(--text-caption1)", color: "var(--bad)" }}>{err}</div>}
       {rows && sorted.length === 0 && (
         <div className="empty" style={{ margin: 14 }}>No leads in this band.</div>
       )}
 
       {sorted.length > 0 && (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-footnote)" }}>
             <thead>
-              <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 11.5 }}>
+              <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "var(--text-caption2)" }}>
                 <th style={th}>Lead</th>
                 <th style={th}>Company</th>
                 <th style={th}>Rep</th>
@@ -135,7 +135,7 @@ export function BandDrill({
                   <tr key={r.lead_id} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={td}>
                       <strong>{r.name || r.phone || "Unnamed"}</strong>
-                      <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)" }}>
+                      <span style={{ display: "block", fontSize: "var(--text-caption2)", color: "var(--muted)" }}>
                         {r.phone ?? "no number"} · {r.status}
                       </span>
                     </td>
@@ -161,7 +161,7 @@ export function BandDrill({
             </tbody>
           </table>
           {sorted.length > 100 && (
-            <div style={{ padding: "9px 14px", fontSize: 12, color: "var(--muted)" }}>
+            <div style={{ padding: "9px 14px", fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
               Showing the 100 oldest of {sorted.length}.
             </div>
           )}
@@ -171,5 +171,5 @@ export function BandDrill({
   );
 }
 
-const th: React.CSSProperties = { padding: "9px 12px", fontWeight: 600 };
+const th: React.CSSProperties = { padding: "9px 12px", fontWeight: "var(--weight-semibold)" };
 const td: React.CSSProperties = { padding: "9px 12px", verticalAlign: "top" };

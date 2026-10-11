@@ -118,26 +118,26 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
   const look = STATUS_LOOK[status] ?? STATUS_LOOK.disconnected;
   const box: React.CSSProperties = {
     padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-strong)",
-    background: "var(--panel)", color: "var(--text)", fontSize: 13,
+    background: "var(--panel)", color: "var(--text)", fontSize: "var(--text-footnote)",
   };
 
   return (
     <div style={{ border: "1px solid var(--border-strong)", borderRadius: 12, padding: 14, marginTop: 14 }}>
-      <strong style={{ color: "var(--text)", fontSize: 14 }}>Founder notifications</strong>
-      <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>
+      <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>Founder notifications</strong>
+      <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>
         Which WhatsApp carries {companyName ? `${companyName}'s` : "this company's"} Daily Pulse to the founder.
         Customers are always messaged on the Cloud API — this setting never touches them.
       </div>
 
       <div style={{ display: "flex", gap: 16, marginTop: 12, flexWrap: "wrap" }}>
         {(["meta", "baileys"] as const).map((p) => (
-          <label key={p} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: 13, cursor: "pointer", maxWidth: 330 }}>
+          <label key={p} style={{ display: "flex", gap: 7, alignItems: "flex-start", fontSize: "var(--text-footnote)", cursor: "pointer", maxWidth: 330 }}>
             <input type="radio" checked={provider === p} disabled={busy} onChange={() => void switchProvider(p)} style={{ marginTop: 3 }} />
             <span>
-              <span style={{ color: "var(--text)", fontWeight: 600 }}>
+              <span style={{ color: "var(--text)", fontWeight: "var(--weight-semibold)" }}>
                 {p === "meta" ? "Meta Cloud API" : "Baileys (Experimental)"}
               </span>
-              <span style={{ display: "block", color: "var(--muted)", fontSize: 12, lineHeight: 1.45 }}>
+              <span style={{ display: "block", color: "var(--muted)", fontSize: "var(--text-caption1)", lineHeight: 1.45 }}>
                 {p === "meta"
                   ? "Official and safe. Needs the founder to message you first, or an approved template."
                   : "Your own WhatsApp account, logged in by QR. No 24-hour rule. Unofficial — use a spare number, not the one leads reply to."}
@@ -160,10 +160,10 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
           </div>
 
           <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 13, color: look.color, fontWeight: 600 }}>● {look.label}</span>
-            {waNumber && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>+{waNumber}</span>}
+            <span style={{ fontSize: "var(--text-footnote)", color: look.color, fontWeight: "var(--weight-semibold)" }}>● {look.label}</span>
+            {waNumber && <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>+{waNumber}</span>}
             {lastSeen && (
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>
+              <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
                 Last seen {new Date(lastSeen).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
               </span>
             )}
@@ -178,7 +178,7 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qr} alt="WhatsApp QR code" width={240} height={240}
                 style={{ borderRadius: 12, background: "#fff", padding: 8 }} />
-              <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6, maxWidth: 380, lineHeight: 1.5 }}>
+              <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 6, maxWidth: 380, lineHeight: 1.5 }}>
                 On the phone: WhatsApp → Settings → Linked devices → Link a device. The code refreshes on
                 its own every few seconds, so scan whatever is on screen.
               </div>
@@ -186,14 +186,14 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
           )}
 
           {err && (
-            <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--bad)", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
+            <div style={{ marginTop: 10, fontSize: "var(--text-caption1)", color: "var(--bad)", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
               {err}
             </div>
           )}
         </div>
       )}
 
-      {msg && <div style={{ marginTop: 10, fontSize: 12.5, color: msg === "Saved." ? "var(--good)" : "var(--bad)" }}>{msg}</div>}
+      {msg && <div style={{ marginTop: 10, fontSize: "var(--text-caption1)", color: msg === "Saved." ? "var(--good)" : "var(--bad)" }}>{msg}</div>}
     </div>
   );
 }

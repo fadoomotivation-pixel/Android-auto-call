@@ -82,8 +82,8 @@ export async function SyncHeartbeat() {
 
   return (
     <section style={{ marginTop: 30 }}>
-      <h3 style={{ fontSize: 17, marginBottom: 2 }}>💓 Sync heartbeat</h3>
-      <p className="subtitle" style={{ margin: "0 0 12px", fontSize: 12.5, maxWidth: "74ch" }}>
+      <h3 style={{ fontSize: "var(--text-body)", marginBottom: 2 }}>💓 Sync heartbeat</h3>
+      <p className="subtitle" style={{ margin: "0 0 12px", fontSize: "var(--text-caption1)", maxWidth: "74ch" }}>
         What each phone reports about itself on every run, including the runs where it did nothing
         and why. Everything above this line is inferred from the calls that <em>arrived</em>; this
         is the only thing that can see the calls that did not.
@@ -100,16 +100,16 @@ export async function SyncHeartbeat() {
           <div key={r.salesperson_id} className="card"
             style={{ padding: "11px 14px", marginBottom: 8 }}>
             <div style={{ display: "flex", gap: 11, flexWrap: "wrap", alignItems: "baseline" }}>
-              <strong style={{ fontSize: 14 }}>{s.dot} {r.full_name ?? "Unnamed"}</strong>
-              <span style={{ fontSize: 12.5, color: r.trustworthy ? "var(--good)" : "var(--bad)" }}>
+              <strong style={{ fontSize: "var(--text-subheadline)" }}>{s.dot} {r.full_name ?? "Unnamed"}</strong>
+              <span style={{ fontSize: "var(--text-caption1)", color: r.trustworthy ? "var(--good)" : "var(--bad)" }}>
                 {s.label}
               </span>
-              <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: "auto" }}>
+              <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginLeft: "auto" }}>
                 last full scan {ist(r.last_ok_at, "never")}
               </span>
             </div>
 
-            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+            <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 4 }}>
               {r.company_name}
               {r.device_model ? ` · ${r.device_model}` : ""}
               {r.app_version ? ` · v${r.app_version}` : ""}
@@ -126,14 +126,14 @@ export async function SyncHeartbeat() {
                 worth saying out loud before the net misses one too. */}
             {r.state === "ok" && (r.native_seen ?? 0) > 0 &&
               (r.backfilled ?? 0) / (r.native_seen ?? 1) > 0.5 && (
-              <div style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 6 }}>
+              <div style={{ fontSize: "var(--text-caption1)", color: "var(--warn)", marginTop: 6 }}>
                 Most of this phone&apos;s calls are arriving late, through the 15-minute safety net
                 rather than as they happen. Live capture is probably not running.
               </div>
             )}
 
             {s.fix && (
-              <div style={{ fontSize: 12.5, marginTop: 6, borderLeft: "3px solid var(--warn)",
+              <div style={{ fontSize: "var(--text-caption1)", marginTop: 6, borderLeft: "3px solid var(--warn)",
                 paddingLeft: 10, color: "var(--muted)" }}>
                 {s.fix}
                 {r.detail ? <div style={{ marginTop: 3, opacity: 0.75 }}>{r.detail}</div> : null}

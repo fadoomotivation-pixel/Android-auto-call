@@ -72,7 +72,7 @@ function Block({
     return (
       <section id={id} className="card"
         style={{ padding: "11px 16px", marginBottom: 10, scrollMarginTop: 16, opacity: 0.72 }}>
-        <span style={{ fontSize: 13.5 }}>
+        <span style={{ fontSize: "var(--text-footnote)" }}>
           ✅ {clear ?? `No ${title.toLowerCase()} today`}
         </span>
       </section>
@@ -81,14 +81,14 @@ function Block({
   return (
     <section id={id} className="card" style={{ padding: 16, marginBottom: 16, scrollMarginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <h3 style={{ margin: 0, fontSize: 16 }}>{emoji} {title}</h3>
+        <h3 style={{ margin: 0, fontSize: "var(--text-callout)" }}>{emoji} {title}</h3>
         <span style={{
-          fontSize: 13, fontWeight: 700, color: tone,
+          fontSize: "var(--text-footnote)", fontWeight: "var(--weight-bold)", color: tone,
           background: `color-mix(in srgb, ${tone} 15%, transparent)`,
           borderRadius: 999, padding: "1px 9px",
         }}>{count}</span>
       </div>
-      <p className="subtitle" style={{ margin: "4px 0 12px", fontSize: 12.5 }}>{blurb}</p>
+      <p className="subtitle" style={{ margin: "4px 0 12px", fontSize: "var(--text-caption1)" }}>{blurb}</p>
       {children}
     </section>
   );
@@ -99,9 +99,9 @@ function GroupHead({ label, n, color }: { label: string; n: number; color: strin
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 7, marginTop: 12, marginBottom: 2,
-      fontSize: 12, fontWeight: 700, color,
+      fontSize: "var(--text-caption1)", fontWeight: "var(--weight-bold)", color,
     }}>
-      {label} <span style={{ opacity: 0.7, fontWeight: 600 }}>({n})</span>
+      {label} <span style={{ opacity: 0.7, fontWeight: "var(--weight-semibold)" }}>({n})</span>
     </div>
   );
 }
@@ -112,7 +112,7 @@ function Row({ left, why, right, href, action }: {
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
-      padding: "9px 0", borderTop: "1px solid var(--border)", fontSize: 13.5,
+      padding: "9px 0", borderTop: "1px solid var(--border)", fontSize: "var(--text-footnote)",
     }}>
       {/* The action sits OUTSIDE the link. A button inside an anchor is a row
           you cannot press without also navigating away from it. */}
@@ -123,13 +123,13 @@ function Row({ left, why, right, href, action }: {
         {/* Why this row is in the queue at all. Without it the manager has to
             open the lead just to find out what the app is worried about, which
             is the navigation this page exists to remove. */}
-        <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", marginTop: 1 }}>
+        <span style={{ display: "block", fontSize: "var(--text-caption2)", color: "var(--muted)", marginTop: 1 }}>
           {why}
         </span>
       </Link>
-      <span style={{ color: "var(--muted)", fontSize: 12.5, whiteSpace: "nowrap" }}>{right}</span>
+      <span style={{ color: "var(--muted)", fontSize: "var(--text-caption1)", whiteSpace: "nowrap" }}>{right}</span>
       {action}
-      <Link href={href} style={{ textDecoration: "none", color: "var(--muted)", fontSize: 12.5 }}>→</Link>
+      <Link href={href} style={{ textDecoration: "none", color: "var(--muted)", fontSize: "var(--text-caption1)" }}>→</Link>
     </div>
   );
 }
@@ -305,7 +305,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
           or only Fanbe?" must never need a second look. */}
       {isSuper && companyList.length > 0 && (
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", margin: "12px 0 18px" }}>
-          <span style={{ fontSize: 11.5, color: "var(--muted)", marginRight: 2 }}>Showing:</span>
+          <span style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", marginRight: 2 }}>Showing:</span>
           {[{ id: null as string | null, name: "All companies" }, ...companyList].map((c) => {
             const on = scope === c.id;
             return (
@@ -314,7 +314,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
                 href={c.id ? `/dashboard/actions?company=${c.id}` : "/dashboard/actions"}
                 style={{
                   padding: on ? "6px 15px" : "5px 12px",
-                  borderRadius: 999, fontSize: 12.5, textDecoration: "none",
+                  borderRadius: 999, fontSize: "var(--text-caption1)", textDecoration: "none",
                   fontWeight: on ? 800 : 500,
                   background: on ? "var(--accent)" : "transparent",
                   color: on ? "#fff" : "var(--muted)",
@@ -349,7 +349,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
           <Row key={v.contact_id} href={`/dashboard/leads?q=${encodeURIComponent(v.phone ?? "")}`}
             left={<><strong>{v.name || v.phone}</strong>{v.telecaller ? ` · ${v.telecaller}` : " · unassigned"}</>}
             why={`Asked ${v.times_asked}× and still no answer · ${v.days_waiting ?? 0} days since the visit`}
-            right={<span style={{ color: severity(v.days_waiting ?? 0).color, fontWeight: 700 }}>
+            right={<span style={{ color: severity(v.days_waiting ?? 0).color, fontWeight: "var(--weight-bold)" }}>
               {severity(v.days_waiting ?? 0).dot} {v.days_waiting ?? daysAgo(v.visit_at)}d
             </span>}
             action={<RepAction userId={v.salesperson_id} contactId={v.contact_id}
@@ -372,7 +372,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
           <Row key={v.contact_id} href={`/dashboard/leads?q=${encodeURIComponent(v.phone ?? "")}`}
             left={<><strong>{v.name || v.phone}</strong>{v.telecaller ? ` · ${v.telecaller}` : " · unassigned"}</>}
             why={`${v.days_waiting ?? 0} days since the site visit, outcome still not recorded`}
-            right={<span style={{ color: severity(v.days_waiting ?? 0).color, fontWeight: 700 }}>
+            right={<span style={{ color: severity(v.days_waiting ?? 0).color, fontWeight: "var(--weight-bold)" }}>
               {severity(v.days_waiting ?? 0).dot} {v.days_waiting ?? 0}d
             </span>}
             action={<RepAction userId={v.salesperson_id} contactId={v.contact_id}
@@ -396,7 +396,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
               <Row key={f.id} href={`/dashboard/leads?q=${encodeURIComponent(f.phone ?? "")}`}
                 left={<><strong>{f.name || f.phone}</strong>{f.note ? ` · ${f.note}` : ""}</>}
                 why={`Callback was promised for ${ist(f.due_at)} and has not been made`}
-                right={<span style={{ color: g.color, fontWeight: 700 }}>overdue</span>}
+                right={<span style={{ color: g.color, fontWeight: "var(--weight-bold)" }}>overdue</span>}
                 action={<RepAction userId={f.salesperson_id} contactId={f.contact_id}
                   companyId={scope} kind="follow_up" lastRemindedAt={remindedAt(f.contact_id, "follow_up")}
                   title="Callback is overdue"
@@ -406,7 +406,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
                   companyName={companyNameOf(f.salesperson_id)} delayDays={daysAgo(f.due_at)} />} />
             ))}
             {g.rows.length > 10 && (
-              <div style={{ fontSize: 12, color: "var(--muted)", padding: "7px 0 0" }}>
+              <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", padding: "7px 0 0" }}>
                 +{g.rows.length - 10} more in this group
               </div>
             )}
@@ -448,7 +448,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
           <Row key={g.salesperson_id} href={`/dashboard/integrity${q}`}
             left={<>
               <strong>{g.full_name || "Telecaller"}</strong>
-              <span style={{ display: "block", marginTop: 3, fontSize: 12, lineHeight: 1.7 }}>
+              <span style={{ display: "block", marginTop: 3, fontSize: "var(--text-caption1)", lineHeight: 1.7 }}>
                 {g.no_next_step > 0 && (
                   <span style={{ color: "var(--bad)", marginRight: 12 }}>🔴 {g.no_next_step} missing next call</span>
                 )}

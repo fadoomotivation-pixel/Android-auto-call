@@ -8,7 +8,7 @@ const init: ActionResult = { ok: false };
 
 const btn: React.CSSProperties = {
   padding: "4px 10px", borderRadius: 8, border: "1px solid var(--border)",
-  background: "transparent", color: "inherit", cursor: "pointer", fontSize: 13,
+  background: "transparent", color: "inherit", cursor: "pointer", fontSize: "var(--text-footnote)",
 };
 
 /** Super-admin per-company actions: rename or delete (with its data). */

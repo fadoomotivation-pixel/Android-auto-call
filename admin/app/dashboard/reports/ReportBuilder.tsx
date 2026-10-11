@@ -179,7 +179,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
       {/* Controls (hidden during print) */}
       <div className="no-print card" style={{ display: "flex", gap: 16, alignItems: "flex-end", marginBottom: 24 }}>
         <div style={{ flex: 1 }}>
-          <label style={{ display: "block", marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Report Type</label>
+          <label style={{ display: "block", marginBottom: 6, fontSize: "var(--text-footnote)", fontWeight: "var(--weight-medium)" }}>Report Type</label>
           <select 
             value={reportType} 
             onChange={e => setReportType(e.target.value)}
@@ -192,7 +192,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
         </div>
         
         <div style={{ flex: 1 }}>
-          <label style={{ display: "block", marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Date Range</label>
+          <label style={{ display: "block", marginBottom: 6, fontSize: "var(--text-footnote)", fontWeight: "var(--weight-medium)" }}>Date Range</label>
           <select 
             value={dateRange} 
             onChange={e => setDateRange(e.target.value)}
@@ -208,7 +208,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
         <button 
           onClick={generateReport}
           disabled={loading}
-          style={{ background: "var(--primary)", color: "white", padding: "10px 16px", borderRadius: 8, border: "none", fontWeight: 600, cursor: "pointer" }}
+          style={{ background: "var(--primary)", color: "white", padding: "10px 16px", borderRadius: 8, border: "none", fontWeight: "var(--weight-semibold)", cursor: "pointer" }}
         >
           {loading ? "Generating..." : "Generate Report"}
         </button>
@@ -235,7 +235,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
             </div>
           </div>
           
-          <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 16 }}>
+          <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", marginBottom: 16 }}>
             {reportType !== "pipeline" && `Date Range: ${dateRange.replace("_", " ")}`}
           </div>
 

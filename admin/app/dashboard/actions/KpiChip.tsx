@@ -43,11 +43,11 @@ export function KpiChip({
         transition: "background 140ms ease, border-color 140ms ease",
       }}
     >
-      <div style={{ fontSize: 26, fontWeight: 800, color: live ? tone : "var(--muted)", lineHeight: 1.1 }}>
+      <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", color: live ? tone : "var(--muted)", lineHeight: 1.1 }}>
         {n}
       </div>
-      <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{label}</div>
-      {hint && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3, opacity: 0.85 }}>{hint}</div>}
+      <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 2 }}>{label}</div>
+      {hint && <div style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", marginTop: 3, opacity: 0.85 }}>{hint}</div>}
     </a>
   );
 }

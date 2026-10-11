@@ -65,7 +65,7 @@ export function AutoRescue() {
 
   return (
     <div style={card}>
-      <strong style={{ color: "var(--text)", fontSize: 15 }}>💬 Auto First-Reply</strong>
+      <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>💬 Auto First-Reply</strong>
       <p className="subtitle" style={{ margin: "2px 0 8px" }}>
         A buyer fills three or four forms — whoever replies first usually wins. If nobody has called a lead by
         your limit, this sends <strong>one short WhatsApp in that telecaller&apos;s own name</strong> so the customer
@@ -83,26 +83,26 @@ export function AutoRescue() {
         const on = !!p?.enabled;
         return (
           <div key={c.id} style={row}>
-            <span style={{ color: "var(--text)", fontWeight: 600, minWidth: 150 }}>{c.name ?? "Company"}</span>
+            <span style={{ color: "var(--text)", fontWeight: "var(--weight-semibold)", minWidth: 150 }}>{c.name ?? "Company"}</span>
             <button
               onClick={() => save(c.id, { enabled: !on })}
               disabled={busy === c.id}
-              style={{ padding: "6px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontWeight: 700,
+              style={{ padding: "6px 14px", borderRadius: 999, cursor: "pointer", fontSize: "var(--text-caption1)", fontWeight: "var(--weight-bold)",
                 border: `1px solid ${on ? "var(--good)" : "var(--border)"}`,
                 background: on ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.03)",
                 color: on ? "var(--good)" : "var(--muted)" }}>
               {busy === c.id ? "…" : on ? "ON" : "OFF"}
             </button>
-            <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Reply if uncalled after</span>
+            <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>Reply if uncalled after</span>
             <select
               value={p?.reassign_after_min ?? 120}
               onChange={(e) => save(c.id, { reassign_after_min: Number(e.target.value) })}
-              style={{ width: "auto", padding: "6px 10px", fontSize: 12.5 }}>
+              style={{ width: "auto", padding: "6px 10px", fontSize: "var(--text-caption1)" }}>
               {[30, 60, 120, 240, 480].map((m) => (
                 <option key={m} value={m}>{m < 60 ? `${m} min` : `${m / 60} hr`}</option>
               ))}
             </select>
-            <label style={{ fontSize: 12.5, color: "var(--muted)", display: "inline-flex", gap: 6, alignItems: "center" }}>
+            <label style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", display: "inline-flex", gap: 6, alignItems: "center" }}>
               <input type="checkbox" checked={p?.notify_admin ?? true}
                 onChange={(e) => save(c.id, { notify_admin: e.target.checked })}
                 style={{ width: "auto" }} />
@@ -113,22 +113,22 @@ export function AutoRescue() {
       })}
 
       <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <div style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           What it did
         </div>
         {events.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
+          <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", marginTop: 8 }}>
             Nothing yet — it only replies to leads that pass your limit while it&apos;s switched on.
           </div>
         ) : (
           <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
             {events.map((e) => (
-              <div key={e.id} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 13 }}>
-                <span style={{ color: e.action === "holding_reply" ? "var(--good)" : e.action === "skipped" ? "var(--warn)" : "var(--muted)", fontWeight: 600, minWidth: 96 }}>
+              <div key={e.id} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: "var(--text-footnote)" }}>
+                <span style={{ color: e.action === "holding_reply" ? "var(--good)" : e.action === "skipped" ? "var(--warn)" : "var(--muted)", fontWeight: "var(--weight-semibold)", minWidth: 96 }}>
                   {e.action.replace("_", " ")}
                 </span>
                 <span style={{ color: "var(--text)" }}>{e.detail}</span>
-                <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 12, whiteSpace: "nowrap" }}>
+                <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: "var(--text-caption1)", whiteSpace: "nowrap" }}>
                   {ist(e.created_at)}
                 </span>
               </div>

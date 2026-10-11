@@ -108,7 +108,7 @@ export default function LoginPage() {
                 border: "none",
                 cursor: "pointer",
                 color: "var(--muted)",
-                fontSize: 16,
+                fontSize: "var(--text-callout)",
                 padding: 4,
                 lineHeight: 1,
               }}
@@ -123,7 +123,7 @@ export default function LoginPage() {
         </button>
 
         {error && <div className="error">{error}</div>}
-        {notice && <div style={{ color: "var(--good)", fontSize: 13, marginTop: 12 }}>{notice}</div>}
+        {notice && <div style={{ color: "var(--good)", fontSize: "var(--text-footnote)", marginTop: 12 }}>{notice}</div>}
 
         <div style={{ marginTop: 16, textAlign: "center" }}>
           {mode === "signin" ? (

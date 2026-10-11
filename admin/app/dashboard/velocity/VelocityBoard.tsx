@@ -75,14 +75,14 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
   const maxAdv = Math.max(1, ...(data?.buckets ?? []).map((b) => b.advance_pct));
 
   const card: CSSProperties = { background: "var(--panel-grad, var(--panel))", border: "1px solid var(--border)", borderRadius: 16, padding: 22 };
-  const th: CSSProperties = { textAlign: "right", padding: "8px 10px", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--muted)", whiteSpace: "nowrap" };
-  const td: CSSProperties = { textAlign: "right", padding: "9px 10px", fontSize: 13, whiteSpace: "nowrap" };
+  const th: CSSProperties = { textAlign: "right", padding: "8px 10px", fontSize: "var(--text-caption2)", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--muted)", whiteSpace: "nowrap" };
+  const td: CSSProperties = { textAlign: "right", padding: "9px 10px", fontSize: "var(--text-footnote)", whiteSpace: "nowrap" };
 
   function table(title: string, rows: GroupRow[], label: string) {
     if (rows.length === 0) return null;
     return (
       <div style={card}>
-        <strong style={{ color: "var(--text)", fontSize: 15 }}>{title}</strong>
+        <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>{title}</strong>
         <div style={{ overflowX: "auto", marginTop: 12 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
             <thead>
@@ -105,7 +105,7 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
                   <td style={{ ...td, color: r.never_pct >= 40 ? "var(--bad)" : r.never_pct >= 15 ? "var(--warn)" : "var(--muted)" }}>
                     {r.never_called} <span style={{ opacity: 0.6 }}>({r.never_pct}%)</span>
                   </td>
-                  <td style={{ ...td, fontWeight: 600, color: r.advance_pct >= 15 ? "var(--good)" : undefined }}>{r.advance_pct}%</td>
+                  <td style={{ ...td, fontWeight: "var(--weight-semibold)", color: r.advance_pct >= 15 ? "var(--good)" : undefined }}>{r.advance_pct}%</td>
                 </tr>
               ))}
             </tbody>
@@ -121,7 +121,7 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         {DAYS.map((d) => (
           <button key={d} onClick={() => setDays(d)}
-            style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: 13,
+            style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: "var(--text-footnote)",
               border: `1px solid ${days === d ? "var(--accent)" : "var(--border)"}`,
               background: days === d ? "var(--accent)" : "rgba(255,255,255,0.03)",
               color: days === d ? "#fff" : "var(--text)" }}>
@@ -129,10 +129,10 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
           </button>
         ))}
         <span style={{ display: "inline-flex", gap: 6, alignItems: "center", marginLeft: "auto" }}>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>Cost per lead ₹</span>
+          <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>Cost per lead ₹</span>
           <input value={cpl} onChange={(e) => setCpl(e.target.value.replace(/[^0-9]/g, ""))}
             onBlur={() => void load(days, Number(cpl))} placeholder="e.g. 350"
-            style={{ width: 90, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", fontSize: 13 }} />
+            style={{ width: 90, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", fontSize: "var(--text-footnote)" }} />
         </span>
       </div>
 
@@ -162,7 +162,7 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
 
           {/* The proof */}
           <div style={card}>
-            <strong style={{ color: "var(--text)", fontSize: 15 }}>⏱️ Speed decides the sale</strong>
+            <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>⏱️ Speed decides the sale</strong>
             <p className="subtitle" style={{ margin: "2px 0 14px" }}>
               Your own leads, grouped by how fast the first call went out. &ldquo;Advance&rdquo; = the lead reached
               Interested, Site&nbsp;Visit or Booking.
@@ -188,17 +188,17 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
                     background: isOpen ? "rgba(255,255,255,0.05)" : "transparent",
                     borderRadius: 8, padding: "2px 6px", margin: "0 -6px",
                   }}>
-                  <div style={{ width: 110, fontSize: 13, color: "var(--text)" }}>{b.label}</div>
+                  <div style={{ width: 110, fontSize: "var(--text-footnote)", color: "var(--text)" }}>{b.label}</div>
                   <div style={{ flex: 1, height: 22, background: "var(--tint)", borderRadius: 999, overflow: "hidden" }}>
                     <div style={{ width: `${Math.max(2, (b.advance_pct / maxAdv) * 100)}%`, height: "100%", borderRadius: 999,
                       background: "linear-gradient(90deg, var(--accent), var(--accent))" }} />
                   </div>
-                  <div style={{ width: 62, textAlign: "right", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{b.advance_pct}%</div>
-                  <div style={{ width: 74, textAlign: "right", fontSize: 12, color: "var(--muted)" }}>{b.leads} leads</div>
+                  <div style={{ width: 62, textAlign: "right", fontSize: "var(--text-footnote)", fontWeight: "var(--weight-bold)", color: "var(--text)" }}>{b.advance_pct}%</div>
+                  <div style={{ width: 74, textAlign: "right", fontSize: "var(--text-caption1)", color: "var(--muted)" }}>{b.leads} leads</div>
                 </div>
               );})}
             </div>
-            <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10 }}>
+            <div style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", marginTop: 10 }}>
               Click any band to see the leads in it.
             </div>
             {band && <BandDrill band={band} days={days} onClose={() => setBand(null)} />}
@@ -207,12 +207,12 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
           {/* AI verdict */}
           {data.verdict?.verdict && (
             <div style={{ ...card, background: "rgba(99,102,241,0.06)", border: "1px solid rgba(99,102,241,0.28)" }}>
-              <strong style={{ color: "var(--text)", fontSize: 15 }}>🧠 What this costs you — and the fix</strong>
-              <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text)", margin: "10px 0 4px", letterSpacing: "-0.01em" }}>
+              <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>🧠 What this costs you — and the fix</strong>
+              <div style={{ fontSize: "var(--text-callout)", fontWeight: "var(--weight-semibold)", color: "var(--text)", margin: "10px 0 4px", letterSpacing: "-0.01em" }}>
                 {data.verdict.verdict}
               </div>
               {data.verdict.one_number && (
-                <div style={{ display: "inline-block", marginTop: 6, fontSize: 12.5, fontWeight: 700, color: "var(--accent)",
+                <div style={{ display: "inline-block", marginTop: 6, fontSize: "var(--text-caption1)", fontWeight: "var(--weight-bold)", color: "var(--accent)",
                   border: "1px solid rgba(10,132,255,0.5)", borderRadius: 999, padding: "3px 12px" }}>
                   🎯 {data.verdict.one_number}
                 </div>
@@ -220,9 +220,9 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
                 {(data.verdict.moves ?? []).map((m, i) => (
                   <div key={i} style={{ background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px" }}>
-                    <strong style={{ color: "var(--text)", fontSize: 14 }}>{i + 1}. {m.title}</strong>
-                    {m.why && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 5 }}>{m.why}</div>}
-                    {m.how && <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 5 }}>👉 {m.how}</div>}
+                    <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>{i + 1}. {m.title}</strong>
+                    {m.why && <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", marginTop: 5 }}>{m.why}</div>}
+                    {m.how && <div style={{ fontSize: "var(--text-footnote)", color: "var(--text)", marginTop: 5 }}>👉 {m.how}</div>}
                   </div>
                 ))}
               </div>
@@ -235,7 +235,7 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
           {/* The leak list */}
           {(data.leak_list ?? []).length > 0 && (
             <div style={{ ...card, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.04)" }}>
-              <strong style={{ color: "var(--text)", fontSize: 15 }}>🩸 Paid for, never called</strong>
+              <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>🩸 Paid for, never called</strong>
               <p className="subtitle" style={{ margin: "2px 0 12px" }}>
                 Oldest untouched leads — every one of these cost money to acquire and has never had a single call.
               </p>
@@ -251,11 +251,11 @@ export function VelocityBoard({ isSuper }: { isSuper: boolean }) {
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {(data.leak_list ?? []).map((l, i) => (
-                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, padding: "7px 0", borderTop: i ? "1px solid rgba(255,255,255,0.05)" : undefined }}>
-                    <span style={{ color: "var(--bad)", fontWeight: 600, width: 74 }}>{l.age_hours >= 48 ? `${Math.round(l.age_hours / 24)}d old` : `${l.age_hours}h old`}</span>
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: "var(--text-footnote)", padding: "7px 0", borderTop: i ? "1px solid rgba(255,255,255,0.05)" : undefined }}>
+                    <span style={{ color: "var(--bad)", fontWeight: "var(--weight-semibold)", width: 74 }}>{l.age_hours >= 48 ? `${Math.round(l.age_hours / 24)}d old` : `${l.age_hours}h old`}</span>
                     <span style={{ color: "var(--text)" }}>{l.company ?? "—"}</span>
                     <span style={{ color: "var(--muted)" }}>· {l.name ?? "unassigned"}</span>
-                    <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 12 }}>{l.source}</span>
+                    <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: "var(--text-caption1)" }}>{l.source}</span>
                   </div>
                 ))}
               </div>
@@ -285,9 +285,9 @@ function Tile({ label, value, tone, sub, onClick, active }: {
         borderRadius: 12, padding: "16px 18px",
         cursor: onClick ? "pointer" : "default",
       }}>
-      <div style={{ color: tone, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
-      <div style={{ color: tone, fontSize: 26, fontWeight: 800, marginTop: 6 }}>{value}</div>
-      {sub && <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>{sub}</div>}
+      <div style={{ color: tone, fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+      <div style={{ color: tone, fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", marginTop: 6 }}>{value}</div>
+      {sub && <div style={{ color: "var(--muted)", fontSize: "var(--text-caption1)", marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }

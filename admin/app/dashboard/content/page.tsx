@@ -79,7 +79,7 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
         <div className="card" style={{ marginTop: 20 }}>
           <h3 style={{ marginTop: 0 }}>
             Shares &amp; opens{" "}
-            <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: 14 }}>
+            <span style={{ color: "var(--muted)", fontWeight: "var(--weight-regular)", fontSize: "var(--text-subheadline)" }}>
               ({openedCount} of {sharesList.length} opened)
             </span>
           </h3>
@@ -88,7 +88,7 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
             : (
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
+                  <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "var(--text-caption1)" }}>
                     <th style={{ padding: "6px 4px" }}>Content</th>
                     <th style={{ padding: "6px 4px" }}>Sent to</th>
                     <th style={{ padding: "6px 4px" }}>Sent</th>
@@ -103,7 +103,7 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
                       <td style={{ padding: "8px 4px", color: "var(--muted)" }}>{fmt(s.sent_at)}</td>
                       <td style={{ padding: "8px 4px" }}>
                         {s.opened_at
-                          ? <span style={{ color: "var(--good)", fontWeight: 600 }}>✅ {fmt(s.opened_at)}{s.open_count > 1 ? ` (${s.open_count}×)` : ""}</span>
+                          ? <span style={{ color: "var(--good)", fontWeight: "var(--weight-semibold)" }}>✅ {fmt(s.opened_at)}{s.open_count > 1 ? ` (${s.open_count}×)` : ""}</span>
                           : <span style={{ color: "var(--muted)" }}>Not yet</span>}
                       </td>
                     </tr>

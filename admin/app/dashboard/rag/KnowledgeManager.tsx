@@ -178,12 +178,12 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
 
   const wrap: CSSProperties = { marginTop: 20, background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 16, padding: 20 };
   const row: CSSProperties = { display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid var(--border)" };
-  const tag: CSSProperties = { fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "var(--tint)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" };
+  const tag: CSSProperties = { fontSize: "var(--text-caption2)", padding: "2px 8px", borderRadius: 999, background: "var(--tint)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" };
 
   if (!open) {
     return (
       <div style={wrap}>
-        <strong style={{ fontSize: 16, color: "var(--text)" }}>🗂️ Trained knowledge</strong>
+        <strong style={{ fontSize: "var(--text-callout)", color: "var(--text)" }}>🗂️ Trained knowledge</strong>
         <p className="subtitle" style={{ marginTop: 2 }}>
           The full list is large. It stays closed so this page can open on the health table.
           Nothing here has been counted as empty.
@@ -198,8 +198,8 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
   return (
     <div style={wrap}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <strong style={{ fontSize: 16, color: "var(--text)" }}>🗂️ Trained knowledge</strong>
-        <button onClick={load} style={{ fontSize: 13 }}>Refresh</button>
+        <strong style={{ fontSize: "var(--text-callout)", color: "var(--text)" }}>🗂️ Trained knowledge</strong>
+        <button onClick={load} style={{ fontSize: "var(--text-footnote)" }}>Refresh</button>
       </div>
       <p className="subtitle" style={{ marginTop: 2 }}>
         Everything the AI has learned, grouped by source. Open a source to fix a wrong fact, or delete
@@ -235,22 +235,22 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
                       border: "none", padding: 0, cursor: "pointer", color: "inherit",
                     }}
                   >
-                    <div style={{ color: "var(--text)", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div style={{ color: "var(--text)", fontWeight: "var(--weight-semibold)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       <span style={{ color: "var(--muted)", marginRight: 6 }}>{isOpen ? "▾" : "▸"}</span>
                       {g.title}
                     </div>
                     <div style={{ display: "flex", gap: 8, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}>
                       <span style={tag}>{KIND_LABEL[g.kind] ?? g.kind}</span>
                       <span style={{
-                        fontSize: 12, fontWeight: g.scope === "global" ? 600 : 400,
+                        fontSize: "var(--text-caption1)", fontWeight: g.scope === "global" ? 600 : 400,
                         color: g.scope === "global" ? "var(--good)" : "var(--muted)",
                       }}>
                         {companyName(g.companyId)}
                       </span>
-                      <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                      <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
                         {g.facts.length} fact{g.facts.length === 1 ? "" : "s"}
                       </span>
-                      <span style={{ fontSize: 12, color: "var(--muted)" }} title={ist(g.touchedAt)}>
+                      <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }} title={ist(g.touchedAt)}>
                         updated {ago(g.touchedAt)}
                       </span>
                     </div>
@@ -268,8 +268,8 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
                 {isOpen && (
                   <div style={{ padding: "0 0 12px 18px" }}>
                     {g.sourceId && (
-                      <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>
-                        Source: <code style={{ fontSize: 11.5 }}>{g.sourceId}</code>
+                      <div style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", marginBottom: 8 }}>
+                        Source: <code style={{ fontSize: "var(--text-caption2)" }}>{g.sourceId}</code>
                       </div>
                     )}
                     {g.facts.map((f, i) => {
@@ -281,7 +281,7 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
                           border: "1px solid var(--border)",
                         }}>
                           <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-                            <span style={{ fontSize: 11, color: "var(--muted)", minWidth: 22 }}>#{i + 1}</span>
+                            <span style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", minWidth: 22 }}>#{i + 1}</span>
                             {editing ? (
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <textarea
@@ -290,30 +290,30 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
                                   rows={Math.min(12, Math.max(3, Math.ceil(draft.length / 90)))}
                                   autoFocus
                                   style={{
-                                    width: "100%", fontSize: 13, lineHeight: 1.6, padding: 9,
+                                    width: "100%", fontSize: "var(--text-footnote)", lineHeight: 1.6, padding: 9,
                                     borderRadius: 8, background: "rgba(0,0,0,0.28)", color: "var(--text)",
                                     border: "1px solid var(--border-strong)", resize: "vertical",
                                   }}
                                 />
                                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 7, flexWrap: "wrap" }}>
-                                  <button onClick={() => void saveEdit(f)} disabled={saving} style={{ fontSize: 12.5 }}>
+                                  <button onClick={() => void saveEdit(f)} disabled={saving} style={{ fontSize: "var(--text-caption1)" }}>
                                     {saving ? "Re-teaching the AI…" : "Save & re-teach"}
                                   </button>
-                                  <button onClick={() => { setEditId(null); setSaveErr(null); }} disabled={saving} style={{ fontSize: 12.5 }}>
+                                  <button onClick={() => { setEditId(null); setSaveErr(null); }} disabled={saving} style={{ fontSize: "var(--text-caption1)" }}>
                                     Cancel
                                   </button>
-                                  <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                                  <span style={{ fontSize: "var(--text-caption2)", color: "var(--muted)" }}>
                                     {draft.trim().length} characters
                                     {g.scope === "global" ? " · this changes every company's brain" : ""}
                                   </span>
                                 </div>
-                                {saveErr && <div className="error" style={{ marginTop: 7, fontSize: 12.5 }}>{saveErr}</div>}
+                                {saveErr && <div className="error" style={{ marginTop: 7, fontSize: "var(--text-caption1)" }}>{saveErr}</div>}
                               </div>
                             ) : (
                               <>
-                                <div style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                                <div style={{ flex: 1, minWidth: 0, fontSize: "var(--text-footnote)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
                                   {f.content}
-                                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                                  <div style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", marginTop: 4 }}>
                                     {f.updated_at && f.updated_at !== f.created_at
                                       ? `Corrected ${ago(f.updated_at)}`
                                       : `Learned ${ago(f.created_at)}`}
@@ -326,7 +326,7 @@ export function KnowledgeManager({ isSuper, companies }: { isSuper: boolean; com
                                   onClick={() => startEdit(f)}
                                   disabled={!canWrite}
                                   title={canWrite ? "Fix this fact and re-teach the AI" : "Global knowledge is super-admin only"}
-                                  style={{ fontSize: 12, whiteSpace: "nowrap", opacity: canWrite ? 1 : 0.5 }}
+                                  style={{ fontSize: "var(--text-caption1)", whiteSpace: "nowrap", opacity: canWrite ? 1 : 0.5 }}
                                 >
                                   Edit
                                 </button>

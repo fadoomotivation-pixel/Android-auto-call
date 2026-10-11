@@ -56,8 +56,8 @@ export function PlatformSender({ companies }: { companies: { id: string; name: s
   return (
     <div className="card" style={{ margin: "12px 0" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <strong style={{ color: "var(--text)", fontSize: 15 }}>Platform sending number</strong>
-        <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+        <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>Platform sending number</strong>
+        <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
           Used for any company that hasn&apos;t connected its own WhatsApp — one number for the whole platform,
           like the shared ad account. Each founder still only gets their own company&apos;s report.
         </span>
@@ -68,16 +68,16 @@ export function PlatformSender({ companies }: { companies: { id: string; name: s
           value={current ?? ""}
           onChange={(e) => save(e.target.value)}
           disabled={busy}
-          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--panel)", color: "var(--text)", fontSize: 13 }}
+          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--panel)", color: "var(--text)", fontSize: "var(--text-footnote)" }}
         >
           <option value="">— none —</option>
           {usable.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
         </select>
-        {msg && <span style={{ fontSize: 12.5, color: msg.startsWith("Saved") || msg === "Cleared." ? "var(--good)" : "var(--bad)" }}>{msg}</span>}
+        {msg && <span style={{ fontSize: "var(--text-caption1)", color: msg.startsWith("Saved") || msg === "Cleared." ? "var(--good)" : "var(--bad)" }}>{msg}</span>}
       </div>
 
       {usable.length === 0 && (
-        <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--warn)", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
+        <div style={{ marginTop: 10, fontSize: "var(--text-caption1)", color: "var(--warn)", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
           No company has a working WhatsApp connection yet — a number is set up, but its access token was never
           saved, so nothing can send. Fill in the token below and save; then this list will have something to pick.
         </div>
