@@ -57,6 +57,9 @@ data class AppState(
     val breakSeconds: Int = 5,
     val reviewAfterCall: Boolean = true,
     val dailyGoal: Int = 50,
+    /** Home rings — local per-device goals (Settings). */
+    val connectedGoal: Int = 30,
+    val visitsGoal: Int = 3,
     val cloudEnabled: Boolean = false,
     val cloudIncomingEnabled: Boolean = false,
     val cloudAgentId: String = "",
@@ -474,6 +477,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             breakSeconds = AppPrefs.getBreakSeconds(app),
             reviewAfterCall = AppPrefs.getReviewAfterCall(app),
             dailyGoal = AppPrefs.getDailyGoal(app),
+            connectedGoal = AppPrefs.getConnectedGoal(app),
+            visitsGoal = AppPrefs.getVisitsGoal(app),
             cloudEnabled = AppPrefs.getCloudEnabled(app),
             cloudIncomingEnabled = AppPrefs.getIncomingEnabled(app),
             cloudAgentId = AppPrefs.getAgentId(app),
@@ -925,6 +930,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setDailyGoal(value: Int) {
         AppPrefs.setDailyGoal(getApplication(), value)
         set { it.copy(dailyGoal = value.coerceIn(10, 500)) }
+    }
+
+    fun setConnectedGoal(value: Int) {
+        AppPrefs.setConnectedGoal(getApplication(), value)
+        set { it.copy(connectedGoal = value.coerceIn(1, 300)) }
+    }
+
+    fun setVisitsGoal(value: Int) {
+        AppPrefs.setVisitsGoal(getApplication(), value)
+        set { it.copy(visitsGoal = value.coerceIn(1, 30)) }
     }
 
     fun setCloudEnabled(v: Boolean) {

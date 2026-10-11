@@ -141,6 +141,14 @@ object AppPrefs {
     fun setDailyGoal(context: Context, value: Int) =
         prefs(context).edit().putInt(KEY_GOAL, value.coerceIn(10, 500)).apply()
 
+    /** Home rings: this phone's own daily goals for connected calls and site visits. */
+    fun getConnectedGoal(context: Context): Int = prefs(context).getInt("goal_connected", 30).coerceIn(1, 300)
+    fun setConnectedGoal(context: Context, value: Int) =
+        prefs(context).edit().putInt("goal_connected", value.coerceIn(1, 300)).apply()
+    fun getVisitsGoal(context: Context): Int = prefs(context).getInt("goal_visits", 3).coerceIn(1, 30)
+    fun setVisitsGoal(context: Context, value: Int) =
+        prefs(context).edit().putInt("goal_visits", value.coerceIn(1, 30)).apply()
+
     fun getBreakSeconds(context: Context): Int =
         prefs(context).getInt(KEY_BREAK, 5)
 

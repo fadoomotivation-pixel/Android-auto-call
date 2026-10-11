@@ -2,6 +2,24 @@
 
 package com.salesautocall.app.ui
 
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Leaderboard
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.RadioButtonChecked
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.outlined.List
+import com.salesautocall.app.ui.design.IosGroup
+import com.salesautocall.app.ui.design.IosSwitch
+import com.salesautocall.app.ui.design.IosSeparator
+import com.salesautocall.app.ui.design.InitialsAvatar
+import com.salesautocall.app.ui.design.IosColors
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -696,6 +714,10 @@ private fun MainShell(vm: MainViewModel) {
                     else callNowContacts(state.leads, state.workByLead).size.toString(),
                 siteVisits = state.leads.count { it.status == "site_visit" },
                 pipelineValue = pipelineValue(state.leads, state.leadStages),
+                coachOn = state.coachOn,
+                checkingUpdate = state.checkingUpdate,
+                onCoachToggle = { vm.setCoachOn(it) },
+                onCheckUpdate = { vm.checkForUpdate(manual = true) },
                 onNavigate = { route ->
                     vm.clearMessage()
                     scope.launch { drawerState.close() }
@@ -724,9 +746,10 @@ private fun MainShell(vm: MainViewModel) {
                 if (topRoute != Tab.Leads.route) TopAppBar(
                     title = {
                         Column {
-                            Text("Call Pro AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.82f))
+                            Text("Call Pro AI", style = com.salesautocall.app.ui.design.AppType.headline,
+                                color = com.salesautocall.app.ui.design.AppColors.TextPrimary)
+                            Text("Real Estate Sales Simplified", style = com.salesautocall.app.ui.design.AppType.meta,
+                                color = com.salesautocall.app.ui.design.AppColors.TextSecondary)
                         }
                     },
                     navigationIcon = {
@@ -755,15 +778,12 @@ private fun MainShell(vm: MainViewModel) {
                         com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.Settings, "Settings") { vm.openSettings() }
                         Spacer(Modifier.width(8.dp))
                     },
-                    // Brand-gradient app bar with translucent rounded icon buttons.
-                    modifier = Modifier
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
-                        .background(com.salesautocall.app.ui.design.Brand.gradient),
+                    // Apple bar: the grouped canvas, graphite icons, no gradient.
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        titleContentColor = Color.White,
-                        navigationIconContentColor = Color.White,
-                        actionIconContentColor = Color.White,
+                        containerColor = com.salesautocall.app.ui.design.AppColors.Canvas,
+                        titleContentColor = com.salesautocall.app.ui.design.AppColors.TextPrimary,
+                        navigationIconContentColor = com.salesautocall.app.ui.design.AppColors.TextPrimary,
+                        actionIconContentColor = com.salesautocall.app.ui.design.AppColors.TextPrimary,
                     ),
                 )
             },
@@ -1337,42 +1357,29 @@ internal fun FloatingCallBar(
     // Kept deliberately darker than a normal secondary: inactive labels were
     // washing out in sunlight, which is where a telecaller actually works.
     val unsel = AppColors.TextSecondary
-    val ring = MaterialTheme.colorScheme.background
-    Box(Modifier.fillMaxWidth().height(70.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.BottomCenter) {
+    // Apple tab bar: flat, translucent white, a hairline on top. The Dial
+    // stays in the middle as a plain blue circle in the row — same action,
+    // no raised "cut-out" ring.
+    Column(Modifier.fillMaxWidth().background(pill.copy(alpha = 0.96f))) {
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(hair))
         Row(
-            Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(22.dp))
-                .background(pill).border(1.dp, hair, RoundedCornerShape(22.dp)),
+            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Follow Ups takes the slot Call history had.
-            //
-            // A telecaller's most frequent question is "who do I ring next", and
-            // its answer lived two taps deep in the drawer. Call history is a
-            // once-a-week, look-something-up screen and it had a permanent slot.
-            // The bar has four places; they should go to the four things done
-            // most often, and this swap is worth more than any amount of
-            // rearranging the screens themselves. History is still one tap away
-            // under More → Calls & Recordings.
+            // Follow Ups takes the slot Call history had: "who do I ring next"
+            // is the most frequent question. History is under More → Calls.
             NavSlot("Home", Icons.Outlined.Home, current == "home", jade, unsel, Modifier.weight(1f)) { onTab("home") }
             NavSlot("Leads", Icons.Outlined.People, current == "leads", jade, unsel, Modifier.weight(1f)) { onTab("leads") }
-            // The gap goes with the dial, or the bar keeps a hole in its middle.
-            if (showDial) Spacer(Modifier.width(64.dp)) // room for the raised dial
+            if (showDial) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.size(44.dp).clip(CircleShape).background(jade).clickable { onDial() },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Default.Call, contentDescription = "Dial", tint = Color.White, modifier = Modifier.size(22.dp)) }
+                }
+            }
             NavSlot("Follow Ups", Icons.Outlined.Schedule, current == "followups", jade, unsel, Modifier.weight(1f)) { onTab("followups") }
             NavSlot("More", Icons.Outlined.Menu, false, jade, unsel, Modifier.weight(1f)) { onMore() }
-        }
-        // Raised centre Dial — the primary job, straddling the bar's top edge. A
-        // ring in the surrounding colour "cuts" it out of the bar. A circle, not
-        // a coloured squircle: the Phone-app control, large enough for a thumb.
-        if (showDial) {
-            Box(
-                Modifier.align(Alignment.TopCenter).size(62.dp).clip(CircleShape).background(ring),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier.size(52.dp).clip(CircleShape).background(jade).clickable { onDial() },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Default.Call, contentDescription = "Dial", tint = Color.White, modifier = Modifier.size(26.dp)) }
-            }
         }
     }
 }
@@ -1387,8 +1394,8 @@ private fun NavSlot(label: String, icon: ImageVector, on: Boolean, jade: Color, 
         modifier.clip(RoundedCornerShape(12.dp)).clickable { onClick() }.padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = label, tint = if (on) jade else unsel, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(2.dp))
+        Icon(icon, contentDescription = label, tint = if (on) jade else unsel, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(4.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
             color = if (on) jade else unsel, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
     }
@@ -1447,6 +1454,10 @@ private fun AppDrawer(
     callNow: String,
     siteVisits: Int,
     pipelineValue: String,
+    coachOn: Boolean,
+    checkingUpdate: Boolean,
+    onCoachToggle: (Boolean) -> Unit,
+    onCheckUpdate: () -> Unit,
     onNavigate: (String) -> Unit,
     onSettings: () -> Unit,
     onSignOut: () -> Unit,
@@ -1457,195 +1468,184 @@ private fun AppDrawer(
         else android.widget.Toast.makeText(context, "$label — coming soon", android.widget.Toast.LENGTH_SHORT).show()
     }
 
+    // Menu A — an iOS Settings-style grouped inset list. Same destinations,
+    // same order, same numbers as before; the Coach switch and the version /
+    // update check (which live in Settings) are mirrored here for one-tap reach.
     val main = listOf(
-        NavRow("Dashboard", "Overview, performance & revenue", Icons.Default.Dashboard, "home"),
-        NavRow("Leads", "Manage, auto-dial & activity", Icons.Default.People, "leads"),
+        NavRow("Dashboard", "Overview, performance & revenue", Icons.Outlined.GridView, "home"),
+        NavRow("Leads", "Manage, auto-dial & activity", Icons.Outlined.People, "leads"),
         NavRow("Calling", "Dialer & call workflow", Icons.Default.Dialpad, "dialer"),
-        NavRow("AI Sales Coach", "Insights, next actions & coach", Icons.Default.AutoAwesome, "ai", "NEW"),
-        NavRow("Reports", "Team performance & analytics", Icons.Default.Leaderboard, "team"),
+        NavRow("AI Sales Coach", "Insights, next actions & coach", Icons.Outlined.AutoAwesome, "ai", "NEW"),
+        NavRow("Reports", "Team performance & analytics", Icons.Outlined.Leaderboard, "team"),
     )
     val quick = listOf(
-        QuickAction("Start Calling", Icons.Default.Call, "dialer"),
-        QuickAction("Add Lead", Icons.Default.People, "add_lead"),
-        QuickAction("Schedule Follow-up", Icons.Default.CalendarMonth, "calendar"),
-        QuickAction("Import Call List", Icons.Default.Campaign, "campaign"),
+        QuickAction("Start Calling", Icons.Outlined.Call, "dialer"),
+        QuickAction("Add Lead", Icons.Default.Add, "add_lead"),
+        QuickAction("Schedule Follow-up", Icons.Outlined.CalendarMonth, "calendar"),
+        QuickAction("Import Call List", Icons.AutoMirrored.Outlined.List, "campaign"),
     )
-    // "Projects" is gone from here. It routed nowhere and answered a tap with
-    // "coming soon" — a menu entry whose only behaviour is to say no. A rep who
-    // taps it once learns the menu lies; a rep who taps it twice stops reading
-    // the menu. It comes back when there is a screen behind it.
+    // "Projects" stays gone: a menu entry whose only behaviour is "coming
+    // soon" teaches the rep the menu lies.
     val more = listOf(
-        NavRow("Follow Ups", "Opens on Call now", Icons.Default.AccessTime, "followups"),
-        NavRow("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance"),
-        NavRow("My report", "Your calls and talk time, any day", Icons.Default.BarChart, "my_report"),
-        NavRow("Calls & Recordings", "History and recordings", Icons.Default.Call, "calls"),
-    )
-
-    // One tile colour per destination, like iOS Settings. Colour helps the
-    // eye find a row; it does not mean anything else.
-    val tileTint = mapOf(
-        "home" to IosColors.Blue, "leads" to IosColors.Green, "dialer" to IosColors.Teal,
-        "ai" to IosColors.Indigo, "team" to IosColors.Orange,
-        "followups" to IosColors.Red, "attendance" to IosColors.Purple, "calls" to IosColors.Green,
-        "my_report" to IosColors.Blue,
+        NavRow("Follow Ups", "Opens on Call now", Icons.Outlined.Schedule, "followups"),
+        NavRow("Attendance", "Selfie + GPS check-in", Icons.Outlined.LocationOn, "attendance"),
+        NavRow("My report", "Your calls and talk time, any day", Icons.Outlined.BarChart, "my_report"),
+        NavRow("Calls & Recordings", "History and recordings", Icons.Outlined.RadioButtonChecked, "calls"),
     )
 
     ModalDrawerSheet(
         Modifier.fillMaxWidth(0.86f),
         drawerContainerColor = AppColors.Canvas,
         drawerContentColor = MenuText,
-        drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
+        drawerShape = RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp),
     ) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp).padding(top = 20.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+                .padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp),
         ) {
-            // Brand header — the app icon, the name, the Premium tag.
-            Row(Modifier.fillMaxWidth().gradientCard().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Brand.OnGradientFill)
-                        .border(1.dp, Brand.OnGradientBorder, RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = Color.White, modifier = Modifier.size(24.dp))
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Call Pro AI", style = AppType.title3, color = Color.White)
-                    Text("Real Estate Sales Simplified", style = AppType.footnote, color = Color.White.copy(alpha = 0.85f))
-                }
-                IosTag("Premium", fg = Color.White, bg = Brand.OnGradientFill)
-            }
+            Text("Menu", style = AppType.title, color = MenuText, modifier = Modifier.padding(top = 8.dp, bottom = 16.dp))
 
-            // Today's Opportunities — one white group, three numbers.
-            IosGroup(header = "Today's opportunities") {
-                Row(Modifier.fillMaxWidth().padding(16.dp)) {
-                    OppStat(callNow, "Call now", Modifier.weight(1f))
-                    OppStat(siteVisits.toString(), "Site visits", Modifier.weight(1f))
-                    OppStat(pipelineValue, "Pipeline", Modifier.weight(1f))
-                }
-            }
-
-            IosGroup(header = "Main") {
-                main.forEachIndexed { i, row ->
-                    if (i > 0) IosSeparator(58.dp)
-                    DrawerNavRow(row, tileTint[row.route] ?: IosColors.Blue, selected = row.route == currentRoute) { open(row.route, row.label) }
-                }
-            }
-
-            Column {
-                AccentHeader("Quick actions", Modifier.padding(start = 4.dp, bottom = 8.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    quick.chunked(2).forEach { pair ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            pair.forEach { q -> QuickTile(q, Modifier.weight(1f)) { open(q.route, q.label) } }
-                            if (pair.size == 1) Spacer(Modifier.weight(1f))
-                        }
-                    }
-                }
-            }
-
-            IosGroup(header = "More") {
-                more.forEachIndexed { i, row ->
-                    if (i > 0) IosSeparator(58.dp)
-                    DrawerMoreRow(row.icon, row.label, tileTint[row.route] ?: IosColors.Gray, selected = row.route == currentRoute) { open(row.route, row.label) }
-                }
-                IosSeparator(58.dp)
-                DrawerMoreRow(Icons.Default.Settings, "Settings", IosColors.Gray, selected = currentRoute == "settings") { onSettings() }
-            }
-
-            // Profile + sign out, as its own group.
+            // Profile — tap for Settings.
             IosGroup {
                 Row(
-                    Modifier.fillMaxWidth().clickable { onSignOut() }.padding(horizontal = 16.dp, vertical = 12.dp),
+                    Modifier.fillMaxWidth().clickable { onSettings() }.heightIn(min = 72.dp).padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    InitialsAvatar(userName.ifBlank { "?" }, size = 40)
+                    InitialsAvatar(userName.ifBlank { "?" }, size = 48)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(userName, style = AppType.headline, color = MenuText)
+                        Text(userName, style = AppType.headline, color = MenuText, maxLines = 1)
                         Text(
                             buildString {
-                                // "Admin", not "Super Admin". Every company's own
-                                // admin was being shown "Super Admin", which is the
-                                // platform owner who sees every company.
+                                // "Admin", not "Super Admin" — that is the platform owner.
                                 append(if (role == "admin") "Admin" else "Telecaller")
                                 companyName?.let { append(" · "); append(it) }
                             },
-                            style = AppType.footnote, color = MenuMuted,
+                            style = AppType.meta, color = MenuMuted, maxLines = 1,
                         )
                     }
-                    Text("Sign out", style = AppType.body, color = IosColors.Red)
+                    MenuChevron()
                 }
+            }
+
+            MenuSubhead("Today")
+            IosGroup {
+                Row(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+                    OppStat(callNow, "Call now", Modifier.weight(1f).padding(start = 16.dp))
+                    MenuVDivider()
+                    OppStat(siteVisits.toString(), "Site visits", Modifier.weight(1f).padding(start = 16.dp))
+                    MenuVDivider()
+                    OppStat(pipelineValue, "Pipeline", Modifier.weight(1f).padding(start = 16.dp))
+                }
+            }
+
+            MenuSubhead("Main")
+            IosGroup {
+                main.forEachIndexed { i, row ->
+                    if (i > 0) IosSeparator(52.dp)
+                    MenuRow(row.icon, row.label, selected = row.route == currentRoute,
+                        trailing = row.badge?.let { b -> { com.salesautocall.app.ui.design.IosTag(b, fg = MenuAccent) } }) { open(row.route, row.label) }
+                }
+            }
+
+            MenuSubhead("Quick actions")
+            IosGroup {
+                quick.forEachIndexed { i, q ->
+                    if (i > 0) IosSeparator(52.dp)
+                    MenuRow(q.icon, q.label, selected = false) { open(q.route, q.label) }
+                }
+            }
+
+            MenuSubhead("More")
+            IosGroup {
+                more.forEachIndexed { i, row ->
+                    if (i > 0) IosSeparator(52.dp)
+                    MenuRow(row.icon, row.label, selected = row.route == currentRoute) { open(row.route, row.label) }
+                }
+                IosSeparator(52.dp)
+                MenuRow(Icons.Outlined.Settings, "Settings", selected = currentRoute == "settings") { onSettings() }
+            }
+
+            MenuSubhead("App")
+            IosGroup {
+                MenuRow(Icons.Outlined.AutoAwesome, "Coach", selected = false, trailing = {
+                    IosSwitch(checked = coachOn, onCheckedChange = onCoachToggle)
+                }, onClick = null)
+                IosSeparator(52.dp)
+                MenuRow(Icons.Outlined.Info, "Version", selected = false, trailing = {
+                    Text(
+                        "${com.salesautocall.app.BuildConfig.VERSION_NAME} (${com.salesautocall.app.BuildConfig.VERSION_CODE})",
+                        style = AppType.body, color = MenuMuted,
+                    )
+                }, onClick = null)
+                IosSeparator(52.dp)
+                MenuRow(Icons.Outlined.Download, if (checkingUpdate) "Checking…" else "Check for updates", selected = false,
+                    onClick = if (checkingUpdate) null else onCheckUpdate)
+            }
+
+            Spacer(Modifier.height(24.dp))
+            IosGroup {
+                Box(
+                    Modifier.fillMaxWidth().clickable { onSignOut() }.heightIn(min = 48.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text("Sign out", style = AppType.label, color = IosColors.Red) }
             }
         }
     }
+}
+
+@Composable
+private fun MenuSubhead(text: String) {
+    Text(
+        text.uppercase(), style = AppType.sectionLabel, color = MenuMuted,
+        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun MenuChevron() {
+    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
+        tint = AppColors.TextTertiary, modifier = Modifier.size(20.dp))
+}
+
+@Composable
+private fun MenuVDivider() {
+    Box(Modifier.width(0.5.dp).height(40.dp).background(AppColors.Separator))
 }
 
 @Composable
 private fun OppStat(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier) {
-        Text(value, style = AppType.title3, color = MenuText, maxLines = 1)
-        Text(label, style = AppType.footnote, color = MenuMuted)
+        Text(value, style = AppType.headline, color = MenuText, maxLines = 1)
+        Text(label, style = AppType.meta, color = MenuMuted, maxLines = 1)
     }
 }
 
-/** MAIN row: colour tile, label + one-line description, a blue tick of selection. */
+/** One Menu A row: monochrome icon · label · chevron (or a trailing control). */
 @Composable
-private fun DrawerNavRow(item: NavRow, tint: Color, selected: Boolean, onClick: () -> Unit) {
+private fun MenuRow(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: (() -> Unit)?,
+) {
+    val ink = if (selected) MenuAccent else com.salesautocall.app.ui.design.Brand.Ink
     Row(
         Modifier.fillMaxWidth()
-            .background(if (selected) IosColors.Blue.copy(alpha = 0.08f) else Color.Transparent)
-            .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .background(if (selected) MenuAccent.copy(alpha = 0.06f) else Color.Transparent)
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .heightIn(min = 48.dp).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IosIconTile(item.icon, tint)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(item.label, style = AppType.headline, color = if (selected) MenuAccent else MenuText)
-                item.badge?.let {
-                    Spacer(Modifier.width(8.dp))
-                    IosTag(it, fg = MenuAccent)
-                }
-            }
-            Text(item.desc, style = AppType.footnote, color = MenuMuted, maxLines = 1)
-        }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.TextTertiary, modifier = Modifier.size(20.dp))
-    }
-}
-
-/** MORE row — tile and label, iOS Settings style. */
-@Composable
-private fun DrawerMoreRow(icon: ImageVector, label: String, tint: Color, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth()
-            .background(if (selected) IosColors.Blue.copy(alpha = 0.08f) else Color.Transparent)
-            .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IosIconTile(icon, tint)
-        Spacer(Modifier.width(14.dp))
-        Text(label, style = AppType.body.copy(fontSize = 16.sp), color = if (selected) MenuAccent else MenuText, modifier = Modifier.weight(1f))
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = AppColors.TextTertiary, modifier = Modifier.size(20.dp))
-    }
-}
-
-/** Quick-action tile — a white rounded square in the 2×2 grid. */
-@Composable
-private fun QuickTile(item: QuickAction, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(
-        modifier.height(80.dp).clip(Radii.card).background(AppColors.Surface).iosPress { onClick() }
-            .padding(horizontal = 8.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(item.icon, contentDescription = item.label, tint = MenuAccent, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(7.dp))
-        Text(item.label, style = AppType.metaStrong, color = MenuText, maxLines = 1)
+        Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(16.dp))
+        Text(
+            label, style = AppType.body, color = if (selected) MenuAccent else MenuText,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.weight(1f), maxLines = 1,
+        )
+        if (trailing != null) trailing() else if (onClick != null) MenuChevron()
     }
 }
 

@@ -35,12 +35,14 @@ object Space {
  * [ContinuousShape] draws that; every card, control and sheet goes through it.
  */
 object Radii {
-    val tag = RoundedCornerShape(999.dp)
-    val chip = RoundedCornerShape(12.dp)
-    val control = RoundedCornerShape(14.dp)
-    /** Brand restyle: generous, soft card corners. */
-    val card = RoundedCornerShape(20.dp)
-    val sheet = RoundedCornerShape(24.dp)
+    /** Apple family: status pills are 6dp rounded rects, not capsules. */
+    val tag = RoundedCornerShape(6.dp)
+    val chip = RoundedCornerShape(999.dp)
+    val control = RoundedCornerShape(12.dp)
+    /** Inset-grouped cards: 12dp. Hero cards use [hero]. */
+    val card = RoundedCornerShape(12.dp)
+    val hero = RoundedCornerShape(16.dp)
+    val sheet = RoundedCornerShape(16.dp)
     /** Top corners only, for a sheet that rises from the bottom edge. */
     val sheetTop = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 }

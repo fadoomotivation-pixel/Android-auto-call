@@ -25,6 +25,11 @@ private val Inter = FontFamily(
     Font(R.font.inter_bold, FontWeight.Bold),
 )
 
+/**
+ * Apple family (Oct 2026): four sizes only — 22 (titles, big numbers),
+ * 17 (headlines), 15 (body, rows), 12 (meta, tags, grey subheads). The call
+ * surface's dial number is the single exception.
+ */
 object AppType {
 
     // ── The iOS text styles, by their Apple names ─────────────────────
@@ -36,7 +41,7 @@ object AppType {
 
     /** Large Title (34). The title a screen opens with before it scrolls. */
     val largeTitle = TextStyle(
-        fontFamily = Inter, fontSize = 34.sp, lineHeight = 41.sp,
+        fontFamily = Inter, fontSize = 22.sp, lineHeight = 28.sp,
         fontWeight = FontWeight.SemiBold, letterSpacing = (-0.7).sp,
     )
 
@@ -48,14 +53,14 @@ object AppType {
 
     /** Title 3 (20). Card titles that are the point of the card. */
     val title3 = TextStyle(
-        fontFamily = Inter, fontSize = 19.sp, lineHeight = 25.sp,
+        fontFamily = Inter, fontSize = 17.sp, lineHeight = 22.sp,
         fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp,
     )
 
     /** Headline (17 semibold). A row's name, a button in a sheet. */
     val headline = TextStyle(
-        fontFamily = Inter, fontSize = 18.sp, lineHeight = 24.sp,
-        fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp,
+        fontFamily = Inter, fontSize = 17.sp, lineHeight = 22.sp,
+        fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
     )
 
     /** Callout (16). Coach advice and other sentences meant to be read. */
@@ -78,7 +83,7 @@ object AppType {
 
     /** Footnote (13). Helper text, timestamps, group footers. */
     val footnote = TextStyle(
-        fontFamily = Inter, fontSize = 13.sp, lineHeight = 18.sp,
+        fontFamily = Inter, fontSize = 12.sp, lineHeight = 16.sp,
         fontWeight = FontWeight.Normal,
     )
 
@@ -90,8 +95,8 @@ object AppType {
 
     /** Group header above an inset-grouped card (footnote, uppercase, grey). */
     val groupHeader = TextStyle(
-        fontFamily = Inter, fontSize = 13.sp, lineHeight = 18.sp,
-        fontWeight = FontWeight.Normal, letterSpacing = 0.3.sp,
+        fontFamily = Inter, fontSize = 12.sp, lineHeight = 16.sp,
+        fontWeight = FontWeight.SemiBold, letterSpacing = 0.3.sp,
     )
 
     // ── The app's original names (kept; hundreds of call sites) ───────
@@ -99,8 +104,8 @@ object AppType {
     /** Large title, the way a Settings screen opens. e.g. "Good day, Rahul". */
     val display = TextStyle(
         fontFamily = Inter,
-        fontSize = 32.sp,
-        lineHeight = 38.sp,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-0.6).sp,
     )
@@ -126,9 +131,9 @@ object AppType {
     /** Small uppercase section label above groups. */
     val sectionLabel = TextStyle(
         fontFamily = Inter,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
-        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.3.sp,
     )
 
@@ -145,8 +150,8 @@ object AppType {
     /** Secondary line under a row title, timestamps, helper text. */
     val meta = TextStyle(
         fontFamily = Inter,
-        fontSize = 13.sp,
-        lineHeight = 18.5.sp,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
         fontWeight = FontWeight.Normal,
     )
 
@@ -163,7 +168,7 @@ object AppType {
 
     val tag = TextStyle(
         fontFamily = Inter,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         lineHeight = 14.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.2.sp,

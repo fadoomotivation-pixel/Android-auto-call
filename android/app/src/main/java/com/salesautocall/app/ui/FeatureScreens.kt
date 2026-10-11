@@ -1,5 +1,22 @@
 package com.salesautocall.app.ui
 
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.PhoneCallback
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import com.salesautocall.app.ui.design.IosColors
+import com.salesautocall.app.ui.design.IosSwitch
+import com.salesautocall.app.ui.design.IosGroup
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
@@ -356,7 +373,7 @@ private fun MessagingCard(vm: MainViewModel, app: AppState) {
 
     PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            SettingHeader(Icons.Default.Chat, "Messages", "Which WhatsApp to send from, and how you refer to yourself")
+            SettingHeader(Icons.Outlined.ChatBubbleOutline, "Send from", "Which WhatsApp to send from")
 
             // ---- which WhatsApp ----
             if (installed.size > 1) {
@@ -424,7 +441,6 @@ private fun CompanyCard(vm: MainViewModel, app: AppState) {
 
     PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Your company", style = MaterialTheme.typography.titleMedium)
             if (company != null) {
                 Text("You're in: ${company.name}", style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold)
@@ -531,7 +547,6 @@ private fun CallRecordingFolderCard(context: android.content.Context, vm: MainVi
     }
     PaperCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Call recording", style = MaterialTheme.typography.titleMedium)
             // Record-all disclosure, framed as the helper it is: calls are
             // recorded so the AI keeps the CRM updated for the rep (still an
             // honest "calls are recorded" notice — just not a scary one).
@@ -672,7 +687,7 @@ private fun CloudCallingCard(vm: MainViewModel, app: AppState) {
                     Text("Optional. Rings your phone, then bridges the customer — no SIM auto-dial.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked = app.cloudEnabled, onCheckedChange = { vm.setCloudEnabled(it) })
+                IosSwitch(checked = app.cloudEnabled, onCheckedChange = { vm.setCloudEnabled(it) })
             }
             if (app.company?.recordingEnabled == true) {
                 Spacer(Modifier.height(8.dp))
@@ -1161,27 +1176,65 @@ private fun PaperCard(
     )
 }
 
-/** Section header: one quiet jade-tinted icon + title + one-line subtitle.
- *  Jade is the app's ONLY accent — every icon wears the same colour. */
+/** Row header, Apple Settings style: monochrome icon · title · grey helper. */
 @Composable
 private fun SettingHeader(icon: ImageVector, title: String, subtitle: String? = null) {
-    // jadeAccent ignores its argument since the app went light-only; read the
-    // token directly rather than querying a dark mode that cannot happen.
-    val jade = AppColors.Indigo
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(36.dp).clip(CircleShape).background(jade.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = null, tint = jade, modifier = Modifier.size(18.dp)) }
-        Spacer(Modifier.width(12.dp))
+    Row(verticalAlignment = if (subtitle == null) Alignment.CenterVertically else Alignment.Top) {
+        Icon(icon, contentDescription = null, tint = com.salesautocall.app.ui.design.Brand.Ink,
+            modifier = Modifier.padding(top = if (subtitle == null) 0.dp else 2.dp).size(20.dp))
+        Spacer(Modifier.width(16.dp))
         Column {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(title, style = AppType.body, color = AppColors.TextPrimary)
             subtitle?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(it, style = AppType.meta, color = AppColors.TextSecondary)
             }
         }
     }
 }
+
+/** Grey uppercase subhead above a settings group. */
+@Composable
+private fun SettingsSubhead(text: String) {
+    Text(text.uppercase(), style = AppType.sectionLabel, color = AppColors.TextSecondary,
+        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
+}
+
+/** Hairline between rows inside one group, inset past the icon. */
+@Composable
+private fun SettingsSep() {
+    Box(Modifier.fillMaxWidth().padding(start = 52.dp).height(0.5.dp).background(AppColors.Separator))
+}
+
+/** One switch row: icon · title / helper · switch. */
+@Composable
+private fun SwitchRow(icon: ImageVector, title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f)) { SettingHeader(icon, title, subtitle) }
+        Spacer(Modifier.width(8.dp))
+        IosSwitch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/** A −/value/+ stepper row for a goal. */
+@Composable
+private fun StepperRow(icon: ImageVector, title: String, subtitle: String?, value: Int, step: Int, onChange: (Int) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f)) { SettingHeader(icon, title, subtitle) }
+        Text("−$step", style = AppType.label, color = AppColors.Indigo,
+            modifier = Modifier.clip(Radii.control).clickable { onChange(value - step) }.padding(horizontal = 8.dp, vertical = 8.dp))
+        Text("$value", style = AppType.headline, color = AppColors.TextPrimary,
+            modifier = Modifier.widthIn(min = 40.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("+$step", style = AppType.label, color = AppColors.Indigo,
+            modifier = Modifier.clip(Radii.control).clickable { onChange(value + step) }.padding(horizontal = 8.dp, vertical = 8.dp))
+    }
+}
+
 @Composable
 fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val app by vm.state.collectAsState()
@@ -1194,176 +1247,126 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Column(
         Modifier.fillMaxSize().verticalScroll(scroll)
-            .padding(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 96.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 52.dp, bottom = 96.dp),
     ) {
-        IosLargeTitle("Settings", "Your changes are saved automatically.", Modifier.padding(start = 0.dp))
-        Spacer(Modifier.height(16.dp))
+        IosLargeTitle("Settings", "Your changes are saved automatically.", Modifier.padding(start = 0.dp), inset = 0.dp)
 
-        // FIRST CARD, ON PURPOSE. When a rep opens Settings it is usually because
+        // FIRST GROUP, ON PURPOSE. When a rep opens Settings it is usually because
         // something is not working, and this is the answer to "sab on hai na?".
+        SettingsSubhead("Is my phone working?")
         PhoneCheckCard(vm)
-        Spacer(Modifier.height(16.dp))
 
         // Company: invite code (admin) or join/switch by code (everyone else).
+        SettingsSubhead("Your company")
         CompanyCard(vm, app)
-        Spacer(Modifier.height(16.dp))
 
+        SettingsSubhead("Messages")
         MessagingCard(vm, app)
-        Spacer(Modifier.height(16.dp))
 
+        SettingsSubhead("Calling")
         PaperCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                SettingHeader(Icons.Default.Timer, "Break between calls", "Waiting time after each call ends")
-                Spacer(Modifier.height(16.dp))
-                Text("${app.breakSeconds} seconds", style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.fillMaxWidth(), fontWeight = FontWeight.Bold,
-                    color = jadeAccent(androidx.compose.foundation.isSystemInDarkTheme()))
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {
+                        SettingHeader(Icons.Outlined.Timer, "Break between calls", "Waiting time after each call ends")
+                    }
+                    Text("${app.breakSeconds} seconds", style = AppType.body, color = AppColors.TextSecondary)
+                }
                 Slider(
                     value = app.breakSeconds.toFloat(),
                     onValueChange = { vm.setBreakSeconds(it.toInt()) },
                     valueRange = 1f..59f,
+                    modifier = Modifier.padding(start = 36.dp),
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("1s", style = MaterialTheme.typography.bodySmall)
-                    Text("59s", style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.fillMaxWidth().padding(start = 36.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("1s", style = AppType.meta, color = AppColors.TextSecondary)
+                    Text("59s", style = AppType.meta, color = AppColors.TextSecondary)
                 }
             }
-        }
-        Spacer(Modifier.height(16.dp))
-        PaperCard(Modifier.fillMaxWidth()) {
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.weight(1f)) {
-                    SettingHeader(Icons.Default.Pause, "Pause after each call",
-                        "Review the call, set an outcome, or WhatsApp before the next number.")
-                }
-                IosSwitch(checked = app.reviewAfterCall, onCheckedChange = { vm.setReviewAfterCall(it) })
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        // How the app asks after a SIM call. Off (the default) the Update button
-        // shakes instead of a sheet appearing — the sheet cannot land until
-        // Android hands focus back from the phone's own in-call screen, which is
-        // a second or two after the rep has already moved on.
-        PaperCard(Modifier.fillMaxWidth()) {
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.weight(1f)) {
-                    SettingHeader(Icons.Default.Notifications, "Popup right after a SIM call",
-                        "Off: the lead's Update button shakes instead — no waiting for the popup to open.")
-                }
-                IosSwitch(checked = app.postCallPopup, onCheckedChange = { vm.setPostCallPopup(it) })
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        // The assistant's own questions. One switch for all of them, because a
-        // rep who wants quiet wants quiet — offering three sub-toggles just
-        // makes turning it off harder.
-        PaperCard(Modifier.fillMaxWidth()) {
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.weight(1f)) {
-                    SettingHeader(Icons.Default.Lightbulb, "Let the app ask me things",
-                        "A few questions a day: did the customer come to the site, did you make that callback, how did today go.")
-                }
-                IosSwitch(checked = app.assistantOn, onCheckedChange = { vm.setAssistantOn(it) })
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        // Coach on/off. Local to this phone. Off hides good morning, coaching
-        // time, coach cards and Ask Coach; this switch is how it comes back.
-        PaperCard(Modifier.fillMaxWidth()) {
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.weight(1f)) {
-                    SettingHeader(Icons.Default.Lightbulb, "Coach",
-                        "Good morning, coaching time, coach cards and Ask Coach. Turn off for a quiet app.")
-                }
-                IosSwitch(checked = app.coachOn, onCheckedChange = { vm.setCoachOn(it) })
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        PaperCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                SettingHeader(Icons.Default.Flag, "Daily call goal", "Target calls per day, shown on your Today card.")
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { vm.setDailyGoal(app.dailyGoal - 10) }) { Text("−10") }
-                    Text("${app.dailyGoal}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    OutlinedButton(onClick = { vm.setDailyGoal(app.dailyGoal + 10) }) { Text("+10") }
-                }
-            }
+            SettingsSep()
+            SwitchRow(Icons.Outlined.Pause, "Pause after each call",
+                "Review the call, set an outcome, or WhatsApp before the next number.",
+                app.reviewAfterCall) { vm.setReviewAfterCall(it) }
+            SettingsSep()
+            // How the app asks after a SIM call. Off (the default) the Update
+            // button shakes instead of a sheet appearing — the sheet cannot land
+            // until Android hands focus back from the phone's in-call screen.
+            SwitchRow(Icons.Outlined.Notifications, "Popup right after a SIM call",
+                "Off: the lead's Update button shakes instead — no waiting for the popup to open.",
+                app.postCallPopup) { vm.setPostCallPopup(it) }
+            SettingsSep()
+            StepperRow(Icons.Outlined.Flag, "Daily call goal", "Target calls per day, shown on your Today card.",
+                app.dailyGoal, 10) { vm.setDailyGoal(it) }
+            SettingsSep()
+            // Home rings. Local to this phone, like the call goal.
+            StepperRow(Icons.Outlined.PhoneCallback, "Connected goal", "Calls that connect, per day. The second ring on Home.",
+                app.connectedGoal, 1) { vm.setConnectedGoal(it) }
+            SettingsSep()
+            StepperRow(Icons.Outlined.LocationOn, "Site visits goal", "Visits per day. The third ring on Home.",
+                app.visitsGoal, 1) { vm.setVisitsGoal(it) }
         }
 
-        Spacer(Modifier.height(16.dp))
+        SettingsSubhead("AI")
+        PaperCard(Modifier.fillMaxWidth()) {
+            // The assistant's own questions. One switch for all of them — a rep
+            // who wants quiet wants quiet.
+            SwitchRow(Icons.Outlined.Lightbulb, "Let the app ask me things",
+                "A few questions a day: did the customer come to the site, did you make that callback, how did today go.",
+                app.assistantOn) { vm.setAssistantOn(it) }
+            SettingsSep()
+            // Coach on/off. Local to this phone. Off hides good morning, coaching
+            // time, coach cards and Ask Coach; this switch is how it comes back.
+            SwitchRow(Icons.Outlined.AutoAwesome, "Coach",
+                "Good morning, coaching time, coach cards and Ask Coach. Turn off for a quiet app.",
+                app.coachOn) { vm.setCoachOn(it) }
+        }
+
+        SettingsSubhead("Office line calling")
         CloudCallingCard(vm, app)
 
-
-        Spacer(Modifier.height(16.dp))
+        SettingsSubhead("Call recording")
         CallRecordingFolderCard(context, vm, app.recordingSyncing, app.recordingSyncMsg, app.company?.recordAllCalls == true)
 
-        Spacer(Modifier.height(16.dp))
+        SettingsSubhead("App")
         PaperCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                SettingHeader(
-                    Icons.Default.Download, "App version & updates",
-                    "You're on v${com.salesautocall.app.BuildConfig.VERSION_NAME} (build ${com.salesautocall.app.BuildConfig.VERSION_CODE})",
-                )
-                Spacer(Modifier.height(4.dp))
-                app.update?.let { rel ->
-                    Text("Update available: v${rel.versionName}", style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { SettingHeader(Icons.Outlined.Info, "Version") }
+                Text("${com.salesautocall.app.BuildConfig.VERSION_NAME} (${com.salesautocall.app.BuildConfig.VERSION_CODE})",
+                    style = AppType.body, color = AppColors.TextSecondary)
+            }
+            SettingsSep()
+            val rel = app.update
+            if (rel != null) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { vm.installUpdate() }.heightIn(min = 48.dp).padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) { SettingHeader(Icons.Outlined.Download, "Download & install v${rel.versionName}", "Update available") }
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AppColors.TextTertiary)
                 }
-                Spacer(Modifier.height(12.dp))
-                if (app.update != null) {
-                    Button(onClick = { vm.installUpdate() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("⬇ Download & install v${app.update!!.versionName}")
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = { vm.checkForUpdate(manual = true) },
-                        enabled = !app.checkingUpdate,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        if (app.checkingUpdate) {
-                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp)); Text("Checking…")
-                        } else {
-                            Text("Check for updates")
-                        }
-                    }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().clickable(enabled = !app.checkingUpdate) { vm.checkForUpdate(manual = true) }
+                        .heightIn(min = 48.dp).padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f)) { SettingHeader(Icons.Outlined.Download, if (app.checkingUpdate) "Checking…" else "Check for updates") }
+                    if (app.checkingUpdate) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AppColors.TextTertiary)
                 }
             }
         }
 
+        // "Save settings" is gone: every control above saves the moment it
+        // changes (each setter writes AppPrefs), so the button only ever showed
+        // a toast and went back. Back is the nav bar's.
         Spacer(Modifier.height(24.dp))
-        PrimaryButton(
-            "Save settings",
-            modifier = Modifier.fillMaxWidth(),
-            onClick = {
-                android.widget.Toast.makeText(context, "✓ Settings saved", android.widget.Toast.LENGTH_SHORT).show()
-                onBack()
-            },
-        )
-        Spacer(Modifier.height(10.dp))
-        SecondaryButton("Back", modifier = Modifier.fillMaxWidth(), onClick = onBack)
-        Spacer(Modifier.height(24.dp))
-        // Account, as an iOS group: who you are, and a red Sign out row.
+        // Account, as an iOS group: a red Sign out row, who you are below it.
         IosGroup(footer = app.profile?.let { "Signed in as ${it.fullName ?: "—"}" }) {
-            IosRow("Sign out", destructive = true, onClick = { vm.signOut() })
+            Box(
+                Modifier.fillMaxWidth().clickable { vm.signOut() }.heightIn(min = 48.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text("Sign out", style = AppType.label, color = IosColors.Red) }
         }
     }
         IosNavBar(
@@ -1564,7 +1567,7 @@ private fun PhoneCheckCard(vm: MainViewModel) {
         Column(Modifier.padding(16.dp)) {
             SettingHeader(
                 if (allGood) Icons.Default.CheckCircle else Icons.Default.Warning,
-                "Is my phone working?",
+                "Phone check",
                 "Check that your calls are reaching the office",
             )
             Spacer(Modifier.height(12.dp))
@@ -1682,31 +1685,26 @@ private fun PhoneCheckCard(vm: MainViewModel) {
 
 @Composable
 private fun CheckRow(title: String, detail: String, ok: Boolean, onFix: () -> Unit) {
-    // ✅ / ❌ rendered at whatever size and hue the phone's emoji font chose,
-    // which on a self-check screen is the one place the state has to be
-    // unambiguous. A tag states it in the app's own colours instead.
+    // Apple row: title + one grey line, the state as a trailing pill. "Fix"
+    // is the tappable pill when something is off — same onFix as before.
     Row(
-        Modifier.fillMaxWidth().padding(vertical = Space.s),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = Space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatusTag(
-            if (ok) "OK" else "Fix",
-            if (ok) StatusTone(AppColors.Positive, AppColors.PositiveSoft)
-            else StatusTone(AppColors.Danger, AppColors.DangerSoft),
-        )
-        Spacer(Modifier.width(Space.m))
         Column(Modifier.weight(1f)) {
-            Text(title, style = AppType.rowTitle, color = AppColors.TextPrimary)
+            Text(title, style = AppType.body, color = AppColors.TextPrimary)
             Text(detail, style = AppType.meta,
                 color = if (ok) AppColors.TextSecondary else AppColors.Danger)
         }
-        if (!ok) {
+        Spacer(Modifier.width(Space.s))
+        if (ok) {
+            StatusTag("OK", StatusTone(AppColors.Positive, AppColors.PositiveSoft))
+        } else {
             Box(
-                Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary)
-                    .clickable { onFix() }.padding(horizontal = 14.dp, vertical = 7.dp),
+                Modifier.clip(Radii.tag).background(AppColors.DangerSoft)
+                    .clickable { onFix() }.padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
-                Text("Fix", color = MaterialTheme.colorScheme.onPrimary,
-                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text("Fix", color = AppColors.Danger, style = AppType.tag)
             }
         }
     }

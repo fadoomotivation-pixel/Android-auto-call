@@ -37,6 +37,38 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-11 — Grok Bot (Apple family: the founder's six picks, replaces the #523 gradient look)
+
+- **Visual layer + two small local settings.** Tokens: canvas `#F2F2F7`, white
+  12dp cards (hero 16dp), ink `#1C1C1E`, grey `#8E8E93`, ONE accent `#007AFF`
+  (token still `AppColors.Indigo`), monochrome icons (`Brand.Ink`). `BrandKit`
+  keeps its API but paints flat (no gradients/glass); `Tiles` are one quiet
+  grey; `AppType` is four sizes (22/17/15/12); `Radii` tag 6 / chip pill /
+  control 12 / card 12 / hero 16. `IosNavBar` is the canvas bar again with
+  the title fading in on scroll; `IosLargeTitle` shows the title again.
+- **Screens:** Leads B (Next call hero, underline lane tabs, black/white
+  sub-chips, plain rows), Lead detail D (canvas bar, no monogram tile,
+  dots-only stepper with "Interested · Step 3 of 7 / Next: …", ONE `LeadTimeline`
+  All/Calls/WhatsApp/Notes/Visits built from `leadDetailCalls` +
+  `leadDetailActivities` + visit stamps + saved notes — it replaces the
+  Calls & recordings card and the Journey card; calls still render with
+  `LeadCallRow` so play/stop is unchanged; the pinned Call bar is unchanged),
+  Menu A (drawer as grouped list + Coach switch + version + Check for updates),
+  Settings A (grouped list; "Save settings"/"Back" removed because every
+  setter already writes `AppPrefs` on change), Home C (rings), Follow Ups A
+  (Reminders rows, 5 tabs as a segmented control, Overdue/Today/Upcoming
+  groups, check circle → `openFollowUpUpdate`; unlinked rows → Done as before).
+  Bottom bar is a flat iOS tab bar (Dial kept in the middle).
+- **New local prefs:** `goal_connected` (default 30) and `goal_visits`
+  (default 3), ±1 steppers in Settings › Calling, `AppState.connectedGoal` /
+  `visitsGoal`. Home ring 2 = `todayConnected`; ring 3 = leads whose
+  `site_visit_arrived_at` is today (the geofenced check-in — a visit DATE is
+  never counted); "—" until leads have loaded.
+- Home "Start calling" caption now says what it does: "Opens Leads on Call now."
+- No handler, count, flow, tab, warning or coach gating removed. Rejected
+  items still rejected (no 4th follow-up tab, no follow-up chip total, no
+  post-call popup, no capture-down banner).
+
 ## 2026-10-11 — Grok Bot (brand restyle: gradient bars, soft cards, icon tiles)
 
 - **Visual layer only.** The founder dropped the iOS look. New style, inspired

@@ -33,6 +33,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -98,117 +100,155 @@ internal fun DayStartCard(
     dailyGoal: Int,
     onAttendance: () -> Unit,
     onStartCalling: () -> Unit,
+    /** Connected calls today (the same todayConnected My report reads). */
+    connectedToday: Int = 0,
+    connectedGoal: Int = 0,
+    /** Site visits today; null when it cannot be counted honestly. */
+    visitsToday: Int? = null,
+    visitsGoal: Int = 0,
 ) {
     val hour = java.time.LocalTime.now().hour
     val st = shiftState(attendance)
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.l)) {
-        // Hero: greeting on the brand gradient.
-        Row(
-            Modifier.fillMaxWidth().gradientCard(Radii.sheet).padding(horizontal = Space.l, vertical = Space.l + Space.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    val today = java.time.LocalDate.now()
+        .format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM", java.util.Locale.ENGLISH))
+    Column(Modifier.fillMaxWidth()) {
+        // Large-title greeting (Home C). Company logo, when set, sits on the right.
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(greetingFor(hour), style = AppType.footnote, color = Color.White.copy(alpha = 0.85f), maxLines = 1)
-                Text(firstName, style = AppType.title2, color = Color.White, maxLines = 1)
+                Text(today, style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
+                Text("${greetingFor(hour)}, $firstName", style = AppType.title, color = AppColors.TextPrimary, maxLines = 1)
                 if (!company.isNullOrBlank()) {
-                    Text(company, style = AppType.footnote, color = Color.White.copy(alpha = 0.8f), maxLines = 1)
+                    Text(company, style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
                 }
             }
-            Spacer(Modifier.width(Space.m))
-            Box(
-                Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Brand.OnGradientFill)
-                    .border(1.dp, Brand.OnGradientBorder, RoundedCornerShape(16.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (!logoUrl.isNullOrBlank()) {
-                    coil.compose.AsyncImage(
-                        model = logoUrl, contentDescription = company?.let { "$it logo" },
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Color.White),
-                    )
-                } else {
-                    Icon(Icons.Filled.Dashboard, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
-                }
-            }
-        }
-
-        // Attendance card: same state, same single action.
-        Column(Modifier.fillMaxWidth().softCard().padding(Space.l)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(AppColors.IndigoSoft),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Filled.Fingerprint, contentDescription = null, tint = AppColors.Indigo, modifier = Modifier.size(24.dp)) }
+            if (!logoUrl.isNullOrBlank()) {
                 Spacer(Modifier.width(Space.m))
-                Column(Modifier.weight(1f)) {
-                    Text("Attendance", style = AppType.label, color = AppColors.TextPrimary)
-                    Text(
-                        when (st) {
-                            ShiftState.NOT_IN -> "Not checked in"
-                            ShiftState.ON_SHIFT -> "Checked in at ${clock(attendance?.punchInAt)}"
-                            ShiftState.DONE -> "Checked out at ${clock(attendance?.punchOutAt)}"
-                        },
-                        style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1,
-                    )
-                }
-                OutlinedPill(
-                    when (st) { ShiftState.NOT_IN -> "Not in"; ShiftState.ON_SHIFT -> "On shift"; ShiftState.DONE -> "Done" },
-                    when (st) { ShiftState.NOT_IN -> AppColors.Danger; ShiftState.ON_SHIFT -> AppColors.Positive; ShiftState.DONE -> AppColors.TextSecondary },
+                coil.compose.AsyncImage(
+                    model = logoUrl, contentDescription = "$company logo",
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.size(40.dp).clip(CircleShape).background(AppColors.Surface),
                 )
             }
-            Spacer(Modifier.height(Space.m))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(AppColors.Separator))
-            Spacer(Modifier.height(Space.m))
-            val (btnLabel, btnIcon, btnBrush) = when (st) {
-                ShiftState.NOT_IN -> Triple("Check in", Icons.AutoMirrored.Filled.Login, Tiles.Positive.brush)
-                ShiftState.ON_SHIFT -> Triple("Check out", Icons.AutoMirrored.Filled.Logout, Tiles.Negative.brush)
-                ShiftState.DONE -> Triple("View", Icons.Filled.Visibility, null)
-            }
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 46.dp).clip(Radii.control)
-                    .then(if (btnBrush != null) Modifier.background(btnBrush) else Modifier.background(AppColors.SurfaceMuted))
-                    .iosPress { onAttendance() },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                val fg = if (btnBrush != null) Color.White else AppColors.TextPrimary
-                Icon(btnIcon, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(Space.s))
-                Text(btnLabel, style = AppType.label, color = fg)
-            }
         }
+        Spacer(Modifier.height(Space.l))
 
-        // The one primary action.
-        Column {
+        // Rings card: calls vs goal, connected vs goal, site visits — then the
+        // ONE primary action.
+        Column(Modifier.fillMaxWidth().clip(Radii.hero).background(AppColors.Surface).padding(Space.l)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val callsP = if (dailyGoal > 0) callsToday.toFloat() / dailyGoal else 0f
+                val connP = if (connectedGoal > 0) connectedToday.toFloat() / connectedGoal else 0f
+                val visP = if (visitsToday != null && visitsGoal > 0) visitsToday.toFloat() / visitsGoal else 0f
+                DayRings(callsP, connP, visP, Modifier.size(128.dp))
+                Spacer(Modifier.width(Space.xxl))
+                Column(verticalArrangement = Arrangement.spacedBy(Space.s)) {
+                    RingLegend(RingCalls, "Calls today", if (dailyGoal > 0) "$callsToday / $dailyGoal" else "$callsToday")
+                    RingLegend(RingConnected, "Connected", if (connectedGoal > 0) "$connectedToday / $connectedGoal" else "$connectedToday")
+                    RingLegend(RingVisits, "Site visits",
+                        when {
+                            visitsToday == null -> "—"
+                            visitsGoal > 0 -> "$visitsToday / $visitsGoal"
+                            else -> "$visitsToday"
+                        })
+                }
+            }
+            Spacer(Modifier.height(Space.m))
+            Text(
+                "${followUpNow?.toString() ?: "—"} follow-up · ${converted?.toString() ?: "—"} converted",
+                style = AppType.meta, color = AppColors.TextSecondary,
+            )
+            Spacer(Modifier.height(Space.l))
             Row(
-                Modifier.fillMaxWidth().height(56.dp).gradientCard(Radii.control, Brand.gradientHorizontal)
+                Modifier.fillMaxWidth().height(48.dp).clip(Radii.control).background(AppColors.Indigo)
                     .iosPress { onStartCalling() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(Icons.AutoMirrored.Filled.PhoneForwarded, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(Space.m))
+                Icon(Icons.Outlined.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(Space.s))
                 Text(
                     if (followUpNow != null && followUpNow > 0) "Start calling ($followUpNow)" else "Start calling",
-                    style = AppType.headline, color = Color.White,
+                    style = AppType.label, color = Color.White,
                 )
             }
-            Spacer(Modifier.height(Space.xs))
+            Spacer(Modifier.height(Space.s))
+            // The button opens the Leads tab, which starts on Call now — say
+            // exactly that (it used to promise "Opens Call now").
             Text(
-                "Opens Call now, most urgent first.",
-                style = AppType.footnote, color = AppColors.TextSecondary,
+                "Opens Leads on Call now.",
+                style = AppType.meta, color = AppColors.TextSecondary,
                 modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center,
             )
         }
+        Spacer(Modifier.height(Space.l))
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.m)) {
-            MetricTile("Follow-up", followUpNow?.toString() ?: "—", Icons.Filled.Update, Tiles.FollowUp, Modifier.weight(1f))
-            MetricTile("Converted", converted?.toString() ?: "—", Icons.Filled.CheckCircle, Tiles.Positive, Modifier.weight(1f))
-            MetricTile(
-                "Calls today", if (dailyGoal > 0) "$callsToday/$dailyGoal" else "$callsToday",
-                Icons.Filled.Call, Tiles.Calls, Modifier.weight(1f),
+        // Attendance: same state, same single action.
+        Row(
+            Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface)
+                .padding(horizontal = Space.l, vertical = Space.m),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.LocationOn, contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(Space.l))
+            Column(Modifier.weight(1f)) {
+                Text("Attendance", style = AppType.label, color = AppColors.TextPrimary)
+                Text(
+                    when (st) {
+                        ShiftState.NOT_IN -> "Not in · Not checked in"
+                        ShiftState.ON_SHIFT -> "On shift · Checked in at ${clock(attendance?.punchInAt)}"
+                        ShiftState.DONE -> "Done · Checked out at ${clock(attendance?.punchOutAt)}"
+                    },
+                    style = AppType.meta,
+                    color = when (st) {
+                        ShiftState.NOT_IN -> AppColors.Danger
+                        ShiftState.ON_SHIFT -> AppColors.Positive
+                        ShiftState.DONE -> AppColors.TextSecondary
+                    },
+                    maxLines = 1,
+                )
+            }
+            Text(
+                when (st) { ShiftState.NOT_IN -> "Check in"; ShiftState.ON_SHIFT -> "Check out"; ShiftState.DONE -> "View" },
+                style = AppType.label, color = AppColors.Indigo,
+                modifier = Modifier.clip(Radii.control).iosPress { onAttendance() }.padding(horizontal = Space.s, vertical = Space.s),
             )
         }
+    }
+}
+
+private val RingCalls = Color(0xFF007AFF)
+private val RingConnected = Color(0xFF3A3A3C)
+private val RingVisits = Color(0xFF8E8E93)
+
+/** Three concentric progress rings (Fitness-style). Fractions are clamped. */
+@Composable
+internal fun DayRings(calls: Float, connected: Float, visits: Float, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val stroke = 10.dp.toPx()
+        val gap = 4.dp.toPx()
+        listOf(calls to RingCalls, connected to RingConnected, visits to RingVisits).forEachIndexed { i, (p, c) ->
+            val inset = stroke / 2 + i * (stroke + gap)
+            val sz = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2)
+            val tl = androidx.compose.ui.geometry.Offset(inset, inset)
+            drawArc(c.copy(alpha = 0.15f), 0f, 360f, false, tl, sz,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+            val f = if (p.isNaN()) 0f else p.coerceIn(0f, 1f)
+            if (f > 0f) drawArc(c, -90f, 360f * f, false, tl, sz,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        }
+    }
+}
+
+@Composable
+private fun RingLegend(color: Color, label: String, value: String) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+            Spacer(Modifier.width(Space.s))
+            Text(label, style = AppType.meta, color = AppColors.TextSecondary, maxLines = 1)
+        }
+        Text(value, style = AppType.headline, color = AppColors.TextPrimary, maxLines = 1,
+            modifier = Modifier.padding(start = Space.l))
     }
 }
 
@@ -228,26 +268,29 @@ internal fun MetricTile(label: String, value: String, icon: ImageVector, tone: T
 
 internal data class QuickItem(val label: String, val icon: ImageVector, val onClick: () -> Unit)
 
-/** Quick access: a 3-column grid of white cards, each with a gradient icon tile. */
+/** Quick access: one white card, a 4-column grid of monochrome icons. */
 @Composable
 internal fun QuickAccessGrid(items: List<QuickItem>) {
-    val tones = listOf(Tiles.Leads, Tiles.FollowUp, Tiles.Calls, Tiles.Brand, Tiles.Positive, Tiles.Time, Tiles.Negative, Tiles.FollowUp)
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.m)) {
-        AccentHeader("Quick access")
-        items.chunked(3).forEachIndexed { r, row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.m)) {
-                row.forEachIndexed { c, q ->
-                    Column(
-                        Modifier.weight(1f).softCard().iosPress { q.onClick() }
-                            .padding(vertical = Space.l, horizontal = Space.xs),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        GradientIconTile(q.icon, tones[(r * 3 + c) % tones.size], size = 48.dp)
-                        Spacer(Modifier.height(Space.s))
-                        Text(q.label, style = AppType.metaStrong, color = AppColors.TextPrimary, maxLines = 1, textAlign = TextAlign.Center)
+    Column(Modifier.fillMaxWidth()) {
+        AccentHeader("Quick access", Modifier.padding(bottom = Space.s))
+        Column(
+            Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface).padding(vertical = Space.l, horizontal = Space.s),
+            verticalArrangement = Arrangement.spacedBy(Space.l),
+        ) {
+            items.chunked(4).forEach { row ->
+                Row(Modifier.fillMaxWidth()) {
+                    row.forEach { q ->
+                        Column(
+                            Modifier.weight(1f).clip(Radii.control).iosPress { q.onClick() }.padding(vertical = Space.xs),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(q.icon, contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.height(Space.s))
+                            Text(q.label, style = AppType.meta, color = AppColors.TextPrimary, maxLines = 1, textAlign = TextAlign.Center)
+                        }
                     }
+                    repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
-                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

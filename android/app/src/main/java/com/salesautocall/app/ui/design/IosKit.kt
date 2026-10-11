@@ -165,9 +165,9 @@ fun IosGroup(
 ) {
     Column(modifier.fillMaxWidth()) {
         if (!header.isNullOrBlank()) {
-            AccentHeader(header, Modifier.padding(start = Space.xs, end = Space.l, bottom = Space.s))
+            AccentHeader(header, Modifier.padding(end = Space.l, bottom = Space.s))
         }
-        Column(Modifier.fillMaxWidth().softCard(), content = content)
+        Column(Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface), content = content)
         if (!footer.isNullOrBlank()) {
             Text(
                 footer, style = AppType.footnote, color = AppColors.TextSecondary,
@@ -177,14 +177,12 @@ fun IosGroup(
     }
 }
 
-/** The coloured rounded tile an iOS Settings row carries on its left. */
+/** The row's leading icon: monochrome graphite, no coloured tile. */
 @Composable
-fun IosIconTile(icon: ImageVector, tint: Color, size: Int = 32) {
-    Box(
-        Modifier.size(size.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape((size * 0.3f).dp))
-            .background(Tiles.forTint(tint).brush),
-        contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size((size * 0.6f).dp)) }
+fun IosIconTile(icon: ImageVector, @Suppress("UNUSED_PARAMETER") tint: Color, size: Int = 32) {
+    Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) {
+        Icon(icon, contentDescription = null, tint = Brand.Ink, modifier = Modifier.size((size * 0.66f).dp))
+    }
 }
 
 /**
@@ -282,7 +280,7 @@ fun IosChip(
 ) {
     val faded = empty && !selected
     val bg = when {
-        selected -> selectedColor
+        selected -> if (selectedColor == AppColors.Indigo) AppColors.TextPrimary else selectedColor
         faded -> AppColors.Surface.copy(alpha = 0.55f)
         else -> AppColors.Surface
     }
@@ -298,8 +296,7 @@ fun IosChip(
     }
     Row(
         modifier.heightIn(min = 32.dp).clip(Radii.chip)
-            .then(if (selected && selectedColor == AppColors.Indigo) Modifier.background(Brand.gradientHorizontal) else Modifier.background(bg))
-            .then(if (!selected) Modifier.border(1.dp, AppColors.Border, Radii.chip) else Modifier)
+            .background(bg)
             .then(if (faded) Modifier else Modifier.iosPress(scaleTo = 0.95f) { onClick() })
             .padding(horizontal = 13.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -315,7 +312,7 @@ fun IosChip(
 /** A small read-only tag: tinted capsule, coloured text. */
 @Composable
 fun IosTag(text: String, fg: Color, bg: Color = fg.copy(alpha = 0.12f)) {
-    Box(Modifier.clip(Radii.tag).background(bg).border(1.dp, fg.copy(alpha = 0.30f), Radii.tag).padding(horizontal = 9.dp, vertical = 3.dp)) {
+    Box(Modifier.clip(Radii.tag).background(bg).padding(horizontal = 8.dp, vertical = 2.dp)) {
         Text(text, style = AppType.tag, color = fg, maxLines = 1)
     }
 }
@@ -376,16 +373,15 @@ fun IosSegmented(
         label = "seg",
     )
     Box(
-        modifier.fillMaxWidth().height(40.dp).clip(Radii.chip).background(AppColors.Surface)
-            .border(1.dp, AppColors.Border, Radii.chip)
+        modifier.fillMaxWidth().height(36.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(9.dp)).background(IosColors.Fill)
             .onSizeChanged { widthPx = it.width }
             .padding(pad),
     ) {
         if (widthPx > 0 && !none) {
             Box(
                 Modifier.offset(x = thumbX).width(segW).fillMaxHeight()
-                    .shadow(4.dp, androidx.compose.foundation.shape.RoundedCornerShape(10.dp), clip = false, spotColor = Brand.Start.copy(alpha = 0.4f))
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(Brand.gradientHorizontal),
+                    .shadow(2.dp, androidx.compose.foundation.shape.RoundedCornerShape(7.dp), clip = false, spotColor = Color.Black.copy(alpha = 0.2f))
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(7.dp)).background(Color.White),
             )
         }
         Row(Modifier.fillMaxWidth().fillMaxHeight()) {
@@ -401,8 +397,8 @@ fun IosSegmented(
                 ) {
                     ShrinkText(
                         label,
-                        style = AppType.label.copy(fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
-                        color = if (on) Color.White else AppColors.TextSecondary,
+                        style = AppType.label.copy(fontSize = 12.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                        color = if (on) AppColors.TextPrimary else AppColors.TextSecondary,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -504,9 +500,9 @@ fun IosActionSheet(
 // ── Navigation bar ───────────────────────────────────────────────
 
 /**
- * The app bar: brand gradient, white title, translucent rounded icon buttons.
- * (Name kept from the iOS pass so call sites do not change.) [collapsed] now
- * only deepens the shadow once content scrolls under the bar.
+ * The navigation bar, Apple style: the grouped canvas, graphite icons, and a
+ * small centred-weight title that fades in only once the large title has
+ * scrolled away ([collapsed]) — then a hairline appears under it.
  */
 @Composable
 fun IosNavBar(
@@ -519,46 +515,45 @@ fun IosNavBar(
     leading: (@Composable () -> Unit)? = null,
 ) {
     val a by animateFloatAsState(if (collapsed) 1f else 0f, tween(180), label = "nav")
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp)
-    Box(
-        modifier.fillMaxWidth()
-            .shadow((4 + 6 * a).dp, shape, clip = false, spotColor = Brand.Start.copy(alpha = 0.35f))
-            .clip(shape).background(Brand.gradient)
-            .height(60.dp)
-            .padding(horizontal = Space.s),
-    ) {
-        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier.fillMaxWidth().background(AppColors.Canvas.copy(alpha = 0.96f))) {
+        Row(
+            Modifier.fillMaxWidth().height(44.dp).padding(horizontal = Space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (onBack != null) {
-                GlassIconButton(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = backLabel ?: "Back") { onBack() }
+                Row(
+                    Modifier.heightIn(min = 44.dp).iosPress { onBack() }.padding(end = Space.s),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = backLabel ?: "Back",
+                        tint = AppColors.Indigo, modifier = Modifier.size(28.dp))
+                    if (!backLabel.isNullOrBlank()) Text(backLabel, style = AppType.body, color = AppColors.Indigo, maxLines = 1)
+                }
             } else if (leading != null) {
-                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides Color.White) {
+                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) {
                     GlassBox { leading() }
                 }
             }
             Spacer(Modifier.width(Space.s))
             Text(
-                title, style = AppType.headline.copy(fontSize = 18.sp), color = Color.White, maxLines = 1,
+                title, style = AppType.headline, color = AppColors.TextPrimary.copy(alpha = a), maxLines = 1,
                 modifier = Modifier.weight(1f),
             )
             trailing?.let {
-                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides Color.White) { it() }
+                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) { it() }
             }
         }
+        Box(Modifier.fillMaxWidth().height(0.5.dp).background(AppColors.Separator.copy(alpha = a)))
     }
 }
 
-/**
- * The line under the app bar. The title itself now lives in the gradient bar,
- * so this shows only the subtitle (the facts line), never a second title.
- */
+/** The large title a screen opens with (22), and its optional grey line. */
 @Composable
 fun IosLargeTitle(title: String, subtitle: String? = null, modifier: Modifier = Modifier, inset: androidx.compose.ui.unit.Dp = Space.l) {
-    Column(modifier.fillMaxWidth().padding(start = inset, end = inset, top = Space.l, bottom = Space.xs)) {
+    Column(modifier.fillMaxWidth().padding(start = inset, end = inset, top = Space.s, bottom = Space.xs)) {
+        Text(title, style = AppType.title, color = AppColors.TextPrimary)
         if (!subtitle.isNullOrBlank()) {
-            Text(subtitle, style = AppType.footnote, color = AppColors.TextSecondary)
-        } else {
-            // Keep the title readable for screen readers / previews where no bar exists.
-            Text(title, style = AppType.headline, color = AppColors.TextPrimary)
+            Text(subtitle, style = AppType.meta, color = AppColors.TextSecondary)
         }
     }
 }

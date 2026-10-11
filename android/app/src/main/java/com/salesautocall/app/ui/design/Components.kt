@@ -465,8 +465,7 @@ fun AiPanel(
         modifier
             .fillMaxWidth()
             .clip(Radii.card)
-            .background(AppColors.IndigoSoft)
-            .border(1.dp, AppColors.Indigo.copy(alpha = 0.15f), Radii.card)
+            .background(AppColors.Surface)
             .padding(Space.l),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -496,8 +495,7 @@ fun AiChip(text: String, onClick: () -> Unit) {
     Row(
         Modifier
             .clip(Radii.tag)
-            .background(AppColors.Surface)
-            .border(1.dp, AppColors.Indigo.copy(alpha = 0.25f), Radii.tag)
+            .background(AppColors.IndigoSoft)
             .clickable { onClick() }
             .padding(horizontal = Space.m, vertical = Space.s),
         verticalAlignment = Alignment.CenterVertically,
