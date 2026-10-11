@@ -103,7 +103,7 @@ export default async function ContentPage({ searchParams }: { searchParams: Prom
                       <td style={{ padding: "8px 4px", color: "var(--muted)" }}>{fmt(s.sent_at)}</td>
                       <td style={{ padding: "8px 4px" }}>
                         {s.opened_at
-                          ? <span style={{ color: "#16a34a", fontWeight: 600 }}>✅ {fmt(s.opened_at)}{s.open_count > 1 ? ` (${s.open_count}×)` : ""}</span>
+                          ? <span style={{ color: "var(--good)", fontWeight: 600 }}>✅ {fmt(s.opened_at)}{s.open_count > 1 ? ` (${s.open_count}×)` : ""}</span>
                           : <span style={{ color: "var(--muted)" }}>Not yet</span>}
                       </td>
                     </tr>

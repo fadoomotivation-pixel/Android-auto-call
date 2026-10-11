@@ -109,9 +109,9 @@ async function DigestList({ isSuper, companyId }: { isSuper: boolean; companyId:
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 20 }}>
       {rows.map((d) => (
-        <div key={d.id} className="card hover-scale" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", borderRadius: 16, padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}>
+        <div key={d.id} className="card hover-scale" style={{ background: "var(--tint)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", borderRadius: 16, padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
-            <strong style={{ fontSize: 16, color: "#fff", letterSpacing: "0.2px" }}>
+            <strong style={{ fontSize: 16, color: "var(--text)", letterSpacing: "0.2px" }}>
               {istDayYear(d.digest_date)}
               {isSuper && <span style={{ color: "var(--muted)", fontWeight: 400 }}> · {nameById.get(d.company_id) ?? "—"}</span>}
             </strong>
@@ -126,8 +126,8 @@ async function DigestList({ isSuper, companyId }: { isSuper: boolean; companyId:
 
 function DigestStats({ stats }: { stats: Record<string, number> }) {
   const chip = (label: string, value: number | undefined) => (
-    <span style={{ fontSize: 12, color: "var(--text)", background: "rgba(255,255,255,0.05)", padding: "6px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", gap: 6, fontWeight: 500, letterSpacing: "0.5px" }}>
-      <strong style={{ color: "#fff", fontSize: 14 }}>{value ?? 0}</strong> <span style={{ color: "var(--muted)", textTransform: "uppercase", fontSize: 10 }}>{label}</span>
+    <span style={{ fontSize: 12, color: "var(--text)", background: "var(--tint)", padding: "6px 12px", borderRadius: 999, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 6, fontWeight: 500, letterSpacing: "0.5px" }}>
+      <strong style={{ color: "var(--text)", fontSize: 14 }}>{value ?? 0}</strong> <span style={{ color: "var(--muted)", textTransform: "uppercase", fontSize: 10 }}>{label}</span>
     </span>
   );
   return (

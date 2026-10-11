@@ -287,7 +287,7 @@ export function CallsBoard({
           style={{
             display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
             border: "1px solid rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.08)",
-            borderRadius: 14, padding: "10px 14px", marginBottom: 14, fontSize: 13,
+            borderRadius: 12, padding: "10px 14px", marginBottom: 14, fontSize: 13,
           }}
         >
           <span>

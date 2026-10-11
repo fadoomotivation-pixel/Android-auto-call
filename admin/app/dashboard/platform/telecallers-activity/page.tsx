@@ -209,7 +209,7 @@ const WATCH_LABEL: Record<Row["wa_watch"], string> = {
   stale: "stale",
 };
 const WATCH_TONE: Record<Row["wa_watch"], string | undefined> = {
-  none: undefined, ok: "#22c55e", stale: "#f59e0b",
+  none: undefined, ok: "var(--good)", stale: "var(--warn)",
 };
 
 export default function TelecallerActivityPage({
@@ -364,7 +364,7 @@ async function ActivityBody({
             through above it. */}
         <div style={{
           display: "flex", alignItems: "center", gap: 12, paddingBottom: 12,
-          borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: 14,
+          borderBottom: "1px solid var(--border)", marginBottom: 14,
           position: "sticky", top: -16, zIndex: 2,
           background: "#0b1411", paddingTop: 16, marginTop: -16,
         }}>
@@ -373,8 +373,8 @@ async function ActivityBody({
             <div className="subtitle" style={{ fontSize: 12.5, marginTop: 2 }}>
               {peer} · {thread.length} messages
               {inCrm
-                ? <> · <span style={{ color: "#22c55e" }}>a lead in {current.company_name.trim()}</span></>
-                : <> · <span style={{ color: "#f59e0b" }}>not in the CRM</span></>}
+                ? <> · <span style={{ color: "var(--good)" }}>a lead in {current.company_name.trim()}</span></>
+                : <> · <span style={{ color: "var(--warn)" }}>not in the CRM</span></>}
             </div>
             {/* WHEN THIS CONVERSATION ACTUALLY STOPPED.
                 "Today's messages aren't showing" is the reasonable conclusion
@@ -427,11 +427,11 @@ async function ActivityBody({
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: 13 }}>
                 <span>
                   {owed
-                    ? <><strong style={{ color: "#ef4444" }}>They spoke last</strong> — waiting {human}</>
+                    ? <><strong style={{ color: "var(--bad)" }}>They spoke last</strong> — waiting {human}</>
                     : <><strong>Rep spoke last</strong> — ball is with the buyer</>}
                 </span>
-                {hot > 0 && <span style={{ color: "#22c55e" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
-                {risk > 0 && <span style={{ color: "#ef4444" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
+                {hot > 0 && <span style={{ color: "var(--good)" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
+                {risk > 0 && <span style={{ color: "var(--bad)" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
                 <span style={{ opacity: 0.7 }}>{ordered.length} messages</span>
                 {/* "KITNA DOWNLOAD HO GAYA", ANSWERED WITH A NUMBER.
                     A photo arrives as a message first and as a file a few
@@ -450,7 +450,7 @@ async function ActivityBody({
                   ).length;
                   const done = got === withFile.length;
                   return (
-                    <span style={{ color: done ? "#22c55e" : coming > 0 ? "#f59e0b" : "#8696a0" }}>
+                    <span style={{ color: done ? "var(--good)" : coming > 0 ? "var(--warn)" : "#8696a0" }}>
                       📎 {got}/{withFile.length} file{withFile.length === 1 ? "" : "s"}
                       {done ? " downloaded" : coming > 0 ? ` downloaded · ${coming} still coming` : " downloaded"}
                     </span>
@@ -487,7 +487,7 @@ async function ActivityBody({
             <input name="name" placeholder="Their name (optional)" defaultValue={named ?? ""}
               style={{
                 padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)",
-                background: "rgba(255,255,255,0.02)", color: "var(--text)", minWidth: 220,
+                background: "var(--tint)", color: "var(--text)", minWidth: 220,
               }} />
             <button className="btn" type="submit">Add as lead</button>
           </form>
@@ -597,7 +597,7 @@ async function ActivityBody({
             marginBottom: 16, padding: 14,
             background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.35)",
           }}>
-            <strong style={{ color: "#f59e0b" }}>
+            <strong style={{ color: "var(--warn)" }}>
               ⚠️ This WhatsApp is probably not the number they use for leads
             </strong>
             <p className="subtitle" style={{ marginTop: 6, marginBottom: 8 }}>
@@ -638,12 +638,12 @@ async function ActivityBody({
         {(current.wa_hot > 0 || current.wa_risk > 0) && (
           <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
             {current.wa_risk > 0 && (
-              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, background: "rgba(239,68,68,0.14)", color: "#ef4444" }}>
+              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, background: "rgba(239,68,68,0.14)", color: "var(--bad)" }}>
                 ⚠️ {current.wa_risk} buyer message{current.wa_risk === 1 ? "" : "s"} read as about to walk
               </span>
             )}
             {current.wa_hot > 0 && (
-              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, background: "rgba(34,197,94,0.14)", color: "#22c55e" }}>
+              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, background: "rgba(34,197,94,0.14)", color: "var(--good)" }}>
                 🔥 {current.wa_hot} buyer message{current.wa_hot === 1 ? "" : "s"} read as ready to move
               </span>
             )}
@@ -688,7 +688,7 @@ async function ActivityBody({
             marginBottom: 16, padding: 14,
             background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.45)",
           }}>
-            <strong style={{ color: "#ef4444" }}>
+            <strong style={{ color: "var(--bad)" }}>
               {current.wa_watch === "none"
                 ? "⚠️ This telecaller's WhatsApp is not connected"
                 : "⚠️ Nothing is being captured right now"}
@@ -714,7 +714,7 @@ async function ActivityBody({
             marginBottom: 16, padding: 14,
             background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.35)",
           }}>
-            <strong style={{ color: "#ef4444" }}>
+            <strong style={{ color: "var(--bad)" }}>
               🔒 {locked.reduce((a, c) => a + c.locked, 0)} messages arrived that could not be read
             </strong>
             <p className="subtitle" style={{ marginTop: 6, marginBottom: 8 }}>
@@ -764,7 +764,7 @@ async function ActivityBody({
               return (
                 <p style={{
                   marginTop: -4, marginBottom: 12, fontSize: 13,
-                  color: hours >= 24 ? "#ef4444" : "#8696a0",
+                  color: hours >= 24 ? "var(--bad)" : "#8696a0",
                   fontWeight: hours >= 24 ? 600 : 400,
                 }}>
                   {hours >= 24
@@ -898,7 +898,7 @@ async function ActivityBody({
                         working relationship living on one person's phone. */}
                     <td style={{ textAlign: "right" }}>
                       {u.calls > 0
-                        ? <strong style={{ color: "#f59e0b" }}>{u.calls}×</strong>
+                        ? <strong style={{ color: "var(--warn)" }}>{u.calls}×</strong>
                         : <span style={{ opacity: 0.3 }}>—</span>}
                     </td>
                     <td style={{ textAlign: "right" }}>{u.messages}</td>
@@ -906,7 +906,7 @@ async function ActivityBody({
                         never replied is noise; one that wrote BACK is a person. */}
                     <td style={{ textAlign: "right" }}>
                       {u.they_sent > 0
-                        ? <strong style={{ color: "#22c55e" }}>{u.they_sent}</strong>
+                        ? <strong style={{ color: "var(--good)" }}>{u.they_sent}</strong>
                         : <span style={{ opacity: 0.4 }}>0</span>}
                     </td>
                     <td className="subtitle" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
@@ -955,8 +955,8 @@ async function ActivityBody({
                       <td style={{ textAlign: "right" }}>{b.times_sent}</td>
                       <td style={{ textAlign: "right" }}>
                         {dead
-                          ? <strong style={{ color: "#ef4444" }}>0</strong>
-                          : <strong style={{ color: "#22c55e" }}>{b.replies_from}</strong>}
+                          ? <strong style={{ color: "var(--bad)" }}>0</strong>
+                          : <strong style={{ color: "var(--good)" }}>{b.replies_from}</strong>}
                       </td>
                     </tr>
                   );
@@ -996,7 +996,7 @@ async function ActivityBody({
               padding: "6px 14px", textDecoration: "none",
               fontWeight: d === days ? 700 : 400,
               color: d === days ? "#fff" : "inherit",
-              background: d === days ? "var(--accent, #4353B8)" : undefined,
+              background: d === days ? "var(--accent)" : undefined,
             }}>
             {d === 1 ? "Today" : `${d} days`}
           </a>
@@ -1005,7 +1005,7 @@ async function ActivityBody({
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
         <div className="card" style={{ flex: 1, minWidth: 160, padding: "14px 12px" }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: silent.length ? "#ef4444" : undefined }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: silent.length ? "var(--bad)" : undefined }}>
             {silent.length}/{rows.length}
           </div>
           <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
@@ -1046,13 +1046,13 @@ async function ActivityBody({
                   {!r.is_active && " · inactive account"}
                 </div>
                 {r.silent && (
-                  <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 600 }}>
+                  <div style={{ color: "var(--bad)", fontSize: 12, fontWeight: 600 }}>
                     Nothing recorded in {days} day{days === 1 ? "" : "s"}
                   </div>
                 )}
               </td>
               <td style={{ textAlign: "right" }}>
-                {r.calls === 0 ? <strong style={{ color: "#ef4444" }}>0</strong> : r.calls}
+                {r.calls === 0 ? <strong style={{ color: "var(--bad)" }}>0</strong> : r.calls}
                 {r.connected_calls > 0 && (
                   <div className="subtitle" style={{ fontSize: 12 }}>{r.connected_calls} got through</div>
                 )}
@@ -1071,10 +1071,10 @@ async function ActivityBody({
               </td>
               <td style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
                 {r.wa_risk > 0 && (
-                  <div style={{ color: "#ef4444", fontWeight: 700 }}>⚠️ {r.wa_risk} about to walk</div>
+                  <div style={{ color: "var(--bad)", fontWeight: 700 }}>⚠️ {r.wa_risk} about to walk</div>
                 )}
                 {r.wa_hot > 0 && (
-                  <div style={{ color: "#22c55e", fontWeight: 700 }}>🔥 {r.wa_hot} ready to move</div>
+                  <div style={{ color: "var(--good)", fontWeight: 700 }}>🔥 {r.wa_hot} ready to move</div>
                 )}
                 {r.wa_risk === 0 && r.wa_hot === 0 && <span style={{ opacity: 0.3 }}>—</span>}
               </td>

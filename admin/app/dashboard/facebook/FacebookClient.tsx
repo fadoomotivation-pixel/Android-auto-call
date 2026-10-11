@@ -480,7 +480,7 @@ export function FacebookClient({
     setSavingCapi(false);
   }
 
-  const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" } as const;
+  const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" } as const;
   const labelStyle = { display: "block", marginBottom: 8, fontSize: 13, fontWeight: 500, color: "var(--muted)", letterSpacing: "0.2px" } as const;
 
   // Overall connection health, derived from the last test (auto-run on load).
@@ -519,7 +519,7 @@ export function FacebookClient({
         {checks && (
           <span style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 600, padding: "4px 12px", borderRadius: 999,
             background: allGood ? "rgba(34,197,94,0.14)" : anyBad ? "rgba(248,113,113,0.14)" : "rgba(148,163,184,0.14)",
-            color: allGood ? "#22c55e" : anyBad ? "#f87171" : "var(--muted)" }}>
+            color: allGood ? "var(--good)" : anyBad ? "var(--bad)" : "var(--muted)" }}>
             {allGood ? "✅ Connection live" : anyBad ? "⚠ Needs attention" : "Checking…"}
           </span>
         )}
@@ -539,10 +539,10 @@ export function FacebookClient({
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
         <FbStat label="Leads today" value={stats.today} tone="#1877F2" loading={countFailed} />
-        <FbStat label="Last 7 days" value={stats.d7} tone="#22c55e" loading={countFailed} />
-        <FbStat label="Last 30 days" value={stats.d30} tone="#a855f7" loading={countFailed} />
-        <FbStat label="Conversions → Meta" value={stats.conversions} tone="#f59e0b" loading={countFailed} />
-        <FbStat label="Not sent" value={stats.failed} tone={stats.failed > 0 ? "#ef4444" : "#86868B"} loading={countFailed} />
+        <FbStat label="Last 7 days" value={stats.d7} tone="var(--good)" loading={countFailed} />
+        <FbStat label="Last 30 days" value={stats.d30} tone="var(--purple)" loading={countFailed} />
+        <FbStat label="Conversions → Meta" value={stats.conversions} tone="var(--warn)" loading={countFailed} />
+        <FbStat label="Not sent" value={stats.failed} tone={stats.failed > 0 ? "var(--bad)" : "var(--muted)"} loading={countFailed} />
       </div>
       {statsError && <div className="error">Lead counts could not be loaded. {statsError}</div>}
       {integrationError && <div className="error">Facebook setup could not be loaded. {integrationError}</div>}
@@ -550,11 +550,11 @@ export function FacebookClient({
   );
 
   const recentLeadsCard = (
-    <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
+    <div className="card" style={{ background: "var(--tint)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ margin: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Recent Facebook leads</h3>
         <button type="button" onClick={() => companyId && loadRecentLeads(companyId)} disabled={!companyId}
-          style={{ fontSize: 12, padding: "5px 12px", borderRadius: 7, border: "1px solid var(--border)", background: "rgba(255,255,255,0.04)", color: "var(--muted)", cursor: "pointer" }}>
+          style={{ fontSize: 12, padding: "5px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--muted)", cursor: "pointer" }}>
           🔄 Refresh
         </button>
       </div>
@@ -567,7 +567,7 @@ export function FacebookClient({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {recentLeads.map((l) => (
-            <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: 10, flexWrap: "wrap" }}>
+            <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 12, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontWeight: 600, color: "var(--text)" }}>{l.name || "(no name)"}</div>
                 <div style={{ fontSize: 13, color: "var(--muted)", fontFamily: "monospace" }}>{l.phone}</div>
@@ -610,7 +610,7 @@ export function FacebookClient({
           <select
             value={companyId}
             onChange={(e) => setCompanyId(e.target.value)}
-            style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", minWidth: 220 }}
+            style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", minWidth: 220 }}
           >
             {companies.length === 0 && <option value="">No companies</option>}
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
@@ -626,7 +626,7 @@ export function FacebookClient({
         <div className="card" style={{ background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.25)", padding: 20, borderRadius: 16, marginBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ minWidth: 220, flex: 1 }}>
-              <strong style={{ color: "#fff", fontSize: 15 }}>⚡ Pull Facebook leads now</strong>
+              <strong style={{ color: "var(--text)", fontSize: 15 }}>⚡ Pull Facebook leads now</strong>
               <p className="subtitle" style={{ marginTop: 2 }}>
                 A lead didn&apos;t reach the rep in real time? Pull the last 7 days now — each missed lead
                 is routed to its company &amp; rep (they get the alert), and CAPI fires back to Meta.
@@ -636,18 +636,18 @@ export function FacebookClient({
               type="button"
               onClick={pullLeads}
               disabled={pulling}
-              style={{ background: "#10b981", color: "#04120c", fontWeight: 700, border: "none", padding: "12px 20px", borderRadius: 10, cursor: pulling ? "default" : "pointer", whiteSpace: "nowrap" }}
+              style={{ background: "var(--good)", color: "#04120c", fontWeight: 700, border: "none", padding: "12px 20px", borderRadius: 12, cursor: pulling ? "default" : "pointer", whiteSpace: "nowrap" }}
             >
               {pulling ? "Pulling…" : "Pull leads now"}
             </button>
           </div>
           {pullMsg && (
-            <div style={{ marginTop: 12, fontSize: 14, color: pullMsg.startsWith("✓") ? "#10b981" : "#ef4444" }}>{pullMsg}</div>
+            <div style={{ marginTop: 12, fontSize: 14, color: pullMsg.startsWith("✓") ? "var(--good)" : "var(--bad)" }}>{pullMsg}</div>
           )}
         </div>
       )}
 
-      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
+      <div className="card" style={{ background: "var(--tint)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
         <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 1: Setup Meta App</h3>
         <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>
           1. Go to developers.facebook.com and create an app (Type: Business).<br />
@@ -660,14 +660,14 @@ export function FacebookClient({
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span><b style={{ color: "#1877F2" }}>Webhook URL:</b> {webhookUrl}</span>
             <button type="button" onClick={() => copyField(webhookUrl, "url")}
-              style={{ fontSize: 11, padding: "3px 9px", borderRadius: 6, border: "1px solid rgba(24,119,242,0.4)", background: "rgba(24,119,242,0.1)", color: "#1877F2", cursor: "pointer" }}>
+              style={{ fontSize: 11, padding: "3px 9px", borderRadius: 8, border: "1px solid rgba(24,119,242,0.4)", background: "rgba(24,119,242,0.1)", color: "#1877F2", cursor: "pointer" }}>
               {copiedField === "url" ? "Copied ✓" : "Copy"}
             </button>
           </div>
           <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span><b style={{ color: "#1877F2" }}>Verify Token:</b> {verifyToken}</span>
             <button type="button" onClick={() => copyField(verifyToken, "vt")}
-              style={{ fontSize: 11, padding: "3px 9px", borderRadius: 6, border: "1px solid rgba(24,119,242,0.4)", background: "rgba(24,119,242,0.1)", color: "#1877F2", cursor: "pointer" }}>
+              style={{ fontSize: 11, padding: "3px 9px", borderRadius: 8, border: "1px solid rgba(24,119,242,0.4)", background: "rgba(24,119,242,0.1)", color: "#1877F2", cursor: "pointer" }}>
               {copiedField === "vt" ? "Copied ✓" : "Copy"}
             </button>
           </div>
@@ -696,7 +696,7 @@ export function FacebookClient({
               value={pageId} 
               onChange={e => setPageId(e.target.value)} 
               placeholder="e.g. 1029384756"
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" }}
               required
             />
           </div>
@@ -711,13 +711,13 @@ export function FacebookClient({
               value={accessToken}
               onChange={e => setAccessToken(e.target.value)}
               placeholder={integration?.page_access_token_secret_id ? "Stored securely — leave blank to keep current" : "EAABw..."}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s" }}
               required={!integration?.page_access_token_secret_id}
             />
           </div>
 
           {/* Lead routing — auto-assign vs admin-controlled distribution */}
-          <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "rgba(255,255,255,0.02)" }}>
+          <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "var(--tint)" }}>
             <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
               <input
                 type="checkbox"
@@ -740,7 +740,7 @@ export function FacebookClient({
             type="submit"
             disabled={saving}
             style={{ 
-              background: "linear-gradient(135deg, #1877F2, #0A52CC)", 
+              background: "linear-gradient(135deg, #1877F2, var(--accent))", 
               color: "white", 
               padding: "12px 20px", 
               borderRadius: 8, 
@@ -757,7 +757,7 @@ export function FacebookClient({
       </div>
 
       {/* Connection health — verify + one-click subscribe (via facebook-manage). */}
-      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
+      <div className="card" style={{ background: "var(--tint)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
         <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Connection health</h3>
         <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 16, lineHeight: 1.6 }}>
           Check that your token, page subscription and lead permission are all live — and subscribe the page in one click.
@@ -775,7 +775,7 @@ export function FacebookClient({
             type="button"
             onClick={runSubscribe}
             disabled={subscribing || !integration}
-            style={{ background: "linear-gradient(135deg, #1877F2, #0A52CC)", color: "white", padding: "10px 18px", borderRadius: 8, border: "none", fontWeight: 600, cursor: subscribing ? "wait" : "pointer" }}
+            style={{ background: "linear-gradient(135deg, #1877F2, var(--accent))", color: "white", padding: "10px 18px", borderRadius: 8, border: "none", fontWeight: 600, cursor: subscribing ? "wait" : "pointer" }}
           >
             {subscribing ? "Subscribing…" : "🔗 Auto-subscribe page"}
           </button>
@@ -784,19 +784,19 @@ export function FacebookClient({
             onClick={runPageToken}
             disabled={fixing || !integration}
             title="If you saved a User / System-User token, this converts it to the Page Access Token the webhook needs."
-            style={{ background: "rgba(16,185,129,0.12)", color: "#22c55e", border: "1px solid rgba(16,185,129,0.4)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: fixing ? "wait" : "pointer" }}
+            style={{ background: "rgba(16,185,129,0.12)", color: "var(--good)", border: "1px solid rgba(16,185,129,0.4)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: fixing ? "wait" : "pointer" }}
           >
             {fixing ? "Fixing…" : "🔧 Get Page token"}
           </button>
         </div>
         {!integration && <p style={{ fontSize: 13, color: "var(--muted)" }}>Save the Page integration above first.</p>}
-        {connMsg && <div style={{ fontSize: 13, color: connMsg.startsWith("✓") ? "#22c55e" : "#f87171", marginBottom: 10 }}>{connMsg}</div>}
+        {connMsg && <div style={{ fontSize: 13, color: connMsg.startsWith("✓") ? "var(--good)" : "var(--bad)", marginBottom: 10 }}>{connMsg}</div>}
         {checks && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {[checks.token, checks.subscription, checks.permission].filter(Boolean).map((c, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 }}>
                 <span style={{ fontSize: 16 }}>{c!.ok ? "✅" : "❌"}</span>
-                <span style={{ color: c!.ok ? "var(--text)" : "#fca5a5" }}>{c!.label}</span>
+                <span style={{ color: c!.ok ? "var(--text)" : "var(--bad)" }}>{c!.label}</span>
               </div>
             ))}
           </div>
@@ -806,7 +806,7 @@ export function FacebookClient({
       {recentLeadsCard}
 
       {/* Step 3 — close the loop: send conversions BACK to Meta (CAPI) */}
-      <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
+      <div className="card" style={{ background: "var(--tint)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 32, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", borderRadius: 16 }}>
         <h3 style={{ marginTop: 0, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Step 3: Send conversions back to Meta</h3>
         <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>
           Teach Meta which leads actually convert. When a Meta lead reaches a stage below, we send Meta a
@@ -870,7 +870,7 @@ export function FacebookClient({
           <button
             type="submit"
             disabled={savingCapi}
-            style={{ background: "linear-gradient(135deg, #1877F2, #0A52CC)", color: "white", padding: "12px 20px", borderRadius: 8, border: "none", fontWeight: 600, cursor: savingCapi ? "wait" : "pointer", boxShadow: "0 4px 16px rgba(24, 119, 242, 0.3)", marginTop: 4 }}
+            style={{ background: "linear-gradient(135deg, #1877F2, var(--accent))", color: "white", padding: "12px 20px", borderRadius: 8, border: "none", fontWeight: 600, cursor: savingCapi ? "wait" : "pointer", boxShadow: "0 4px 16px rgba(24, 119, 242, 0.3)", marginTop: 4 }}
           >
             {savingCapi ? "Saving..." : "Save Conversions Setup"}
           </button>
@@ -881,11 +881,11 @@ export function FacebookClient({
               type="button"
               onClick={runTestCapi}
               disabled={capiTesting}
-              style={{ background: "rgba(16,185,129,0.12)", color: "#22c55e", border: "1px solid rgba(16,185,129,0.4)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: capiTesting ? "wait" : "pointer" }}
+              style={{ background: "rgba(16,185,129,0.12)", color: "var(--good)", border: "1px solid rgba(16,185,129,0.4)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: capiTesting ? "wait" : "pointer" }}
             >
               {capiTesting ? "Testing…" : "🧪 Test CAPI"}
             </button>
-            {capiMsg && <span style={{ fontSize: 13, color: capiMsg.startsWith("✓") || capiMsg.startsWith("No failed") || (/Still failed: 0\b/.test(capiMsg) && !capiMsg.includes("Waiting for a token")) ? "#22c55e" : "#f87171" }}>{capiMsg}</span>}
+            {capiMsg && <span style={{ fontSize: 13, color: capiMsg.startsWith("✓") || capiMsg.startsWith("No failed") || (/Still failed: 0\b/.test(capiMsg) && !capiMsg.includes("Waiting for a token")) ? "var(--good)" : "var(--bad)" }}>{capiMsg}</span>}
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
             <button
@@ -893,7 +893,7 @@ export function FacebookClient({
               onClick={retryFailed}
               disabled={capiRetrying || !companyFailed || companyFailed.n === 0}
               aria-busy={capiRetrying}
-              style={{ background: "rgba(239,68,68,0.10)", color: "#fca5a5", border: "1px solid rgba(239,68,68,0.35)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: capiRetrying || !companyFailed || companyFailed.n === 0 ? "default" : "pointer" }}
+              style={{ background: "rgba(239,68,68,0.10)", color: "var(--bad)", border: "1px solid rgba(239,68,68,0.35)", padding: "10px 18px", borderRadius: 8, fontWeight: 600, cursor: capiRetrying || !companyFailed || companyFailed.n === 0 ? "default" : "pointer" }}
             >
               {capiRetrying ? "Retrying…" : companyFailed ? `Retry this company's failed (${companyFailed.n})` : "Checking failed events…"}
             </button>
@@ -913,7 +913,7 @@ export function FacebookClient({
 
 function FbStat({ label, value, tone, loading }: { label: string; value: number; tone: string; loading: boolean }) {
   return (
-    <div className="card" style={{ background: `${tone}0d`, border: `1px solid ${tone}22`, borderRadius: 14, padding: "16px 18px" }}>
+    <div className="card" style={{ background: `${tone}0d`, border: `1px solid ${tone}22`, borderRadius: 12, padding: "16px 18px" }}>
       <div style={{ color: tone, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
       <div style={{ color: tone, fontSize: 28, fontWeight: 800, marginTop: 6 }}>{loading ? "…" : value.toLocaleString("en-IN")}</div>
     </div>

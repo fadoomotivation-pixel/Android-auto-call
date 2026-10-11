@@ -148,7 +148,7 @@ export function WhatsAppInbox({
         {activeChat ? (
           <>
             <div className="chat-header">
-              <strong style={{ fontSize: 16, color: "#fff" }}>
+              <strong style={{ fontSize: 16, color: "var(--text)" }}>
                 {getChatName(activeChat, activeMessages)}
               </strong>
             </div>

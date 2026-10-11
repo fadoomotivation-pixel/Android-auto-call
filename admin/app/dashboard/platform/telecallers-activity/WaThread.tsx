@@ -351,7 +351,7 @@ export function WaThread({
 
   return (
     <div style={{
-      background: "rgba(11,20,17,0.55)", borderRadius: 14, padding: "12px 10px",
+      background: "rgba(11,20,17,0.55)", borderRadius: 12, padding: "12px 10px",
       border: "1px solid rgba(255,255,255,0.07)",
     }}>
       <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 10, fontSize: 11, opacity: 0.6 }}>
@@ -368,7 +368,7 @@ export function WaThread({
         // A signal colours the EDGE of the bubble rather than the whole thing:
         // the bubble's own colour is what tells you who spoke, and losing that
         // to a highlight makes the thread harder to read, not easier.
-        const edge = m.signal === "risk" ? "#ef4444" : m.signal === "hot" ? "#22c55e" : null;
+        const edge = m.signal === "risk" ? "var(--bad)" : m.signal === "hot" ? "var(--good)" : null;
 
         return (
           <div key={i}>
@@ -387,7 +387,7 @@ export function WaThread({
               <div style={{
                 maxWidth: "76%", minWidth: 90,
                 padding: "7px 10px 5px",
-                borderRadius: 10,
+                borderRadius: 12,
                 borderTopRightRadius: mine ? 2 : 10,
                 borderTopLeftRadius: mine ? 10 : 2,
                 background: mine ? "#0b5c4b" : "#22292c",

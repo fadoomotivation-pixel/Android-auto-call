@@ -324,15 +324,15 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
         </h3>
         <button onClick={() => void load()} disabled={busy}
           style={{
-            fontSize: 12, padding: "5px 12px", borderRadius: 7, cursor: "pointer",
-            border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "var(--muted)",
+            fontSize: 12, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
+            border: "1px solid var(--border-strong)", background: "transparent", color: "var(--muted)",
           }}>
           {busy ? "Checking…" : "Re-check"}
         </button>
       </div>
 
       {err && (
-        <div style={{ marginTop: 10, fontSize: 12.5, color: "#fca5a5" }}>
+        <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--bad)" }}>
           Could not read health: {err}
         </div>
       )}
@@ -348,12 +348,12 @@ export function Health({ companyId, companyName }: { companyId: string | null; c
           <div key={c.label} style={{
             display: "grid", gridTemplateColumns: "22px minmax(140px,168px) 1fr", gap: 10,
             alignItems: "baseline", padding: "8px 0",
-            borderTop: "1px solid rgba(255,255,255,0.055)", fontSize: 13,
+            borderTop: "1px solid var(--border)", fontSize: 13,
           }}>
             <span aria-hidden>{DOT[c.level]}</span>
             <strong style={{ fontWeight: 600 }}>{c.label}</strong>
             <span style={{
-              color: c.level === "bad" ? "#fca5a5" : c.level === "warn" ? "#fcd34d" : "var(--muted)",
+              color: c.level === "bad" ? "var(--bad)" : c.level === "warn" ? "var(--warn)" : "var(--muted)",
               fontSize: 12.5, lineHeight: 1.5,
             }}>
               {c.reason}

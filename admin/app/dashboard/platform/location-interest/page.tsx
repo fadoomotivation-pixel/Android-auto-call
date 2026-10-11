@@ -96,7 +96,7 @@ export default async function LocationInterestPage({
                 padding: "10px 16px", textDecoration: "none", display: "flex",
                 flexDirection: "column", alignItems: "center", gap: 2, minWidth: 90,
                 fontWeight: c.city === city ? 700 : 400,
-                background: c.city === city ? "var(--accent, #4353B8)" : undefined,
+                background: c.city === city ? "var(--accent)" : undefined,
                 color: c.city === city ? "#fff" : "inherit",
               }}
             >

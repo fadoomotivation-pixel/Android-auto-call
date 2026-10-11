@@ -86,12 +86,12 @@ export function BandDrill({
 
   return (
     <div style={{
-      marginTop: 12, borderRadius: 14, border: "1px solid rgba(255,255,255,0.14)",
-      background: "rgba(255,255,255,0.02)", overflow: "hidden",
+      marginTop: 12, borderRadius: 12, border: "1px solid var(--border-strong)",
+      background: "var(--tint)", overflow: "hidden",
     }}>
       <div style={{
         display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
-        padding: "11px 14px", borderBottom: "1px solid rgba(255,255,255,0.08)",
+        padding: "11px 14px", borderBottom: "1px solid var(--border)",
       }}>
         <strong style={{ fontSize: 14.5 }}>
           {bandLabel(band)}
@@ -103,13 +103,13 @@ export function BandDrill({
           Oldest first — the one that has waited longest is the one to ring.
         </span>
         <button onClick={onClose} style={{
-          marginLeft: "auto", fontSize: 12, padding: "4px 11px", borderRadius: 7,
-          cursor: "pointer", border: "1px solid rgba(255,255,255,0.15)",
+          marginLeft: "auto", fontSize: 12, padding: "4px 11px", borderRadius: 8,
+          cursor: "pointer", border: "1px solid var(--border-strong)",
           background: "transparent", color: "var(--muted)",
         }}>Close</button>
       </div>
 
-      {err && <div style={{ padding: 14, fontSize: 12.5, color: "#fca5a5" }}>{err}</div>}
+      {err && <div style={{ padding: 14, fontSize: 12.5, color: "var(--bad)" }}>{err}</div>}
       {rows && sorted.length === 0 && (
         <div className="empty" style={{ margin: 14 }}>No leads in this band.</div>
       )}
@@ -132,7 +132,7 @@ export function BandDrill({
                 const age = daysAgo(r.created_at);
                 const level = agedLevel(age);
                 return (
-                  <tr key={r.lead_id} style={{ borderTop: "1px solid rgba(255,255,255,0.055)" }}>
+                  <tr key={r.lead_id} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={td}>
                       <strong>{r.name || r.phone || "Unnamed"}</strong>
                       <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)" }}>
@@ -140,7 +140,7 @@ export function BandDrill({
                       </span>
                     </td>
                     <td style={{ ...td, color: "var(--muted)" }}>{r.company_name ?? "—"}</td>
-                    <td style={{ ...td, color: r.rep_name ? "var(--text)" : "#fbbf24" }}>
+                    <td style={{ ...td, color: r.rep_name ? "var(--text)" : "var(--warn)" }}>
                       {r.rep_name ?? "unassigned"}
                     </td>
                     <td style={{ ...td, color: colorOf(level), whiteSpace: "nowrap" }}>
@@ -151,9 +151,9 @@ export function BandDrill({
                     </td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>
                       {r.next_due_at
-                        ? <span style={{ color: "#86efac" }}>{ist(r.next_due_at)}</span>
+                        ? <span style={{ color: "var(--good)" }}>{ist(r.next_due_at)}</span>
                         /* The real leak: someone spoke to them and booked nothing. */
-                        : <span style={{ color: "#fbbf24" }}>nothing booked</span>}
+                        : <span style={{ color: "var(--warn)" }}>nothing booked</span>}
                     </td>
                   </tr>
                 );

@@ -325,7 +325,7 @@ export default async function RecordingsPage({
                     {isSuper && c.off_crm ? (
                       <span
                         title="Not a CRM lead — captured by record-all-calls monitoring"
-                        style={{ color: "var(--danger, #C0452C)", fontWeight: 600 }}
+                        style={{ color: "var(--bad)", fontWeight: 600 }}
                       >
                         ⚠ Off-CRM number
                       </span>

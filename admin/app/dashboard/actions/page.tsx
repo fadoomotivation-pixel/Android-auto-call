@@ -112,7 +112,7 @@ function Row({ left, why, right, href, action }: {
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
-      padding: "9px 0", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 13.5,
+      padding: "9px 0", borderTop: "1px solid var(--border)", fontSize: 13.5,
     }}>
       {/* The action sits OUTSIDE the link. A button inside an anchor is a row
           you cannot press without also navigating away from it. */}
@@ -272,10 +272,10 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
     return 3;
   };
   const BUCKETS = [
-    { label: "🔴 Over 30 days", color: "#f87171" },
-    { label: "🟠 Over 14 days", color: "#fb923c" },
-    { label: "🟡 Over 7 days", color: "#facc15" },
-    { label: "🔵 This week", color: "#60a5fa" },
+    { label: "🔴 Over 30 days", color: "var(--bad)" },
+    { label: "🟠 Over 14 days", color: "var(--warn)" },
+    { label: "🟡 Over 7 days", color: "var(--warn)" },
+    { label: "🔵 This week", color: "var(--accent)" },
   ];
   const grouped = BUCKETS.map((b, i) => ({ ...b, rows: overdue.filter((f) => bucketOf(f) === i) }));
 
@@ -330,19 +330,19 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
       )}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "0 0 20px" }}>
-        <KpiChip n={awaiting.length} label="Awaiting site visits" target="visits" tone="#f59e0b"
+        <KpiChip n={awaiting.length} label="Awaiting site visits" target="visits" tone="var(--warn)"
           hint={oldestVisit > 0 ? `oldest ${oldestVisit} days` : undefined} />
-        <KpiChip n={overdue.length} label="Overdue follow-ups" target="followups" tone="#60a5fa"
+        <KpiChip n={overdue.length} label="Overdue follow-ups" target="followups" tone="var(--accent)"
           hint={dueToday.length > 0 ? `+${dueToday.length} due later today` : undefined} />
-        <KpiChip n={crmTotal} label="CRM issues" target="crm" tone="#c084fc"
+        <KpiChip n={crmTotal} label="CRM issues" target="crm" tone="var(--purple)"
           hint={gaps.length > 0 ? `across ${gaps.length} telecaller${gaps.length > 1 ? "s" : ""}` : undefined} />
-        <KpiChip n={escalations.length} label="Critical escalations" target="escalations" tone="#f87171" />
+        <KpiChip n={escalations.length} label="Critical escalations" target="escalations" tone="var(--bad)" />
       </div>
 
       {/* 1 — the only block that is about a PERSON not answering, rather than a
           lead going stale. Two asks and still nothing means the prompt engine
           has done all it can and a human has to step in. */}
-      <Block id="escalations" emoji="🚨" title="Escalations" count={escalations.length} tone="#f87171"
+      <Block id="escalations" emoji="🚨" title="Escalations" count={escalations.length} tone="var(--bad)"
         clear="No escalations today — nobody has ignored the app twice"
         blurb="Asked twice and still no answer. The app has stopped chasing these — they need you.">
         {escalations.map((v) => (
@@ -365,7 +365,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
       {/* 2 — the most expensive blank in the database: a visit that happened and
           nobody said what came of it keeps counting as a qualified lead in every
           report and in the ad autopsy, forever. */}
-      <Block id="visits" emoji="📍" title="Site visits awaiting outcome" count={awaiting.length} tone="#f59e0b"
+      <Block id="visits" emoji="📍" title="Site visits awaiting outcome" count={awaiting.length} tone="var(--warn)"
         clear="Every site visit has an outcome recorded"
         blurb="The customer came (or didn't) and nobody has recorded what happened. Until they do, these still count as qualified everywhere.">
         {awaiting.map((v) => (
@@ -386,7 +386,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
       </Block>
 
       {/* 3 — invisible on the web until now: no page in this app read follow_ups. */}
-      <Block id="followups" emoji="📋" title="Follow-ups due" count={followUps.length} tone="#60a5fa"
+      <Block id="followups" emoji="📋" title="Follow-ups due" count={followUps.length} tone="var(--accent)"
         clear="No callbacks due today"
         blurb={`${overdue.length} overdue, ${dueToday.length} still to come today. Overdue first — the customer who has waited longest is the one to ring.`}>
         {grouped.filter((g) => g.rows.length > 0).map((g) => (
@@ -414,12 +414,12 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
         ))}
         {dueToday.length > 0 && (
           <div>
-            <GroupHead label="🟢 Still to come today" n={dueToday.length} color="#4ade80" />
+            <GroupHead label="🟢 Still to come today" n={dueToday.length} color="var(--good)" />
             {dueToday.slice(0, 8).map((f) => (
               <Row key={f.id} href={`/dashboard/leads?q=${encodeURIComponent(f.phone ?? "")}`}
                 left={<><strong>{f.name || f.phone}</strong>{f.note ? ` · ${f.note}` : ""}</>}
                 why={`Callback promised for ${ist(f.due_at)} today`}
-                right={<span style={{ color: "#4ade80" }}>today</span>} />
+                right={<span style={{ color: "var(--good)" }}>today</span>} />
             ))}
           </div>
         )}
@@ -427,7 +427,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
 
       {/* 4 — what actually went out to a founder's phone. The engine sends one
           message per lead per kind, ever; this is the record of it. */}
-      <Block id="alerts" emoji="🔔" title="Alerts sent" count={fired.length} tone="#22c55e"
+      <Block id="alerts" emoji="🔔" title="Alerts sent" count={fired.length} tone="var(--good)"
         clear="No alerts today — nothing has booked or been visited yet"
         blurb="Bookings, payments and site visits that were pushed to WhatsApp. Baseline rows from first setup are not shown.">
         {fired.map((a) => (
@@ -441,7 +441,7 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
 
       {/* 5 — a COUNT and a link, never the analysis. Integrity owns that, and
           two pages disagreeing about a rep's numbers is worse than one page. */}
-      <Block id="crm" emoji="⚠️" title="CRM issues" count={gaps.length} tone="#c084fc"
+      <Block id="crm" emoji="⚠️" title="CRM issues" count={gaps.length} tone="var(--purple)"
         clear="Nothing missing from the CRM"
         blurb="Information missing from the CRM, per telecaller. The analysis lives on Integrity — this is only the nudge to go and look.">
         {gaps.map((g) => (
@@ -450,13 +450,13 @@ async function ActionsBody({ searchParams }: { searchParams: Promise<Search> }) 
               <strong>{g.full_name || "Telecaller"}</strong>
               <span style={{ display: "block", marginTop: 3, fontSize: 12, lineHeight: 1.7 }}>
                 {g.no_next_step > 0 && (
-                  <span style={{ color: "#f87171", marginRight: 12 }}>🔴 {g.no_next_step} missing next call</span>
+                  <span style={{ color: "var(--bad)", marginRight: 12 }}>🔴 {g.no_next_step} missing next call</span>
                 )}
                 {g.calls_no_outcome_7d > 0 && (
-                  <span style={{ color: "#fb923c", marginRight: 12 }}>🟠 {g.calls_no_outcome_7d} missing outcome</span>
+                  <span style={{ color: "var(--warn)", marginRight: 12 }}>🟠 {g.calls_no_outcome_7d} missing outcome</span>
                 )}
                 {g.bookings_without_amount > 0 && (
-                  <span style={{ color: "#facc15" }}>🟡 {g.bookings_without_amount} missing amount</span>
+                  <span style={{ color: "var(--warn)" }}>🟡 {g.bookings_without_amount} missing amount</span>
                 )}
               </span>
             </>}

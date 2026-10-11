@@ -30,7 +30,7 @@ export function ModuleLinks({
 
   return (
     <section style={{
-      marginTop: 34, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.08)",
+      marginTop: 34, paddingTop: 16, borderTop: "1px solid var(--border)",
     }}>
       <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
         <strong style={{ color: "var(--fg, #fff)" }}>{me.icon} {me.label}</strong> owns one
@@ -63,7 +63,7 @@ function Group({
         <Link key={m.id} href={withScope(m.href, scope)}
           style={{
             display: "block", textDecoration: "none", padding: "7px 0",
-            borderTop: "1px solid rgba(255,255,255,0.05)",
+            borderTop: "1px solid var(--border)",
           }}>
           <span style={{ fontSize: 13.5, fontWeight: 600 }}>
             {arrow} {m.icon} {m.label}

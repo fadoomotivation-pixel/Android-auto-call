@@ -65,8 +65,8 @@ function ago(iso: string | null): string {
 
 /** Red only when it is genuinely bad, or the colour stops meaning anything. */
 function tone(n: number, warn: number, bad: number): string | undefined {
-  if (n >= bad) return "#ef4444";
-  if (n >= warn) return "#f59e0b";
+  if (n >= bad) return "var(--bad)";
+  if (n >= warn) return "var(--warn)";
   return undefined;
 }
 
@@ -166,7 +166,7 @@ async function LeaksBody({
                   <td>
                     <strong>{r.rep_name || "Telecaller"}</strong>
                     {r.silent && (
-                      <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 600 }}>
+                      <div style={{ color: "var(--bad)", fontSize: 12, fontWeight: 600 }}>
                         No call in 3 days
                       </div>
                     )}
@@ -179,7 +179,7 @@ async function LeaksBody({
                   <td style={{ textAlign: "right" }}><Num n={r.broken_promises} warn={10} bad={50} /></td>
                   <td style={{ textAlign: "right" }}>
                     {r.calls_7d === 0
-                      ? <strong style={{ color: "#ef4444" }}>0</strong>
+                      ? <strong style={{ color: "var(--bad)" }}>0</strong>
                       : r.calls_7d}
                   </td>
                   <td className="subtitle" style={{ fontSize: 12.5 }}>{ago(r.last_call_at)}</td>
@@ -187,8 +187,8 @@ async function LeaksBody({
                     {r.wa_last_seen_at === null
                       ? <span style={{ opacity: 0.4 }}>not watched</span>
                       : Date.now() - new Date(r.wa_last_seen_at).getTime() < 2 * 3600_000
-                        ? <span style={{ color: "#22c55e" }}>watching</span>
-                        : <span style={{ color: "#f59e0b" }}>stale</span>}
+                        ? <span style={{ color: "var(--good)" }}>watching</span>
+                        : <span style={{ color: "var(--warn)" }}>stale</span>}
                   </td>
                 </tr>
               ))}
@@ -220,7 +220,7 @@ async function LeaksBody({
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "12px 0 18px" }}>
         <div className="card" style={{ flex: 1, minWidth: 150, padding: "14px 12px" }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: totalRisk > 0 ? "#ef4444" : undefined }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: totalRisk > 0 ? "var(--bad)" : undefined }}>
             {totalRisk}
           </div>
           <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
@@ -228,7 +228,7 @@ async function LeaksBody({
           </div>
         </div>
         <div className="card" style={{ flex: 1, minWidth: 150, padding: "14px 12px" }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: totalSilent > 0 ? "#ef4444" : undefined }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: totalSilent > 0 ? "var(--bad)" : undefined }}>
             {totalSilent}/{totalReps}
           </div>
           <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
@@ -236,7 +236,7 @@ async function LeaksBody({
           </div>
         </div>
         <div className="card" style={{ flex: 1, minWidth: 150, padding: "14px 12px" }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: totalNoOwner > 0 ? "#f59e0b" : undefined }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: totalNoOwner > 0 ? "var(--warn)" : undefined }}>
             {totalNoOwner}
           </div>
           <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
@@ -248,7 +248,7 @@ async function LeaksBody({
       {worst && worst.at_risk > 0 && (
         <div
           className="card"
-          style={{ padding: 14, marginBottom: 16, borderLeft: "3px solid #ef4444" }}
+          style={{ padding: 14, marginBottom: 16, borderLeft: "3px solid var(--bad)" }}
         >
           <strong>Call {worst.company_name.trim()} first.</strong>{" "}
           {worst.at_risk_pct}% of their book ({worst.at_risk} of {worst.leads_total} leads) is going
@@ -287,7 +287,7 @@ async function LeaksBody({
                 <strong
                   style={{
                     fontSize: 15,
-                    color: r.at_risk_pct >= 70 ? "#ef4444" : r.at_risk_pct >= 40 ? "#f59e0b" : undefined,
+                    color: r.at_risk_pct >= 70 ? "var(--bad)" : r.at_risk_pct >= 40 ? "var(--warn)" : undefined,
                   }}
                 >
                   {r.at_risk}
@@ -300,7 +300,7 @@ async function LeaksBody({
               <td style={{ textAlign: "right" }}>
                 {r.silent_reps === 0
                   ? <span style={{ opacity: 0.3 }}>—</span>
-                  : <strong style={{ color: "#ef4444" }}>{r.silent_reps}/{r.telecallers}</strong>}
+                  : <strong style={{ color: "var(--bad)" }}>{r.silent_reps}/{r.telecallers}</strong>}
               </td>
               <td className="subtitle" style={{ fontSize: 12.5 }}>
                 {r.last_call_at

@@ -84,10 +84,10 @@ export function FormRouting() {
   }
 
   const cell = { padding: "8px 10px", verticalAlign: "top" } as const;
-  const select = { padding: "7px 9px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.03)", color: "var(--text)", minWidth: 150 } as const;
+  const select = { padding: "7px 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", minWidth: 150 } as const;
 
   return (
-    <div className="card" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", padding: 28, borderRadius: 16 }}>
+    <div className="card" style={{ background: "var(--tint)", border: "1px solid var(--border)", padding: 28, borderRadius: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h3 style={{ marginTop: 0, marginBottom: 4, color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Lead form → company routing</h3>
@@ -98,12 +98,12 @@ export function FormRouting() {
           </p>
         </div>
         <button type="button" onClick={load} disabled={loading}
-          style={{ fontSize: 12, padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.04)", color: "var(--muted)", cursor: "pointer" }}>
+          style={{ fontSize: 12, padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--muted)", cursor: "pointer" }}>
           {loading ? "Loading…" : "🔄 Refresh"}
         </button>
       </div>
 
-      {error && <div style={{ marginTop: 12, fontSize: 13, color: "#f87171" }}>{error}</div>}
+      {error && <div style={{ marginTop: 12, fontSize: 13, color: "var(--bad)" }}>{error}</div>}
 
       {!loading && forms.length === 0 && !error && (
         <p style={{ fontSize: 14, color: "var(--muted)", marginTop: 16 }}>No lead forms found. Connect a Page (Step 1) that has lead forms.</p>
@@ -155,7 +155,7 @@ export function FormRouting() {
                       </select>
                     </td>
                     <td style={{ ...cell, whiteSpace: "nowrap", color: "var(--muted)", fontSize: 12 }}>
-                      {savingId === f.form_id ? "Saving…" : savedId === f.form_id ? <span style={{ color: "#22c55e" }}>Saved ✓</span> : ""}
+                      {savingId === f.form_id ? "Saving…" : savedId === f.form_id ? <span style={{ color: "var(--good)" }}>Saved ✓</span> : ""}
                     </td>
                   </tr>
                 );

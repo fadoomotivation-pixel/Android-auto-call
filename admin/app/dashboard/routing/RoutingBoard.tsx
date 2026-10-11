@@ -132,14 +132,14 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
 
   const card: CSSProperties = {
     background: "var(--panel-grad, var(--panel))", border: "1px solid var(--border)",
-    borderRadius: 18, padding: 20, marginBottom: 14,
+    borderRadius: 16, padding: 20, marginBottom: 14,
   };
   const label: CSSProperties = { fontSize: 12.5, color: "var(--muted)" };
   const toggle = (on: boolean): CSSProperties => ({
     padding: "5px 13px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontWeight: 700,
-    border: `1px solid ${on ? "#10b981" : "var(--border)"}`,
+    border: `1px solid ${on ? "var(--good)" : "var(--border)"}`,
     background: on ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.03)",
-    color: on ? "#10b981" : "var(--muted)",
+    color: on ? "var(--good)" : "var(--muted)",
   });
 
   return (
@@ -149,7 +149,7 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
       </div>
 
       {err && <div className="error" style={{ marginBottom: 10 }}>{err}</div>}
-      {msg && <div style={{ marginBottom: 10, color: "#10b981", fontSize: 13 }}>{msg}</div>}
+      {msg && <div style={{ marginBottom: 10, color: "var(--good)", fontSize: 13 }}>{msg}</div>}
       {!rows && <div className="empty">Loading…</div>}
       {rows && companies.length === 0 && <div className="empty">No companies to configure.</div>}
 
@@ -159,11 +159,11 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
         return (
           <div key={p.company_id} style={card}>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <strong style={{ color: "#fff", fontSize: 16 }}>{name}</strong>
+              <strong style={{ color: "var(--text)", fontSize: 16 }}>{name}</strong>
               <span style={label}>
                 {onShift}/{reps.length} on shift · {ready} can take a lead
               </span>
-              <span style={{ marginLeft: "auto", fontSize: 13, color: pool > 0 ? "#f59e0b" : "var(--muted)", fontWeight: pool > 0 ? 700 : 400 }}>
+              <span style={{ marginLeft: "auto", fontSize: 13, color: pool > 0 ? "var(--warn)" : "var(--muted)", fontWeight: pool > 0 ? 700 : 400 }}>
                 {pool} leads waiting
               </span>
             </div>
@@ -206,10 +206,10 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
 
             {/* --- office pin --- */}
             {p.enforce_geofence && (
-              <div style={{ marginTop: 12, padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.07)" }}>
+              <div style={{ marginTop: 12, padding: 12, borderRadius: 12, border: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                   <span style={label}>Office location</span>
-                  <strong style={{ color: "#fff", fontSize: 13 }}>
+                  <strong style={{ color: "var(--text)", fontSize: 13 }}>
                     {p.office_lat != null && p.office_lng != null
                       ? `${p.office_lat.toFixed(5)}, ${p.office_lng.toFixed(5)}`
                       : "not set — the fence is not working yet"}
@@ -245,13 +245,13 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {[...reps].sort((a, b) => Number(b.on_shift) - Number(a.on_shift)).map((r) => (
                     <div key={r.salesperson_id!} style={{ display: "flex", gap: 10, alignItems: "center",
-                      flexWrap: "wrap", paddingTop: 7, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                      flexWrap: "wrap", paddingTop: 7, borderTop: "1px solid var(--border)" }}>
                       <span style={{ fontSize: 15 }}>{r.on_shift ? "🟢" : "⚪"}</span>
-                      <strong style={{ color: "#fff", fontSize: 13.5, minWidth: 110 }}>{r.rep_name ?? "Telecaller"}</strong>
+                      <strong style={{ color: "var(--text)", fontSize: 13.5, minWidth: 110 }}>{r.rep_name ?? "Telecaller"}</strong>
                       <span style={label}>
                         {r.punch_in_at ? `in ${ist(r.punch_in_at)}` : "not checked in"}
                         {r.geo_ok === false && (
-                          <span style={{ color: "#ef4444", fontWeight: 700 }}>
+                          <span style={{ color: "var(--bad)", fontWeight: 700 }}>
                             {" "}· {r.distance_m != null ? `${r.distance_m} m away — outside fence` : "location off"}
                           </span>
                         )}
@@ -259,7 +259,7 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
                       </span>
                       <span style={{ ...label, marginLeft: "auto" }}>
                         today {r.assigned_today} assigned · {r.backlog} untouched ·{" "}
-                        <strong style={{ color: r.capacity > 0 ? "#10b981" : "#f59e0b" }}>
+                        <strong style={{ color: r.capacity > 0 ? "var(--good)" : "var(--warn)" }}>
                           {r.capacity > 0 ? `${r.capacity} more they can take` : "full — the next one goes to someone else"}
                         </strong>
                       </span>
@@ -277,7 +277,7 @@ export function RoutingBoard({ isSuper }: { isSuper: boolean }) {
                 </button>
                 <button className="link" disabled={busy === p.company_id}
                   onClick={() => distributeNow(p.company_id, true)}
-                  style={{ color: "#f59e0b" }}>
+                  style={{ color: "var(--warn)" }}>
                   Force — ignore check-in &amp; limit
                 </button>
               </div>

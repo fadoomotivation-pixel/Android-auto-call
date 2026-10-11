@@ -68,16 +68,16 @@ export function PlatformSender({ companies }: { companies: { id: string; name: s
           value={current ?? ""}
           onChange={(e) => save(e.target.value)}
           disabled={busy}
-          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "var(--panel)", color: "var(--text)", fontSize: 13 }}
+          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--panel)", color: "var(--text)", fontSize: 13 }}
         >
           <option value="">— none —</option>
           {usable.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
         </select>
-        {msg && <span style={{ fontSize: 12.5, color: msg.startsWith("Saved") || msg === "Cleared." ? "#22c55e" : "#f87171" }}>{msg}</span>}
+        {msg && <span style={{ fontSize: 12.5, color: msg.startsWith("Saved") || msg === "Cleared." ? "var(--good)" : "var(--bad)" }}>{msg}</span>}
       </div>
 
       {usable.length === 0 && (
-        <div style={{ marginTop: 10, fontSize: 12.5, color: "#fcd34d", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
+        <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--warn)", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
           No company has a working WhatsApp connection yet — a number is set up, but its access token was never
           saved, so nothing can send. Fill in the token below and save; then this list will have something to pick.
         </div>

@@ -21,10 +21,10 @@ type Baileys = {
 };
 
 const STATUS_LOOK: Record<string, { label: string; color: string }> = {
-  connected: { label: "Connected", color: "#22c55e" },
-  qr: { label: "Waiting for scan", color: "#fbbf24" },
-  connecting: { label: "Connecting…", color: "#60a5fa" },
-  disconnected: { label: "Not connected", color: "#f87171" },
+  connected: { label: "Connected", color: "var(--good)" },
+  qr: { label: "Waiting for scan", color: "var(--warn)" },
+  connecting: { label: "Connecting…", color: "var(--accent)" },
+  disconnected: { label: "Not connected", color: "var(--bad)" },
 };
 
 export function ProviderPicker({ companyId, companyName }: { companyId: string; companyName?: string | null }) {
@@ -117,13 +117,13 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
 
   const look = STATUS_LOOK[status] ?? STATUS_LOOK.disconnected;
   const box: React.CSSProperties = {
-    padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)",
+    padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-strong)",
     background: "var(--panel)", color: "var(--text)", fontSize: 13,
   };
 
   return (
-    <div style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: 14, marginTop: 14 }}>
-      <strong style={{ color: "#fff", fontSize: 14 }}>Founder notifications</strong>
+    <div style={{ border: "1px solid var(--border-strong)", borderRadius: 12, padding: 14, marginTop: 14 }}>
+      <strong style={{ color: "var(--text)", fontSize: 14 }}>Founder notifications</strong>
       <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.5 }}>
         Which WhatsApp carries {companyName ? `${companyName}'s` : "this company's"} Daily Pulse to the founder.
         Customers are always messaged on the Cloud API — this setting never touches them.
@@ -148,7 +148,7 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
       </div>
 
       {provider === "baileys" && (
-        <div style={{ marginTop: 14, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 12 }}>
+        <div style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
               placeholder="https://your-baileys-worker.up.railway.app" style={{ ...box, flex: "1 1 300px" }} />
@@ -177,7 +177,7 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
             <div style={{ marginTop: 12 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qr} alt="WhatsApp QR code" width={240} height={240}
-                style={{ borderRadius: 10, background: "#fff", padding: 8 }} />
+                style={{ borderRadius: 12, background: "#fff", padding: 8 }} />
               <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6, maxWidth: 380, lineHeight: 1.5 }}>
                 On the phone: WhatsApp → Settings → Linked devices → Link a device. The code refreshes on
                 its own every few seconds, so scan whatever is on screen.
@@ -186,14 +186,14 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
           )}
 
           {err && (
-            <div style={{ marginTop: 10, fontSize: 12.5, color: "#fca5a5", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
+            <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--bad)", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>
               {err}
             </div>
           )}
         </div>
       )}
 
-      {msg && <div style={{ marginTop: 10, fontSize: 12.5, color: msg === "Saved." ? "#22c55e" : "#f87171" }}>{msg}</div>}
+      {msg && <div style={{ marginTop: 10, fontSize: 12.5, color: msg === "Saved." ? "var(--good)" : "var(--bad)" }}>{msg}</div>}
     </div>
   );
 }

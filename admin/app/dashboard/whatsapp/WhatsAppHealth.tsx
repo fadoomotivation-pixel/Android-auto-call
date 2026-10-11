@@ -11,8 +11,8 @@ interface Check {
 }
 
 const TONE: Record<string, string> = {
-  connected: "#22c55e", not_set_up: "#86868B", inactive: "#f59e0b",
-  token_missing: "#ef4444", token_expired: "#ef4444", wrong_id: "#ef4444", error: "#ef4444",
+  connected: "var(--good)", not_set_up: "var(--muted)", inactive: "var(--warn)",
+  token_missing: "var(--bad)", token_expired: "var(--bad)", wrong_id: "var(--bad)", error: "var(--bad)",
 };
 const LABEL: Record<string, string> = {
   connected: "Working", not_set_up: "Not set up", inactive: "Switched off",
@@ -74,8 +74,8 @@ export function WhatsAppHealth({ isSuper, companyId }: { isSuper: boolean; compa
         <strong style={{ color: "var(--text)", fontSize: 15 }}>Connection check</strong>
         {all && (
           <span style={{ fontSize: 13, color: "var(--muted)" }}>
-            <span style={{ color: "#22c55e", fontWeight: 700 }}>{working} working</span>
-            {broken > 0 && <> · <span style={{ color: "#ef4444", fontWeight: 700 }}>{broken} broken</span></>}
+            <span style={{ color: "var(--good)", fontWeight: 700 }}>{working} working</span>
+            {broken > 0 && <> · <span style={{ color: "var(--bad)", fontWeight: 700 }}>{broken} broken</span></>}
             {missing > 0 && <> · {missing} not set up</>}
           </span>
         )}
@@ -91,7 +91,7 @@ export function WhatsAppHealth({ isSuper, companyId }: { isSuper: boolean; compa
         <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
           <span style={pill(one.state)}>{LABEL[one.state] ?? one.state}</span>
           <div>
-            <div style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>{one.headline}</div>
+            <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 600 }}>{one.headline}</div>
             {one.fix && <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>👉 {one.fix}</div>}
           </div>
         </div>
@@ -101,10 +101,10 @@ export function WhatsAppHealth({ isSuper, companyId }: { isSuper: boolean; compa
       {all && all.length > 0 && (
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
           {[...all].sort((a, b) => Number(a.ok) - Number(b.ok)).map((c) => (
-            <div key={c.company_id} style={{ display: "flex", gap: 10, alignItems: "flex-start", paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+            <div key={c.company_id} style={{ display: "flex", gap: 10, alignItems: "flex-start", paddingTop: 8, borderTop: "1px solid var(--border)" }}>
               <span style={pill(c.state)}>{LABEL[c.state] ?? c.state}</span>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ color: "#fff", fontSize: 13.5, fontWeight: 600 }}>
+                <div style={{ color: "var(--text)", fontSize: 13.5, fontWeight: 600 }}>
                   {c.company_name ?? "Company"}
                   {c.number && <span style={{ color: "var(--muted)", fontWeight: 400 }}> · {c.number}</span>}
                 </div>

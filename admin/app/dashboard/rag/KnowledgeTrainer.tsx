@@ -127,11 +127,11 @@ export function KnowledgeTrainer({ isSuper, companies }: { isSuper: boolean; com
   }
 
   const label: CSSProperties = { fontSize: 12, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" };
-  const field: CSSProperties = { padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none", width: "100%" };
+  const field: CSSProperties = { padding: "10px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", outline: "none", width: "100%" };
 
   return (
     <div className="card" style={{ marginBottom: 20, background: "rgba(16,185,129,0.04)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 16, padding: 20 }}>
-      <strong style={{ fontSize: 16, color: "#fff" }}>🎓 Train the AI</strong>
+      <strong style={{ fontSize: 16, color: "var(--text)" }}>🎓 Train the AI</strong>
       <p className="subtitle" style={{ marginTop: 2 }}>
         Upload a PDF or paste text. Teach one general brain shared by every company, or one company&apos;s own price sheet &amp; offers.
       </p>
@@ -140,16 +140,16 @@ export function KnowledgeTrainer({ isSuper, companies }: { isSuper: boolean; com
         <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
           <button
             onClick={() => setScope("global")}
-            style={{ flex: 1, minWidth: 200, padding: "12px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left", border: scope === "global" ? "1px solid #10b981" : "1px solid var(--border)", background: scope === "global" ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.02)", color: "var(--text)" }}
+            style={{ flex: 1, minWidth: 200, padding: "12px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left", border: scope === "global" ? "1px solid var(--good)" : "1px solid var(--border)", background: scope === "global" ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.02)", color: "var(--text)" }}
           >
-            <div style={{ fontWeight: 700, color: "#fff" }}>🌐 Global brain</div>
+            <div style={{ fontWeight: 700, color: "var(--text)" }}>🌐 Global brain</div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>General real-estate knowledge — shared to every company.</div>
           </button>
           <button
             onClick={() => setScope("company")}
-            style={{ flex: 1, minWidth: 200, padding: "12px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left", border: scope === "company" ? "1px solid #6366f1" : "1px solid var(--border)", background: scope === "company" ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.02)", color: "var(--text)" }}
+            style={{ flex: 1, minWidth: 200, padding: "12px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left", border: scope === "company" ? "1px solid var(--accent)" : "1px solid var(--border)", background: scope === "company" ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.02)", color: "var(--text)" }}
           >
-            <div style={{ fontWeight: 700, color: "#fff" }}>🏢 One company</div>
+            <div style={{ fontWeight: 700, color: "var(--text)" }}>🏢 One company</div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Private price sheet / offer — only that company sees it.</div>
           </button>
         </div>
@@ -180,7 +180,7 @@ export function KnowledgeTrainer({ isSuper, companies }: { isSuper: boolean; com
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 10, border: "1px dashed var(--border)", cursor: "pointer", color: "var(--text)", background: "rgba(255,255,255,0.02)" }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 12, border: "1px dashed var(--border)", cursor: "pointer", color: "var(--text)", background: "var(--tint)" }}>
             <input type="file" accept=".pdf,.txt" onChange={onFile} style={{ display: "none" }} />
             📄 Upload PDF / text
           </label>
@@ -200,9 +200,9 @@ export function KnowledgeTrainer({ isSuper, companies }: { isSuper: boolean; com
         </div>
 
         {msg && (
-          <div style={{ padding: "9px 12px", borderRadius: 10, fontSize: 13, ...(msg.ok
-            ? { color: "#10b981", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }
-            : { color: "#ff453a", background: "rgba(255,69,58,0.1)", border: "1px solid rgba(255,69,58,0.2)" }) }}>
+          <div style={{ padding: "9px 12px", borderRadius: 12, fontSize: 13, ...(msg.ok
+            ? { color: "var(--good)", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }
+            : { color: "var(--bad)", background: "rgba(255,69,58,0.1)", border: "1px solid rgba(255,69,58,0.2)" }) }}>
             {msg.text}
           </div>
         )}

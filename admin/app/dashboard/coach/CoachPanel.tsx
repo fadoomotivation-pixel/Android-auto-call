@@ -37,9 +37,9 @@ export function CoachPanel({ companyId = null }: { companyId?: string | null }) 
           fontSize: 16,
           fontWeight: 700,
           letterSpacing: "0.5px",
-          background: "linear-gradient(135deg, var(--accent), #10B981)",
+          background: "linear-gradient(135deg, var(--accent), var(--good))",
           boxShadow: "0 8px 32px rgba(16, 185, 129, 0.4)",
-          border: "1px solid rgba(255,255,255,0.2)",
+          border: "1px solid var(--border-strong)",
           borderRadius: 12,
           transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           textShadow: "0 2px 4px rgba(0,0,0,0.2)"

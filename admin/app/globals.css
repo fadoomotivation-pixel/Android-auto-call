@@ -23,11 +23,20 @@
   --accent-soft: rgba(10, 132, 255, 0.18);
   --accent-glow: rgba(10, 132, 255, 0.18);
   --hover: rgba(255, 255, 255, 0.05);
+  /* The faintest fill in the system: a tint that separates a strip from the
+     card behind it without drawing a box. Sixty places hand-wrote this as
+     rgba(255,255,255,0.02), which is a white film — correct on a dark panel
+     and invisible on a light one. */
+  --tint: rgba(255, 255, 255, 0.035);
   --topbar: rgba(11, 11, 12, 0.72);
 
   --good: #30d158;
   --warn: #ff9f0a;
   --bad: #ff453a;
+  /* Apple's systemPurple. Added because four shades of Tailwind violet were
+     already in use for the "AI / automatic" things — the brain, the coach,
+     the generated draft — and they wanted one colour, not four. */
+  --purple: #bf5af2;
   --success: #30d158;
   --danger: #ff453a;
 
@@ -62,10 +71,12 @@ html[data-theme="light"] {
   --accent-hover: #0077ed;
   --accent-soft: rgba(0, 113, 227, 0.12);
   --hover: rgba(0, 0, 0, 0.04);
+  --tint: rgba(0, 0, 0, 0.028);
   --topbar: rgba(245, 245, 247, 0.78);
   --good: #248a3d;
   --warn: #c93400;
   --bad: #d70015;
+  --purple: #8944ab;
   --success: #248a3d;
   --danger: #d70015;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(0, 0, 0, 0.05);

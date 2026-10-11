@@ -25,12 +25,12 @@ interface Row {
 }
 
 const TONE: Record<string, string> = {
-  ok: "#22c55e",
-  idle: "#86868B",
-  offcrm_disabled: "#f59e0b",
-  no_recordings: "#f59e0b",
-  sync_stale: "#ef4444",
-  no_calllog_permission: "#ef4444",
+  ok: "var(--good)",
+  idle: "var(--muted)",
+  offcrm_disabled: "var(--warn)",
+  no_recordings: "var(--warn)",
+  sync_stale: "var(--bad)",
+  no_calllog_permission: "var(--bad)",
 };
 
 const LABEL: Record<string, string> = {
@@ -156,7 +156,7 @@ export function PhoneHealth({ isSuper }: { isSuper: boolean }) {
 
   const card: CSSProperties = {
     background: "var(--panel-grad, var(--panel))", border: "1px solid var(--border)",
-    borderRadius: 18, padding: 18, marginBottom: 12,
+    borderRadius: 16, padding: 18, marginBottom: 12,
   };
   const pill = (state: string): CSSProperties => ({
     fontSize: 11, fontWeight: 700, color: TONE[state] ?? "var(--muted)",
@@ -177,9 +177,9 @@ export function PhoneHealth({ isSuper }: { isSuper: boolean }) {
         </select>
         {rows && (
           <span style={{ fontSize: 13, color: "var(--muted)" }}>
-            {broken.length > 0 && <><span style={{ color: "#ef4444", fontWeight: 700 }}>{broken.length} phone need fixing</span> · </>}
-            {warn.length > 0 && <><span style={{ color: "#f59e0b", fontWeight: 700 }}>{warn.length} partial</span> · </>}
-            <span style={{ color: "#22c55e", fontWeight: 700 }}>{good.length} healthy</span>
+            {broken.length > 0 && <><span style={{ color: "var(--bad)", fontWeight: 700 }}>{broken.length} phone need fixing</span> · </>}
+            {warn.length > 0 && <><span style={{ color: "var(--warn)", fontWeight: 700 }}>{warn.length} partial</span> · </>}
+            <span style={{ color: "var(--good)", fontWeight: 700 }}>{good.length} healthy</span>
           </span>
         )}
         <button className="link" style={{ marginLeft: "auto" }} onClick={() => void load()}>Check again</button>
@@ -190,20 +190,20 @@ export function PhoneHealth({ isSuper }: { isSuper: boolean }) {
       {/* Company-level switch: no rep-side fix can work while this is off. */}
       {offcrmCompanies.length > 0 && (
         <div style={{ ...card, border: "1px solid rgba(245,158,11,0.35)" }}>
-          <strong style={{ color: "#fff", fontSize: 14.5 }}>⚙️ Off-CRM calling is OFF</strong>
+          <strong style={{ color: "var(--text)", fontSize: 14.5 }}>⚙️ Off-CRM calling is OFF</strong>
           <p className="subtitle" style={{ margin: "4px 0 10px" }}>
             With this off, any call to a number that isn&apos;t a CRM lead — and its recording — never reaches the
             dashboard. Turn it on and the phones start uploading those calls within 15 minutes. No app update.
           </p>
           {offcrmCompanies.map((c) => (
-            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-              <span style={{ color: "#fff", fontWeight: 600 }}>{c.name}</span>
+            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0", borderTop: "1px solid var(--border)" }}>
+              <span style={{ color: "var(--text)", fontWeight: 600 }}>{c.name}</span>
               <button
                 onClick={() => turnOnOffCrm(c.id)}
                 disabled={busy === c.id}
                 style={{ marginLeft: "auto", padding: "6px 14px", borderRadius: 999, cursor: "pointer",
-                  fontSize: 12.5, fontWeight: 700, border: "1px solid #f59e0b",
-                  background: "rgba(245,158,11,0.14)", color: "#f59e0b" }}>
+                  fontSize: 12.5, fontWeight: 700, border: "1px solid var(--warn)",
+                  background: "rgba(245,158,11,0.14)", color: "var(--warn)" }}>
                 {busy === c.id ? "…" : "Turn ON"}
               </button>
             </div>
@@ -222,12 +222,12 @@ export function PhoneHealth({ isSuper }: { isSuper: boolean }) {
             <div key={r.salesperson_id} style={card}>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <span style={pill(r.state)}>{LABEL[r.state] ?? r.state}</span>
-                <strong style={{ color: "#fff", fontSize: 15 }}>{r.rep_name ?? "Telecaller"}</strong>
+                <strong style={{ color: "var(--text)", fontSize: 15 }}>{r.rep_name ?? "Telecaller"}</strong>
                 {isSuper && <span style={stat}>· {r.company_name ?? "Company"}</span>}
                 <span style={{ ...stat, marginLeft: "auto" }}>App last seen {ist(r.app_last_seen)}</span>
               </div>
 
-              <div style={{ color: "#fff", fontSize: 14, fontWeight: 600, marginTop: 10 }}>{v.title}</div>
+              <div style={{ color: "var(--text)", fontSize: 14, fontWeight: 600, marginTop: 10 }}>{v.title}</div>
               <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4, lineHeight: 1.55 }}>{v.why}</div>
 
               {v.fix && (

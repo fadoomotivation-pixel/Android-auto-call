@@ -258,7 +258,7 @@ export default async function AutomationsPage({
           <div key={r.what} style={{
             display: "grid", gridTemplateColumns: "minmax(150px,1fr) minmax(120px,150px) 2fr",
             gap: 10, alignItems: "baseline", padding: "7px 0", fontSize: 12.5,
-            borderTop: "1px solid rgba(255,255,255,0.055)",
+            borderTop: "1px solid var(--border)",
           }}>
             <strong style={{ fontWeight: 600 }}>{r.what}</strong>
             <span style={{ color: TRANSPORT[r.transport].colour, fontWeight: 650, whiteSpace: "nowrap" }}>
@@ -303,9 +303,9 @@ export default async function AutomationsPage({
               // its own and must never be dressed up as "never sent" — one
               // means nothing happened, the other means nobody would know.
               const current = a.blind
-                ? { text: "not logged", colour: "#fbbf24" }
+                ? { text: "not logged", colour: "var(--warn)" }
                 : st.fail && (!st.sent || st.fail.created_at >= st.sent)
-                  ? { text: `failing since ${ist(st.fail.created_at)}`, colour: "#f87171" }
+                  ? { text: `failing since ${ist(st.fail.created_at)}`, colour: "var(--bad)" }
                   : st.sent
                     ? { text: `last sent ${ist(st.sent)}`, colour: "var(--muted)" }
                     : { text: "never sent", colour: "var(--muted)" };
@@ -330,8 +330,8 @@ export default async function AutomationsPage({
                       and how it ended last time. */}
                   <div style={{
                     marginTop: 12, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
-                    fontSize: 12, padding: "9px 11px", borderRadius: 9,
-                    background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)",
+                    fontSize: 12, padding: "9px 11px", borderRadius: 8,
+                    background: "var(--tint)", border: "1px solid var(--border)",
                   }}>
                     {a.path.map((step, i) => (
                       <span key={step} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -342,12 +342,12 @@ export default async function AutomationsPage({
                     <span style={{ color: "var(--muted)" }}>↓</span>
                     <strong style={{
                       fontSize: 11.5,
-                      color: a.blind ? "#fbbf24" : current.colour === "#f87171" ? "#f87171" : "#86efac",
+                      color: a.blind ? "var(--warn)" : current.colour === "var(--bad)" ? "var(--bad)" : "var(--good)",
                     }}>
-                      {a.blind ? "NOT RECORDED" : current.colour === "#f87171" ? "FAILED" : st.sent ? "Delivered" : "Nothing yet"}
+                      {a.blind ? "NOT RECORDED" : current.colour === "var(--bad)" ? "FAILED" : st.sent ? "Delivered" : "Nothing yet"}
                     </strong>
                     {st.err && (
-                      <span style={{ fontSize: 11.5, color: "#fca5a5", flexBasis: "100%" }}>
+                      <span style={{ fontSize: 11.5, color: "var(--bad)", flexBasis: "100%" }}>
                         Reason: {st.err}
                       </span>
                     )}
@@ -380,7 +380,7 @@ export default async function AutomationsPage({
                       <pre style={{
                         margin: 0, whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.55,
                         background: "rgba(37,211,102,0.06)", border: "1px solid rgba(37,211,102,0.22)",
-                        borderRadius: 10, padding: "11px 13px", fontFamily: "inherit",
+                        borderRadius: 12, padding: "11px 13px", fontFamily: "inherit",
                       }}>{a.preview}</pre>
                     </div>
                   </div>
@@ -399,7 +399,7 @@ export default async function AutomationsPage({
                             <span key={s.label} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                               {j > 0 && <span style={{ color: "var(--muted)" }}>→</span>}
                               <span style={{
-                                color: s.state === "fail" ? "#f87171" : s.state === "done" ? "#86efac" : "var(--muted)",
+                                color: s.state === "fail" ? "var(--bad)" : s.state === "done" ? "var(--good)" : "var(--muted)",
                                 fontWeight: s.state === "fail" ? 700 : 500,
                               }}>
                                 {s.label}{s.at ? ` ${clock(s.at)}` : ""}
@@ -407,7 +407,7 @@ export default async function AutomationsPage({
                             </span>
                           ))}
                           {e.to && <span style={{ color: "var(--muted)", fontSize: 11.5 }}>· {e.to}</span>}
-                          {e.error && <span style={{ color: "#fca5a5", flexBasis: "100%", fontSize: 11.5 }}>{e.error}</span>}
+                          {e.error && <span style={{ color: "var(--bad)", flexBasis: "100%", fontSize: 11.5 }}>{e.error}</span>}
                         </div>
                       ))}
                       <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 5 }}>
@@ -419,7 +419,7 @@ export default async function AutomationsPage({
 
                   {(a.blind || a.caveat) && (
                     <div style={{ marginTop: 13, fontSize: 12.5, color: "var(--muted)",
-                      borderLeft: `3px solid ${a.blind ? "#fbbf24" : "rgba(255,255,255,0.18)"}`,
+                      borderLeft: `3px solid ${a.blind ? "var(--warn)" : "rgba(255,255,255,0.18)"}`,
                       paddingLeft: 11 }}>
                       {a.blind ?? a.caveat}
                     </div>
@@ -434,7 +434,7 @@ export default async function AutomationsPage({
                       />
                     : (
                       <div style={{ marginTop: 13, fontSize: 12, color: "var(--muted)",
-                        borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 11 }}>
+                        borderTop: "1px solid var(--border)", paddingTop: 11 }}>
                         No test button on purpose. Firing this would push a real notification to a
                         real person — that is not a test, it is the thing happening.
                       </div>
@@ -473,7 +473,7 @@ export default async function AutomationsPage({
             the one who is fine. */}
         {noPhone.length > 0 && (
           <div style={{
-            marginBottom: 12, padding: "11px 14px", borderRadius: 10,
+            marginBottom: 12, padding: "11px 14px", borderRadius: 12,
             border: "1px solid rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.07)",
           }}>
             <strong style={{ fontSize: 13.5 }}>
@@ -486,7 +486,7 @@ export default async function AutomationsPage({
               <div key={r.salesperson_id} style={{
                 display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
                 padding: "7px 0", fontSize: 13.5,
-                borderTop: "1px solid rgba(255,255,255,0.06)",
+                borderTop: "1px solid var(--border)",
               }}>
                 <strong>{r.full_name ?? "Unnamed"}</strong>
                 <span style={{ fontSize: 12, color: "var(--muted)" }}>{r.company_name}</span>
@@ -504,7 +504,7 @@ export default async function AutomationsPage({
           : reps.map((r) => (
             <div key={r.salesperson_id} style={{ display: "flex", gap: 12, flexWrap: "wrap",
               alignItems: "center", padding: "8px 0", fontSize: 13.5,
-              borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              borderTop: "1px solid var(--border)" }}>
               <strong>{r.enrolled && r.device_trustworthy ? "✅" : "⚠️"} {r.full_name ?? "Unnamed"}</strong>
               {!scope && <span style={{ fontSize: 12, color: "var(--muted)" }}>{r.company_name}</span>}
               <span style={{ color: "var(--muted)", fontSize: 12.5 }}>
@@ -513,7 +513,7 @@ export default async function AutomationsPage({
               <AddPhone salespersonId={r.salesperson_id}
                 name={r.full_name ?? "this telecaller"} current={r.has_phone ? r.phone : null} />
               <span style={{ fontSize: 12, marginLeft: "auto",
-                color: r.enrolled && r.device_trustworthy ? "#86efac" : "#fbbf24" }}>
+                color: r.enrolled && r.device_trustworthy ? "var(--good)" : "var(--warn)" }}>
                 {!r.enrolled
                   ? (!r.has_phone ? "needs a phone number"
                     : !r.company_on ? "this company has switched it off"
@@ -538,7 +538,7 @@ export default async function AutomationsPage({
           ? <div className="empty">Nobody is subscribed. The reports and alerts go to no one.</div>
           : subRows.map((s) => (
             <div key={s.id} style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center",
-              padding: "9px 0", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 13.5 }}>
+              padding: "9px 0", borderTop: "1px solid var(--border)", fontSize: 13.5 }}>
               <strong>{s.salesperson_id ? "👤" : "👑"} {s.label}</strong>
               <span style={{ color: "var(--muted)" }}>{s.phone}</span>
               <span style={{ fontSize: 12, color: "var(--muted)" }}>
@@ -547,8 +547,8 @@ export default async function AutomationsPage({
               </span>
               <span style={{ fontSize: 12, marginLeft: "auto",
                 color: !s.active ? "var(--muted)"
-                  : s.last_status === "failed" ? "#f87171"
-                  : s.last_status ? "#86efac" : "var(--muted)" }}>
+                  : s.last_status === "failed" ? "var(--bad)"
+                  : s.last_status ? "var(--good)" : "var(--muted)" }}>
                 {!s.active ? "off"
                   : s.last_status === "failed" ? `failed — ${s.last_error ?? "no reason"}`
                   : s.last_sent_at ? `sent ${ist(s.last_sent_at)}` : "never sent"}

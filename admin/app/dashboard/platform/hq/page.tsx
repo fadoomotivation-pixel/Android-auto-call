@@ -38,11 +38,11 @@ function fmtTalk(seconds: number) {
 // with each step's conversion off the previous.
 function Funnel({ f }: { f: HqFunnel }) {
   const stages = [
-    { label: "Leads", value: f.leads_total, color: "#64748b" },
-    { label: "Contacted", value: f.contacted, color: "#4353B8" },
-    { label: "Interested", value: f.interested, color: "#8b5cf6" },
-    { label: "Site visit", value: f.site_visit, color: "#f59e0b" },
-    { label: "Booked", value: f.booked, color: "#22c55e" },
+    { label: "Leads", value: f.leads_total, color: "var(--muted)" },
+    { label: "Contacted", value: f.contacted, color: "var(--accent)" },
+    { label: "Interested", value: f.interested, color: "var(--purple)" },
+    { label: "Site visit", value: f.site_visit, color: "var(--warn)" },
+    { label: "Booked", value: f.booked, color: "var(--good)" },
   ];
   const total = Math.max(1, f.leads_total);
   return (
@@ -58,8 +58,8 @@ function Funnel({ f }: { f: HqFunnel }) {
                 <span>{s.label}{i > 0 && <span style={{ opacity: 0.55 }}> · {conv}% of prev</span>}</span>
                 <strong>{s.value} <span style={{ opacity: 0.6, fontWeight: 400 }}>({pct}%)</span></strong>
               </div>
-              <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
-                <div style={{ width: `${Math.max(pct, 1.5)}%`, height: "100%", borderRadius: 4, background: s.color }} />
+              <div style={{ height: 8, borderRadius: 8, background: "var(--tint)", overflow: "hidden" }}>
+                <div style={{ width: `${Math.max(pct, 1.5)}%`, height: "100%", borderRadius: 8, background: s.color }} />
               </div>
             </div>
           );
@@ -78,8 +78,8 @@ function Sparkline({ values }: { values: number[] }) {
   const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   return (
     <svg width={w} height={h} style={{ display: "block" }} aria-hidden>
-      <polyline points={pts} fill="none" stroke="#4353B8" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={x(n - 1)} cy={y(values[n - 1] ?? 0)} r={2} fill="#4353B8" />
+      <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={x(n - 1)} cy={y(values[n - 1] ?? 0)} r={2} fill="var(--accent)" />
     </svg>
   );
 }
@@ -193,7 +193,7 @@ export default async function PlatformHqPage({
               padding: "6px 14px", textDecoration: "none",
               fontWeight: r.key === range ? 700 : 400,
               color: r.key === range ? "#fff" : "inherit",
-              background: r.key === range ? "var(--accent, #4353B8)" : undefined,
+              background: r.key === range ? "var(--accent)" : undefined,
             }}
           >
             {r.label}
@@ -228,7 +228,7 @@ export default async function PlatformHqPage({
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <strong style={{ flex: 1, fontSize: 16 }}>{c.company_name.trim()}</strong>
                   {c.calls_today === 0 && c.telecallers > 0 && (
-                    <span style={{ color: "#B8860B", fontSize: 13 }}>😴 idle</span>
+                    <span style={{ color: "var(--warn)", fontSize: 13 }}>😴 idle</span>
                   )}
                 </div>
                 <div className="subtitle" style={{ margin: "2px 0 10px", fontSize: 13 }}>
@@ -290,9 +290,9 @@ export default async function PlatformHqPage({
                         : <span style={{ fontSize: 12, opacity: 0.5 }}>—</span>}
                     </td>
                     <td>
-                      {!r.is_active ? <span style={{ color: "var(--danger, #C0452C)" }}>inactive</span>
-                        : r.calls_today === 0 ? <span style={{ color: "#B8860B" }}>😴 no calls yet</span>
-                        : <span style={{ color: "var(--accent, #4353B8)" }}>working</span>}
+                      {!r.is_active ? <span style={{ color: "var(--bad)" }}>inactive</span>
+                        : r.calls_today === 0 ? <span style={{ color: "var(--warn)" }}>😴 no calls yet</span>
+                        : <span style={{ color: "var(--accent)" }}>working</span>}
                     </td>
                   </tr>
                   );
@@ -318,7 +318,7 @@ export default async function PlatformHqPage({
                     <td>{c.rep_name ?? "—"}</td>
                     <td>
                       {c.off_crm
-                        ? <span style={{ color: "var(--danger, #C0452C)", fontWeight: 600 }}>⚠ Off-CRM number</span>
+                        ? <span style={{ color: "var(--bad)", fontWeight: 600 }}>⚠ Off-CRM number</span>
                         : <strong>{c.lead_name ?? "Unknown"}</strong>}
                       <div style={{ fontSize: 12, opacity: 0.7 }}>{c.phone}</div>
                     </td>

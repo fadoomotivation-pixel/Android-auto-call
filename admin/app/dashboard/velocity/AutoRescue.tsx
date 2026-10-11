@@ -60,12 +60,12 @@ export function AutoRescue() {
     setPolicies((p) => ({ ...p, [companyId]: row }));
   }
 
-  const card: CSSProperties = { background: "var(--panel-grad, var(--panel))", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 18, padding: 22 };
-  const row: CSSProperties = { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "10px 0", borderTop: "1px solid rgba(255,255,255,0.06)" };
+  const card: CSSProperties = { background: "var(--panel-grad, var(--panel))", border: "1px solid rgba(16,185,129,0.25)", borderRadius: 16, padding: 22 };
+  const row: CSSProperties = { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "10px 0", borderTop: "1px solid var(--border)" };
 
   return (
     <div style={card}>
-      <strong style={{ color: "#fff", fontSize: 15 }}>💬 Auto First-Reply</strong>
+      <strong style={{ color: "var(--text)", fontSize: 15 }}>💬 Auto First-Reply</strong>
       <p className="subtitle" style={{ margin: "2px 0 8px" }}>
         A buyer fills three or four forms — whoever replies first usually wins. If nobody has called a lead by
         your limit, this sends <strong>one short WhatsApp in that telecaller&apos;s own name</strong> so the customer
@@ -83,14 +83,14 @@ export function AutoRescue() {
         const on = !!p?.enabled;
         return (
           <div key={c.id} style={row}>
-            <span style={{ color: "#fff", fontWeight: 600, minWidth: 150 }}>{c.name ?? "Company"}</span>
+            <span style={{ color: "var(--text)", fontWeight: 600, minWidth: 150 }}>{c.name ?? "Company"}</span>
             <button
               onClick={() => save(c.id, { enabled: !on })}
               disabled={busy === c.id}
               style={{ padding: "6px 14px", borderRadius: 999, cursor: "pointer", fontSize: 12.5, fontWeight: 700,
-                border: `1px solid ${on ? "#10b981" : "var(--border)"}`,
+                border: `1px solid ${on ? "var(--good)" : "var(--border)"}`,
                 background: on ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.03)",
-                color: on ? "#10b981" : "var(--muted)" }}>
+                color: on ? "var(--good)" : "var(--muted)" }}>
               {busy === c.id ? "…" : on ? "ON" : "OFF"}
             </button>
             <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Reply if uncalled after</span>
@@ -124,7 +124,7 @@ export function AutoRescue() {
           <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
             {events.map((e) => (
               <div key={e.id} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 13 }}>
-                <span style={{ color: e.action === "holding_reply" ? "#10b981" : e.action === "skipped" ? "#f59e0b" : "var(--muted)", fontWeight: 600, minWidth: 96 }}>
+                <span style={{ color: e.action === "holding_reply" ? "var(--good)" : e.action === "skipped" ? "var(--warn)" : "var(--muted)", fontWeight: 600, minWidth: 96 }}>
                   {e.action.replace("_", " ")}
                 </span>
                 <span style={{ color: "var(--text)" }}>{e.detail}</span>

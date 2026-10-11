@@ -156,7 +156,7 @@ export function AttendanceTable({
                         <img 
                           src={r.selfie.startsWith("data:") ? r.selfie : `data:image/jpeg;base64,${r.selfie}`} 
                           alt="selfie" 
-                          style={{ width: 36, height: 36, borderRadius: "50%", cursor: "pointer", objectFit: "cover", backgroundColor: "#333" }}
+                          style={{ width: 36, height: 36, borderRadius: "50%", cursor: "pointer", objectFit: "cover", backgroundColor: "var(--text)" }}
                           onClick={() => setSelectedSelfie(r.selfie?.startsWith("data:") ? r.selfie : `data:image/jpeg;base64,${r.selfie}`)}
                         />
                       ) : "—"}

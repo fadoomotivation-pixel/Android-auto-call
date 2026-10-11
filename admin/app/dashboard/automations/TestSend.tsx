@@ -137,13 +137,13 @@ export function TestSend({
         : null;
 
   return (
-    <div style={{ marginTop: 13, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>
+    <div style={{ marginTop: 13, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
         {preview && (
           <button onClick={() => void run("preview")} disabled={!!busy || blockedPreview}
             style={{
               fontSize: 13, fontWeight: 600, padding: "7px 15px", borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.22)", background: "transparent",
+              border: "1px solid var(--border-strong)", background: "transparent",
               color: blockedPreview ? "var(--muted)" : "#fff",
               cursor: blockedPreview ? "not-allowed" : "pointer", opacity: busy === "preview" ? 0.6 : 1,
             }}>
@@ -166,14 +166,14 @@ export function TestSend({
             <button onClick={() => void run("send")} disabled={!!busy}
               style={{
                 fontSize: 13, fontWeight: 700, padding: "7px 15px", borderRadius: 8,
-                border: "1px solid #ef4444", background: "#ef4444", color: "#fff", cursor: "pointer",
+                border: "1px solid var(--bad)", background: "var(--bad)", color: "#fff", cursor: "pointer",
               }}>
               {busy === "send" ? "Sending…" : "Yes — send it for real"}
             </button>
             <button onClick={() => setConfirming(false)}
               style={{
                 fontSize: 13, padding: "7px 13px", borderRadius: 8, cursor: "pointer",
-                border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "var(--muted)",
+                border: "1px solid var(--border-strong)", background: "transparent", color: "var(--muted)",
               }}>
               Cancel
             </button>
@@ -189,7 +189,7 @@ export function TestSend({
           <div style={{
             marginTop: 10, fontSize: 12.5, padding: "8px 11px", borderRadius: 8,
             background: out.ok ? "rgba(34,197,94,0.10)" : "rgba(248,113,113,0.10)",
-            color: out.ok ? "#86efac" : "#fca5a5",
+            color: out.ok ? "var(--good)" : "var(--bad)",
           }}>
             {out.ok ? "✓ " : "✗ "}{out.text}
           </div>
@@ -197,7 +197,7 @@ export function TestSend({
             <pre style={{
               margin: "9px 0 0", whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.55,
               background: "rgba(37,211,102,0.06)", border: "1px solid rgba(37,211,102,0.22)",
-              borderRadius: 10, padding: "11px 13px", fontFamily: "inherit",
+              borderRadius: 12, padding: "11px 13px", fontFamily: "inherit",
             }}>{out.preview}</pre>
           )}
         </>

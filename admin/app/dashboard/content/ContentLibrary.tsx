@@ -47,7 +47,7 @@ function safeKey(companyId: string, name: string): string {
 
 const input: React.CSSProperties = {
   padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)",
-  background: "rgba(255,255,255,0.02)", color: "var(--text)", width: "100%", outline: "none",
+  background: "var(--tint)", color: "var(--text)", width: "100%", outline: "none",
 };
 const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
 const lbl: React.CSSProperties = { fontSize: 13, color: "var(--muted)", fontWeight: 500 };
@@ -282,8 +282,8 @@ export function ContentLibrary(
           <label style={lbl}>Description (optional)</label>
           <input style={input} value={form.description} onChange={(e) => set("description", e.target.value)} />
         </div>
-        {err && <div style={{ color: "var(--danger, #ef4444)", fontSize: 13 }}>{err}</div>}
-        {note && <div style={{ color: "#f59e0b", fontSize: 13 }}>{note}</div>}
+        {err && <div style={{ color: "var(--bad)", fontSize: 13 }}>{err}</div>}
+        {note && <div style={{ color: "var(--warn)", fontSize: 13 }}>{note}</div>}
         <div>
           <button className="primary" onClick={add} disabled={saving}>
             {saving ? (step ?? "Adding…") : "Add to library"}
@@ -320,9 +320,9 @@ export function ContentLibrary(
                         different answers to "why doesn't the AI know this?" */}
                     <td style={{ padding: "8px 4px", fontSize: 13 }}>
                       {a.trained === true
-                        ? <span style={{ color: "#16a34a", fontWeight: 600 }}>🧠 Yes</span>
+                        ? <span style={{ color: "var(--good)", fontWeight: 600 }}>🧠 Yes</span>
                         : a.trained === false
-                        ? <span style={{ color: "#f59e0b" }} title="No readable text — likely a scan">No text to read</span>
+                        ? <span style={{ color: "var(--warn)" }} title="No readable text — likely a scan">No text to read</span>
                         : <span style={{ color: "var(--muted)" }}>—</span>}
                     </td>
                     <td style={{ padding: "8px 4px" }}>
@@ -331,7 +331,7 @@ export function ContentLibrary(
                       </button>
                     </td>
                     <td style={{ padding: "8px 4px", textAlign: "right" }}>
-                      <button className="link" onClick={() => remove(a)} style={{ color: "var(--danger, #ef4444)" }}>Delete</button>
+                      <button className="link" onClick={() => remove(a)} style={{ color: "var(--bad)" }}>Delete</button>
                     </td>
                   </tr>
                 ))}

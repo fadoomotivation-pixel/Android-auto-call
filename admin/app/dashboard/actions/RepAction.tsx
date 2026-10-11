@@ -165,10 +165,10 @@ export function RepAction({
         disabled={state === "busy"}
         title={why ?? "Choose what to do about this lead"}
         style={{
-          fontSize: 11.5, padding: "3px 10px", borderRadius: 7, cursor: "pointer",
-          border: "1px solid rgba(255,255,255,0.14)",
+          fontSize: 11.5, padding: "3px 10px", borderRadius: 8, cursor: "pointer",
+          border: "1px solid var(--border-strong)",
           background: open ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
-          color: state === "error" ? "#fca5a5" : "var(--text)",
+          color: state === "error" ? "var(--bad)" : "var(--text)",
           whiteSpace: "nowrap",
         }}
       >
@@ -180,8 +180,8 @@ export function RepAction({
           role="menu"
           style={{
             position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 30,
-            minWidth: 262, padding: 8, borderRadius: 11,
-            background: "#141821", border: "1px solid rgba(255,255,255,0.14)",
+            minWidth: 262, padding: 8, borderRadius: 12,
+            background: "#141821", border: "1px solid var(--border-strong)",
             boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
           }}
         >
@@ -220,7 +220,7 @@ export function RepAction({
             hint="10:30 AM, straight onto the rep's Follow-up tab" />
 
           {why && (
-            <div style={{ fontSize: 11.5, color: "#fca5a5", padding: "6px 6px 2px" }}>{why}</div>
+            <div style={{ fontSize: 11.5, color: "var(--bad)", padding: "6px 6px 2px" }}>{why}</div>
           )}
         </div>
       )}

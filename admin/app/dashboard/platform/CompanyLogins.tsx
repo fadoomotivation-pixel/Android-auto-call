@@ -8,7 +8,7 @@ export type CompanyAdmin = { id: string; full_name: string | null; company_id: s
 
 const init: ActionResult = { ok: false };
 const btn: React.CSSProperties = {
-  padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border, #333)",
+  padding: "4px 10px", borderRadius: 8, border: "1px solid var(--border)",
   background: "transparent", color: "inherit", cursor: "pointer", fontSize: 13,
 };
 
@@ -34,7 +34,7 @@ function AdminReset({ admin }: { admin: CompanyAdmin }) {
       <input
         name="password" value={pw} onChange={(e) => setPw(e.target.value)}
         placeholder="New password" type="text" autoComplete="off"
-        style={{ width: 160, padding: "7px 10px", borderRadius: 8, border: "1px solid var(--border, #333)", background: "rgba(255,255,255,0.03)", color: "var(--text)" }}
+        style={{ width: 160, padding: "7px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)" }}
       />
       <SetBtn />
     </form>
@@ -57,7 +57,7 @@ export default function CompanyLogins({ name, admins }: { name: string; admins: 
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ width: "min(460px, 100%)", maxHeight: "90vh", overflow: "auto", background: "var(--panel, #16181d)", border: "1px solid var(--border, #333)", borderRadius: 16, padding: 22 }}
+            style={{ width: "min(460px, 100%)", maxHeight: "90vh", overflow: "auto", background: "var(--panel, #16181d)", border: "1px solid var(--border)", borderRadius: 16, padding: 22 }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <strong style={{ fontSize: 16 }}>Login · {name}</strong>

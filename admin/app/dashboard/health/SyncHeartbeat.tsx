@@ -101,7 +101,7 @@ export async function SyncHeartbeat() {
             style={{ padding: "11px 14px", marginBottom: 8 }}>
             <div style={{ display: "flex", gap: 11, flexWrap: "wrap", alignItems: "baseline" }}>
               <strong style={{ fontSize: 14 }}>{s.dot} {r.full_name ?? "Unnamed"}</strong>
-              <span style={{ fontSize: 12.5, color: r.trustworthy ? "#86efac" : "#fca5a5" }}>
+              <span style={{ fontSize: 12.5, color: r.trustworthy ? "var(--good)" : "var(--bad)" }}>
                 {s.label}
               </span>
               <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: "auto" }}>
@@ -126,14 +126,14 @@ export async function SyncHeartbeat() {
                 worth saying out loud before the net misses one too. */}
             {r.state === "ok" && (r.native_seen ?? 0) > 0 &&
               (r.backfilled ?? 0) / (r.native_seen ?? 1) > 0.5 && (
-              <div style={{ fontSize: 12.5, color: "#fcd34d", marginTop: 6 }}>
+              <div style={{ fontSize: 12.5, color: "var(--warn)", marginTop: 6 }}>
                 Most of this phone&apos;s calls are arriving late, through the 15-minute safety net
                 rather than as they happen. Live capture is probably not running.
               </div>
             )}
 
             {s.fix && (
-              <div style={{ fontSize: 12.5, marginTop: 6, borderLeft: "3px solid #fbbf24",
+              <div style={{ fontSize: 12.5, marginTop: 6, borderLeft: "3px solid var(--warn)",
                 paddingLeft: 10, color: "var(--muted)" }}>
                 {s.fix}
                 {r.detail ? <div style={{ marginTop: 3, opacity: 0.75 }}>{r.detail}</div> : null}

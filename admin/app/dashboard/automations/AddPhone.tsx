@@ -88,7 +88,7 @@ export function AddPhone({
       <button
         onClick={() => setOpen(true)}
         style={{
-          fontSize: 11.5, padding: "3px 10px", borderRadius: 7, cursor: "pointer",
+          fontSize: 11.5, padding: "3px 10px", borderRadius: 8, cursor: "pointer",
           border: `1px solid ${current ? "rgba(255,255,255,0.14)" : "var(--accent)"}`,
           background: current ? "rgba(255,255,255,0.05)" : "var(--accent)",
           color: current ? "var(--text)" : "#fff", whiteSpace: "nowrap",
@@ -110,26 +110,26 @@ export function AddPhone({
         inputMode="tel"
         aria-label={`WhatsApp number for ${name}`}
         style={{
-          fontSize: 12.5, padding: "4px 9px", borderRadius: 7, width: 150,
-          border: "1px solid rgba(255,255,255,0.2)", background: "rgba(0,0,0,0.3)",
+          fontSize: 12.5, padding: "4px 9px", borderRadius: 8, width: 150,
+          border: "1px solid var(--border-strong)", background: "rgba(0,0,0,0.3)",
           color: "var(--text)",
         }}
       />
       <button onClick={() => void save()} disabled={state === "saving"}
         style={{
-          fontSize: 11.5, padding: "4px 11px", borderRadius: 7, cursor: "pointer",
+          fontSize: 11.5, padding: "4px 11px", borderRadius: 8, cursor: "pointer",
           border: "1px solid var(--accent)", background: "var(--accent)", color: "#fff",
         }}>
         {state === "saving" ? "Saving…" : "Save"}
       </button>
       <button onClick={() => { setOpen(false); setValue(current ?? ""); setState("idle"); setWhy(null); }}
         style={{
-          fontSize: 11.5, padding: "4px 9px", borderRadius: 7, cursor: "pointer",
-          border: "1px solid rgba(255,255,255,0.14)", background: "transparent", color: "var(--muted)",
+          fontSize: 11.5, padding: "4px 9px", borderRadius: 8, cursor: "pointer",
+          border: "1px solid var(--border-strong)", background: "transparent", color: "var(--muted)",
         }}>
         Cancel
       </button>
-      {why && <span style={{ fontSize: 11.5, color: "#fca5a5", flexBasis: "100%" }}>{why}</span>}
+      {why && <span style={{ fontSize: 11.5, color: "var(--bad)", flexBasis: "100%" }}>{why}</span>}
     </span>
   );
 }

@@ -113,8 +113,8 @@ const HEALTH_LABEL: Record<Health, string> = {
   disconnected: "Disconnected",
 };
 const HEALTH_TONE: Record<Health, string> = {
-  connected: "#22c55e", stale: "#f59e0b", scan: "#f59e0b",
-  connecting: "#8696a0", disconnected: "#ef4444",
+  connected: "var(--good)", stale: "var(--warn)", scan: "var(--warn)",
+  connecting: "#8696a0", disconnected: "var(--bad)",
 };
 
 function ago(iso: string | null): string {
@@ -553,7 +553,7 @@ export function TelecallerWhatsApp({
                       const sn = seenBy.get(s.salesperson_id);
                       if (!trusted || !sn || sn.unmatched === 0) return null;
                       return (
-                        <div style={{ fontSize: 12, marginTop: 4, color: sn.matched === 0 ? "#f59e0b" : undefined }}>
+                        <div style={{ fontSize: 12, marginTop: 4, color: sn.matched === 0 ? "var(--warn)" : undefined }}>
                           {sn.matched === 0
                             ? `${sn.unmatched} messages seen today — none with a lead of this company`
                             : `+${sn.unmatched} more with numbers not in the CRM`}
@@ -620,7 +620,7 @@ export function TelecallerWhatsApp({
 
       {qrFor && (
         <div style={{
-          marginTop: 16, padding: 16, borderRadius: 12, border: "1px solid #e5e7eb",
+          marginTop: 16, padding: 16, borderRadius: 12, border: "1px solid var(--border-strong)",
           textAlign: "center", maxWidth: 380,
         }}>
           <strong>{repName.get(qrFor) ?? "Telecaller"}</strong>
@@ -651,9 +651,9 @@ export function TelecallerWhatsApp({
                 </div>
                 <div style={{
                   fontFamily: "monospace", fontSize: 26, fontWeight: 700, letterSpacing: 4,
-                  textAlign: "center", padding: "10px 6px", borderRadius: 10,
+                  textAlign: "center", padding: "10px 6px", borderRadius: 12,
                   background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.35)",
-                  color: "#22c55e",
+                  color: "var(--good)",
                 }}>
                   {pairCode}
                 </div>
@@ -674,7 +674,7 @@ export function TelecallerWhatsApp({
                     inputMode="numeric"
                     style={{
                       flex: 1, minWidth: 150, padding: "8px 10px", borderRadius: 8,
-                      border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)",
+                      border: "1px solid var(--border)", background: "var(--tint)",
                       color: "var(--text)", fontSize: 13,
                     }}
                   />
@@ -698,10 +698,10 @@ export function TelecallerWhatsApp({
               never emits a QR at all. */}
           {qrStuck && !qr && (
             <div style={{
-              marginTop: 10, padding: 10, borderRadius: 10, textAlign: "left",
+              marginTop: 10, padding: 10, borderRadius: 12, textAlign: "left",
               background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)",
             }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#f59e0b" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--warn)" }}>
                 {workerDown ? "The WhatsApp worker is not answering." : "Still no QR."}
               </div>
               <div style={{ fontSize: 12.5, marginTop: 4 }}>

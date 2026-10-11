@@ -198,7 +198,7 @@ export function ImportLeads({
     padding: "10px 14px",
     borderRadius: 8,
     border: "1px solid var(--border)",
-    background: "rgba(255,255,255,0.02)",
+    background: "var(--tint)",
     color: "var(--text)",
     outline: "none",
     backdropFilter: "blur(12px)",
@@ -213,7 +213,7 @@ export function ImportLeads({
     >
       <div
         className="card"
-        style={{ width: "min(640px, 100%)", maxHeight: "90vh", overflow: "auto", background: "rgba(10, 10, 12, 0.85)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(24px)", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}
+        style={{ width: "min(640px, 100%)", maxHeight: "90vh", overflow: "auto", background: "rgba(10, 10, 12, 0.85)", border: "1px solid var(--border)", backdropFilter: "blur(24px)", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -289,7 +289,7 @@ export function ImportLeads({
           <div style={{ marginTop: 14 }}>
             {/* Stat strip — ready vs skipped, at a glance. */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-              <span style={{ padding: "4px 12px", borderRadius: 999, background: "rgba(16,185,129,0.12)", color: "#10b981", fontWeight: 700, fontSize: 14 }}>
+              <span style={{ padding: "4px 12px", borderRadius: 999, background: "rgba(16,185,129,0.12)", color: "var(--good)", fontWeight: 700, fontSize: 14 }}>
                 ✓ {parsed.length} ready
               </span>
               {skipped > 0 && (
@@ -303,7 +303,7 @@ export function ImportLeads({
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
               <span style={{ fontSize: 12, color: "var(--muted)", alignSelf: "center" }}>We read:</span>
               {mappedFields.map((f) => (
-                <span key={f} style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12, background: "rgba(99,102,241,0.12)", color: "#a5b4fc", textTransform: "capitalize", fontWeight: 600 }}>
+                <span key={f} style={{ padding: "3px 10px", borderRadius: 999, fontSize: 12, background: "rgba(99,102,241,0.12)", color: "var(--accent)", textTransform: "capitalize", fontWeight: 600 }}>
                   {f}
                 </span>
               ))}
@@ -325,7 +325,7 @@ export function ImportLeads({
                   </thead>
                   <tbody>
                     {parsed.slice(0, 50).map((l, i) => (
-                      <tr key={i} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                      <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
                         <td style={{ ...tdCell, color: "var(--muted)" }}>{i + 1}</td>
                         <td style={tdCell}>{l.name || <span style={{ color: "var(--muted)" }}>—</span>}</td>
                         <td style={{ ...tdCell, fontFamily: "monospace" }}>{l.phone}</td>
@@ -338,7 +338,7 @@ export function ImportLeads({
                 </table>
               </div>
               {parsed.length > 50 && (
-                <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--muted)", background: "rgba(255,255,255,0.02)", borderTop: "1px solid var(--border)" }}>
+                <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--muted)", background: "var(--tint)", borderTop: "1px solid var(--border)" }}>
                   Showing first 50 of {parsed.length} — all {parsed.length} will import.
                 </div>
               )}
@@ -360,14 +360,14 @@ export function ImportLeads({
             paddingTop: 12,
             background: "rgba(10, 10, 12, 0.94)",
             backdropFilter: "blur(24px)",
-            borderTop: "1px solid rgba(255,255,255,0.08)",
+            borderTop: "1px solid var(--border)",
           }}
         >
         {error && <div className="error" style={{ marginBottom: 10 }}>{error}</div>}
 
         {duplicateConflicts.length > 0 ? (
           <div className="card" style={{ marginBottom: 12, background: "rgba(245, 158, 11, 0.05)", border: "1px solid rgba(245, 158, 11, 0.2)" }}>
-            <strong style={{ color: "#f59e0b" }}>⚠️ Found {duplicateConflicts.length} duplicate leads</strong>
+            <strong style={{ color: "var(--warn)" }}>⚠️ Found {duplicateConflicts.length} duplicate leads</strong>
             <p className="subtitle" style={{ marginTop: 4 }}>
               These numbers already exist in your system or appear multiple times in your file.
             </p>
@@ -399,7 +399,7 @@ export function ImportLeads({
                 answers the second one, and was read as answering both. */}
             {companies && companies.length > 0 && (
               <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: targetCompany ? "var(--muted)" : "#f59e0b", minWidth: 132 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: targetCompany ? "var(--muted)" : "var(--warn)", minWidth: 132 }}>
                   Which company? *
                 </span>
                 <select
@@ -413,7 +413,7 @@ export function ImportLeads({
                     setFreshLeads([]);
                     setError(null);
                   }}
-                  style={{ ...input, flex: 1, minWidth: 200, borderColor: targetCompany ? "var(--border)" : "#f59e0b" }}
+                  style={{ ...input, flex: 1, minWidth: 200, borderColor: targetCompany ? "var(--border)" : "var(--warn)" }}
                 >
                   <option value="">— required: pick a company —</option>
                   {companies.map(([id, name]) => (
@@ -423,7 +423,7 @@ export function ImportLeads({
               </div>
             )}
             {needsCompany && (
-              <div style={{ fontSize: 12.5, color: "#f59e0b", marginBottom: 10 }}>
+              <div style={{ fontSize: 12.5, color: "var(--warn)", marginBottom: 10 }}>
                 These {parsed.length} leads need a company before they can import.
                 “Leave unassigned” below only means no rep is given the leads — it does not answer this.
               </div>
@@ -474,11 +474,11 @@ export function ImportLeads({
               <span>Importing…</span>
               <span>{progress.done} / {progress.total}</span>
             </div>
-            <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+            <div style={{ height: 8, borderRadius: 999, background: "var(--tint)", overflow: "hidden" }}>
               <div style={{
                 height: "100%",
                 width: `${progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0}%`,
-                background: "linear-gradient(90deg, #6366f1, #10b981)",
+                background: "linear-gradient(90deg, var(--accent), var(--good))",
                 transition: "width 0.3s ease",
               }} />
             </div>

@@ -119,14 +119,14 @@ export function WaChat({
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: 13 }}>
             <span>
               {owed
-                ? <><strong style={{ color: "#ef4444" }}>They spoke last</strong> — waiting {human}</>
+                ? <><strong style={{ color: "var(--bad)" }}>They spoke last</strong> — waiting {human}</>
                 : <><strong>Rep spoke last</strong> — ball is with the buyer</>}
             </span>
-            {hot > 0 && <span style={{ color: "#22c55e" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
-            {risk > 0 && <span style={{ color: "#ef4444" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
+            {hot > 0 && <span style={{ color: "var(--good)" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
+            {risk > 0 && <span style={{ color: "var(--bad)" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
             <span style={{ opacity: 0.7 }}>{ordered.length} messages</span>
             {withFile.length > 0 && (
-              <span style={{ color: allIn ? "#22c55e" : coming > 0 ? "#f59e0b" : "#8696a0" }}>
+              <span style={{ color: allIn ? "var(--good)" : coming > 0 ? "var(--warn)" : "#8696a0" }}>
                 📎 {got}/{withFile.length} file{withFile.length === 1 ? "" : "s"} downloaded
                 {!allIn && coming > 0 ? ` · ${coming} still coming` : ""}
               </span>

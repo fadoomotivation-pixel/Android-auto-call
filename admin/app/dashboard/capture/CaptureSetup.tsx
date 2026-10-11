@@ -16,7 +16,7 @@ type Member = { id: string; full_name: string | null };
 
 const input: React.CSSProperties = {
   padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)",
-  background: "rgba(255,255,255,0.02)", color: "var(--text)", width: "100%", outline: "none",
+  background: "var(--tint)", color: "var(--text)", width: "100%", outline: "none",
 };
 const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
 const lbl: React.CSSProperties = { fontSize: 13, color: "var(--muted)", fontWeight: 500 };
@@ -64,11 +64,11 @@ export function CaptureSetup({
   // site builder's HTML/embed block; it POSTs straight to the capture URL.
   const embedCode = captureUrl
     ? `<form onsubmit="event.preventDefault();var f=this,b=f.querySelector('button');b.disabled=true;fetch('${captureUrl}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:f.name.value,phone:f.phone.value,email:f.email.value,source:'website'})}).then(function(r){return r.json()}).then(function(){f.reset();b.disabled=false;f.querySelector('.msg').textContent='Thank you! We will call you shortly.'}).catch(function(){b.disabled=false;f.querySelector('.msg').textContent='Something went wrong, please try again.'});return false;" style="max-width:360px;display:flex;flex-direction:column;gap:10px;font-family:sans-serif">
-  <input name="name" placeholder="Your name" required style="padding:10px;border:1px solid #ccc;border-radius:8px" />
-  <input name="phone" placeholder="Phone number" required style="padding:10px;border:1px solid #ccc;border-radius:8px" />
-  <input name="email" type="email" placeholder="Email (optional)" style="padding:10px;border:1px solid #ccc;border-radius:8px" />
-  <button type="submit" style="padding:12px;border:0;border-radius:8px;background:#4353B8;color:#fff;font-weight:600;cursor:pointer">Get a call back</button>
-  <span class="msg" style="font-size:13px;color:#16a34a"></span>
+  <input name="name" placeholder="Your name" required style="padding:10px;border:1px solid var(--border-strong);border-radius:8px" />
+  <input name="phone" placeholder="Phone number" required style="padding:10px;border:1px solid var(--border-strong);border-radius:8px" />
+  <input name="email" type="email" placeholder="Email (optional)" style="padding:10px;border:1px solid var(--border-strong);border-radius:8px" />
+  <button type="submit" style="padding:12px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer">Get a call back</button>
+  <span class="msg" style="font-size:13px;color:var(--good)"></span>
 </form>`
     : null;
 
@@ -179,7 +179,7 @@ export function CaptureSetup({
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button className="primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-        {saved && <span style={{ color: "#16a34a", fontSize: 13 }}>Saved ✓</span>}
+        {saved && <span style={{ color: "var(--good)", fontSize: 13 }}>Saved ✓</span>}
         {err && <span className="error" style={{ fontSize: 13 }}>{err}</span>}
       </div>
 
@@ -189,12 +189,12 @@ export function CaptureSetup({
           <span style={{ ...lbl, color: "var(--text)", fontWeight: 600 }}>Test it</span>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <button className="primary" type="button" onClick={sendTest} disabled={testing || !form.active}
-              style={{ background: "rgba(67,83,184,0.15)", color: "var(--accent, #4353B8)", border: "1px solid rgba(67,83,184,0.4)" }}>
+              style={{ background: "rgba(67,83,184,0.15)", color: "var(--accent)", border: "1px solid rgba(67,83,184,0.4)" }}>
               {testing ? "Sending…" : "🧪 Send a test lead"}
             </button>
-            {!form.active && <span style={{ fontSize: 12, color: "#f59e0b" }}>Turn on “Capture active” and Save first.</span>}
+            {!form.active && <span style={{ fontSize: 12, color: "var(--warn)" }}>Turn on “Capture active” and Save first.</span>}
             {testResult && (
-              <span style={{ fontSize: 13, color: testResult.ok ? "#16a34a" : "#f87171" }}>{testResult.msg}</span>
+              <span style={{ fontSize: 13, color: testResult.ok ? "var(--good)" : "var(--bad)" }}>{testResult.msg}</span>
             )}
           </div>
         </div>
@@ -240,7 +240,7 @@ function CapStat({ label, value, loading }: { label: string; value: number; load
   return (
     <div style={{ flex: "1 1 140px", minWidth: 140, background: "rgba(67,83,184,0.06)", border: "1px solid rgba(67,83,184,0.2)", borderRadius: 12, padding: "12px 14px" }}>
       <div style={{ fontSize: 11.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.4px", color: "var(--muted)" }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--accent, #4353B8)" }}>{loading ? "…" : value.toLocaleString("en-IN")}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--accent)" }}>{loading ? "…" : value.toLocaleString("en-IN")}</div>
     </div>
   );
 }

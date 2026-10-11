@@ -251,7 +251,7 @@ export function PlatformContacts({
             </button>
             <button
               className="primary"
-              style={{ background: "#ef4444", borderColor: "#ef4444" }}
+              style={{ background: "var(--bad)", borderColor: "var(--bad)" }}
               onClick={deleteSelected}
               disabled={busy || selected.size === 0}
             >

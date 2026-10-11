@@ -183,7 +183,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
           <select 
             value={reportType} 
             onChange={e => setReportType(e.target.value)}
-            style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text)" }}
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text)" }}
           >
             <option value="team_performance">Team Performance (Calls & Conversions)</option>
             <option value="attendance">Attendance Summary</option>
@@ -197,7 +197,7 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
             value={dateRange} 
             onChange={e => setDateRange(e.target.value)}
             disabled={reportType === "pipeline"}
-            style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text)" }}
+            style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--text)" }}
           >
             <option value="this_week">This Week</option>
             <option value="last_week">Last Week</option>
@@ -208,14 +208,14 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
         <button 
           onClick={generateReport}
           disabled={loading}
-          style={{ background: "var(--primary)", color: "white", padding: "10px 16px", borderRadius: 6, border: "none", fontWeight: 600, cursor: "pointer" }}
+          style={{ background: "var(--primary)", color: "white", padding: "10px 16px", borderRadius: 8, border: "none", fontWeight: 600, cursor: "pointer" }}
         >
           {loading ? "Generating..." : "Generate Report"}
         </button>
       </div>
 
       {errorMsg && (
-        <div className="card" style={{ background: "#fef2f2", color: "#991b1b", border: "1px solid #f87171", marginBottom: 24 }}>
+        <div className="card" style={{ background: "#fef2f2", color: "var(--bad)", border: "1px solid var(--bad)", marginBottom: 24 }}>
           {errorMsg}
         </div>
       )}
@@ -270,8 +270,8 @@ export function ReportBuilder({ companyId }: { companyId: string }) {
               .printable-report, .printable-report * { visibility: visible; }
               .printable-report { position: absolute; left: 0; top: 0; width: 100%; }
               .no-print { display: none !important; }
-              table { border: 1px solid #ddd; }
-              th, td { border: 1px solid #ddd !important; padding: 8px !important; color: black !important; }
+              table { border: 1px solid var(--border-strong); }
+              th, td { border: 1px solid var(--border-strong) !important; padding: 8px !important; color: black !important; }
               th { background-color: #f5f5f5 !important; -webkit-print-color-adjust: exact; }
             }
           `}} />
