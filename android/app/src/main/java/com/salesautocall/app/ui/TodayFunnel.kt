@@ -215,7 +215,7 @@ internal fun TodayFunnelCard(
     onOpenFollowUps: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxWidth().clipCard().padding(Space.l),
+        Modifier.fillMaxWidth().clipCard().padding(Space.m),
     ) {
         Text("Today", style = AppType.rowTitle, color = AppColors.TextPrimary)
         Spacer(Modifier.height(10.dp))

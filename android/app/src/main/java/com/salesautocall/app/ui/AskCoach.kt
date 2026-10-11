@@ -1,5 +1,7 @@
 package com.salesautocall.app.ui
 
+import com.salesautocall.app.ui.design.CoachCharacter
+import com.salesautocall.app.ui.design.CoachMood
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -214,7 +216,7 @@ private fun AskCoachSheet(
                 .padding(horizontal = Space.l).padding(bottom = 20.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CoachOrb(size = 44.dp, active = loading, face = true)
+                CoachCharacter(size = 44.dp, mood = if (loading) CoachMood.Nod else CoachMood.Idle)
                 Spacer(Modifier.width(Space.m))
                 Column(Modifier.weight(1f)) {
                     Text("Ask Coach", style = AppType.title, color = AppColors.TextPrimary)
@@ -283,7 +285,7 @@ private fun AskCoachSheet(
                         else -> "No playbook note matched this. This is general advice. Ask your manager to add the right answer in RAG."
                     },
                 ) {
-                    Column(Modifier.padding(Space.l)) {
+                    Column(Modifier.padding(Space.m)) {
                         when {
                             loading -> Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = IosColors.Blue)

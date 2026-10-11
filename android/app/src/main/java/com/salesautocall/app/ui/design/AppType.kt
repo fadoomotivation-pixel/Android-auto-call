@@ -43,7 +43,7 @@ object AppType {
     /** Title 2 (22). Sheet titles, a card's single big figure. */
     val title2 = TextStyle(
         fontFamily = Inter, fontSize = 22.sp, lineHeight = 28.sp,
-        fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp,
+        fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp,
     )
 
     /** Title 3 (20). Card titles that are the point of the card. */
@@ -85,7 +85,7 @@ object AppType {
     /** Caption (12). The smallest text that is still meant to be read. */
     val caption = TextStyle(
         fontFamily = Inter, fontSize = 12.sp, lineHeight = 16.sp,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.Normal,
     )
 
     /** Group header above an inset-grouped card (footnote, uppercase, grey). */
@@ -126,10 +126,10 @@ object AppType {
     /** Small uppercase section label above groups. */
     val sectionLabel = TextStyle(
         fontFamily = Inter,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.8.sp,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+        fontWeight = FontWeight.Normal,
+        letterSpacing = 0.3.sp,
     )
 
     val body = TextStyle(
@@ -155,10 +155,10 @@ object AppType {
     /** Button / tab label. */
     val label = TextStyle(
         fontFamily = Inter,
-        fontSize = 14.sp,
-        lineHeight = 18.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.1.sp,
+        fontSize = 15.sp,
+        lineHeight = 20.sp,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = (-0.1).sp,
     )
 
     val tag = TextStyle(
