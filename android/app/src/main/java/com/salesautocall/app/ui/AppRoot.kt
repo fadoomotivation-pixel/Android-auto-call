@@ -817,6 +817,7 @@ private fun MainShell(vm: MainViewModel) {
                         onTab = { go(it) },
                         onDial = { go(Tab.Dialer.route) },
                         onMore = { scope.launch { drawerState.open() } },
+                        moreOpen = drawerState.isOpen,
                     )
                 }
             },
@@ -1347,6 +1348,8 @@ internal fun FloatingCallBar(
      * ke button ho gae h". The four tabs stay; only the duplicate goes.
      */
     showDial: Boolean = true,
+    /** The drawer is open, so the More slot is the destination you are on. */
+    moreOpen: Boolean = false,
 ) {
     // Light-only now — the dark arms of these three were dead the moment the
     // dark colour scheme went, and worse than dead: they would have painted a
@@ -1371,15 +1374,26 @@ internal fun FloatingCallBar(
             NavSlot("Home", Icons.Outlined.Home, current == "home", jade, unsel, Modifier.weight(1f)) { onTab("home") }
             NavSlot("Leads", Icons.Outlined.People, current == "leads", jade, unsel, Modifier.weight(1f)) { onTab("leads") }
             if (showDial) {
+                // A tab bar's one job is to say where you are. Dial LOOKS like
+                // an action because it is a filled circle, but it navigates to
+                // the dialler like every other slot — so when you are on it,
+                // it has to say so. It used to stay the same whether you were
+                // there or not, which meant a fifth of the bar was lying.
+                val onDialer = current == "dialer"
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Box(
-                        Modifier.size(44.dp).clip(CircleShape).background(jade).clickable { onDial() },
+                        Modifier.size(44.dp).clip(CircleShape)
+                            .background(if (onDialer) jade else jade.copy(alpha = 0.92f))
+                            .then(if (onDialer) Modifier.border(2.dp, jade.copy(alpha = 0.35f), CircleShape) else Modifier)
+                            .clickable { onDial() },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Default.Call, contentDescription = "Dial", tint = Color.White, modifier = Modifier.size(22.dp)) }
                 }
             }
             NavSlot("Follow Ups", Icons.Outlined.Schedule, current == "followups", jade, unsel, Modifier.weight(1f)) { onTab("followups") }
-            NavSlot("More", Icons.Outlined.Menu, false, jade, unsel, Modifier.weight(1f)) { onMore() }
+            // More opens the drawer, so "selected" is the drawer being open —
+            // not a hardcoded false, which is what it was.
+            NavSlot("More", Icons.Outlined.Menu, moreOpen, jade, unsel, Modifier.weight(1f)) { onMore() }
         }
     }
 }

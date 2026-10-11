@@ -87,14 +87,14 @@ class IncomingCallActivity : ComponentActivity() {
                     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Spacer(Modifier.height(64.dp))
                         Text(if (inCall) "Cloud call" else "Incoming cloud call",
-                            color = Color.White.copy(alpha = 0.8f), fontSize = 16.sp)
+                            color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
                         Spacer(Modifier.height(20.dp))
                         CallAvatar(number)
                         Spacer(Modifier.height(18.dp))
-                        Text(number, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                        Text(number, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(8.dp))
                         if (inCall) CallStatusLine(connectedAt, "Connected")
-                        else Text("Ringing…", color = Color.White.copy(alpha = 0.85f), fontSize = 16.sp)
+                        else Text("Ringing…", color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp)
                         Spacer(Modifier.weight(1f))
 
                         if (inCall) {
@@ -152,7 +152,7 @@ private fun CallButton(label: String, icon: ImageVector, color: Color, onClick: 
             Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(34.dp))
         }
         Spacer(Modifier.height(10.dp))
-        Text(label, color = Color.White, fontSize = 14.sp)
+        Text(label, color = Color.White, fontSize = 15.sp)
     }
 }
 
@@ -167,6 +167,6 @@ private fun ToggleButton(label: String, icon: ImageVector, active: Boolean, onCl
             contentAlignment = Alignment.Center,
         ) { Icon(icon, contentDescription = label, tint = fg, modifier = Modifier.size(26.dp)) }
         Spacer(Modifier.height(8.dp))
-        Text(label, color = Color.White, fontSize = 13.sp)
+        Text(label, color = Color.White, fontSize = 12.sp)
     }
 }

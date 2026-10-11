@@ -307,7 +307,7 @@ private fun AskCoachSheet(
                                     .padding(vertical = 12.dp),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                             if (lead != null && answer != HOW_TO_USE) {
-                                Text("Open WhatsApp", style = AppType.headline, color = Color(0xFF1FA855),
+                                Text("Open WhatsApp", style = AppType.headline, color = AppColors.Positive,
                                     modifier = Modifier.weight(1f).iosPress {
                                         com.salesautocall.app.data.WhatsAppLauncher.open(context, lead.phone, answer.orEmpty().trim())
                                     }.padding(vertical = 12.dp),

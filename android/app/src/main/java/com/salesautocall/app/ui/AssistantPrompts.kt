@@ -190,7 +190,7 @@ private fun AssistantHeader(emoji: String, title: String, who: String?) {
         Box(
             Modifier.size(38.dp).clip(CircleShape).background(Jade.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
-        ) { Text(emoji, fontSize = 18.sp) }
+        ) { Text(emoji, fontSize = 17.sp) }
         Spacer(Modifier.width(11.dp))
         Column {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -751,7 +751,7 @@ private fun DayReviewPrompt(vm: MainViewModel, ask: AssistantAsk) {
 @Composable
 private fun CallOfDay(emoji: String, label: String, lead: String?, rating: Int, why: String?, tone: Color) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-        Text(emoji, fontSize = 14.sp)
+        Text(emoji, fontSize = 15.sp)
         Spacer(Modifier.width(8.dp))
         Column {
             Text("$label · ${lead ?: "lead"} · ${"★".repeat(rating.coerceIn(0, 5))}",
@@ -809,7 +809,7 @@ private fun DayStat(emoji: String, value: String, label: String, color: Color, m
             .padding(vertical = 11.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(emoji, fontSize = 16.sp)
+        Text(emoji, fontSize = 15.sp)
         Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = color)
         Text(label, style = MaterialTheme.typography.labelSmall, color = color.copy(alpha = 0.8f))
     }

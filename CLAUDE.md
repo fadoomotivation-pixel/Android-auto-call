@@ -43,6 +43,32 @@ migrations in `supabase/migrations/`).
 - This app exists to make a telecaller's day easier — if a screen needs
   explaining twice, the screen is wrong, not the rep.
 
+## One design system, and which one it is
+- **Android: `ui/design/IosKit.kt` is canonical.** `Components.kt` and
+  `BrandKit.kt` are what is left of two earlier kits and are being folded in.
+  Before adding a component, check IosKit — there were already FOUR ways to
+  draw a status pill (`StatusTag` 5 uses, `IosTag` 3, `IosChip` 3, `MetaTag` 1)
+  and THREE ways to draw a section header (`IosNavBar` 3, `AccentHeader` 3,
+  `IosLargeTitle` 2). Never add a fifth. `OutlinedPill` and `AppSurface` were
+  deleted rather than kept "in case": an unused component in a design system
+  is not a spare part, it is an invitation to make the next one.
+  **Count usage with `\bName[ ]*[({]`, not `\bName(`** — Compose components are
+  called with a trailing lambda and no bracket, and the shorter pattern reports
+  a live component as dead. It said `GlassBox` had 0 uses; it has 3.
+- **"Glass" and "Gradient" are not the language.** Flat surfaces, grouped
+  lists, one hairline, system colours. If a new thing needs a gradient to look
+  right, the thing is wrong.
+- **Colours come from `AppColors` / `IosColors`; sizes from `AppType`.** The
+  app palette is Apple's system colours. Tailwind's reds and greens (#EF4444,
+  #DC2626, #16A34A, #15803D) had leaked in, including onto the in-call Answer
+  and End buttons — on the one screen a rep looks at with the phone to their
+  face, the green and red must be the ones their own dialler uses.
+- **Admin: `app/globals.css` is the system.** Ten type steps named as Apple
+  names them (caption2 … large-title), four weights, one red/green/amber/blue.
+  A size that is not on that list is not a size. Never write a hex, a raw px
+  font size, or `rgba(255,255,255,…)` in a `.tsx` — the last one is a white
+  film that vanishes in light mode, and 54 headings were invisible that way.
+
 ## Operational notes
 - **The Follow-up tab is three groups, one clock** (`LeadsScreen`): **Call now**
   (`due_at` ≤ now, or no time ever booked), **Done today** (rep recorded an

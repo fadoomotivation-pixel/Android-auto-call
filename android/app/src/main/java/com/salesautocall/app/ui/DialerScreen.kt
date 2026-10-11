@@ -167,10 +167,10 @@ private fun DialKey(key: Key, modifier: Modifier = Modifier, onClick: () -> Unit
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(key.digit, fontSize = 28.sp, fontWeight = FontWeight.Medium)
+                Text(key.digit, fontSize = 22.sp, fontWeight = FontWeight.Medium)
                 if (key.letters.isNotEmpty()) {
                     Text(
-                        key.letters, fontSize = 10.sp, letterSpacing = 1.sp,
+                        key.letters, fontSize = 12.sp, letterSpacing = 1.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

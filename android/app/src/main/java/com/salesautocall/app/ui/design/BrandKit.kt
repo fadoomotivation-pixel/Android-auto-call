@@ -93,20 +93,10 @@ fun GradientIconTile(icon: ImageVector, tone: TileTone, size: Dp = 48.dp, iconSi
     ) { Icon(icon, contentDescription = null, tint = Brand.Ink, modifier = Modifier.size(iconSize)) }
 }
 
-/** Status pill: light tinted fill, coloured text, thin coloured border. */
-@Composable
-fun OutlinedPill(text: String, color: Color, modifier: Modifier = Modifier) {
-    Box(
-        modifier.clip(Radii.tag).background(color.copy(alpha = 0.10f))
-            .padding(horizontal = 10.dp, vertical = 3.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(6.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color))
-            Spacer(Modifier.width(6.dp))
-            Text(text, style = AppType.tag, color = color, maxLines = 1)
-        }
-    }
-}
+// OutlinedPill was here. It was a fourth way to draw a status pill, beside
+// StatusTag, IosTag and IosChip, and nothing ever called it. Deleted rather
+// than kept "in case", because an unused component in a design system is not
+// a spare part — it is an invitation to make the fifth one.
 
 /** Section header: light grey uppercase subhead (iOS grouped style). */
 @Composable

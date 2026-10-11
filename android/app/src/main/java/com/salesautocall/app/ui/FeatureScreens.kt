@@ -1560,7 +1560,7 @@ private fun PhoneCheckCard(vm: MainViewModel) {
     val autoOk = refresh.let { PC.autostartConfirmed(context) }
     val (allGood, verdict) = refresh.let { PC.verdict(context) }
 
-    val good = androidx.compose.ui.graphics.Color(0xFF16A34A)
+    val good = androidx.compose.ui.graphics.AppColors.Positive
     val bad = MaterialTheme.colorScheme.error
 
     PaperCard(Modifier.fillMaxWidth()) {
@@ -1665,7 +1665,7 @@ private fun PhoneCheckCard(vm: MainViewModel) {
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                         .background(
                             (if (bad) MaterialTheme.colorScheme.error
-                             else androidx.compose.ui.graphics.Color(0xFF16A34A)).copy(alpha = 0.10f),
+                             else androidx.compose.ui.graphics.AppColors.Positive).copy(alpha = 0.10f),
                         )
                         .padding(horizontal = 11.dp, vertical = 9.dp),
                 ) {
@@ -1673,7 +1673,7 @@ private fun PhoneCheckCard(vm: MainViewModel) {
                         r,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (bad) MaterialTheme.colorScheme.error
-                                else androidx.compose.ui.graphics.Color(0xFF16A34A),
+                                else androidx.compose.ui.graphics.AppColors.Positive,
                         fontWeight = FontWeight.Medium,
                         lineHeight = 17.sp,
                     )
