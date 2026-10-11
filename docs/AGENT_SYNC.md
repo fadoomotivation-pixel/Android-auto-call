@@ -37,6 +37,29 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-11 — Grok Bot (brand restyle: gradient bars, soft cards, icon tiles)
+
+- **Visual layer only.** The founder dropped the iOS look. New style, inspired
+  by (not copied from) a CRM he likes: indigo `#5B5BF0` → sky `#4AA3FF`
+  gradient app bars with translucent rounded icon buttons, canvas `#F3F5FB`,
+  white 20dp cards with a soft coloured shadow, gradient icon tiles per meaning
+  (violet follow-up, green connected/converted, red missed, amber time, teal
+  leads, pink calls), outlined status pills with a dot, accent-bar section
+  headers, Inter type with bold navy `#0F172A` titles and slate `#64748B`
+  secondary, thin gradient progress bars.
+- New `ui/design/BrandKit.kt` (Brand, Tiles, softCard, gradientCard,
+  GradientIconTile, OutlinedPill, AccentHeader, GlassIconButton, GradientProgress).
+  `IosNavBar` keeps its name but now draws the gradient bar; `IosLargeTitle`
+  now shows only the subtitle line (the title is in the bar).
+- Screens: Login, Home (hero, attendance, Start calling, metric tiles, Quick
+  access), Leads (bar, hero, sub-chips, each lead its own card with avatar
+  tile), Lead detail (bar, avatar, cards), My report (gradient date card,
+  metric tiles, connect-rate bar), drawer header, Settings, update dialog and
+  dialer progress bars. Everything else inherits via tokens.
+- No logic, data, counts, flows, navigation or R8 rules changed. AGENT rule 7's
+  "one action blue #007AFF" is superseded by brand indigo `#5B5BF0` (token
+  still named `Indigo`).
+
 ## 2026-10-11 — Grok Bot (slim APK: 168 MB → 40 MB, same signature)
 - Published `app-debug.apk` is now ARM only (`arm64-v8a`, `armeabi-v7a`) via debug `ndk.abiFilters`.
   Emulator work: build with `-PincludeX86=true` (local only; CI never passes it).

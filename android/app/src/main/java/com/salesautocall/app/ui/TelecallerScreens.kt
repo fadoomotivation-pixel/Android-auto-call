@@ -5517,14 +5517,15 @@ private fun LeadLanes(
                 subs.forEach { (code, label) ->
                     val on = code == sub
                     Box(
-                        Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(8.dp))
-                            .background(if (on) AppColors.TextPrimary else AppColors.Surface)
+                        Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(12.dp))
+                            .then(if (on) Modifier.background(AppColors.IndigoSoft).border(1.dp, AppColors.Indigo.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                                  else Modifier.background(AppColors.Surface).border(1.dp, AppColors.Border, RoundedCornerShape(12.dp)))
                             .clickable { if (!on) onSub(code) }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text("$label ${cnt(code)}", style = AppType.footnote.copy(fontWeight = FontWeight.Medium),
-                            color = if (on) Color.White else AppColors.TextPrimary, maxLines = 1)
+                            color = if (on) AppColors.Indigo else AppColors.TextPrimary, maxLines = 1)
                     }
                 }
             }
@@ -5738,7 +5739,7 @@ private fun NextCallHero(
         }
         Spacer(Modifier.height(12.dp))
         Row(
-            Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(10.dp)).background(IosColors.Blue)
+            Modifier.fillMaxWidth().height(48.dp).gradientCard(RoundedCornerShape(14.dp), com.salesautocall.app.ui.design.Brand.gradientHorizontal, elevation = 8.dp)
                 .iosPress(scaleTo = 0.97f) { onCall() },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
         ) {

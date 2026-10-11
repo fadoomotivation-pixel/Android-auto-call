@@ -1065,7 +1065,7 @@ private fun SectionCard(
         // for every card on this page, so the edges line up down the screen.
         Modifier.fillMaxWidth().padding(horizontal = Space.l)
             .softCard(color = CardBg)
-            .padding(Space.l),
+            .padding(Space.m),
         content = content,
     )
     if (!footer.isNullOrBlank()) {
@@ -1414,7 +1414,7 @@ private fun AiCoachCard(
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Space.l)
             .softCard(color = CardBg)
-            .padding(Space.l),
+            .padding(Space.m),
     ) {
         Text("Opening line, a reply to their objection, or a message to send.",
             style = AppType.footnote, color = AppColors.TextSecondary)

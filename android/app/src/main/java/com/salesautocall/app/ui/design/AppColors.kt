@@ -106,12 +106,12 @@ object AppColors {
     )
 
     val avatarInk = listOf(
-        Color(0xFF3F3AB8),
-        Color(0xFF1D4ED8),
-        Color(0xFF0F766E),
-        Color(0xFF6D28D9),
-        Color(0xFF9A5B18),
-        Color(0xFF475569),
+        Color(0xFF5B5BF0),
+        Color(0xFF3B82F6),
+        Color(0xFF0D9488),
+        Color(0xFF7C3AED),
+        Color(0xFFDB2777),
+        Color(0xFF0891B2),
     )
 }
 

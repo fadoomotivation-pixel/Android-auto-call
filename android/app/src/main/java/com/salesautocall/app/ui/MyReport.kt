@@ -8,7 +8,6 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.PhoneCallback
 import androidx.compose.material.icons.filled.PhoneMissed
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.salesautocall.app.ui.design.AccentHeader
 import com.salesautocall.app.ui.design.Brand
@@ -336,23 +335,19 @@ private fun ReportCalls(r: DayReport) {
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.m)) {
             BigNumber("Not connected", r.notConnected.toString(), Icons.Filled.PhoneMissed, Tiles.Negative, Modifier.weight(1f))
-            BigNumber("Connect rate", connectPercent(r)?.let { "$it%" } ?: "—", Icons.Filled.TrendingUp, Tiles.Brand, Modifier.weight(1f))
-        }
-        connectPercent(r)?.let { pct ->
-            Column(Modifier.fillMaxWidth().softCard().padding(Space.l)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Connect rate", style = AppType.label, color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
-                    Text("$pct%", style = AppType.label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = AppColors.TextPrimary)
-                }
-                Spacer(Modifier.height(Space.s))
-                com.salesautocall.app.ui.design.GradientProgress(pct / 100f)
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.m)) {
             BigNumber("Talk time", formatTalk(r.talkSeconds), Icons.Filled.Timer, Tiles.Time, Modifier.weight(1f))
-            BigNumber("Average call", formatTalk(r.avgSeconds), Icons.Filled.AccessTime, Tiles.Leads, Modifier.weight(1f),
-                note = "Connected calls only")
         }
+        Column(Modifier.fillMaxWidth().softCard().padding(Space.l)) {
+            val pct = connectPercent(r)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Connect rate", style = AppType.label, color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
+                Text(pct?.let { "$it%" } ?: "—", style = AppType.label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = AppColors.TextPrimary)
+            }
+            Spacer(Modifier.height(Space.s))
+            com.salesautocall.app.ui.design.GradientProgress((pct ?: 0) / 100f)
+        }
+        BigNumber("Average call", formatTalk(r.avgSeconds), Icons.Filled.AccessTime, Tiles.Leads, Modifier.fillMaxWidth(),
+            note = "Connected calls only")
     }
 }
 
@@ -363,7 +358,7 @@ private fun BigNumber(label: String, value: String, icon: ImageVector, tone: Til
         Spacer(Modifier.width(Space.m))
         Column(Modifier.weight(1f)) {
             Text(value, style = AppType.metric, color = AppColors.TextPrimary, maxLines = 1)
-            Text(label, style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1)
+            Text(label, style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 2)
             if (note != null) Text(note, style = AppType.caption, color = AppColors.TextTertiary, maxLines = 1)
         }
     }
