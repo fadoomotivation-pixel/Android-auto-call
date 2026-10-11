@@ -579,7 +579,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                 coach?.rating?.let { r ->
                                     Text("$r/5",
                                         style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold, color = IndigoL)
+                                        fontWeight = FontWeight.SemiBold, color = IndigoL)
                                 }
                             }
                             Spacer(Modifier.height(10.dp))
@@ -750,7 +750,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text("Send visit confirmation", style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold, color = JadeL)
+                                        fontWeight = FontWeight.SemiBold, color = JadeL)
                                     Text("WhatsApp the buyer a clean date/time/project confirmation",
                                         style = MaterialTheme.typography.labelSmall, color = SubInk, maxLines = 2)
                                 }
@@ -784,7 +784,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 item {
                     SectionCard(header = "Calls & recordings" + (app.leadDetailCalls.size.takeIf { it > 0 }?.let { " · $it" } ?: "")) {
                         when {
-                            app.leadDetailLoading -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                            app.leadDetailLoading -> Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             app.leadDetailCallsFailed -> Text("Could not load this lead's calls. Pull down to try again.", style = MaterialTheme.typography.bodySmall, color = AmberL)
                             app.leadDetailCalls.isEmpty() -> Text("No calls logged for this lead yet.", style = MaterialTheme.typography.bodySmall, color = SubInk)
                             else -> app.leadDetailCalls.forEach { call ->
@@ -890,7 +890,7 @@ fun LeadDetailScreen(vm: MainViewModel) {
                             ) {
                                 Icon(Icons.Default.Save, null, tint = Color.White, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Save Details", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                Text("Save Details", color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -1062,7 +1062,7 @@ private fun SectionCard(
         // for every card on this page, so the edges line up down the screen.
         Modifier.fillMaxWidth().padding(horizontal = Space.l)
             .clip(Radii.card).background(CardBg)
-            .padding(Space.l),
+            .padding(Space.m),
         content = content,
     )
     if (!footer.isNullOrBlank()) {
@@ -1077,7 +1077,7 @@ private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Com
     Column(
         modifier
             .clip(Radii.card).background(CardBg)
-            .heightIn(min = 96.dp).padding(Space.l),
+            .heightIn(min = 96.dp).padding(Space.m),
     ) {
         Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.TextTertiary, maxLines = 1)
         Spacer(Modifier.height(10.dp))
@@ -1303,7 +1303,7 @@ private fun NextStepBanner(color: Color, title: String, detail: String, cta: Str
     // for a date, a time and a project name without truncating.
     Row(
         Modifier.fillMaxWidth().padding(horizontal = Space.l).clip(Radii.card)
-            .background(CardBg).padding(Space.l),
+            .background(CardBg).padding(Space.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // A coloured dot keeps the state readable at a glance (amber = nothing
@@ -1410,7 +1410,7 @@ private fun AiCoachCard(
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Space.l)
             .clip(Radii.card).background(CardBg)
-            .padding(Space.l),
+            .padding(Space.m),
     ) {
         Text("Opening line, a reply to their objection, or a message to send.",
             style = AppType.footnote, color = AppColors.TextSecondary)
@@ -1505,7 +1505,7 @@ private fun AiCoachCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(if (rebuttalLoading) "Thinking…" else "Get reply →", color = Color.White,
-                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             }
 
             if (rebuttalLoading) {
@@ -1565,7 +1565,7 @@ private fun AiCoachCard(
                         .padding(14.dp),
                 ) {
                     Text("DON'T MESSAGE — CALL", style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold, color = RedL, letterSpacing = 0.5.sp)
+                        fontWeight = FontWeight.SemiBold, color = RedL, letterSpacing = 0.5.sp)
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "$draftSentCount messages went in two weeks and not one came back. " +
@@ -1582,7 +1582,7 @@ private fun AiCoachCard(
                             Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("Call them now", color = Color.White,
-                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -1597,7 +1597,7 @@ private fun AiCoachCard(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text("Write the message for this lead", style = MaterialTheme.typography.labelLarge,
-                        color = JadeL, fontWeight = FontWeight.Bold)
+                        color = JadeL, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -1644,7 +1644,7 @@ private fun AiCoachCard(
                             Text(
                                 "Send on WhatsApp",
                                 color = Color.White,
-                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
                             )
                         }
                     }
@@ -1723,14 +1723,14 @@ private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Space.l).clip(Radii.card)
             .background(CardBg).border(1.5.dp, JadeL.copy(alpha = 0.45f), Radii.card)
-            .padding(16.dp),
+            .padding(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("", fontSize = 20.sp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("COMMITMENT — caught by AI on the call", style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold, color = JadeL, letterSpacing = 0.5.sp)
+                    fontWeight = FontWeight.SemiBold, color = JadeL, letterSpacing = 0.5.sp)
                 Text(
                     if (applied) "Saved and set up automatically" else "Setting up…",
                     style = MaterialTheme.typography.labelSmall, color = SubInk,
@@ -1738,7 +1738,7 @@ private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
             }
             if (applied) {
                 Box(Modifier.clip(RoundedCornerShape(10.dp)).background(JadeL.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 5.dp)) {
-                    Text("✓ Done", color = JadeL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Text("✓ Done", color = JadeL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -1849,20 +1849,20 @@ private fun HorizontalFunnel(contact: Contact, stages: List<LeadStage>, onTap: (
                     if (current) {
                         Box(Modifier.size(36.dp).clip(CircleShape).background(PurpleL.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
                             Box(Modifier.size(28.dp).clip(CircleShape).background(circleColor), contentAlignment = Alignment.Center) {
-                                Text("${i + 1}", color = textOnCircle, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text("${i + 1}", color = textOnCircle, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     } else {
                         Box(Modifier.size(28.dp).clip(CircleShape).background(circleColor), contentAlignment = Alignment.Center) {
                             Text(if (done) "✓" else "${i + 1}", color = textOnCircle,
-                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
                 Spacer(Modifier.height(6.dp))
                 FitOneLine(
                     text = labels[i],
-                    style = AppType.tag.copy(fontWeight = if (current) FontWeight.Bold else FontWeight.Medium),
+                    style = AppType.tag.copy(fontWeight = if (current) FontWeight.SemiBold else FontWeight.Medium),
                     color = when { current -> PurpleL; done -> GreenL; else -> SubInk },
                     maxSize = 11.sp, minSize = 8.sp,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 1.dp),
@@ -2041,7 +2041,7 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
     LaunchedEffect(recording) { seconds = 0; while (recording) { kotlinx.coroutines.delay(1000); seconds++ } }
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Space.l).clip(Radii.card)
-            .background(CardBg).padding(Space.l),
+            .background(CardBg).padding(Space.m),
     ) {
         Text("VOICE NOTE", style = AppType.sectionLabel, color = AppColors.TextSecondary)
         Spacer(Modifier.height(10.dp))
@@ -2055,7 +2055,7 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(10.dp).clip(CircleShape).background(RedL))
                     Spacer(Modifier.width(10.dp))
-                    Text("Recording…  %d:%02d".format(seconds / 60, seconds % 60), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = RedL)
+                    Text("Recording…  %d:%02d".format(seconds / 60, seconds % 60), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = RedL)
                     Spacer(Modifier.weight(1f))
                     Text("Discard", color = SubInk, style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { vm.cancelVoiceNote() }.padding(horizontal = 10.dp, vertical = 6.dp))
@@ -2068,7 +2068,7 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
                     ) {
                         Text(
                             if (canSave) "✓ Save" else "Save in ${3 - seconds}s",
-                            color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold,
+                            color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
                         )
                     }
                 }
@@ -2093,7 +2093,7 @@ private fun VoiceNoteCard(vm: MainViewModel, recording: Boolean, uploading: Bool
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Record voice note", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = IndigoL)
+                    Text("Record voice note", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = IndigoL)
                     Text("Tap and speak for a few seconds — AI writes the summary",
                         style = MaterialTheme.typography.labelSmall, color = SubInk, maxLines = 2)
                 }
@@ -2306,7 +2306,7 @@ private fun LeadActionBar(
             // a long page instead of only at the top of it.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(
-                    Modifier.weight(1.45f).height(52.dp).clip(RoundedCornerShape(12.dp))
+                    Modifier.weight(1.45f).height(44.dp).clip(RoundedCornerShape(10.dp))
                         .background(IndigoL).clickable { onCall() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
@@ -2390,7 +2390,7 @@ private fun FunnelStepper(contact: Contact, stages: List<LeadStage>, onSet: (Str
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(26.dp).clip(CircleShape).background(if (done || current) stepColor else Hair), contentAlignment = Alignment.Center) {
-                        Text(if (done) "✓" else "${i + 1}", color = if (done || current) Color.White else SubInk, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text(if (done) "✓" else "${i + 1}", color = if (done || current) Color.White else SubInk, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                     }
                     if (i < FUNNEL.lastIndex) Box(Modifier.width(2.dp).height(14.dp).background(if (done) GreenL else Hair))
                 }
@@ -2412,7 +2412,7 @@ private fun FunnelStepper(contact: Contact, stages: List<LeadStage>, onSet: (Str
                             Text("Edit", color = PurpleL, style = AppType.tag)
                         }
                         Box(Modifier.size(24.dp).clip(CircleShape).background(RedL.copy(alpha = 0.12f)).clickable { onClearVisit() }, contentAlignment = Alignment.Center) {
-                            Text("✕", color = RedL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            Text("✕", color = RedL, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     current -> StatusTag("NOW", StatusTone(PurpleL, AppColors.IndigoSoft))

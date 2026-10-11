@@ -1,5 +1,7 @@
 package com.salesautocall.app.ui
 
+import com.salesautocall.app.ui.design.CoachCharacter
+import com.salesautocall.app.ui.design.CoachMood
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -135,7 +137,7 @@ internal fun MorningGreetingCard(vm: MainViewModel, app: AppState, leadsById: Ma
 
     Column(Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface)) {
         Row(Modifier.fillMaxWidth().padding(start = Space.l, end = 6.dp, top = 14.dp), verticalAlignment = Alignment.Top) {
-            CoachOrb(size = 52.dp, active = true, face = true, modifier = Modifier.scale(pop.value))
+            CoachCharacter(size = 52.dp, mood = CoachMood.Wave, modifier = Modifier.scale(pop.value))
             Spacer(Modifier.width(Space.m))
             Column(Modifier.weight(1f).padding(top = 2.dp)) {
                 Text(hello.take(shown), style = AppType.title3, color = AppColors.TextPrimary)
@@ -166,7 +168,7 @@ internal fun MorningGreetingCard(vm: MainViewModel, app: AppState, leadsById: Ma
             Text(it, style = AppType.footnote, color = AppColors.TextTertiary,
                 modifier = Modifier.padding(horizontal = Space.l, vertical = 4.dp))
         }
-        Row(Modifier.fillMaxWidth().padding(Space.l), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(Space.s)) {
+        Row(Modifier.fillMaxWidth().padding(Space.m), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(Space.s)) {
             named.firstOrNull { it.contactId != null }?.let { top ->
                 PrimaryButton("Start with ${top.name.substringBefore(' ')}", modifier = Modifier.weight(1f)) {
                     haptics.confirm()
@@ -268,7 +270,7 @@ internal fun CoachMomentBar(vm: MainViewModel, app: AppState) {
                 .heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
         ) {
             Row(Modifier.fillMaxWidth().padding(start = Space.l, end = 6.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                CoachOrb(size = 44.dp, active = true, face = true, modifier = Modifier.scale(pop.value))
+                CoachCharacter(size = 48.dp, mood = CoachMood.Nod, modifier = Modifier.scale(pop.value))
                 Spacer(Modifier.width(Space.m))
                 Column(Modifier.weight(1f)) {
                     Text("Coaching time", style = AppType.headline, color = AppColors.TextPrimary)

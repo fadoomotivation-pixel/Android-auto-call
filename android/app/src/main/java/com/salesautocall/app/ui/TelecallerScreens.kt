@@ -1,5 +1,8 @@
 package com.salesautocall.app.ui
 
+import com.salesautocall.app.ui.design.IosSeparator
+import com.salesautocall.app.ui.design.ContinuousShape
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -890,7 +893,7 @@ private fun ScoreGauge(score: Int, modifier: Modifier = Modifier) {
             drawArc(color = color, startAngle = 135f, sweepAngle = 270f * (score.coerceIn(0, 100) / 100f), useCenter = false, style = Stroke(stroke, cap = StrokeCap.Round))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("$score", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = color)
+            Text("$score", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, color = color)
             Text("Score", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -922,7 +925,7 @@ private fun PerformanceCard(app: AppState) {
             .background(AppColors.Surface)
 ,
     ) {
-        Column(Modifier.padding(Space.l)) {
+        Column(Modifier.padding(Space.m)) {
             Text("TODAY'S PERFORMANCE", style = AppType.sectionLabel, color = AppColors.TextTertiary)
             Spacer(Modifier.height(Space.m))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1100,7 +1103,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                     Modifier.fillMaxWidth().clip(Radii.card)
                         .background(AppColors.Surface)
 
-                        .padding(Space.l),
+                        .padding(Space.m),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(44.dp).clip(CircleShape).background(AppColors.IndigoSoft), contentAlignment = Alignment.Center) {
@@ -1153,7 +1156,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                         .background(AppColors.WarningSoft)
                         .border(1.dp, Amber.copy(alpha = 0.35f), Radii.card)
                         .clickable { vm.protectLeads(unprotected) }
-                        .padding(Space.l),
+                        .padding(Space.m),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.Shield, contentDescription = null, tint = Amber, modifier = Modifier.size(22.dp))
@@ -1184,7 +1187,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                     Modifier.fillMaxWidth().clip(Radii.card)
                         .background(AppColors.Surface)
 
-                        .padding(Space.l),
+                        .padding(Space.m),
                 ) {
                     Column {
                         SectionHeader(
@@ -1317,7 +1320,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                 Modifier.fillMaxWidth().clip(Radii.card)
                     .background(AppColors.Surface)
 
-                    .padding(Space.l),
+                    .padding(Space.m),
             ) {
                 Column {
                     SectionHeader("Lead Pipeline", "View all", onOpenLeads)
@@ -1337,7 +1340,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                     Spacer(Modifier.width(8.dp))
                                     Text(stage.label, style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-                                    Text(n.toString(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                    Text(n.toString(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
                                         color = if (n > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 Spacer(Modifier.height(5.dp))
@@ -1409,7 +1412,7 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
 ,
     ) {
         Box(Modifier.fillMaxWidth().height(3.dp).background(action))
-        Column(Modifier.padding(Space.l)) {
+        Column(Modifier.padding(Space.m)) {
             app.company?.name?.takeIf { it.isNotBlank() }?.let { company ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     app.company?.logoUrl?.takeIf { it.isNotBlank() }?.let { logo ->
@@ -1773,7 +1776,7 @@ private fun UpNextCard(
         Modifier.fillMaxWidth().clip(Radii.card)
             .background(AppColors.Surface)
             .clickable { onOpen() }
-            .padding(Space.l),
+            .padding(Space.m),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The count is NOT repeated here. It lives once, on "Call all N".
@@ -1785,7 +1788,7 @@ private fun UpNextCard(
             InitialsAvatar(lead.name ?: lead.phone)
             Spacer(Modifier.width(Space.m))
             Column(Modifier.weight(1f)) {
-                Text(who, style = AppType.headline.copy(fontSize = 20.sp), color = AppColors.TextPrimary,
+                Text(who, style = AppType.headline, color = AppColors.TextPrimary,
                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 // Why this one and not another. A queue that will not explain
                 // itself is a queue a rep second-guesses, and then ignores.
@@ -1811,7 +1814,7 @@ private fun UpNextCard(
         // now count appears while this card is on screen.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.s)) {
             Row(
-                Modifier.weight(1f).heightIn(min = 50.dp).clip(RoundedCornerShape(10.dp))
+                Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
                     .background(IosColors.Blue)
                     .iosPress(scaleTo = 0.96f) { onCall() },
                 verticalAlignment = Alignment.CenterVertically,
@@ -1824,7 +1827,7 @@ private fun UpNextCard(
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             if (queueSize > 1) Column(
-                Modifier.weight(1f).heightIn(min = 50.dp).clip(RoundedCornerShape(10.dp))
+                Modifier.weight(1f).heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
                     .background(IosColors.Blue.copy(alpha = 0.12f))
                     .iosPress(scaleTo = 0.96f) { onCallAll() }
                     .padding(horizontal = Space.s, vertical = 6.dp),
@@ -2434,7 +2437,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                 } else {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Select leads", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                            Text("Select leads", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                             Text("Tap leads to add them to a campaign", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text("Cancel", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge,
@@ -2652,7 +2655,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("${selectedIds.size} selected", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("${selectedIds.size} selected", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                             TextButton(onClick = {
                                 selectedIds = if (allSelected) selectedIds - filteredIds else selectedIds + filteredIds
                             }) { Text(if (allSelected) "Clear all" else "Select all (${filteredIds.size})") }
@@ -2767,9 +2770,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
         // Start-campaign action bar (bulk select → one-tap auto-dial)
         if (selectMode) {
             Surface(shadowElevation = 12.dp, color = MaterialTheme.colorScheme.surface) {
-                Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("${selectedIds.size} lead(s) selected", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("${selectedIds.size} lead(s) selected", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text("Auto-dials them one after another", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Button(
@@ -2808,7 +2811,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
         androidx.compose.material3.ModalBottomSheet(onDismissRequest = { sheetOpen = false }) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Filters", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Filters", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     TextButton(onClick = { stageFilter = null; tempFilter = null; quick = null; sortBy = "default" }) { Text("Clear all") }
                 }
                 // Lists that left the segmented row (max 3 per bucket) live here,
@@ -2841,7 +2844,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                         ) {
                             Text(label, style = MaterialTheme.typography.labelMedium,
                                 color = if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                         }
                     }
                 }
@@ -2861,7 +2864,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                         ) {
                             Text(label, style = MaterialTheme.typography.labelMedium,
                                 color = if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                         }
                     }
                 }
@@ -2877,7 +2880,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                         ) {
                             Text(label, style = MaterialTheme.typography.labelMedium,
                                 color = if (on) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = if (on) FontWeight.Bold else FontWeight.Normal)
+                                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
                         }
                     }
                 }
@@ -2928,7 +2931,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(c.name ?: prettyPhone(c.phone), style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                                        fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.weight(1f))
                                     budgetLabel(c.budget)?.let {
                                         Text("₹ $it", style = MaterialTheme.typography.labelMedium, color = Green, fontWeight = FontWeight.SemiBold)
                                     }
@@ -3045,7 +3048,7 @@ private fun WhatsAppChatDialog(
         text = {
             Column {
                 when {
-                    loading -> Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    loading -> Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     thread.isEmpty() -> Text("No messages yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     else -> Column(
                         Modifier.fillMaxWidth().heightIn(max = 280.dp).verticalScroll(rememberScrollState()),
@@ -3308,7 +3311,7 @@ private fun LeadCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(initialsOf(c.name), style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold, color = ring ?: discInk)
+                    fontWeight = FontWeight.SemiBold, color = ring ?: discInk)
             }
             Spacer(Modifier.width(11.dp))
 
@@ -3321,7 +3324,7 @@ private fun LeadCard(
                     Text(
                         prettyName(c.name) ?: prettyPhone(c.phone),
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
@@ -3335,12 +3338,12 @@ private fun LeadCard(
                         Text(
                             " ·${last4(c.phone)}",
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold, color = jade, maxLines = 1,
+                            fontWeight = FontWeight.SemiBold, color = jade, maxLines = 1,
                         )
                     }
                     if (tempLabel.isNotEmpty()) {
                         Spacer(Modifier.width(6.dp))
-                        Text(tempLabel, fontSize = 10.sp, color = tempColor, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text(tempLabel, fontSize = 10.sp, color = tempColor, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                     // WHEN THIS LEAD ACTUALLY ARRIVED, to the minute.
                     //
@@ -3381,7 +3384,7 @@ private fun LeadCard(
                             // indigo. Weight carries it instead.
                             Text("₹ $it", style = MaterialTheme.typography.bodyMedium,
                                 color = AppColors.TextPrimary,
-                                fontWeight = FontWeight.Bold, maxLines = 1)
+                                fontWeight = FontWeight.SemiBold, maxLines = 1)
                         }
                         answers.take(3).forEach { (label, value) ->
                             Box(
@@ -3484,7 +3487,7 @@ private fun LeadCard(
             ) {
                 ACTIONS.firstOrNull { it.code == work?.actionState }?.let { a ->
                     Text(a.label, fontSize = 11.sp, color = a.color,
-                        fontWeight = FontWeight.Bold, maxLines = 1)
+                        fontWeight = FontWeight.SemiBold, maxLines = 1)
                     Spacer(Modifier.width(7.dp))
                 }
                 Text(label, fontSize = 12.sp, color = color, fontWeight = FontWeight.Medium,
@@ -3562,7 +3565,7 @@ private fun LeadCard(
                 Spacer(Modifier.width(7.dp))
                 // Calling is the job. The only filled button on the card.
                 Row(
-                    Modifier.weight(1.6f).height(52.dp).clip(RoundedCornerShape(12.dp))
+                    Modifier.weight(1.6f).height(44.dp).clip(RoundedCornerShape(10.dp))
                         .background(jade)
                         .clickable { if (cloudOn) onCloudCall() else onCall() },
                     verticalAlignment = Alignment.CenterVertically,
@@ -4353,7 +4356,7 @@ private fun DispoButton(label: String, bg: Color, fg: Color, modifier: Modifier 
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = fg, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        Text(label, color = fg, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -4789,7 +4792,7 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                     Modifier.fillMaxWidth().clip(Radii.card)
                         .background(AppColors.Surface)
 
-                        .padding(Space.l),
+                        .padding(Space.m),
                 ) {
                     Text("Visits waiting on an outcome", style = AppType.rowTitle, color = AppColors.TextPrimary)
                     app.pendingVisits.error?.let { msg ->
@@ -4904,10 +4907,12 @@ fun FollowUpsScreen(vm: MainViewModel, onBack: () -> Unit) {
                 )
             }
         } else {
-            items(shown, key = { it.id ?: it.contactId ?: it.phone }) { f ->
+            itemsIndexed(shown, key = { _, it -> it.id ?: it.contactId ?: it.phone }) { idx, f ->
                 val cid = f.contactId
                 FollowUpCard(
                     f = f,
+                    groupFirst = idx == 0,
+                    groupLast = idx == shown.lastIndex,
                     now = now,
                     onCall = { vm.dialManual(f.phone) },
                     onWhatsApp = {
@@ -5093,6 +5098,10 @@ private fun FollowUpCard(
     memoryLine: String? = null,
     /** What to say, when focus-five named this lead. */
     sayLine: String? = null,
+    /** Position inside the inset-grouped list: only the ends are rounded,
+     *  rows in between are joined by a hairline (calm iOS, not a stack of boxes). */
+    groupFirst: Boolean = true,
+    groupLast: Boolean = true,
 ) {
     // FIVE BUTTONS WAS THE PROBLEM.
     //
@@ -5125,8 +5134,17 @@ private fun FollowUpCard(
     val accent = if (overdue && !appInvented) Red else if (overdue) muted else jade
     val who = f.name?.takeIf { it.isNotBlank() } ?: prettyPhone(f.phone)
 
+    val groupGap = 12.dp
     Column(
-        Modifier.fillMaxWidth().clip(Radii.card)
+        Modifier.fillMaxWidth()
+            // Joined rows: pull every row after the first up over the list's
+            // 12dp gap so the callbacks read as ONE inset group.
+            .then(if (groupFirst) Modifier else Modifier.layout { m, c ->
+                val g = groupGap.roundToPx()
+                val pl = m.measure(c)
+                layout(pl.width, (pl.height - g).coerceAtLeast(0)) { pl.place(0, -g) }
+            })
+            .clip(ContinuousShape(12.dp, top = groupFirst, bottom = groupLast))
             .background(AppColors.Surface)
 
             // TAP THE CARD, OPEN THE LEAD.
@@ -5138,8 +5156,9 @@ private fun FollowUpCard(
             // win their own taps; Compose gives the press to the innermost
             // clickable, so Call, WhatsApp and Update are unaffected.
             .then(if (onOpen == null) Modifier else Modifier.clickable { onOpen() })
-            .padding(horizontal = Space.m, vertical = Space.m),
     ) {
+        if (!groupFirst) IosSeparator(startInset = 64.dp)
+        Column(Modifier.padding(horizontal = Space.m, vertical = Space.m)) {
         Row(verticalAlignment = Alignment.Top) {
             // The shared circular avatar. It was a rounded square filled with 8%
             // grey — the only avatar shape in the app, and the only one that did
@@ -5181,11 +5200,7 @@ private fun FollowUpCard(
         // the same red is how a card ends up with four different reds on it and
         // none of them meaning anything. The note is context, not an alarm —
         // urgency is the pill's job on this card and nothing else's.
-        Row(
-            Modifier.fillMaxWidth().clip(Radii.control)
-                .background(AppColors.SurfaceMuted)
-                .padding(horizontal = Space.m, vertical = Space.s),
-        ) {
+        Row(Modifier.fillMaxWidth().padding(start = 52.dp)) {
             // THE REAL REASON WINS OVER THE APP'S OWN NOTE.
             //
             // Sorting these rows to the top without saying why would be the
@@ -5216,12 +5231,13 @@ private fun FollowUpCard(
             Text(
                 line,
                 style = AppType.meta,
-                color = AppColors.TextPrimary,
+                color = AppColors.TextSecondary,
+                modifier = Modifier.padding(start = 52.dp),
                 maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.height(9.dp))
+        Spacer(Modifier.height(8.dp))
         if (needsUpdate && onQuickOutcome != null) {
             Text("What happened?", style = AppType.meta, color = muted)
             Spacer(Modifier.height(6.dp))
@@ -5251,37 +5267,34 @@ private fun FollowUpCard(
                 // the one thing allowed to colour this card.
                 val needsInk = if (needsUpdate) Amber else AppColors.TextPrimary
                 Row(
-                    Modifier.nudgeShake(needsUpdate).weight(1f).height(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (needsUpdate) Amber.copy(alpha = 0.14f) else AppColors.Surface)
-                        .border(1.dp, if (needsUpdate) Amber else AppColors.Border, RoundedCornerShape(12.dp))
+                    Modifier.nudgeShake(needsUpdate).weight(1f).height(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (needsUpdate) Amber.copy(alpha = 0.14f) else IosColors.Fill)
                         .clickable { onUpdate() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    Text(if (needsUpdate) "Update call" else "Update", fontSize = 13.sp,
-                        color = needsInk, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(if (needsUpdate) "Update call" else "Update", fontSize = 14.sp,
+                        color = needsInk, fontWeight = FontWeight.Medium, maxLines = 1)
                 }
             } else {
                 // Not linked to a lead, so there is no funnel to move — ticking
                 // the callback off is genuinely all this can do.
                 Row(
-                    Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
-                        .background(AppColors.Surface)
-                        .border(1.dp, AppColors.Border, RoundedCornerShape(12.dp))
+                    Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(10.dp))
+                        .background(IosColors.Fill)
                         .clickable { onDone() },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
                     Text("Done", fontSize = 13.sp, color = AppColors.TextPrimary,
-                        fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        fontWeight = FontWeight.Medium, maxLines = 1)
                 }
             }
-            Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.width(8.dp))
             Row(
-                Modifier.weight(1f).height(44.dp).clip(RoundedCornerShape(12.dp))
-                    .background(AppColors.Surface)
-                    .border(1.dp, AppColors.Border, RoundedCornerShape(12.dp))
+                Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(10.dp))
+                    .background(IosColors.Fill)
                     .clickable(enabled = !whatsAppBusy) { onWhatsApp() },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -5295,12 +5308,12 @@ private fun FollowUpCard(
                 } else {
                     Icon(Icons.Default.Chat, contentDescription = null, tint = WaGreen, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(5.dp))
-                    Text("WhatsApp", fontSize = 13.sp, color = AppColors.TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text("WhatsApp", fontSize = 13.sp, color = AppColors.TextPrimary, fontWeight = FontWeight.Medium, maxLines = 1)
                 }
             }
-            Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.width(8.dp))
             Row(
-                Modifier.weight(1.35f).height(52.dp).clip(RoundedCornerShape(12.dp))
+                Modifier.weight(1.35f).height(40.dp).clip(RoundedCornerShape(10.dp))
                     .background(jade)
                     .clickable { onCall() },
                 verticalAlignment = Alignment.CenterVertically,
@@ -5308,7 +5321,7 @@ private fun FollowUpCard(
             ) {
                 Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Call", fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text("Call", fontSize = 15.sp, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
             }
         }
         // "Not now" lives here — small, plain and out of the way of the three
@@ -5324,6 +5337,7 @@ private fun FollowUpCard(
                     .padding(horizontal = 8.dp, vertical = 8.dp))
         }
     }
+        }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -5339,7 +5353,7 @@ fun TeamScreen(vm: MainViewModel, onCampaigns: () -> Unit, onCallHistory: () -> 
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item { Text("Reports & Team", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item { Text("Reports & Team", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold) }
         item { LeaderboardCard(vm, app, compact = false) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -5356,12 +5370,12 @@ private fun LeaderboardCard(vm: MainViewModel, app: AppState, compact: Boolean) 
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Groups, contentDescription = "Team", tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
-                    Text("Leaderboard", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Leaderboard", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf("today" to "Today", "week" to "Week").forEach { (key, label) ->
@@ -5379,7 +5393,7 @@ private fun LeaderboardCard(vm: MainViewModel, app: AppState, compact: Boolean) 
             val rows = if (compact) app.leaderboard.take(3) else app.leaderboard
             when {
                 app.leaderboardLoading && app.leaderboard.isEmpty() ->
-                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    Box(Modifier.fillMaxWidth().padding(12.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 rows.isEmpty() -> Text("No activity yet for this period.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 else -> {
                     val myId = app.profile?.id
@@ -5397,13 +5411,13 @@ private fun LeaderboardRowView(rank: Int, r: LeaderboardRow, isMe: Boolean) {
         Text(medal, modifier = Modifier.width(34.dp))
         Column(Modifier.weight(1f)) {
             Text((r.fullName ?: "—") + if (isMe) "  (you)" else "", style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (isMe) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (isMe) FontWeight.SemiBold else FontWeight.Normal,
                 color = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
             Text("${r.calls} calls · ${r.connected} connected · ${fmtSec(r.talkSeconds)} talk",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text("${r.leads}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text("${r.leads}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
             Text("leads", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -5731,15 +5745,15 @@ private fun LeadRow(
     ) {
         // The only stripe left: overdue.
         Box(Modifier.width(3.dp).height(56.dp).background(if (overdue) IosColors.Red else Color.Transparent))
-        Column(Modifier.weight(1f).padding(start = 11.dp, top = 10.dp, bottom = 10.dp, end = 8.dp)) {
+        Column(Modifier.weight(1f).heightIn(min = 56.dp).padding(start = 13.dp, top = 8.dp, bottom = 8.dp, end = 8.dp), verticalArrangement = Arrangement.Center) {
             Row(verticalAlignment = Alignment.Top) {
                 Text(name, style = AppType.headline, color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
                 budgetLabel(c.budget)?.let {
                     Spacer(Modifier.width(6.dp))
-                    Text("₹ $it", style = AppType.subhead, color = AppColors.TextPrimary)
+                    Text("₹ $it", style = AppType.subhead, color = AppColors.TextSecondary)
                 }
             }
-            Text(reason, style = AppType.subhead, color = if (overdue) IosColors.Red else AppColors.TextSecondary)
+            Text(reason, style = AppType.subhead.copy(fontSize = 14.sp), color = if (overdue) IosColors.Red else AppColors.TextSecondary)
             Text(lastContact?.let { "Last contact $it" } ?: "Never called", style = AppType.footnote, color = AppColors.TextSecondary)
             if (needsUpdate) Text("Call ended with no result. Tap to add it.", style = AppType.footnote.copy(fontWeight = FontWeight.SemiBold),
                 color = IosColors.Orange, modifier = Modifier.clickable { onUpdate() }.padding(top = 2.dp))

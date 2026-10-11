@@ -1,5 +1,7 @@
 package com.salesautocall.app.ui
 
+import com.salesautocall.app.ui.design.CoachCharacter
+import com.salesautocall.app.ui.design.CoachMood
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -171,7 +173,7 @@ internal fun HomeCoachCard(
                 .padding(horizontal = Space.l, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CoachOrb(size = 46.dp, active = newCall || visits.isNotEmpty() || showLearning)
+            CoachCharacter(size = 44.dp, mood = if (newCall || visits.isNotEmpty() || showLearning) CoachMood.Nod else CoachMood.Idle)
             Spacer(Modifier.width(Space.m))
             Column(Modifier.weight(1f)) {
                 Text("Coach", style = AppType.headline, color = AppColors.TextPrimary)
@@ -252,7 +254,7 @@ internal fun VisitCheckBlock(
     var calendar by remember(v.contactId) { mutableStateOf(false) }
     fun at(days: Long) = java.time.ZonedDateTime.now().plusDays(days)
         .withHour(11).withMinute(0).withSecond(0).withNano(0).toInstant().toEpochMilli()
-    Column(Modifier.fillMaxWidth().padding(Space.l)) {
+    Column(Modifier.fillMaxWidth().padding(Space.m)) {
         BlockHeader(Icons.Outlined.CheckCircle, IosColors.Orange, "Site visit check")
         Spacer(Modifier.height(8.dp))
         Text("Did the site visit happen?", style = AppType.headline, color = AppColors.TextPrimary)
@@ -339,7 +341,7 @@ private fun LastCallBlock(
     error: String?,
     onOpenLead: (String) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(Space.l)) {
+    Column(Modifier.fillMaxWidth().padding(Space.m)) {
         BlockHeader(Icons.Outlined.RecordVoiceOver, IosColors.Indigo, "Last call") {
             insight?.rating?.let { r -> IosTag("$r/5", fg = ratingTint(r)) }
         }
@@ -395,7 +397,7 @@ private fun CoachLine(icon: ImageVector, tint: Color, label: String, text: Strin
 
 @Composable
 private fun LearningBlock(tip: LearningTip, onDone: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(Space.l)) {
+    Column(Modifier.fillMaxWidth().padding(Space.m)) {
         BlockHeader(Icons.Outlined.Lightbulb, IosColors.Yellow, "Learning time · 1 min") {
             Text("Got it", style = AppType.label, color = IosColors.Blue,
                 modifier = Modifier.clip(Radii.tag).iosPress { onDone() }.padding(horizontal = 8.dp, vertical = 4.dp))

@@ -148,7 +148,7 @@ fun HairLine(inset: Boolean = true) {
 fun AppSurface(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    padding: PaddingValues = PaddingValues(Space.l),
+    padding: PaddingValues = PaddingValues(Space.m),
     content: @Composable () -> Unit,
 ) {
     val base = modifier
@@ -219,7 +219,7 @@ fun PrimaryButton(
 ) {
     Row(
         modifier
-            .heightIn(min = Space.touch)
+            .heightIn(min = 46.dp)
             .clip(Radii.control)
             .background(if (enabled) AppColors.Indigo else AppColors.SurfaceMuted)
             .iosPress(enabled = enabled) { onClick() }
@@ -246,7 +246,10 @@ fun SecondaryButton(
 ) {
     Row(
         modifier
-            .heightIn(min = Space.touch)
+            // 44dp touch target, 36dp visual pill (iOS secondary size).
+            .heightIn(min = 44.dp)
+            .padding(vertical = 4.dp)
+            .heightIn(min = 36.dp)
             .clip(Radii.control)
             // iOS "gray" button: a quiet fill, no outline.
             .background(IosColors.Fill)
@@ -272,7 +275,7 @@ fun GhostButton(
 ) {
     Box(
         modifier
-            .heightIn(min = 40.dp)
+            .heightIn(min = 44.dp)
             .clip(Radii.control)
             .clickable { onClick() }
             .padding(horizontal = Space.m),
@@ -289,7 +292,7 @@ fun RoundIconButton(
     contentDescription: String,
     tint: Color = AppColors.Indigo,
     background: Color = AppColors.IndigoSoft,
-    size: Int = 40,
+    size: Int = 36,
     onClick: () -> Unit,
 ) {
     Box(

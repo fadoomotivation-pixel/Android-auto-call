@@ -23,7 +23,7 @@ object Space {
     val xxxl = 32.dp
 
     /** Horizontal screen gutter. */
-    val gutter = 20.dp
+    val gutter = 16.dp
 
     /** Minimum comfortable touch target. */
     val touch = 48.dp

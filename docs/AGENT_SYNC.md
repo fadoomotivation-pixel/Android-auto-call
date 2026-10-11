@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-11 — Grok Bot (calm iOS visual-fatigue pass + human coach character)
+
+- **Follow Ups:** callbacks are now ONE inset-grouped list (rounded only at the ends, 0.5dp hairline between rows, inset 64dp) instead of separate boxed cards. Name 20sp → 17sp semibold. The grey filled "why" box is gone; it is plain 13sp secondary text, indented under the name. Update/WhatsApp: 44dp bordered → 36dp grey fill, 13sp semibold → 14sp medium. Call (the only primary) 52dp → 40dp, 16sp → 15sp. Memory lines grey. Every number, tag and warning kept.
+- **Leads rows:** min 56dp, vertical padding 10 → 8dp, reason 15sp → 14sp, budget grey.
+- **Design tokens:** gutter 20 → 16dp; AppSurface padding 16 → 12dp; card `padding(Space.l / 16 / 20dp)` → 12dp on Home, Leads, Follow Ups, Lead detail, coach cards; Bold → SemiBold on those screens; tall 50–56dp buttons → 44dp. Type: label (buttons) 14sp semibold → 15sp medium; sectionLabel 12sp semibold → 13sp regular; caption medium → regular; title2 bold → semibold. SecondaryButton 48dp → 36dp visual inside a 44dp touch target; GhostButton 40 → 44dp touch; PrimaryButton 48 → 46dp; RoundIconButton 40 → 36dp.
+- **Coach character:** `design/CoachCharacter.kt` — a flat-vector young Indian mentor (navy blazer) on a 100-unit grid: blinks, breathes, tilts; `CoachMood.Wave` on Good morning, `Nod` on Coaching time / Coach card / Ask Coach while loading. Replaces CoachOrb in those four places; top bars keep the monochrome sparkle (CoachOrb still used on Lead detail small badges). `tools/coach_preview.py` renders the same paths to a PNG. Coach timing rules from #514/#515 untouched.
+- No Supabase change. No new scheduler, popup or tab.
+
 ## 2026-10-10 — Grok Bot (AI recommendation + Apple restraint + easy demo password)
 
 - **AI recommendation** (`ui/AiRecommendation.kt`, `buildAiReco`): on the Next call card and
