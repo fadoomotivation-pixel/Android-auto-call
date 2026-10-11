@@ -43,19 +43,19 @@ object AppType {
     /** Title 2 (22). Sheet titles, a card's single big figure. */
     val title2 = TextStyle(
         fontFamily = Inter, fontSize = 22.sp, lineHeight = 28.sp,
-        fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp,
+        fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp,
     )
 
     /** Title 3 (20). Card titles that are the point of the card. */
     val title3 = TextStyle(
         fontFamily = Inter, fontSize = 19.sp, lineHeight = 25.sp,
-        fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp,
+        fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp,
     )
 
     /** Headline (17 semibold). A row's name, a button in a sheet. */
     val headline = TextStyle(
-        fontFamily = Inter, fontSize = 17.sp, lineHeight = 22.sp,
-        fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
+        fontFamily = Inter, fontSize = 18.sp, lineHeight = 24.sp,
+        fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp,
     )
 
     /** Callout (16). Coach advice and other sentences meant to be read. */
@@ -101,7 +101,7 @@ object AppType {
         fontFamily = Inter,
         fontSize = 32.sp,
         lineHeight = 38.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         letterSpacing = (-0.6).sp,
     )
 
@@ -110,14 +110,14 @@ object AppType {
         fontFamily = Inter,
         fontSize = 22.sp,
         lineHeight = 28.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         letterSpacing = (-0.4).sp,
     )
 
     /** Row heading: lead name, contact name. */
     val rowTitle = TextStyle(
         fontFamily = Inter,
-        fontSize = 16.sp,
+        fontSize = 15.sp,
         lineHeight = 22.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = (-0.2).sp,
@@ -135,7 +135,7 @@ object AppType {
     val body = TextStyle(
         fontFamily = Inter,
         fontSize = 15.sp,
-        lineHeight = 22.sp,
+        lineHeight = 23.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = (-0.1).sp,
     )
@@ -157,7 +157,7 @@ object AppType {
         fontFamily = Inter,
         fontSize = 15.sp,
         lineHeight = 20.sp,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.SemiBold,
         letterSpacing = (-0.1).sp,
     )
 
@@ -174,7 +174,7 @@ object AppType {
         fontFamily = Inter,
         fontSize = 22.sp,
         lineHeight = 26.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         letterSpacing = (-0.4).sp,
     )
 

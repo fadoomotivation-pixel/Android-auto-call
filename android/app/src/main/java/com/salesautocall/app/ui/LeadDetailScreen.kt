@@ -83,6 +83,8 @@ import com.salesautocall.app.data.Contact
 import com.salesautocall.app.data.LeadStage
 import com.salesautocall.app.data.Repository
 import com.salesautocall.app.data.Wada
+import com.salesautocall.app.ui.design.softCard
+import com.salesautocall.app.ui.design.gradientCard
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
 import com.salesautocall.app.ui.design.Radii
@@ -371,19 +373,18 @@ fun LeadDetailScreen(vm: MainViewModel) {
                 // ---- Top bar: back · title · quick call / whatsapp / more ----
                 item {
                     Row(
-                        Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 8.dp),
+                        Modifier.fillMaxWidth()
+                            .clip(RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
+                            .background(com.salesautocall.app.ui.design.Brand.gradient)
+                            .heightIn(min = 60.dp)
+                            .padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // iOS back: a blue chevron and the word, not a Material arrow.
                         // The lead's name below is this page's large title.
-                        Row(
-                            Modifier.clip(Radii.chip).iosPress(scaleTo = 0.96f) { vm.closeLeadDetail() }
-                                .padding(end = 10.dp, top = 6.dp, bottom = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Back", tint = IosColors.Blue, modifier = Modifier.size(30.dp))
-                            Text("Leads", style = AppType.body.copy(fontSize = 17.sp), color = IosColors.Blue)
-                        }
+                        com.salesautocall.app.ui.design.GlassIconButton(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Back") { vm.closeLeadDetail() }
+                        Spacer(Modifier.width(8.dp))
+                        Text("Leads", style = AppType.headline, color = Color.White)
                         Spacer(Modifier.weight(1f))
                         // ONE Call on this page. The title bar had a second Call
                         // and a second WhatsApp, the same two buttons the bar
@@ -391,10 +392,12 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         // one screen made the rep stop and choose. More stays:
                         // it holds the things that are not anywhere else.
                         // Coach in the bar, not a floating orb over the lead.
-                        if (app.coachOn) Box(Modifier.size(44.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
-                            SparkleGlyph(20.dp, tint = AppColors.TextPrimary)
+                        if (app.coachOn) com.salesautocall.app.ui.design.GlassBox {
+                            Box(Modifier.size(44.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
+                                SparkleGlyph(20.dp, tint = Color.White)
+                            }
                         }
-                        TopIconButton(Icons.Default.MoreHoriz, IosColors.Blue, size = 36) { moreOpen = true }
+                        com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.MoreHoriz, "More") { moreOpen = true }
                         // An iOS action sheet, not Material's dropdown. Same six
                         // actions, same order. The three that close the lead are
                         // red, the way iOS marks a destructive choice.
@@ -1053,16 +1056,16 @@ private fun SectionCard(
     // optional grey footnote under it.
     Column(Modifier.fillMaxWidth()) {
     if (!header.isNullOrBlank()) {
-        Text(header.uppercase(), style = AppType.groupHeader, color = AppColors.TextSecondary,
-            modifier = Modifier.padding(start = Space.l + Space.l, end = Space.l, bottom = 6.dp))
+        com.salesautocall.app.ui.design.AccentHeader(header,
+            Modifier.padding(start = Space.l + Space.xs, end = Space.l, bottom = Space.s))
     }
     Column(
         // iOS grouped-inset: a white card on the grey canvas, no outline.
         // One radius (Radii.card), one inset (16dp), one inner padding (16dp)
         // for every card on this page, so the edges line up down the screen.
         Modifier.fillMaxWidth().padding(horizontal = Space.l)
-            .clip(Radii.card).background(CardBg)
-            .padding(Space.m),
+            .softCard(color = CardBg)
+            .padding(Space.l),
         content = content,
     )
     if (!footer.isNullOrBlank()) {
@@ -1076,10 +1079,10 @@ private fun SectionCard(
 private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
         modifier
-            .clip(Radii.card).background(CardBg)
+            .softCard(color = CardBg)
             .heightIn(min = 96.dp).padding(Space.m),
     ) {
-        Text(title.uppercase(), style = AppType.sectionLabel, color = AppColors.TextTertiary, maxLines = 1)
+        Text(title, style = AppType.label, color = AppColors.TextSecondary, maxLines = 1)
         Spacer(Modifier.height(10.dp))
         content()
     }
@@ -1089,7 +1092,7 @@ private fun MiniCard(title: String, modifier: Modifier = Modifier, content: @Com
 private fun TopIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, size: Int = 44, onClick: () -> Unit) {
     Box(
         Modifier.size(size.dp)
-            .clip(CircleShape).background(CardBg)
+            .softCard(RoundedCornerShape((size * 0.32f).dp), elevation = 4.dp, color = CardBg)
             .iosPress(scaleTo = 0.92f) { onClick() },
         contentAlignment = Alignment.Center,
     ) { Icon(icon, null, tint = tint, modifier = Modifier.size((size * 0.46f).dp)) }
@@ -1135,11 +1138,12 @@ private fun IdentityBlock(
     Column(Modifier.fillMaxWidth().padding(horizontal = Space.l)) {
         Row(verticalAlignment = Alignment.Top) {
             Box(
-                Modifier.size(64.dp).clip(CircleShape).border(2.dp, ring.copy(alpha = 0.55f), CircleShape),
+                Modifier.size(64.dp)
+                    .gradientCard(RoundedCornerShape(20.dp), androidx.compose.ui.graphics.Brush.linearGradient(listOf(ring, ring.copy(alpha = 0.7f))), elevation = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text((contact.name ?: contact.phone).firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "#",
-                    color = ring, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.headlineSmall)
+                    color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall)
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
@@ -1243,10 +1247,10 @@ private fun IdentityBlock(
 @Composable
 private fun HeroFact(label: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
     Column(
-        modifier.clip(Radii.card).background(CardBg)
+        modifier.softCard(color = CardBg)
             .padding(horizontal = Space.l, vertical = Space.m),
     ) {
-        Text(label, style = AppType.sectionLabel, color = AppColors.TextSecondary, maxLines = 1)
+        Text(label.lowercase().replaceFirstChar { it.uppercase() }, style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1)
         Spacer(Modifier.height(Space.xs))
         Text(value, style = AppType.rowTitle, color = valueColor, maxLines = 2,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -1409,8 +1413,8 @@ private fun AiCoachCard(
         modifier = Modifier.padding(start = Space.l + Space.l, end = Space.l, bottom = 6.dp))
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Space.l)
-            .clip(Radii.card).background(CardBg)
-            .padding(Space.m),
+            .softCard(color = CardBg)
+            .padding(Space.l),
     ) {
         Text("Opening line, a reply to their objection, or a message to send.",
             style = AppType.footnote, color = AppColors.TextSecondary)

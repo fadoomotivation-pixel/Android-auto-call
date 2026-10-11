@@ -36,22 +36,23 @@ object Space {
  */
 object Radii {
     val tag = RoundedCornerShape(999.dp)
-    val chip = ContinuousShape(10.dp)
-    val control = ContinuousShape(10.dp)
-    val card = ContinuousShape(12.dp)
-    val sheet = ContinuousShape(16.dp)
+    val chip = RoundedCornerShape(12.dp)
+    val control = RoundedCornerShape(14.dp)
+    /** Brand restyle: generous, soft card corners. */
+    val card = RoundedCornerShape(20.dp)
+    val sheet = RoundedCornerShape(24.dp)
     /** Top corners only, for a sheet that rises from the bottom edge. */
-    val sheetTop = ContinuousShape(16.dp, bottom = false)
+    val sheetTop = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 }
 
 internal val AppMaterialShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(14.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(20.dp),
     // Material needs plain rounded corners here. Dialogs and sheets: Material's 28dp is the single most "Android" thing
     // on a dialog; iOS alerts are 14pt.
-    extraLarge = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(24.dp),
 )
 
 /**

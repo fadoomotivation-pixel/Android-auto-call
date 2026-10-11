@@ -1,6 +1,22 @@
 package com.salesautocall.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.PhoneCallback
+import androidx.compose.material.icons.filled.PhoneMissed
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.salesautocall.app.ui.design.AccentHeader
+import com.salesautocall.app.ui.design.Brand
+import com.salesautocall.app.ui.design.GradientIconTile
+import com.salesautocall.app.ui.design.TileTone
+import com.salesautocall.app.ui.design.Tiles
+import com.salesautocall.app.ui.design.gradientCard
+import com.salesautocall.app.ui.design.softCard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -284,45 +300,72 @@ fun MyReportScreen(vm: MainViewModel, onBack: () -> Unit) {
 @Composable
 private fun DayPicker(label: String, canNext: Boolean, onPrev: () -> Unit, onNext: () -> Unit, onPick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(Radii.card).background(AppColors.Surface).heightIn(min = 48.dp),
+        Modifier.fillMaxWidth().gradientCard().heightIn(min = 64.dp).padding(horizontal = Space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(48.dp).iosPress { onPrev() }, contentAlignment = Alignment.Center) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous day",
-                tint = AppColors.Indigo, modifier = Modifier.size(24.dp))
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brand.OnGradientFill), contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous day",
+                    tint = Color.White, modifier = Modifier.size(24.dp))
+            }
         }
-        Box(Modifier.weight(1f).heightIn(min = 48.dp).iosPress { onPick() }, contentAlignment = Alignment.Center) {
-            Text(label, style = AppType.headline, color = AppColors.TextPrimary, maxLines = 1)
+        Row(
+            Modifier.weight(1f).heightIn(min = 48.dp).iosPress { onPick() },
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(Space.s))
+            Text(label, style = AppType.headline, color = Color.White, maxLines = 1)
         }
         Box(Modifier.size(48.dp).iosPress { if (canNext) onNext() }, contentAlignment = Alignment.Center) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next day",
-                tint = if (canNext) AppColors.Indigo else AppColors.SurfaceMuted, modifier = Modifier.size(24.dp))
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(Brand.OnGradientFill), contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next day",
+                    tint = if (canNext) Color.White else Color.White.copy(alpha = 0.35f), modifier = Modifier.size(24.dp))
+            }
         }
     }
 }
 
 @Composable
 private fun ReportCalls(r: DayReport) {
-    IosGroup(header = "Calls") {
-        Row(Modifier.fillMaxWidth().padding(horizontal = Space.l, vertical = Space.m)) {
-            BigNumber("Attempted", r.attempted.toString(), Modifier.weight(1f))
-            BigNumber("Connected", r.connected.toString(), Modifier.weight(1f))
-            BigNumber("Not connected", r.notConnected.toString(), Modifier.weight(1f))
+    Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
+        AccentHeader("Calls", Modifier.padding(start = Space.xs))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.m)) {
+            BigNumber("Attempted", r.attempted.toString(), Icons.Filled.Call, Tiles.Calls, Modifier.weight(1f))
+            BigNumber("Connected", r.connected.toString(), Icons.Filled.PhoneCallback, Tiles.Positive, Modifier.weight(1f))
         }
-        IosSeparator()
-        IosRow("Connect rate", value = connectPercent(r)?.let { "$it%" } ?: "—")
-        IosSeparator()
-        IosRow("Talk time", value = formatTalk(r.talkSeconds))
-        IosSeparator()
-        IosRow("Average call", subtitle = "Connected calls only", value = formatTalk(r.avgSeconds))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.m)) {
+            BigNumber("Not connected", r.notConnected.toString(), Icons.Filled.PhoneMissed, Tiles.Negative, Modifier.weight(1f))
+            BigNumber("Connect rate", connectPercent(r)?.let { "$it%" } ?: "—", Icons.Filled.TrendingUp, Tiles.Brand, Modifier.weight(1f))
+        }
+        connectPercent(r)?.let { pct ->
+            Column(Modifier.fillMaxWidth().softCard().padding(Space.l)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Connect rate", style = AppType.label, color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
+                    Text("$pct%", style = AppType.label.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = AppColors.TextPrimary)
+                }
+                Spacer(Modifier.height(Space.s))
+                com.salesautocall.app.ui.design.GradientProgress(pct / 100f)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.m)) {
+            BigNumber("Talk time", formatTalk(r.talkSeconds), Icons.Filled.Timer, Tiles.Time, Modifier.weight(1f))
+            BigNumber("Average call", formatTalk(r.avgSeconds), Icons.Filled.AccessTime, Tiles.Leads, Modifier.weight(1f),
+                note = "Connected calls only")
+        }
     }
 }
 
 @Composable
-private fun BigNumber(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Text(value, style = AppType.metric, color = AppColors.TextPrimary, maxLines = 1)
-        Text(label, style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1)
+private fun BigNumber(label: String, value: String, icon: ImageVector, tone: TileTone, modifier: Modifier = Modifier, note: String? = null) {
+    Row(modifier.softCard().padding(Space.m), verticalAlignment = Alignment.CenterVertically) {
+        GradientIconTile(icon, tone, size = 44.dp)
+        Spacer(Modifier.width(Space.m))
+        Column(Modifier.weight(1f)) {
+            Text(value, style = AppType.metric, color = AppColors.TextPrimary, maxLines = 1)
+            Text(label, style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1)
+            if (note != null) Text(note, style = AppType.caption, color = AppColors.TextTertiary, maxLines = 1)
+        }
     }
 }
 
@@ -334,7 +377,7 @@ private fun StageRow(s: StageCount) {
         Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = Space.l),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
+        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
         Spacer(Modifier.width(16.dp))
         Text(s.label, style = AppType.body, color = AppColors.TextPrimary, modifier = Modifier.weight(1f), maxLines = 1)
         Text(s.count.toString(), style = AppType.body, color = AppColors.TextSecondary)

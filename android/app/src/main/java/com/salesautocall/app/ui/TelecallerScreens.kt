@@ -1,5 +1,6 @@
 package com.salesautocall.app.ui
 
+import com.salesautocall.app.ui.design.softCard
 import com.salesautocall.app.ui.design.IosSeparator
 import com.salesautocall.app.ui.design.ContinuousShape
 import androidx.compose.ui.layout.layout
@@ -2380,18 +2381,19 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             title = if (selectMode) "Select leads" else "Leads",
             collapsed = titleCollapsed,
             leading = {
-                Icon(Icons.Default.Menu, contentDescription = "Menu", tint = AppColors.TextPrimary,
+                Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White,
                     modifier = Modifier.size(44.dp).clip(CircleShape).iosPress { onMenu() }.padding(10.dp))
             },
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Coach lives in the bar now (no floating orb over leads).
-                    if (app.coachOn) Box(Modifier.size(44.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
-                        SparkleGlyph(20.dp, tint = AppColors.TextPrimary)
+                    if (app.coachOn) com.salesautocall.app.ui.design.GlassBox {
+                        Box(Modifier.size(44.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
+                            SparkleGlyph(20.dp, tint = Color.White)
+                        }
                     }
                     Box {
-                        Icon(Icons.Default.MoreHoriz, contentDescription = "More", tint = AppColors.TextPrimary,
-                            modifier = Modifier.size(44.dp).clip(CircleShape).iosPress { leadsMenuOpen = true }.padding(10.dp))
+                        com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.MoreHoriz, "More") { leadsMenuOpen = true }
                         if (leadsMenuOpen) {
                             IosActionSheet(
                                 onDismiss = { leadsMenuOpen = false },
@@ -2404,8 +2406,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                             )
                         }
                     }
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = AppColors.TextPrimary,
-                        modifier = Modifier.size(44.dp).clip(CircleShape).iosPress { vm.openSettings() }.padding(10.dp))
+                    com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.Settings, "Settings") { vm.openSettings() }
                 }
             },
         )
@@ -2769,13 +2770,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                         // separators, rounded only at the top and bottom.
                         val lastIdx = filtered.lastIndex
                         itemsIndexed(filtered, key = { _, c -> c.id ?: c.phone }) { i, c ->
-                            val r = 12.dp
-                            val shape = RoundedCornerShape(
-                                topStart = if (i == 0) r else 0.dp, topEnd = if (i == 0) r else 0.dp,
-                                bottomStart = if (i == lastIdx) r else 0.dp, bottomEnd = if (i == lastIdx) r else 0.dp,
-                            )
-                            Column(Modifier.fillMaxWidth().clip(shape).background(AppColors.Surface)) {
-                                if (i > 0) IosSeparator(startInset = 16.dp)
+                            // Brand restyle: every lead is its own soft white card.
+                            Column(Modifier.fillMaxWidth().padding(bottom = if (i == lastIdx) 0.dp else 12.dp).softCard()) {
                                 androidx.compose.runtime.CompositionLocalProvider(LocalGroupedRow provides true) { leadCard(c) }
                             }
                         }
@@ -5704,7 +5700,8 @@ private fun NextCallHero(
     var more by remember { mutableStateOf(false) }
     val ellipsis = androidx.compose.ui.text.style.TextOverflow.Ellipsis
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AppColors.Surface)
+        Modifier.fillMaxWidth().softCard()
+            .border(1.dp, AppColors.Indigo.copy(alpha = 0.18f), com.salesautocall.app.ui.design.Radii.card)
             .clickable { onOpen() }.padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -5794,10 +5791,11 @@ private fun LeadRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // The only stripe left: overdue.
-        Box(Modifier.width(3.dp).height(56.dp).background(if (overdue) IosColors.Red else Color.Transparent))
-        Column(Modifier.weight(1f).heightIn(min = 56.dp).padding(start = 13.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalArrangement = Arrangement.Center) {
+        Box(Modifier.width(4.dp).height(72.dp).background(if (overdue) AppColors.Danger else Color.Transparent))
+        Box(Modifier.padding(start = 12.dp)) { InitialsAvatar(prettyName(c.name) ?: c.phone, size = 44) }
+        Column(Modifier.weight(1f).heightIn(min = 56.dp).padding(start = 12.dp, top = 14.dp, bottom = 14.dp, end = 8.dp), verticalArrangement = Arrangement.Center) {
             Row(verticalAlignment = Alignment.Top) {
-                Text(name, style = AppType.headline, color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
+                Text(name, style = AppType.headline.copy(fontSize = 16.sp), color = AppColors.TextPrimary, modifier = Modifier.weight(1f))
                 budgetLabel(c.budget)?.let {
                     Spacer(Modifier.width(8.dp))
                     Text("₹ $it", style = AppType.subhead, color = AppColors.TextSecondary)
@@ -5816,8 +5814,8 @@ private fun LeadRow(
                 Modifier.padding(end = 12.dp).size(44.dp).clip(CircleShape).clickable { onCall() },
                 contentAlignment = Alignment.Center,
             ) {
-                Box(Modifier.size(36.dp).clip(CircleShape).background(IosColors.Blue.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Call, contentDescription = "Call", tint = IosColors.Blue, modifier = Modifier.size(18.dp))
+                Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(com.salesautocall.app.ui.design.Brand.gradient), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             }
         }
