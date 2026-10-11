@@ -543,8 +543,8 @@ fun IosNavBar(
 
 /** The large title itself, placed as the first thing in the scrolling content. */
 @Composable
-fun IosLargeTitle(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().padding(horizontal = Space.l, vertical = Space.xs)) {
+fun IosLargeTitle(title: String, subtitle: String? = null, modifier: Modifier = Modifier, inset: androidx.compose.ui.unit.Dp = Space.l) {
+    Column(modifier.fillMaxWidth().padding(horizontal = inset, vertical = Space.xs)) {
         Text(title, style = AppType.largeTitle, color = AppColors.TextPrimary)
         if (!subtitle.isNullOrBlank()) {
             Text(subtitle, style = AppType.footnote, color = AppColors.TextSecondary)

@@ -1,6 +1,9 @@
 package com.salesautocall.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -147,18 +150,24 @@ internal fun AiRecommendationBlock(
     modifier: Modifier = Modifier,
     showButton: Boolean = true,
 ) {
+    // Two lines max (Why + Next step), More expands. Never a paragraph.
+    var more by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    val ell = androidx.compose.ui.text.style.TextOverflow.Ellipsis
     Column(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SparkleGlyph(14.dp)
-            Spacer(Modifier.width(6.dp))
-            Text("AI recommendation", style = AppType.footnote.copy(fontWeight = FontWeight.Medium), color = AppColors.TextSecondary)
+            SparkleGlyph(16.dp, tint = AppColors.TextSecondary)
+            Spacer(Modifier.width(8.dp))
+            Text("AI recommendation", style = AppType.footnote, color = AppColors.TextSecondary, modifier = Modifier.weight(1f))
+            Text(if (more) "Less" else "More", style = AppType.footnote, color = IosColors.Blue,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { more = !more }.padding(vertical = 4.dp))
         }
         Spacer(Modifier.height(4.dp))
-        Text(reco.context, style = AppType.subhead, color = AppColors.TextPrimary)
-        Spacer(Modifier.height(4.dp))
-        Text("Next step: ${reco.nextStep}", style = AppType.subhead.copy(fontWeight = FontWeight.Medium), color = AppColors.TextPrimary)
-        reco.missing?.let {
-            Spacer(Modifier.height(2.dp))
+        Text("Why: ${reco.context}", style = AppType.subhead, color = AppColors.TextPrimary,
+            maxLines = if (more) Int.MAX_VALUE else 1, overflow = ell)
+        Text("Next step: ${reco.nextStep}", style = AppType.subhead.copy(fontWeight = FontWeight.Medium), color = AppColors.TextPrimary,
+            maxLines = if (more) Int.MAX_VALUE else 1, overflow = ell)
+        if (more) reco.missing?.let {
+            Spacer(Modifier.height(4.dp))
             Text(it, style = AppType.footnote, color = AppColors.TextSecondary)
         }
         if (showButton) {

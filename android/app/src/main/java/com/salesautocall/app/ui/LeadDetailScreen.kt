@@ -391,8 +391,8 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         // one screen made the rep stop and choose. More stays:
                         // it holds the things that are not anywhere else.
                         // Coach in the bar, not a floating orb over the lead.
-                        Box(Modifier.size(40.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
-                            SparkleGlyph(20.dp)
+                        if (app.coachOn) Box(Modifier.size(44.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
+                            SparkleGlyph(20.dp, tint = AppColors.TextPrimary)
                         }
                         TopIconButton(Icons.Default.MoreHoriz, IosColors.Blue, size = 36) { moreOpen = true }
                         // An iOS action sheet, not Material's dropdown. Same six
