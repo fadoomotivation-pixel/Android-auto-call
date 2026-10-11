@@ -37,6 +37,17 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-11 — Grok Bot (slim APK: 168 MB → 40 MB, same signature)
+- Published `app-debug.apk` is now ARM only (`arm64-v8a`, `armeabi-v7a`) via debug `ndk.abiFilters`.
+  Emulator work: build with `-PincludeX86=true` (local only; CI never passes it).
+- Debug build runs R8 **shrink only** (`-dontobfuscate`, broad keeps for our package, Linphone,
+  Supabase, ktor, kotlinx) + `isShrinkResources`. Dex ~90 MB → ~24 MB.
+- `.so` stored compressed (`jniLibs.useLegacyPackaging = true`).
+- Dropped 7 unused Linphone alt ringtones via `ignoreAssetsPattern`; Linphone defaults kept.
+- Still the debug build type + committed `android/app/debug.keystore`: signer SHA-256
+  `e35c570c…6eced` identical before/after, so in-app updates install over existing apps.
+- If you add reflection/ServiceLoader code outside `com.salesautocall.app`, add a keep rule.
+
 ## 2026-10-11 — Grok Bot (market-ready pass: Login, Home day start, My report)
 - **My report** (`ui/MyReport.kt`, route `my_report`, drawer + Home quick access): date picker (prev/next/calendar, never future). Calls, connected, talk time and follow-ups come ONLY from the existing `rep_day_facts(uid, date)` RPC (same function the 7pm review / rep_day_score print) — no recount on the phone. Phone only derives not connected = dialled − connected, average = talk ÷ connected ("—" when 0 connected), connect %. "Leads called, by stage now" = that IST day's call_logs (same created_at window) → distinct contact → current stage via lead_stages; unknown leads show as "Not in your list", never dropped. Unit tests: `app/src/test/.../MyReportTest.kt` (junit added as testImplementation).
 - **Home** (`ui/MarketHome.kt`): GreetingCard replaced by DayStartCard — greeting, company, attendance state from the SAME `attendance` row (opens the existing selfie/GPS Attendance screen; no new write path), one primary Start calling (N) → Leads/Call now, 3 numbers: Follow-up = TodayFunnel.callNow, Converted = TodayFunnel.booked, Calls today vs the local daily goal. Quick Actions row → monochrome Quick access grid (adds Leads, Follow-ups, Calls, My report).

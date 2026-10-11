@@ -88,7 +88,29 @@ android {
         }
     }
 
+    // APK SIZE (Oct 2026): the published app-debug.apk was 168 MB, mostly
+    // Linphone native libs for 4 ABIs plus ~90 MB of unshrunk dex. Phones
+    // downloaded it slowly through the in-app updater.
+    //  - ABIs: every Android phone our reps use is ARM. x86/x86_64 are emulator-
+    //    only, so they're left out unless you build with -PincludeX86=true
+    //    (local emulator work). CI never passes it, so releases are ARM only.
+    //  - Dex: R8 SHRINKING only (no obfuscation, see proguard-rules.pro) on the
+    //    debug build that is published. Build type and the committed debug.keystore
+    //    are unchanged, so the signature is identical and updates still install
+    //    over existing installs.
+    val includeX86 = (project.findProperty("includeX86") as String?) == "true"
+
     buildTypes {
+        debug {
+            ndk {
+                abiFilters.clear()
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+                if (includeX86) abiFilters += listOf("x86", "x86_64")
+            }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -106,6 +128,23 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    packaging {
+        // Store the ARM .so files compressed in the APK (legacy packaging). The
+        // download shrinks by tens of MB; Android extracts them once at install.
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+    androidResources {
+        // Linphone ships 7 optional ringtones we never select (the app sets no
+        // ring file, so Linphone uses its defaults: notes_of_the_optimistic.mkv,
+        // ringback.wav, dont_wait_too_long.mkv hold music, silence.mkv). Those
+        // defaults and every other sound/grammar/cert stay. First part of this
+        // pattern is AAPT's default ignore list, kept as-is.
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~" +
+            ":!four_hands_together.mkv:!house_keeping.mkv:!its_a_game.mkv:!leaving_dreams.mkv" +
+            ":!soft_as_snow.mkv:!oldphone-mono.wav:!toy-mono.wav"
     }
     kotlinOptions {
         jvmTarget = "17"
