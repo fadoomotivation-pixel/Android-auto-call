@@ -1409,6 +1409,47 @@ object Repository {
         }
     }
 
+    /**
+     * One telecaller's day in raw counts — `rep_day_facts(uid, date)`.
+     *
+     * The SAME SQL function the 7pm review and rep_day_score() print from, so
+     * the phone's My report and the manager's numbers can never disagree.
+     * Invoker rights: the rep only ever sees their own day.
+     */
+    suspend fun repDayFacts(date: java.time.LocalDate): JsonObject? {
+        val uid = currentUserId() ?: return null
+        return client.postgrest.rpc(
+            "rep_day_facts",
+            buildJsonObject {
+                put("p_salesperson", JsonPrimitive(uid))
+                put("p_date", JsonPrimitive(date.toString()))
+            },
+        ).decodeAs<JsonObject>()
+    }
+
+    /**
+     * This rep's calls inside one IST day, by created_at — the exact window
+     * rep_day_facts() counts, so "leads called" lines up with "attempted".
+     */
+    suspend fun fetchCallsOnDay(date: java.time.LocalDate): List<CallLog> {
+        val uid = currentUserId() ?: return emptyList()
+        val ist = java.time.ZoneId.of("Asia/Kolkata")
+        val start = date.atStartOfDay(ist).toInstant().toString()
+        val end = date.plusDays(1).atStartOfDay(ist).toInstant().toString()
+        return readPages(pageSize = 400, ceiling = 2_000) { from, to ->
+            client.from("call_logs").select {
+                filter {
+                    eq("salesperson_id", uid)
+                    gte("created_at", start)
+                    lt("created_at", end)
+                }
+                order("created_at", Order.DESCENDING)
+                order("id", Order.DESCENDING)
+                range(from, to)
+            }.decodeList<CallLog>()
+        }
+    }
+
     /** Full call history for one lead — newest first — for the lead detail page. */
     suspend fun fetchCallsForContact(contactId: String, limit: Int = 50): List<CallLog> {
         return client.from("call_logs").select {

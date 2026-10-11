@@ -37,6 +37,13 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-11 — Grok Bot (market-ready pass: Login, Home day start, My report)
+- **My report** (`ui/MyReport.kt`, route `my_report`, drawer + Home quick access): date picker (prev/next/calendar, never future). Calls, connected, talk time and follow-ups come ONLY from the existing `rep_day_facts(uid, date)` RPC (same function the 7pm review / rep_day_score print) — no recount on the phone. Phone only derives not connected = dialled − connected, average = talk ÷ connected ("—" when 0 connected), connect %. "Leads called, by stage now" = that IST day's call_logs (same created_at window) → distinct contact → current stage via lead_stages; unknown leads show as "Not in your list", never dropped. Unit tests: `app/src/test/.../MyReportTest.kt` (junit added as testImplementation).
+- **Home** (`ui/MarketHome.kt`): GreetingCard replaced by DayStartCard — greeting, company, attendance state from the SAME `attendance` row (opens the existing selfie/GPS Attendance screen; no new write path), one primary Start calling (N) → Leads/Call now, 3 numbers: Follow-up = TodayFunnel.callNow, Converted = TodayFunnel.booked, Calls today vs the local daily goal. Quick Actions row → monochrome Quick access grid (adds Leads, Follow-ups, Calls, My report).
+- **Login**: same logic/validation; brand mark, labels above fields, leading icons, primary disabled until valid.
+- **Leads**: each sub-list has a one-line explanation (`SUB_EXPLAIN`). **Calls**: empty state uses the shared EmptyState.
+- Not added: attendance BREAK (table has no break column; needs schema + admin UI first), admin daily TARGET (none exists; the phone goal stays local). No Supabase changes.
+
 ## 2026-10-11 — Grok Bot (premium alignment pass + Coach switch + human coach v2)
 - Leads: Next call card ≤35% of screen (name+budget one line, one meta line, Why + Next step as 2 lines with More, one primary Call, WhatsApp / Start calling N / Skip text row, progress footnote).
 - ONE segmented level (Call now / Scheduled / Win back); sub-filters are wrapping chips with counts in the list header. Top bar icons monochrome 44dp. Single 16dp margin (IosLargeTitle got an `inset` param; Leads passes 0 because the list already has 16).

@@ -273,14 +273,17 @@ fun CallsScreen(vm: MainViewModel) {
 
         when {
             app.callsLoading -> Box(Modifier.fillMaxWidth().padding(32.dp)) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
-            rows.isEmpty() -> Text(
-                when (sub) {
+            rows.isEmpty() -> com.salesautocall.app.ui.design.EmptyState(
+                title = when (sub) {
                     2 -> "No missed calls"
-                    3 -> "No unanswered calls in this period."
-                    else -> "No calls in this period yet."
+                    3 -> "No unanswered calls"
+                    else -> "No calls yet"
                 },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(20.dp),
+                message = when (sub) {
+                    2 -> "Calls you could not take show up here."
+                    3 -> "Calls the customer did not pick up show up here."
+                    else -> "Calls from this period show up here a minute after they end."
+                },
             )
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 100.dp)) {
                 // Summary rides inside the list so it scrolls away like a native header.
