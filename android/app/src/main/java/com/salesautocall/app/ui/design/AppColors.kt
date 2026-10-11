@@ -58,9 +58,12 @@ object AppColors {
     val Slate = Color(0xFF475569)
     val SlateSoft = Color(0xFFF1F3F7)
 
-    // Live call / recording
-    val CallAccept = Color(0xFF15803D)
-    val Recording = Color(0xFFD03535)
+    // Live call / recording. systemGreen and systemRed, light-surface
+    // variants — same reasoning as AppColors.Call.Accept: a call control
+    // borrows its meaning from the phone's own dialer, so it borrows the
+    // phone's own colour. These were green-700 and a hand-mixed red.
+    val CallAccept = Color(0xFF34C759)
+    val Recording = Color(0xFFFF3B30)
 
     /**
      * THE ONE DARK SURFACE, AND WHY IT IS ALLOWED TO BE DARK.
@@ -86,12 +89,23 @@ object AppColors {
         val TextSecondary = Color(0xFF9BA1AC)
         val TextTertiary = Color(0xFF6B7280)
 
+        // THESE ARE THE PHONE'S GREENS AND REDS, NOT A FRAMEWORK'S.
+        //
+        // They were Tailwind — green-600, red-600, red-500. On the one screen
+        // a rep stares at with the handset against their face, the colours
+        // have to be the ones their own dialer uses, because that is the
+        // meaning they already carry: this green answers, this red hangs up.
+        // A slightly different red is a slightly different phone.
+        //
+        // systemGreen and systemRed, dark-surface variants, because this
+        // surface is dark by design (see the note above).
+
         /** Answer. The only green on the surface. */
-        val Accept = Color(0xFF17A34A)
+        val Accept = Color(0xFF30D158)
         /** End. The only red on the surface — nothing else may borrow it. */
-        val End = Color(0xFFDC2626)
+        val End = Color(0xFFFF453A)
         /** Live recording dot. */
-        val Recording = Color(0xFFEF4444)
+        val Recording = Color(0xFFFF453A)
     }
 
     /** Deterministic, low-saturation avatar tints. */

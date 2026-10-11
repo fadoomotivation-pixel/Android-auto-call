@@ -1702,7 +1702,7 @@ private fun WadaCard(call: CallLog, onDismiss: () -> Unit) {
             .padding(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("", fontSize = 20.sp)
+            Text("", fontSize = 22.sp)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text("COMMITMENT — caught by AI on the call", style = MaterialTheme.typography.labelLarge,
@@ -2581,7 +2581,7 @@ private fun VoiceNoteRow(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(38.dp).clip(CircleShape).background(if (playing) RedL else IndigoL).clickable { if (playing) onStop() else onPlay() }, contentAlignment = Alignment.Center) {
-                Text(if (playing) "⏸" else "▶", color = Color.White, fontSize = 16.sp)
+                Text(if (playing) "⏸" else "▶", color = Color.White, fontSize = 15.sp)
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {

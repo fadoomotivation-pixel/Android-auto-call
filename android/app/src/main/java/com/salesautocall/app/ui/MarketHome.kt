@@ -13,7 +13,6 @@ import androidx.compose.material.icons.filled.Visibility
 import com.salesautocall.app.ui.design.AccentHeader
 import com.salesautocall.app.ui.design.Brand
 import com.salesautocall.app.ui.design.GradientIconTile
-import com.salesautocall.app.ui.design.OutlinedPill
 import com.salesautocall.app.ui.design.TileTone
 import com.salesautocall.app.ui.design.Tiles
 import com.salesautocall.app.ui.design.gradientCard
@@ -216,9 +215,9 @@ internal fun DayStartCard(
     }
 }
 
-private val RingCalls = Color(0xFF007AFF)
+private val RingCalls = AppColors.Indigo
 private val RingConnected = Color(0xFF3A3A3C)
-private val RingVisits = Color(0xFF8E8E93)
+private val RingVisits = AppColors.TextSecondary
 
 /** Three concentric progress rings (Fitness-style). Fractions are clamped. */
 @Composable

@@ -149,21 +149,8 @@ fun HairLine(inset: Boolean = true) {
     )
 }
 
-/** White card with soft corners and a soft coloured shadow. */
-@Composable
-fun AppSurface(
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
-    padding: PaddingValues = PaddingValues(Space.m),
-    content: @Composable () -> Unit,
-) {
-    val base = modifier
-        .fillMaxWidth()
-        .softCard()
-    Box((if (onClick != null) base.iosPress(scaleTo = 0.985f) { onClick() } else base).padding(padding)) {
-        content()
-    }
-}
+// AppSurface was here — a third way to draw a card, beside IosGroup and the
+// softCard() modifier. Nothing called it. Deleted; IosGroup is the card.
 
 // ── Tags & badges ────────────────────────────────────────────────
 

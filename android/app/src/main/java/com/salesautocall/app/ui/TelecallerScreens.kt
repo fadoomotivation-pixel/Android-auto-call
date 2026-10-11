@@ -1234,36 +1234,8 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
 
         item { TodayFunnelCard(funnel, onOpenFollowUps) }
 
-        // Calling Score — front and centre. The AI listens to the rep's calls and
-        // gives an honest average score, so they see their calling quality first.
-        app.callingScore?.let { score ->
-            item {
-                val stars = Math.round(score).toInt().coerceIn(1, 5)
-                Column(
-                    Modifier.fillMaxWidth().clip(Radii.card)
-                        .background(AppColors.Surface)
-
-                        .padding(Space.m),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(44.dp).clip(CircleShape).background(AppColors.IndigoSoft), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Outlined.Star, contentDescription = null, tint = AppColors.Indigo, modifier = Modifier.size(20.dp))
-                        }
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Calling Score", style = AppType.rowTitle, color = AppColors.TextPrimary)
-                            Text("AI listened to your ${app.callingScoreCount} call${if (app.callingScoreCount == 1) "" else "s"}",
-                                style = AppType.meta, color = AppColors.TextSecondary)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(String.format(java.util.Locale.US, "%.1f", score),
-                                style = AppType.metric, color = AppColors.TextPrimary)
-                            Text("$stars of 5", style = AppType.meta, color = AppColors.TextSecondary)
-                        }
-                    }
-                }
-            }
-        }
+        // Calling Score used to sit here, above the work. It is now the last
+        // card on this screen. See the note where it lives.
 
         // THE COACH. Collapsed; opens on a tap, or by itself only when the
         // rep is idle (see CoachCard.kt). The visit list is the same one
@@ -1419,6 +1391,51 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // Team peek
         item { LeaderboardCard(vm, app, compact = true) }
 
+        // CALLING SCORE, AND WHY IT IS THE LAST THING ON THIS SCREEN.
+        //
+        // It used to be the first — the comment above it said "front and
+        // centre… so they see their calling quality first". That is exactly
+        // the problem. The first thing a telecaller saw when she opened the
+        // app in the morning was a mark out of five for how she had been
+        // doing her job, fifty times a day, before a single piece of work.
+        //
+        // A tool opens with the work. A score is a judgement of the person,
+        // and a judgement that greets you every time you pick up the phone
+        // teaches avoidance, not improvement — she learns that opening the
+        // app is where she gets told off. The score is honest and it is
+        // useful; it is simply not what "what do I do now" looks like.
+        //
+        // So it stays, unchanged, at the bottom: there when she scrolls at
+        // the end of the day and wants to know how it went, and not in the
+        // way when she wants to know who to ring.
+        app.callingScore?.let { score ->
+            item {
+                val stars = Math.round(score).toInt().coerceIn(1, 5)
+                Column(
+                    Modifier.fillMaxWidth().clip(Radii.card)
+                        .background(AppColors.Surface)
+                        .padding(Space.m),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(44.dp).clip(CircleShape).background(AppColors.IndigoSoft), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.Star, contentDescription = null, tint = AppColors.Indigo, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Calling Score", style = AppType.rowTitle, color = AppColors.TextPrimary)
+                            Text("AI listened to your ${app.callingScoreCount} call${if (app.callingScoreCount == 1) "" else "s"}",
+                                style = AppType.meta, color = AppColors.TextSecondary)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(String.format(java.util.Locale.US, "%.1f", score),
+                                style = AppType.metric, color = AppColors.TextPrimary)
+                            Text("$stars of 5", style = AppType.meta, color = AppColors.TextSecondary)
+                        }
+                    }
+                }
+            }
+        }
+
         app.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
     }
     }
@@ -1469,9 +1486,15 @@ private fun GreetingCard(app: AppState, firstName: String, onOpenAttendance: () 
                 }
                 Spacer(Modifier.height(10.dp))
             }
+            // The tagline under this line is gone, and is not coming back.
+            //
+            // "Real estate sales, simplified. Let's close some deals." is copy
+            // written for someone deciding whether to buy the product. The
+            // person reading it has already bought it and is opening the app
+            // for the fiftieth time today to find out who to ring. It cost a
+            // line of the most valuable space in the product and gave her
+            // nothing she could act on.
             Text("Good day, $firstName", style = AppType.display, color = AppColors.TextPrimary)
-            Text("Real estate sales, simplified. Let's close some deals.",
-                style = AppType.meta, color = AppColors.TextSecondary)
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val label = when { done -> "Shift done"; onShift -> "Punch out"; else -> "Check in" }
@@ -3375,7 +3398,7 @@ private fun LeadCard(
                     }
                     if (tempLabel.isNotEmpty()) {
                         Spacer(Modifier.width(6.dp))
-                        Text(tempLabel, fontSize = 10.sp, color = tempColor, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(tempLabel, fontSize = 12.sp, color = tempColor, fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                     // WHEN THIS LEAD ACTUALLY ARRIVED, to the minute.
                     //
@@ -3386,7 +3409,7 @@ private fun LeadCard(
                     // this was.
                     (c.createdAt ?: c.assignedAt)?.let {
                         Spacer(Modifier.width(6.dp))
-                        Text(arrivedLabel(it), fontSize = 10.sp, color = muted, maxLines = 1)
+                        Text(arrivedLabel(it), fontSize = 12.sp, color = muted, maxLines = 1)
                     }
                 }
                 // WHAT THIS CUSTOMER ACTUALLY SAID, on one line.
@@ -3426,7 +3449,7 @@ private fun LeadCard(
                             ) {
                                 Text(
                                     if (label == null) value else "$label · $value",
-                                    fontSize = 11.sp, color = muted, fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp, color = muted, fontWeight = FontWeight.Medium,
                                     maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 )
                             }
@@ -3518,7 +3541,7 @@ private fun LeadCard(
                 verticalAlignment = Alignment.Top,
             ) {
                 ACTIONS.firstOrNull { it.code == work?.actionState }?.let { a ->
-                    Text(a.label, fontSize = 11.sp, color = a.color,
+                    Text(a.label, fontSize = 12.sp, color = a.color,
                         fontWeight = FontWeight.SemiBold, maxLines = 1)
                     Spacer(Modifier.width(7.dp))
                 }
@@ -3566,7 +3589,7 @@ private fun LeadCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    Text(if (needsUpdate) "Update call" else "Update", fontSize = 13.sp,
+                    Text(if (needsUpdate) "Update call" else "Update", fontSize = 12.sp,
                         color = needsInk, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
                 Spacer(Modifier.width(7.dp))
@@ -3605,7 +3628,7 @@ private fun LeadCard(
                 ) {
                     Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Call", fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text("Call", fontSize = 15.sp, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
             }
         }
@@ -4249,7 +4272,7 @@ fun PostCallDispositionSheet(vm: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center,
                         ) {
-                            Text("", fontSize = 13.sp)
+                            Text("", fontSize = 12.sp)
                             Spacer(Modifier.width(8.dp))
                             Text("Record voice note", style = AppType.label, color = AppColors.Indigo, maxLines = 1)
                         }

@@ -85,7 +85,7 @@ fun SoftphoneScreen(vm: MainViewModel) {
             Spacer(Modifier.height(72.dp))
             CallAvatar(number)
             Spacer(Modifier.height(20.dp))
-            Text(number, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text(number, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             // Live timer once connected, otherwise the status line ("Ringing…").
             CallStatusLine(app.callConnectedAt, app.cloudCallStatus.ifBlank { "Connecting…" })
@@ -129,7 +129,7 @@ fun SoftphoneScreen(vm: MainViewModel) {
             Spacer(Modifier.height(28.dp))
             RoundCallButton(Icons.Default.CallEnd, AppColors.Call.End) { vm.endCloudCall() }
             Spacer(Modifier.height(8.dp))
-            Text("End call", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+            Text("End call", color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
             Spacer(Modifier.height(28.dp))
         }
     }
@@ -154,7 +154,7 @@ private fun CallerdeskCallCard(
         ) {
             CallAvatar(number)
             Spacer(Modifier.height(20.dp))
-            Text(number, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text(number, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
             // Once connected this becomes a live MM:SS timer; before that, the status line.
             CallStatusLine(connectedAt, status)
@@ -178,7 +178,7 @@ private fun CallerdeskCallCard(
             Spacer(Modifier.height(24.dp))
             RoundCallButton(Icons.Default.CallEnd, AppColors.Call.End) { onClose() }
             Spacer(Modifier.height(8.dp))
-            Text("Close", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+            Text("Close", color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
         }
     }
 }
@@ -204,7 +204,7 @@ fun CallAvatar(label: String) {
             .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(initial, color = Color.White, fontSize = 44.sp, fontWeight = FontWeight.SemiBold)
+        Text(initial, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -222,7 +222,7 @@ fun CallStatusLine(connectedAt: Long, fallback: String) {
         // Answer. A live timer is not a success state, it is information.
         Text("%02d:%02d".format(s / 60, s % 60), style = AppType.timer, color = AppColors.Call.TextPrimary)
     } else {
-        Text(fallback, color = Color.White.copy(alpha = 0.85f), fontSize = 16.sp)
+        Text(fallback, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp)
     }
 }
 
@@ -247,6 +247,6 @@ fun CallToggle(label: String, icon: ImageVector, active: Boolean, onClick: () ->
             contentAlignment = Alignment.Center,
         ) { Icon(icon, contentDescription = label, tint = fg, modifier = Modifier.size(26.dp)) }
         Spacer(Modifier.height(8.dp))
-        Text(label, color = Color.White, fontSize = 13.sp)
+        Text(label, color = Color.White, fontSize = 12.sp)
     }
 }

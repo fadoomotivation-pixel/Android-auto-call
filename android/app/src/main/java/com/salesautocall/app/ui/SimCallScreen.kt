@@ -146,7 +146,7 @@ fun SimCallScreen() {
                     .background(AppColors.Call.BgElevated),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(label.trim().take(1).uppercase().ifBlank { "#" }, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(label.trim().take(1).uppercase().ifBlank { "#" }, fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
             Spacer(Modifier.height(16.dp))
             Text(label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = CallText, textAlign = TextAlign.Center)
