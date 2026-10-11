@@ -32,6 +32,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PinDrop
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Settings
@@ -1076,7 +1078,21 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Greeting hero
-        item { GreetingCard(app, firstName, onOpenAttendance = { onNavigate("attendance") }) }
+        item {
+            DayStartCard(
+                firstName = firstName,
+                company = app.company?.name,
+                logoUrl = app.company?.logoUrl,
+                attendance = app.attendance,
+                accent = brandColorOf(app.company?.brandColor) ?: AppColors.Indigo,
+                followUpNow = funnel.callNow,
+                converted = if (funnel.ready) funnel.booked else null,
+                callsToday = app.todayCalls,
+                dailyGoal = app.dailyGoal,
+                onAttendance = { onNavigate("attendance") },
+                onStartCalling = onOpenLeads,
+            )
+        }
         // Morning greeting from the coach: first open of the day before 1 PM,
         // closed with one tap. See CoachMoments.kt.
         if (app.morningVisible) {
@@ -1358,19 +1374,20 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
             }
         }
 
-        // Quick actions
+        // Quick access — the places a rep goes, one monochrome grid.
         item {
-            Column {
-                SectionHeader("Quick Actions")
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    val accent = MaterialTheme.colorScheme.primary
-                    QuickAction("Add Lead", Icons.Default.PersonAdd, accent, Modifier.weight(1f)) { onNavigate("add_lead") }
-                    QuickAction("Calendar", Icons.Default.CalendarMonth, accent, Modifier.weight(1f)) { onNavigate("calendar") }
-                    QuickAction("AI Coach", Icons.Default.AutoAwesome, accent, Modifier.weight(1f)) { onNavigate("ai") }
-                    QuickAction("Attendance", Icons.Default.AccessTime, accent, Modifier.weight(1f)) { onNavigate("attendance") }
-                }
-            }
+            QuickAccessGrid(
+                buildList {
+                    add(QuickItem("Leads", Icons.Default.People) { onOpenLeads() })
+                    add(QuickItem("Follow-ups", Icons.Default.AccessTime) { onOpenFollowUps() })
+                    add(QuickItem("Calls", Icons.Default.Call) { onNavigate("calls") })
+                    add(QuickItem("My report", Icons.Default.BarChart) { onNavigate("my_report") })
+                    add(QuickItem("Add lead", Icons.Default.PersonAdd) { onNavigate("add_lead") })
+                    add(QuickItem("Calendar", Icons.Default.CalendarMonth) { onNavigate("calendar") })
+                    add(QuickItem("Attendance", Icons.Default.PinDrop) { onNavigate("attendance") })
+                    if (app.coachOn) add(QuickItem("AI Coach", Icons.Default.AutoAwesome) { onNavigate("ai") })
+                },
+            )
         }
 
         // AI insight
@@ -5433,6 +5450,18 @@ internal val LANE_SUBS: Map<String, List<Pair<String, String>>> = linkedMapOf(
     "revive" to listOf("no_next_step" to "No next step", "cold" to "Said no or cold"),
 )
 
+/** One line per list, so a rep never has to guess what a category holds. */
+internal val SUB_EXPLAIN: Map<String, String> = mapOf(
+    "call_now" to "Everyone to call now: callbacks that are due, and leads never called.",
+    "overdue" to "Their callback time has passed. Call these first.",
+    "new" to "Fresh leads nobody has spoken to yet.",
+    "due_today" to "Callbacks booked for later today.",
+    "scheduled" to "Callbacks booked for another day.",
+    "awaiting_visit" to "A site visit is fixed. Call to confirm.",
+    "no_next_step" to "Talked before, but no callback is booked.",
+    "cold" to "Said no, or no answer after many tries. Worth one more try.",
+)
+
 internal fun laneBucket(sub: String): String = when (sub) {
     "new" -> "new"
     "hot" -> "hot"
@@ -5503,6 +5532,11 @@ private fun LeadLanes(
                     }
                 }
             }
+        }
+        // The red "N overdue" line already says it on Overdue; never twice.
+        SUB_EXPLAIN[sub]?.takeIf { !(sub == "overdue" && !unknown && overdue > 0) }?.let { why ->
+            Spacer(Modifier.height(8.dp))
+            Text(why, style = AppType.footnote, color = AppColors.TextSecondary)
         }
         if (lane == "call" && !unknown && overdue > 0) {
             Spacer(Modifier.height(8.dp))

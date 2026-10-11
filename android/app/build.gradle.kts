@@ -155,4 +155,7 @@ dependencies {
     // Firebase Cloud Messaging — instant push for new hot leads.
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
     implementation("com.google.firebase:firebase-messaging")
+
+    // Plain JVM tests for pure calculations (My report numbers).
+    testImplementation("junit:junit:4.13.2")
 }

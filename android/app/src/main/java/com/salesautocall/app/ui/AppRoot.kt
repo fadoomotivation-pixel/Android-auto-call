@@ -2,6 +2,8 @@
 
 package com.salesautocall.app.ui
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -38,6 +40,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Call
@@ -371,147 +379,174 @@ private fun LoginScreen(vm: MainViewModel) {
     var formError by remember { mutableStateOf<String?>(null) }
     val isAdmin = role == "admin"
 
+    // Valid = the same checks the button used to run after a tap, so the
+    // primary simply stays grey until they all pass.
+    val valid = if (signUp) {
+        fullName.isNotBlank() && (if (isAdmin) companyName.isNotBlank() else companyCode.isNotBlank()) &&
+            email.trim().contains("@") && password.length >= 6
+    } else {
+        email.trim().contains("@") && password.isNotBlank()
+    }
+    val submit = {
+        val err = if (signUp) {
+            when {
+                fullName.isBlank() -> "Please enter your full name."
+                isAdmin && companyName.isBlank() -> "Enter a name for your company."
+                !isAdmin && companyCode.isBlank() -> "Enter the Company code from your admin."
+                !email.trim().contains("@") -> "Please enter a valid email address."
+                password.length < 6 -> "Password must be at least 6 characters."
+                else -> null
+            }
+        } else {
+            when {
+                !email.trim().contains("@") -> "Please enter a valid email address."
+                password.isBlank() -> "Please enter your password."
+                else -> null
+            }
+        }
+        formError = err
+        if (err == null) {
+            AppPrefs.setLastEmail(context, email.trim())
+            if (signUp) vm.signUp(email.trim(), password, fullName, phone, role, companyName, companyCode)
+            else vm.signIn(email.trim(), password)
+        }
+    }
+
     Column(
-        Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().background(AppColors.Canvas).verticalScroll(rememberScrollState())
+            .padding(horizontal = Space.l, vertical = Space.xxxl),
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("Call Pro AI", style = MaterialTheme.typography.headlineMedium)
-        Text(if (signUp) "Create your account" else "Sign in")
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(Space.xxl))
+        // Brand mark: the app icon shape, the name, one line of purpose.
+        Box(
+            Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(AppColors.Indigo)
+                .align(Alignment.CenterHorizontally),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+        }
+        Spacer(Modifier.height(Space.l))
+        Text("Call Pro AI", style = AppType.title2, color = AppColors.TextPrimary,
+            modifier = Modifier.align(Alignment.CenterHorizontally))
+        Text(
+            if (signUp) "Create your account" else "Sign in to start your day",
+            style = AppType.footnote, color = AppColors.TextSecondary,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
+        Spacer(Modifier.height(Space.xxxl))
 
         if (signUp) {
-            // Choose your role — admin creates a company, employee joins one.
-            Text("I want to…", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = isAdmin,
-                    onClick = { role = "admin"; formError = null },
-                    label = { Text("Create company") },
-                )
-                FilterChip(
-                    selected = !isAdmin,
-                    onClick = { role = "salesperson"; formError = null },
-                    label = { Text("Join company") },
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Card(Modifier.fillMaxWidth()) {
-                Text(
-                    if (isAdmin)
-                        "You'll create a new company and become its admin. After signing up you'll get an invite code to share with your team."
-                    else
-                        "Enter the Company code your admin shared with you to join their team. Don't have one? Ask your admin, or switch to “Create a company”.",
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-
-            OutlinedTextField(
-                fullName, { fullName = it }, label = { Text("Full name *") }, singleLine = true,
-                isError = formError != null && fullName.isBlank(),
-                modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.PersonFullName)) { fullName = it },
+            IosSegmented(
+                options = listOf("Join a company", "Create a company"),
+                selectedIndex = if (isAdmin) 1 else 0,
+                onSelect = { idx -> role = if (idx == 1) "admin" else "salesperson"; formError = null },
             )
-            Spacer(Modifier.height(8.dp))
+            Text(
+                if (isAdmin) "You become the admin and get an invite code for your team."
+                else "Use the 6-letter company code your admin gave you.",
+                style = AppType.footnote, color = AppColors.TextSecondary,
+                modifier = Modifier.padding(start = Space.l, end = Space.l, top = Space.s),
+            )
+            Spacer(Modifier.height(Space.xxl))
+            LoginField("Full name", fullName, { fullName = it }, Icons.Default.Person,
+                modifier = Modifier.autofill(listOf(AutofillType.PersonFullName)) { fullName = it })
+            Spacer(Modifier.height(Space.m))
             if (isAdmin) {
-                OutlinedTextField(
-                    companyName, { companyName = it }, label = { Text("Company name *") }, singleLine = true,
-                    isError = formError != null && companyName.isBlank(),
-                    supportingText = { Text("Your business / team name.") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
+                LoginField("Company name", companyName, { companyName = it }, Icons.Default.Business)
             } else {
-                OutlinedTextField(
-                    companyCode, { companyCode = it.uppercase() }, label = { Text("Company code *") },
-                    singleLine = true,
-                    isError = formError != null && companyCode.isBlank(),
-                    supportingText = { Text("The 6-character code from your team admin, e.g. EB5FC8.") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
+                LoginField("Company code", companyCode, { companyCode = it.uppercase() }, Icons.Default.Key,
+                    placeholder = "e.g. EB5FC8")
             }
-            OutlinedTextField(
-                phone, { phone = it }, label = { Text("Phone (optional)") }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.PhoneNumber)) { phone = it },
-            )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Space.m))
+            LoginField("Phone (optional)", phone, { phone = it }, Icons.Default.Phone,
+                keyboard = KeyboardType.Phone,
+                modifier = Modifier.autofill(listOf(AutofillType.PhoneNumber)) { phone = it })
+            Spacer(Modifier.height(Space.m))
         }
 
-        OutlinedTextField(
-            email, { email = it }, label = { Text("Email *") }, singleLine = true,
-            isError = formError != null && !email.trim().contains("@"),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.EmailAddress, AutofillType.Username)) { email = it },
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            password, { password = it }, label = { Text("Password *") }, singleLine = true,
-            isError = formError != null && password.length < 6,
-            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            supportingText = if (signUp) ({ Text("At least 6 characters.") }) else null,
-            trailingIcon = {
+        LoginField("Email", email, { email = it }, Icons.Default.Email,
+            keyboard = KeyboardType.Email, placeholder = "name@company.com",
+            modifier = Modifier.autofill(listOf(AutofillType.EmailAddress, AutofillType.Username)) { email = it })
+        Spacer(Modifier.height(Space.m))
+        LoginField("Password", password, { password = it }, Icons.Default.Lock,
+            keyboard = KeyboardType.Password,
+            placeholder = if (signUp) "At least 6 characters" else null,
+            hidden = !showPassword,
+            trailing = {
                 IconButton(onClick = { showPassword = !showPassword }) {
                     Icon(
                         if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                         contentDescription = if (showPassword) "Hide password" else "Show password",
+                        tint = AppColors.TextTertiary, modifier = Modifier.size(20.dp),
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth().autofill(listOf(AutofillType.Password)) { password = it },
-        )
-        Spacer(Modifier.height(16.dp))
+            modifier = Modifier.autofill(listOf(AutofillType.Password)) { password = it })
+        Spacer(Modifier.height(Space.xxl))
 
-        Button(
-            onClick = {
-                val err = if (signUp) {
-                    when {
-                        fullName.isBlank() -> "Please enter your full name."
-                        isAdmin && companyName.isBlank() -> "Enter a name for your company."
-                        !isAdmin && companyCode.isBlank() -> "Enter the Company code from your admin (shown above)."
-                        !email.trim().contains("@") -> "Please enter a valid email address."
-                        password.length < 6 -> "Password must be at least 6 characters."
-                        else -> null
-                    }
-                } else {
-                    when {
-                        !email.trim().contains("@") -> "Please enter a valid email address."
-                        password.isBlank() -> "Please enter your password."
-                        else -> null
-                    }
-                }
-                formError = err
-                if (err == null) {
-                    AppPrefs.setLastEmail(context, email.trim())
-                    if (signUp) vm.signUp(email.trim(), password, fullName, phone, role, companyName, companyCode)
-                    else vm.signIn(email.trim(), password)
-                }
+        PrimaryButton(
+            when {
+                state.loading -> "Please wait…"
+                signUp && isAdmin -> "Create company"
+                signUp -> "Create account"
+                else -> "Sign in"
             },
-            enabled = !state.loading,
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                when {
-                    state.loading -> "Please wait…"
-                    signUp && isAdmin -> "Create company"
-                    signUp -> "Create account"
-                    else -> "Sign in"
-                },
-            )
-        }
+            enabled = valid && !state.loading,
+        ) { submit() }
 
-        TextButton(
-            onClick = { signUp = !signUp; formError = null },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(if (signUp) "Already have an account? Sign in" else "New here? Create an account")
+        (formError ?: state.error)?.let {
+            Spacer(Modifier.height(Space.m))
+            Text(it, style = AppType.footnote, color = AppColors.Danger, modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
-        formError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Spacer(Modifier.height(Space.s))
+        GhostButton(
+            if (signUp) "Already have an account? Sign in" else "New here? Create an account",
+            modifier = Modifier.fillMaxWidth(),
+        ) { signUp = !signUp; formError = null }
+    }
+}
+
+/** A labelled iOS-style field: label above, leading icon, white fill, no outline. */
+@Composable
+private fun LoginField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    keyboard: KeyboardType = KeyboardType.Text,
+    placeholder: String? = null,
+    hidden: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(label, style = AppType.footnote, color = AppColors.TextSecondary,
+            modifier = Modifier.padding(start = Space.l, bottom = Space.xs))
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(Radii.control).background(AppColors.Surface)
+                .padding(start = Space.l, end = if (trailing != null) Space.xs else Space.l),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = AppColors.TextTertiary, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(Space.m))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (value.isEmpty() && placeholder != null) {
+                    Text(placeholder, style = AppType.body, color = AppColors.TextTertiary, maxLines = 1)
+                }
+                androidx.compose.foundation.text.BasicTextField(
+                    value = value, onValueChange = onChange, singleLine = true,
+                    textStyle = AppType.body.copy(color = AppColors.TextPrimary),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(AppColors.Indigo),
+                    visualTransformation = if (hidden) PasswordVisualTransformation() else VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(keyboardType = keyboard),
+                    modifier = modifier.fillMaxWidth().semantics { contentDescription = label },
+                )
+            }
+            trailing?.invoke()
+        }
     }
 }
 
@@ -819,6 +854,7 @@ private fun MainShell(vm: MainViewModel) {
                     }
                     composable("followups") { FollowUpsScreen(vm, onBack = { nav.popBackStack() }) }
                     composable("attendance") { AttendanceScreen(vm, onBack = { nav.popBackStack() }) }
+                    composable("my_report") { MyReportScreen(vm, onBack = { nav.popBackStack() }) }
                     composable("calendar") { CalendarScreen(vm, onBack = { nav.popBackStack() }) }
                     composable("ai") { AiAssistantScreen(vm, onBack = { nav.popBackStack() }) }
                     composable("calls") { CallsScreen(vm) }
@@ -1432,6 +1468,7 @@ private fun AppDrawer(
     val more = listOf(
         NavRow("Follow Ups", "Opens on Call now", Icons.Default.AccessTime, "followups"),
         NavRow("Attendance", "Selfie + GPS check-in", Icons.Default.PinDrop, "attendance"),
+        NavRow("My report", "Your calls and talk time, any day", Icons.Default.BarChart, "my_report"),
         NavRow("Calls & Recordings", "History and recordings", Icons.Default.Call, "calls"),
     )
 
@@ -1441,6 +1478,7 @@ private fun AppDrawer(
         "home" to IosColors.Blue, "leads" to IosColors.Green, "dialer" to IosColors.Teal,
         "ai" to IosColors.Indigo, "team" to IosColors.Orange,
         "followups" to IosColors.Red, "attendance" to IosColors.Purple, "calls" to IosColors.Green,
+        "my_report" to IosColors.Blue,
     )
 
     ModalDrawerSheet(
