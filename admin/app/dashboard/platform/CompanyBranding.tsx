@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import { setCompanyBrandingAction, type ActionResult } from "./actions";
 
 const init: ActionResult = { ok: false };
-const DEFAULT = "#2563EB";
+const DEFAULT = "var(--accent)";
 
 const btn: React.CSSProperties = {
-  padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border, #333)",
-  background: "transparent", color: "inherit", cursor: "pointer", fontSize: 13,
+  padding: "4px 10px", borderRadius: 8, border: "1px solid var(--border)",
+  background: "transparent", color: "inherit", cursor: "pointer", fontSize: "var(--text-footnote)",
 };
 
 function SaveButton() {
@@ -78,10 +78,10 @@ export default function CompanyBranding({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflow: "auto", background: "var(--panel, #16181d)", border: "1px solid var(--border, #333)", borderRadius: 16, padding: 22 }}
+            style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflow: "auto", background: "var(--panel, #16181d)", border: "1px solid var(--border)", borderRadius: 16, padding: 22 }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <strong style={{ fontSize: 16 }}>Brand · {name}</strong>
+              <strong style={{ fontSize: "var(--text-callout)" }}>Brand · {name}</strong>
               <button type="button" onClick={() => setOpen(false)} style={{ ...btn, border: "none" }}>✕</button>
             </div>
 
@@ -90,12 +90,12 @@ export default function CompanyBranding({
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 {logoPreview && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={logoPreview} alt="logo" style={{ width: 34, height: 34, borderRadius: 8, objectFit: "cover", background: "rgba(255,255,255,0.15)" }} />
+                  <img src={logoPreview} alt="logo" style={{ width: 34, height: 34, borderRadius: 8, objectFit: "cover", background: "var(--tint)" }} />
                 )}
-                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em" }}>{name.toUpperCase()}</div>
+                <div style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-bold)", letterSpacing: "0.08em" }}>{name.toUpperCase()}</div>
               </div>
-              <div style={{ marginTop: 10, fontSize: 18, fontWeight: 800 }}>Good day, Rahul 👋</div>
-              <div style={{ marginTop: 2, fontSize: 13, opacity: 0.9 }}>Real estate sales, simplified.</div>
+              <div style={{ marginTop: 10, fontSize: "var(--text-body)", fontWeight: "var(--weight-bold)" }}>Good day, Rahul 👋</div>
+              <div style={{ marginTop: 2, fontSize: "var(--text-footnote)", opacity: 0.9 }}>Real estate sales, simplified.</div>
             </div>
 
             <form action={action}>
@@ -117,15 +117,15 @@ export default function CompanyBranding({
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
                     spellCheck={false}
-                    style={{ width: 110, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border, #333)", background: "rgba(255,255,255,0.03)", color: "var(--text)", fontFamily: "monospace" }}
+                    style={{ width: 110, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", fontFamily: "monospace" }}
                   />
-                  <span className="subtitle" style={{ fontSize: 12 }}>Reps will see the app in this colour.</span>
+                  <span className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>Reps will see the app in this colour.</span>
                 </div>
               )}
 
               {/* Logo */}
               <div style={{ display: "grid", gap: 6, marginBottom: 18 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Logo</span>
+                <span style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Logo</span>
                 <input
                   type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml"
                   onChange={(e) => {
@@ -135,21 +135,21 @@ export default function CompanyBranding({
                   }}
                 />
                 {logoPreview && (
-                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--text-caption1)", color: "var(--muted)", cursor: "pointer" }}>
                     <input type="checkbox" checked={removeLogo} onChange={(e) => { setRemoveLogo(e.target.checked); if (e.target.checked) setLogoPreview(null); }} />
                     Remove logo
                   </label>
                 )}
-                <span className="subtitle" style={{ fontSize: 12 }}>PNG / JPG / SVG, under 2 MB. Square looks best.</span>
+                <span className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>PNG / JPG / SVG, under 2 MB. Square looks best.</span>
               </div>
 
               {/* App build + shareable APK link for this company. */}
-              <div style={{ display: "grid", gap: 6, marginBottom: 18, paddingTop: 14, borderTop: "1px solid var(--border, #333)" }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>App build (APK to give this company)</span>
+              <div style={{ display: "grid", gap: 6, marginBottom: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+                <span style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>App build (APK to give this company)</span>
                 <select
                   value={channel}
                   onChange={(e) => { const ch = e.target.value; setChannel(ch); setForce(!!policyForce[ch]); setCopied(false); }}
-                  style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid var(--border, #333)", background: "rgba(255,255,255,0.03)", color: "var(--text)" }}
+                  style={{ padding: "9px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)" }}
                 >
                   {CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
@@ -159,14 +159,14 @@ export default function CompanyBranding({
                 </label>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
                   <a href={apkUrlFor(channel)} target="_blank" rel="noreferrer"
-                    style={{ flex: 1, fontSize: 12.5, color: "#60a5fa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    style={{ flex: 1, fontSize: "var(--text-caption1)", color: "var(--accent)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {apkUrlFor(channel)}
                   </a>
                   <button type="button" style={btn} onClick={() => {
                     navigator.clipboard?.writeText(apkUrlFor(channel)); setCopied(true);
                   }}>{copied ? "Copied ✓" : "Copy link"}</button>
                 </div>
-                <span className="subtitle" style={{ fontSize: 12 }}>Ye link company ko bhejo — install karke app khud update hoti rahegi. (Pick the matching build; Save to remember it.)</span>
+                <span className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>Ye link company ko bhejo — install karke app khud update hoti rahegi. (Pick the matching build; Save to remember it.)</span>
               </div>
 
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>

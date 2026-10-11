@@ -58,7 +58,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
           : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 12 }}>
+                <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: "var(--text-caption1)" }}>
                   <th style={{ padding: "6px 4px" }}>Buyer</th>
                   <th style={{ padding: "6px 4px" }}>Project</th>
                   <th style={{ padding: "6px 4px" }}>Stage</th>
@@ -70,7 +70,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                 {rows.map((r) => (
                   <tr key={r.id} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={{ padding: "8px 4px" }}>{r.contacts?.name || r.contacts?.phone || "—"}</td>
-                    <td style={{ padding: "8px 4px", fontWeight: 600 }}>{r.project}</td>
+                    <td style={{ padding: "8px 4px", fontWeight: "var(--weight-semibold)" }}>{r.project}</td>
                     <td style={{ padding: "8px 4px" }}>{STAGE_LABEL[r.stage] ?? r.stage}</td>
                     <td style={{ padding: "8px 4px" }}>{r.budget || "—"}</td>
                     <td style={{ padding: "8px 4px", color: "var(--muted)" }}>{fmtDate(r.site_visit_at)}</td>

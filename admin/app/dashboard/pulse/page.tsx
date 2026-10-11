@@ -32,7 +32,7 @@ export default async function PulsePage({
         movements — short enough to forward to the owner as it is. Play any voice note to hear the rep
         in their own words.
       </p>
-      <p className="subtitle" style={{ marginTop: -8, fontSize: 12.5 }}>
+      <p className="subtitle" style={{ marginTop: -8, fontSize: "var(--text-caption1)" }}>
         A rep showing no activity may not be idle — <a href="/dashboard/health" style={{ color: "var(--accent)" }}>Phone Health</a> says
         whether their phone is even reporting.
       </p>

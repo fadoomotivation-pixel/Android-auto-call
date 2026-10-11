@@ -113,8 +113,8 @@ const HEALTH_LABEL: Record<Health, string> = {
   disconnected: "Disconnected",
 };
 const HEALTH_TONE: Record<Health, string> = {
-  connected: "#22c55e", stale: "#f59e0b", scan: "#f59e0b",
-  connecting: "#8696a0", disconnected: "#ef4444",
+  connected: "var(--good)", stale: "var(--warn)", scan: "var(--warn)",
+  connecting: "#8696a0", disconnected: "var(--bad)",
 };
 
 function ago(iso: string | null): string {
@@ -473,7 +473,7 @@ export function TelecallerWhatsApp({
           company at the top of the page to see another team&apos;s.</>
         )}
       </p>
-      <p className="subtitle" style={{ marginTop: 0, fontSize: 12 }}>
+      <p className="subtitle" style={{ marginTop: 0, fontSize: "var(--text-caption1)" }}>
         Only messages to and from <strong>your own leads</strong> are saved — and those are saved
         in full, so you can read the conversation on the lead. Anything else on the rep&apos;s
         phone — family, friends, personal chats — is dropped before it reaches the CRM.{" "}
@@ -512,7 +512,7 @@ export function TelecallerWhatsApp({
                 <tr key={s.salesperson_id}>
                   <td>
                     <strong>{repName.get(s.salesperson_id) ?? "Telecaller"}</strong>
-                    {s.wa_number && <div className="subtitle" style={{ fontSize: 12 }}>{s.wa_number}</div>}
+                    {s.wa_number && <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>{s.wa_number}</div>}
                   </td>
                   <td>
                     <span className="status-pill" style={{ color: HEALTH_TONE[health] }}>
@@ -525,7 +525,7 @@ export function TelecallerWhatsApp({
                         is about the connection; "last message" is about
                         traffic, and a linked rep having a quiet morning is
                         entitled to have nothing in the second one. */}
-                    <div className="subtitle" style={{ fontSize: 12 }}>
+                    <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
                       {health === "connecting"
                         ? "Coming back up after a restart — this clears by itself, do not re-scan"
                         : health === "scan"
@@ -553,7 +553,7 @@ export function TelecallerWhatsApp({
                       const sn = seenBy.get(s.salesperson_id);
                       if (!trusted || !sn || sn.unmatched === 0) return null;
                       return (
-                        <div style={{ fontSize: 12, marginTop: 4, color: sn.matched === 0 ? "#f59e0b" : undefined }}>
+                        <div style={{ fontSize: "var(--text-caption1)", marginTop: 4, color: sn.matched === 0 ? "var(--warn)" : undefined }}>
                           {sn.matched === 0
                             ? `${sn.unmatched} messages seen today — none with a lead of this company`
                             : `+${sn.unmatched} more with numbers not in the CRM`}
@@ -620,11 +620,11 @@ export function TelecallerWhatsApp({
 
       {qrFor && (
         <div style={{
-          marginTop: 16, padding: 16, borderRadius: 12, border: "1px solid #e5e7eb",
+          marginTop: 16, padding: 16, borderRadius: 12, border: "1px solid var(--border-strong)",
           textAlign: "center", maxWidth: 380,
         }}>
           <strong>{repName.get(qrFor) ?? "Telecaller"}</strong>
-          <p className="subtitle" style={{ fontSize: 12, marginTop: 4 }}>
+          <p className="subtitle" style={{ fontSize: "var(--text-caption1)", marginTop: 4 }}>
             On <strong>{repName.get(qrFor) ?? "the rep"}&apos;s own phone</strong>: WhatsApp →
             Settings → Linked devices → Link a device.
           </p>
@@ -632,7 +632,7 @@ export function TelecallerWhatsApp({
             /* eslint-disable-next-line @next/next/no-img-element */
             ? <img src={qr} alt="WhatsApp QR" width={280} height={280} style={{ maxWidth: "100%", height: "auto" }} />
             : <div className="empty">{qrNote ?? "…"}</div>}
-          {qr && qrNote && <div className="subtitle" style={{ fontSize: 12 }}>{qrNote}</div>}
+          {qr && qrNote && <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>{qrNote}</div>}
 
           {/* LINK WITH A PHONE NUMBER INSTEAD — WHATSAPP'S OWN SECOND OPTION.
               A QR has to survive a screenshot, a forward, and a rep holding one
@@ -645,25 +645,25 @@ export function TelecallerWhatsApp({
           }}>
             {pairCode ? (
               <>
-                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+                <div style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", marginBottom: 6 }}>
                   On {repName.get(qrFor) ?? "the rep"}&apos;s phone: WhatsApp → Linked devices →
                   Link a device → <strong>Link with phone number instead</strong>, then type:
                 </div>
                 <div style={{
-                  fontFamily: "monospace", fontSize: 26, fontWeight: 700, letterSpacing: 4,
-                  textAlign: "center", padding: "10px 6px", borderRadius: 10,
+                  fontFamily: "monospace", fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", letterSpacing: 4,
+                  textAlign: "center", padding: "10px 6px", borderRadius: 12,
                   background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.35)",
-                  color: "#22c55e",
+                  color: "var(--good)",
                 }}>
                   {pairCode}
                 </div>
-                <div className="subtitle" style={{ fontSize: 11.5, marginTop: 6 }}>
+                <div className="subtitle" style={{ fontSize: "var(--text-caption2)", marginTop: 6 }}>
                   Valid for a few minutes. You can read it out over the phone — no screenshot needed.
                 </div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+                <div style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", marginBottom: 6 }}>
                   Camera not working? Link with a phone number instead.
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -674,8 +674,8 @@ export function TelecallerWhatsApp({
                     inputMode="numeric"
                     style={{
                       flex: 1, minWidth: 150, padding: "8px 10px", borderRadius: 8,
-                      border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)",
-                      color: "var(--text)", fontSize: 13,
+                      border: "1px solid var(--border)", background: "var(--tint)",
+                      color: "var(--text)", fontSize: "var(--text-footnote)",
                     }}
                   />
                   <button className="btn" disabled={pairBusy}
@@ -683,7 +683,7 @@ export function TelecallerWhatsApp({
                     {pairBusy ? "Asking…" : "Get code"}
                   </button>
                 </div>
-                <div className="subtitle" style={{ fontSize: 11.5, marginTop: 6 }}>
+                <div className="subtitle" style={{ fontSize: "var(--text-caption2)", marginTop: 6 }}>
                   The rep&apos;s own WhatsApp number, with country code. WhatsApp sends the code to
                   that account, so a wrong number simply never receives one.
                 </div>
@@ -698,13 +698,13 @@ export function TelecallerWhatsApp({
               never emits a QR at all. */}
           {qrStuck && !qr && (
             <div style={{
-              marginTop: 10, padding: 10, borderRadius: 10, textAlign: "left",
+              marginTop: 10, padding: 10, borderRadius: 12, textAlign: "left",
               background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.28)",
             }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#f59e0b" }}>
+              <div style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", color: "var(--warn)" }}>
                 {workerDown ? "The WhatsApp worker is not answering." : "Still no QR."}
               </div>
-              <div style={{ fontSize: 12.5, marginTop: 4 }}>
+              <div style={{ fontSize: "var(--text-caption1)", marginTop: 4 }}>
                 {workerDown
                   ? "Nothing on this card can work until the service is running again. " +
                     "Restart it on the host, then press Ask again."
@@ -715,7 +715,7 @@ export function TelecallerWhatsApp({
                   now a fix has been shipped, deployed, and then debugged from
                   scratch because nobody could tell whether the box was running
                   the new build or the old one. */}
-              <div style={{ fontSize: 11.5, marginTop: 6, opacity: 0.75 }}>
+              <div style={{ fontSize: "var(--text-caption2)", marginTop: 6, opacity: 0.75 }}>
                 Worker build: {workerBuild ?? "not reported — this is an older build"}
                 {waVersion && <><br />WhatsApp version claimed: {waVersion}</>}
               </div>
@@ -744,7 +744,7 @@ export function TelecallerWhatsApp({
               ))}
             </select>
           </label>
-          <p className="subtitle" style={{ fontSize: 12, marginTop: 0 }}>
+          <p className="subtitle" style={{ fontSize: "var(--text-caption1)", marginTop: 0 }}>
             That is the only thing to fill in — the company is already set{companyName ? ` to ${companyName.trim()}` : ""}.
             The QR opens by itself once you save. Have the rep scan it from{" "}
             <strong>their own phone</strong>: WhatsApp → Settings → Linked devices → Link a device.

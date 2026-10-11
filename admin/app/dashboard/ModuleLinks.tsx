@@ -30,9 +30,9 @@ export function ModuleLinks({
 
   return (
     <section style={{
-      marginTop: 34, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.08)",
+      marginTop: 34, paddingTop: 16, borderTop: "1px solid var(--border)",
     }}>
-      <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
+      <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginBottom: 12 }}>
         <strong style={{ color: "var(--fg, #fff)" }}>{me.icon} {me.label}</strong> owns one
         question: {me.owns}
       </div>
@@ -56,19 +56,19 @@ function Group({
   return (
     <div>
       <div style={{
-        fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em",
+        fontSize: "var(--text-caption2)", textTransform: "uppercase", letterSpacing: ".06em",
         color: "var(--muted)", marginBottom: 7,
       }}>{title}</div>
       {items.map((m) => (
         <Link key={m.id} href={withScope(m.href, scope)}
           style={{
             display: "block", textDecoration: "none", padding: "7px 0",
-            borderTop: "1px solid rgba(255,255,255,0.05)",
+            borderTop: "1px solid var(--border)",
           }}>
-          <span style={{ fontSize: 13.5, fontWeight: 600 }}>
+          <span style={{ fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)" }}>
             {arrow} {m.icon} {m.label}
           </span>
-          <span style={{ display: "block", fontSize: 12, color: "var(--muted)", marginTop: 1 }}>
+          <span style={{ display: "block", fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 1 }}>
             {m.owns}
           </span>
         </Link>

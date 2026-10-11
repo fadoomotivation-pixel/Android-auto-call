@@ -75,8 +75,8 @@ export function AssignCompany({
           </option>
         ))}
       </select>
-      {busy && <span className="subtitle" style={{ fontSize: 12 }}>Moving…</span>}
-      {err && <span className="error" style={{ fontSize: 12 }}>{err}</span>}
+      {busy && <span className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>Moving…</span>}
+      {err && <span className="error" style={{ fontSize: "var(--text-caption1)" }}>{err}</span>}
     </div>
   );
 }

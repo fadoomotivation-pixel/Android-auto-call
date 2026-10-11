@@ -14,10 +14,10 @@ type Answer = {
 };
 
 const CONF: Record<string, { label: string; color: string; bg: string }> = {
-  high:   { label: "High confidence",   color: "#10b981", bg: "rgba(16,185,129,0.12)" },
-  medium: { label: "Medium confidence", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
-  low:    { label: "Low confidence",    color: "#f97316", bg: "rgba(249,115,22,0.12)" },
-  none:   { label: "Not in knowledge",  color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
+  high:   { label: "High confidence",   color: "var(--good)", bg: "rgba(16,185,129,0.12)" },
+  medium: { label: "Medium confidence", color: "var(--warn)", bg: "rgba(245,158,11,0.12)" },
+  low:    { label: "Low confidence",    color: "var(--warn)", bg: "rgba(249,115,22,0.12)" },
+  none:   { label: "Not in knowledge",  color: "var(--muted)", bg: "rgba(148,163,184,0.12)" },
 };
 
 /**
@@ -50,10 +50,10 @@ export function AskConsole() {
   const conf = res ? CONF[res.confidence] : null;
 
   return (
-    <div className="card" style={{ marginTop: 4, marginBottom: 20, background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", borderRadius: 16, padding: 20 }}>
+    <div className="card" style={{ marginTop: 4, marginBottom: 20, background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 16, padding: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <strong style={{ fontSize: 16, color: "#fff" }}>💬 Ask your company&apos;s AI</strong>
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase", color: "#c4b5fd", background: "rgba(139,92,246,0.14)", border: "1px solid rgba(139,92,246,0.3)", padding: "2px 8px", borderRadius: 999 }}>
+        <strong style={{ fontSize: "var(--text-callout)", color: "var(--text)" }}>💬 Ask your company&apos;s AI</strong>
+        <span style={{ fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", letterSpacing: "0.03em", textTransform: "uppercase", color: "var(--purple)", background: "rgba(139,92,246,0.14)", border: "1px solid rgba(139,92,246,0.3)", padding: "2px 8px", borderRadius: 999 }}>
           ✦ Claude Fable 5
         </span>
       </div>
@@ -67,7 +67,7 @@ export function AskConsole() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") void ask(); }}
           placeholder="e.g. What's the 2BHK price in Sector 150? What's our loan tie-up?"
-          style={{ flex: 1, minWidth: 240, padding: "11px 14px", borderRadius: 10, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none" }}
+          style={{ flex: 1, minWidth: 240, padding: "11px 14px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", outline: "none" }}
         />
         <button className="primary" style={{ width: "auto", padding: "11px 22px" }} disabled={busy || !q.trim()} onClick={ask}>
           {busy ? "Thinking…" : "Ask"}
@@ -79,16 +79,16 @@ export function AskConsole() {
       {res && conf && (
         <div style={{ marginTop: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 999, background: conf.bg, color: conf.color, fontWeight: 700, fontSize: 12 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 999, background: conf.bg, color: conf.color, fontWeight: "var(--weight-bold)", fontSize: "var(--text-caption1)" }}>
               ● {conf.label}
             </div>
             {res.engine && res.confidence !== "none" && (
-              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
+              <span style={{ fontSize: "var(--text-caption2)", color: "var(--muted)" }}>
                 answered by {res.engine === "fable" ? "Claude Fable 5 ✦" : "Llama 3.3 (fallback)"}
               </span>
             )}
           </div>
-          <div style={{ marginTop: 10, fontSize: 15, lineHeight: 1.6, color: "rgba(255,255,255,0.9)", whiteSpace: "pre-wrap" }}>
+          <div style={{ marginTop: 10, fontSize: "var(--text-subheadline)", lineHeight: 1.6, color: "rgba(255,255,255,0.9)", whiteSpace: "pre-wrap" }}>
             {res.answer}
           </div>
 
@@ -96,12 +96,12 @@ export function AskConsole() {
             <div style={{ marginTop: 12 }}>
               <button
                 onClick={() => setShowReasoning((v) => !v)}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.08)", color: "#c4b5fd", fontSize: 12, fontWeight: 600, cursor: "pointer", width: "auto" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.08)", color: "var(--purple)", fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", cursor: "pointer", width: "auto" }}
               >
                 🧠 {showReasoning ? "Hide" : "See"} how Fable reasoned
               </button>
               {showReasoning && (
-                <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: 10, background: "rgba(139,92,246,0.05)", border: "1px solid rgba(139,92,246,0.18)", fontSize: 13, lineHeight: 1.55, color: "rgba(255,255,255,0.75)", whiteSpace: "pre-wrap" }}>
+                <div style={{ marginTop: 8, padding: "12px 14px", borderRadius: 12, background: "rgba(139,92,246,0.05)", border: "1px solid rgba(139,92,246,0.18)", fontSize: "var(--text-footnote)", lineHeight: 1.55, color: "rgba(255,255,255,0.75)", whiteSpace: "pre-wrap" }}>
                   {res.reasoning}
                 </div>
               )}
@@ -110,21 +110,21 @@ export function AskConsole() {
 
           {res.sources.length > 0 && (
             <div style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)", marginBottom: 8 }}>
+              <div style={{ fontSize: "var(--text-caption1)", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)", marginBottom: 8 }}>
                 Facts it used — with match score
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {res.sources.map((s, i) => (
-                  <div key={i} style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)" }}>
+                  <div key={i} style={{ padding: "10px 12px", borderRadius: 12, background: "var(--tint)", border: "1px solid var(--border)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 11, textTransform: "uppercase", color: "#a5b4fc", background: "rgba(99,102,241,0.12)", padding: "2px 8px", borderRadius: 999 }}>{s.kind}</span>
-                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title || "Untitled"}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: s.similarity >= 60 ? "#10b981" : s.similarity >= 42 ? "#f59e0b" : "#f97316" }}>{s.similarity}%</span>
+                      <span style={{ fontSize: "var(--text-caption2)", textTransform: "uppercase", color: "var(--accent)", background: "rgba(99,102,241,0.12)", padding: "2px 8px", borderRadius: 999 }}>{s.kind}</span>
+                      <span style={{ flex: 1, fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title || "Untitled"}</span>
+                      <span style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-bold)", color: s.similarity >= 60 ? "var(--good)" : s.similarity >= 42 ? "var(--warn)" : "var(--warn)" }}>{s.similarity}%</span>
                     </div>
-                    <div style={{ height: 5, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden", marginBottom: 6 }}>
-                      <div style={{ height: "100%", width: `${s.similarity}%`, background: s.similarity >= 60 ? "#10b981" : s.similarity >= 42 ? "#f59e0b" : "#f97316" }} />
+                    <div style={{ height: 5, borderRadius: 999, background: "var(--tint)", overflow: "hidden", marginBottom: 6 }}>
+                      <div style={{ height: "100%", width: `${s.similarity}%`, background: s.similarity >= 60 ? "var(--good)" : s.similarity >= 42 ? "var(--warn)" : "var(--warn)" }} />
                     </div>
-                    <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.4 }}>{s.snippet}…</div>
+                    <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", lineHeight: 1.4 }}>{s.snippet}…</div>
                   </div>
                 ))}
               </div>
@@ -132,7 +132,7 @@ export function AskConsole() {
           )}
 
           {res.confidence === "none" && (
-            <div style={{ marginTop: 10, fontSize: 13, color: "var(--muted)" }}>
+            <div style={{ marginTop: 10, fontSize: "var(--text-footnote)", color: "var(--muted)" }}>
               Tip: teach it under <strong>AI Coach → AI Knowledge base</strong>, then ask again.
             </div>
           )}

@@ -268,9 +268,9 @@ export default async function RecordingsPage({
               href={linkWith({ rep: id })}
               className="card rep-card"
             >
-              <div style={{ fontWeight: 600 }}>{r.name}</div>
-              {isSuper && r.company && <div style={{ fontSize: 12, opacity: 0.6 }}>{r.company}</div>}
-              <div style={{ fontSize: 13, marginTop: 4 }}>
+              <div style={{ fontWeight: "var(--weight-semibold)" }}>{r.name}</div>
+              {isSuper && r.company && <div style={{ fontSize: "var(--text-caption1)", opacity: 0.6 }}>{r.company}</div>}
+              <div style={{ fontSize: "var(--text-footnote)", marginTop: 4 }}>
                 <strong>{r.recs}</strong> rec · <strong>{fmtLong(r.secs)}</strong> talk
               </div>
             </a>
@@ -325,14 +325,14 @@ export default async function RecordingsPage({
                     {isSuper && c.off_crm ? (
                       <span
                         title="Not a CRM lead — captured by record-all-calls monitoring"
-                        style={{ color: "var(--danger, #C0452C)", fontWeight: 600 }}
+                        style={{ color: "var(--bad)", fontWeight: "var(--weight-semibold)" }}
                       >
                         ⚠ Off-CRM number
                       </span>
                     ) : (
                       <strong>{leadName(c) || "Unknown"}</strong>
                     )}
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>{c.phone}</div>
+                    <div style={{ fontSize: "var(--text-caption1)", opacity: 0.7 }}>{c.phone}</div>
                   </td>
                   <td title={c.direction === "incoming" ? "Lead called the telecaller" : "Telecaller dialled the lead"}>
                     {c.direction === "incoming" ? "↙ In" : "↗ Out"}
@@ -422,11 +422,11 @@ export default async function RecordingsPage({
                     <td>{nameById.get(c.salesperson_id) || "—"}</td>
                     <td>
                       {isSuper && c.off_crm ? (
-                        <span style={{ color: "var(--bad)", fontWeight: 600 }}>Off-CRM number</span>
+                        <span style={{ color: "var(--bad)", fontWeight: "var(--weight-semibold)" }}>Off-CRM number</span>
                       ) : (
                         <strong>{leadName(c) || "Unknown"}</strong>
                       )}
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>{c.phone}</div>
+                      <div style={{ fontSize: "var(--text-caption1)", opacity: 0.7 }}>{c.phone}</div>
                     </td>
                     <td>{c.direction === "incoming" ? "↙ In" : "↗ Out"}</td>
                     <td className="num">{fmt(c.recording_seconds)}</td>
@@ -435,7 +435,7 @@ export default async function RecordingsPage({
                         <span className="status-dot" />
                         {failureLabel(c.recording_error)}
                       </span>
-                      <div style={{ fontSize: 12.5, marginTop: 6, maxWidth: 360, lineHeight: 1.45 }}>
+                      <div style={{ fontSize: "var(--text-caption1)", marginTop: 6, maxWidth: 360, lineHeight: 1.45 }}>
                         {c.recording_error?.trim() || "No reason was stored. The recording still did not arrive."}
                       </div>
                     </td>

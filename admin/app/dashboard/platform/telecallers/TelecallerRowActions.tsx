@@ -7,8 +7,8 @@ import { deleteTelecallerAction, resetTelecallerPasswordAction, type ActionResul
 const init: ActionResult = { ok: false };
 
 const btn: React.CSSProperties = {
-  padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border, #333)",
-  background: "transparent", color: "inherit", cursor: "pointer", fontSize: 13,
+  padding: "4px 10px", borderRadius: 8, border: "1px solid var(--border)",
+  background: "transparent", color: "inherit", cursor: "pointer", fontSize: "var(--text-footnote)",
 };
 
 /** Super-admin per-telecaller actions: reset password or delete the account. */
@@ -47,7 +47,7 @@ export default function TelecallerRowActions({ userId, name }: { userId: string;
         }}
       >
         <input type="hidden" name="user_id" value={userId} />
-        <button type="submit" style={{ ...btn, color: "#ef4444", borderColor: "#ef4444" }}>Delete</button>
+        <button type="submit" style={{ ...btn, color: "var(--bad)", borderColor: "var(--bad)" }}>Delete</button>
       </form>
     </div>
   );

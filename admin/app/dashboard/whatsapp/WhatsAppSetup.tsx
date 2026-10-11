@@ -17,11 +17,11 @@ type Member = { id: string; full_name: string | null };
 
 const input: React.CSSProperties = {
   padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)",
-  background: "rgba(255,255,255,0.02)", color: "var(--text)", width: "100%",
+  background: "var(--tint)", color: "var(--text)", width: "100%",
   outline: "none", backdropFilter: "blur(12px)", transition: "all 0.2s"
 };
 const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
-const lbl: React.CSSProperties = { fontSize: 13, color: "var(--muted)", fontWeight: 500, letterSpacing: "0.2px" };
+const lbl: React.CSSProperties = { fontSize: "var(--text-footnote)", color: "var(--muted)", fontWeight: "var(--weight-medium)", letterSpacing: "0.2px" };
 
 export function WhatsAppSetup({
   companyId, integration, webhookUrl, members,
@@ -70,18 +70,18 @@ export function WhatsAppSetup({
   }
 
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 20, background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}>
-      <strong style={{ fontSize: 16, letterSpacing: "0.5px", background: "linear-gradient(90deg, #25D366, #128C7E)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Connect your WhatsApp number (Meta Cloud API)</strong>
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 20, background: "var(--tint)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", padding: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}>
+      <strong style={{ fontSize: "var(--text-callout)", letterSpacing: "0.5px", background: "linear-gradient(90deg, #25D366, #128C7E)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Connect your WhatsApp number (Meta Cloud API)</strong>
 
       {/* The two walls every owner hits at Meta's end, before any of the fields
           below matter. Both look like our bug and neither is; saying so here is
           the difference between a 5-minute setup and a stuck afternoon. */}
       <details style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 12, padding: "12px 14px" }}>
-        <summary style={{ cursor: "pointer", fontWeight: 600, color: "#f59e0b", fontSize: 14 }}>
+        <summary style={{ cursor: "pointer", fontWeight: "var(--weight-semibold)", color: "var(--warn)", fontSize: "var(--text-subheadline)" }}>
           ⚠️ Getting an error from Meta while adding a number? Read this first.
         </summary>
 
-        <div style={{ marginTop: 12, fontSize: 13.5, lineHeight: 1.65, color: "var(--text)" }}>
+        <div style={{ marginTop: 12, fontSize: "var(--text-footnote)", lineHeight: 1.65, color: "var(--text)" }}>
           <strong>1. &quot;This phone number is already registered to a WhatsApp account&quot;</strong>
           <p style={{ margin: "4px 0 8px", color: "var(--muted)" }}>
             This is not a CRM error. It is a Meta rule. One number can live in one place only:
@@ -142,16 +142,16 @@ export function WhatsAppSetup({
       </label>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
-        <button className="primary" onClick={save} disabled={saving} style={{ background: "linear-gradient(135deg, #25D366, #128C7E)", border: "none", boxShadow: "0 4px 16px rgba(37, 211, 102, 0.3)", padding: "10px 20px", fontWeight: 600 }}>
+        <button className="primary" onClick={save} disabled={saving} style={{ background: "linear-gradient(135deg, #25D366, #128C7E)", border: "none", boxShadow: "0 4px 16px rgba(37, 211, 102, 0.3)", padding: "10px 20px", fontWeight: "var(--weight-semibold)" }}>
           {saving ? "Saving…" : "Save WhatsApp settings"}
         </button>
-        {saved && <span style={{ color: "var(--ok, #16a34a)", fontSize: 13 }}>Saved ✓</span>}
-        {err && <span className="error" style={{ fontSize: 13 }}>{err}</span>}
+        {saved && <span style={{ color: "var(--ok, var(--good))", fontSize: "var(--text-footnote)" }}>Saved ✓</span>}
+        {err && <span className="error" style={{ fontSize: "var(--text-footnote)" }}>{err}</span>}
       </div>
 
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 16, fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
+      <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16, fontSize: "var(--text-footnote)", color: "var(--muted)", marginTop: 8 }}>
         <strong style={{ color: "var(--text)", letterSpacing: "0.3px" }}>In Meta → WhatsApp → Configuration, set the webhook:</strong>
-        <div style={{ marginTop: 8, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.05)" }}>
+        <div style={{ marginTop: 8, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 8, border: "1px solid var(--border)" }}>
           <div>Callback URL:&nbsp;
             <code style={{ color: "var(--accent)" }}>{webhookUrl}</code></div>
           <div style={{ marginTop: 6 }}>Verify token: paste the <em>same</em> verify token shown above.</div>

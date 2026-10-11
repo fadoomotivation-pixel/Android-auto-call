@@ -18,7 +18,7 @@ export function RecordingToggle({ companyId, enabled }: { companyId: string; ena
 
   return (
     <div style={{ margin: "8px 0 16px", display: "flex", alignItems: "center", gap: 10 }}>
-      <span style={{ fontWeight: 600 }}>Call recording:</span>
+      <span style={{ fontWeight: "var(--weight-semibold)" }}>Call recording:</span>
       <span className={`badge ${enabled ? "connected" : ""}`}>{enabled ? "On" : "Off"}</span>
       <button className="link" onClick={toggle} disabled={busy}>
         {busy ? "…" : enabled ? "Turn off" : "Turn on"}

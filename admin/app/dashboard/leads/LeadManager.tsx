@@ -696,7 +696,7 @@ export function LeadManager({
           ))}
         </div>
         {actionFilter && (
-          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
+          <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 6 }}>
             {ACTION_STATES.find((a) => a.code === actionFilter)?.hint}
           </div>
         )}
@@ -746,7 +746,7 @@ export function LeadManager({
 
       {/* Assign bar */}
       <div className="card toolbar">
-        <span style={{ fontWeight: 600 }}>Assign to:</span>
+        <span style={{ fontWeight: "var(--weight-semibold)" }}>Assign to:</span>
         <select
           value={assignTo}
           onChange={(e) => setAssignTo(e.target.value)}
@@ -773,7 +773,7 @@ export function LeadManager({
             destructive reading of an ambiguous click should never be the
             silent one. */}
         <label style={{
-          display: "flex", alignItems: "center", gap: 7, fontSize: 13,
+          display: "flex", alignItems: "center", gap: 7, fontSize: "var(--text-footnote)",
           padding: "6px 10px", borderRadius: 8, cursor: "pointer",
           background: asNew ? "rgba(245,158,11,0.12)" : "transparent",
           border: `1px solid ${asNew ? "rgba(245,158,11,0.4)" : "var(--border)"}`,
@@ -811,7 +811,7 @@ export function LeadManager({
       </div>
 
       {/* Quick select */}
-      <div className="toolbar" style={{ fontSize: 13 }}>
+      <div className="toolbar" style={{ fontSize: "var(--text-footnote)" }}>
         <span style={{ color: "var(--muted)" }}>Quick select:</span>
         {[10, 25, 50].map((n) => (
           <button key={n} className="link" onClick={() => quickSelect(n)} disabled={leads.length === 0}>{n}</button>

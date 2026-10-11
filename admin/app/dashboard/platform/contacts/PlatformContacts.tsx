@@ -204,13 +204,13 @@ export function PlatformContacts({
     <>
       {err && <div className="error" style={{ marginBottom: 12 }}>{err}</div>}
       {msg && (
-        <div style={{ color: "var(--good)", fontSize: 13, marginBottom: 12 }}>{msg}</div>
+        <div style={{ color: "var(--good)", fontSize: "var(--text-footnote)", marginBottom: 12 }}>{msg}</div>
       )}
 
       {/* ---- Reassign selected ---- */}
       <div style={barStyle}>
         <div>
-          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
+          <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginBottom: 6 }}>
             Reassign {selected.size} selected lead(s)
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
@@ -251,7 +251,7 @@ export function PlatformContacts({
             </button>
             <button
               className="primary"
-              style={{ background: "#ef4444", borderColor: "#ef4444" }}
+              style={{ background: "var(--bad)", borderColor: "var(--bad)" }}
               onClick={deleteSelected}
               disabled={busy || selected.size === 0}
             >
@@ -263,7 +263,7 @@ export function PlatformContacts({
 
       {/* ---- Add new leads ---- */}
       <details style={{ ...barStyle, display: "block" }}>
-        <summary style={{ cursor: "pointer", fontWeight: 600 }}>Add new leads</summary>
+        <summary style={{ cursor: "pointer", fontWeight: "var(--weight-semibold)" }}>Add new leads</summary>
         <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
           <select
             style={selectStyle}
@@ -297,7 +297,7 @@ export function PlatformContacts({
 
         {/* single */}
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>Single lead</div>
+          <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginBottom: 6 }}>Single lead</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <input
               style={selectStyle}
@@ -335,7 +335,7 @@ export function PlatformContacts({
 
         {/* bulk */}
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>
+          <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginBottom: 6 }}>
             Bulk paste / CSV — one per line: <code>phone, name, email, company, notes</code>
           </div>
           <textarea

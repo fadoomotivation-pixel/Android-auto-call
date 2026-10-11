@@ -241,7 +241,7 @@ export function CallsBoard({
             display: "inline-flex",
             alignItems: "center",
             gap: 6,
-            fontSize: 12,
+            fontSize: "var(--text-caption1)",
             marginLeft: "auto",
             color: live ? "var(--good)" : "var(--muted)",
           }}
@@ -287,7 +287,7 @@ export function CallsBoard({
           style={{
             display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
             border: "1px solid rgba(245,158,11,0.35)", background: "rgba(245,158,11,0.08)",
-            borderRadius: 14, padding: "10px 14px", marginBottom: 14, fontSize: 13,
+            borderRadius: 12, padding: "10px 14px", marginBottom: 14, fontSize: "var(--text-footnote)",
           }}
         >
           <span>
@@ -337,17 +337,17 @@ export function CallsBoard({
                     </td>
                     <td>{repNames[c.salesperson_id] || "—"}</td>
                     {isSuper && (
-                      <td style={{ fontSize: 12, opacity: 0.85 }}>
+                      <td style={{ fontSize: "var(--text-caption1)", opacity: 0.85 }}>
                         {companyNames[c.company_id] || "—"}
                       </td>
                     )}
                     <td>
                       <strong>{name || (isSuper && c.off_crm ? "Off-CRM number" : "Unknown")}</strong>
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>{c.phone}</div>
+                      <div style={{ fontSize: "var(--text-caption1)", opacity: 0.7 }}>{c.phone}</div>
                       {isSuper && c.off_crm && (
                         <span
                           className="badge"
-                          style={{ background: "var(--border)", color: "var(--muted)", fontSize: 11 }}
+                          style={{ background: "var(--border)", color: "var(--muted)", fontSize: "var(--text-caption2)" }}
                         >
                           Off-CRM
                         </span>

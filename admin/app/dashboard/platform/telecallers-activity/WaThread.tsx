@@ -113,7 +113,7 @@ function Attachment({ m, url, pending }: { m: Msg; url?: string; pending?: boole
       <div style={{ marginBottom: 4 }}>
         <audio controls preload="none" src={url} style={{ width: "100%", maxWidth: 260, display: "block" }} />
         {m.duration_seconds ? (
-          <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{m.duration_seconds}s voice note</div>
+          <div style={{ fontSize: "var(--text-caption2)", opacity: 0.7, marginTop: 2 }}>{m.duration_seconds}s voice note</div>
         ) : null}
       </div>
     );
@@ -134,10 +134,10 @@ function Attachment({ m, url, pending }: { m: Msg; url?: string; pending?: boole
         display: "flex", alignItems: "center", gap: 10, marginBottom: 4, textDecoration: "none",
         padding: "10px 12px", borderRadius: 8, background: "rgba(0,0,0,0.22)",
       }}>
-        <span style={{ fontSize: 22 }}>{ICON[kind] ?? "📎"}</span>
+        <span style={{ fontSize: "var(--text-title2)" }}>{ICON[kind] ?? "📎"}</span>
         <span style={{ minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>{label}</span>
-          <span style={{ fontSize: 11, opacity: 0.75 }}>
+          <span style={{ display: "block", fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", wordBreak: "break-all" }}>{label}</span>
+          <span style={{ fontSize: "var(--text-caption2)", opacity: 0.75 }}>
             Open{kind === "video" ? " video" : ""}{m.file_size ? ` · ${kb(m.file_size)}` : ""}
           </span>
         </span>
@@ -154,10 +154,10 @@ function Attachment({ m, url, pending }: { m: Msg; url?: string; pending?: boole
         padding: "10px 12px", borderRadius: 8,
         background: "rgba(0,0,0,0.18)", border: "1px dashed rgba(255,255,255,0.14)",
       }}>
-        <span style={{ fontSize: 20, opacity: 0.6 }}>{ICON[kind] ?? "📎"}</span>
+        <span style={{ fontSize: "var(--text-title3)", opacity: 0.6 }}>{ICON[kind] ?? "📎"}</span>
         <span style={{ minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>{label}</span>
-          <span style={{ fontSize: 11, opacity: 0.65 }}>Opening attachment…</span>
+          <span style={{ display: "block", fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)" }}>{label}</span>
+          <span style={{ fontSize: "var(--text-caption2)", opacity: 0.65 }}>Opening attachment…</span>
         </span>
       </div>
     );
@@ -200,10 +200,10 @@ function Attachment({ m, url, pending }: { m: Msg; url?: string; pending?: boole
         padding: "10px 12px", borderRadius: 8,
         background: "rgba(0,0,0,0.18)", border: "1px dashed rgba(255,255,255,0.14)",
       }}>
-        <span style={{ fontSize: 20, opacity: 0.6 }}>{ICON[kind] ?? "📎"}</span>
+        <span style={{ fontSize: "var(--text-title3)", opacity: 0.6 }}>{ICON[kind] ?? "📎"}</span>
         <span style={{ minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>{label}</span>
-          <span style={{ fontSize: 11, opacity: 0.65 }}>
+          <span style={{ display: "block", fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)" }}>{label}</span>
+          <span style={{ fontSize: "var(--text-caption2)", opacity: 0.65 }}>
             Downloading{size ? ` ${size}` : ""} — refresh in a moment.
           </span>
         </span>
@@ -224,12 +224,12 @@ function Attachment({ m, url, pending }: { m: Msg; url?: string; pending?: boole
         padding: "10px 12px", borderRadius: 8,
         background: "rgba(245,158,11,0.10)", border: "1px dashed rgba(245,158,11,0.35)",
       }}>
-        <span style={{ fontSize: 20, opacity: 0.7 }}>{ICON[kind] ?? "📎"}</span>
+        <span style={{ fontSize: "var(--text-title3)", opacity: 0.7 }}>{ICON[kind] ?? "📎"}</span>
         <span style={{ minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>
+          <span style={{ display: "block", fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", wordBreak: "break-all" }}>
             {label}{size ? ` · ${size}` : ""}
           </span>
-          <span style={{ fontSize: 11, opacity: 0.75 }}>
+          <span style={{ fontSize: "var(--text-caption2)", opacity: 0.75 }}>
             Saved, but this view could not open it. The banner at the top of the page says why.
           </span>
         </span>
@@ -244,15 +244,15 @@ function Attachment({ m, url, pending }: { m: Msg; url?: string; pending?: boole
         padding: "10px 12px", borderRadius: 8,
         background: "rgba(0,0,0,0.18)", border: "1px dashed rgba(255,255,255,0.18)",
       }}>
-        <span style={{ fontSize: 20, opacity: 0.5 }}>{ICON[kind] ?? "📎"}</span>
+        <span style={{ fontSize: "var(--text-title3)", opacity: 0.5 }}>{ICON[kind] ?? "📎"}</span>
         <span style={{ minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>
+          <span style={{ display: "block", fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", wordBreak: "break-all" }}>
             {label}{size ? ` · ${size}` : ""}
           </span>
           {/* WhatsApp's own reason where there is one. A cause beats a
               symptom, and this panel has already shipped two confident
               explanations that turned out to be wrong. */}
-          <span style={{ fontSize: 11, opacity: 0.65 }}>
+          <span style={{ fontSize: "var(--text-caption2)", opacity: 0.65 }}>
             {m.media_error || "The file could not be downloaded."}
           </span>
         </span>
@@ -267,10 +267,10 @@ function Attachment({ m, url, pending }: { m: Msg; url?: string; pending?: boole
       padding: "10px 12px", borderRadius: 8,
       background: "rgba(0,0,0,0.18)", border: "1px dashed rgba(255,255,255,0.18)",
     }}>
-      <span style={{ fontSize: 20, opacity: 0.6 }}>{ICON[kind] ?? "📎"}</span>
+      <span style={{ fontSize: "var(--text-title3)", opacity: 0.6 }}>{ICON[kind] ?? "📎"}</span>
       <span style={{ minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>{label}</span>
-        <span style={{ fontSize: 11, opacity: 0.65 }}>
+        <span style={{ display: "block", fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", wordBreak: "break-all" }}>{label}</span>
+        <span style={{ fontSize: "var(--text-caption2)", opacity: 0.65 }}>
           {old
             ? "The file was not saved. WhatsApp keeps one on its servers for about a month, and this message was imported after that — the text survived, the file did not."
             : "The file was not saved. Attachments from now on are fetched within seconds and open here."}
@@ -351,10 +351,10 @@ export function WaThread({
 
   return (
     <div style={{
-      background: "rgba(11,20,17,0.55)", borderRadius: 14, padding: "12px 10px",
+      background: "rgba(11,20,17,0.55)", borderRadius: 12, padding: "12px 10px",
       border: "1px solid rgba(255,255,255,0.07)",
     }}>
-      <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 10, fontSize: 11, opacity: 0.6 }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 10, fontSize: "var(--text-caption2)", opacity: 0.6 }}>
         <span>◀ {whoIn}</span><span>{whoOut} ▶</span>
       </div>
 
@@ -368,14 +368,14 @@ export function WaThread({
         // A signal colours the EDGE of the bubble rather than the whole thing:
         // the bubble's own colour is what tells you who spoke, and losing that
         // to a highlight makes the thread harder to read, not easier.
-        const edge = m.signal === "risk" ? "#ef4444" : m.signal === "hot" ? "#22c55e" : null;
+        const edge = m.signal === "risk" ? "var(--bad)" : m.signal === "hot" ? "var(--good)" : null;
 
         return (
           <div key={i}>
             {newDay && (
               <div style={{ display: "flex", justifyContent: "center", margin: "14px 0 10px" }}>
                 <span style={{
-                  fontSize: 11.5, padding: "4px 12px", borderRadius: 999,
+                  fontSize: "var(--text-caption2)", padding: "4px 12px", borderRadius: 999,
                   background: "rgba(0,0,0,0.35)", color: "rgba(255,255,255,0.72)",
                 }}>
                   {dayLabel(m.sent_at)}
@@ -387,7 +387,7 @@ export function WaThread({
               <div style={{
                 maxWidth: "76%", minWidth: 90,
                 padding: "7px 10px 5px",
-                borderRadius: 10,
+                borderRadius: 12,
                 borderTopRightRadius: mine ? 2 : 10,
                 borderTopLeftRadius: mine ? 10 : 2,
                 background: mine ? "#0b5c4b" : "#22292c",
@@ -405,7 +405,7 @@ export function WaThread({
                     messages are already told apart by their side and colour. */}
                 {m.is_group && !mine && (m.sender_name || m.sender_phone) && (
                   <div style={{
-                    fontSize: 11.5, fontWeight: 700, marginBottom: 3,
+                    fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", marginBottom: 3,
                     color: `hsl(${speakerHue(m.sender_name || m.sender_phone || "")} 70% 72%)`,
                   }}>
                     {/* WhatsApp's own name where we have it. The number is the
@@ -421,7 +421,7 @@ export function WaThread({
                 )}
 
                 {m.signal && (
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: edge ?? undefined, marginBottom: 3 }}>
+                  <div style={{ fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", color: edge ?? undefined, marginBottom: 3 }}>
                     {m.signal === "risk" ? "⚠️ SOUNDS READY TO WALK" : "🔥 SOUNDS READY TO BOOK"}
                   </div>
                 )}
@@ -432,13 +432,13 @@ export function WaThread({
                      real and the founder can see it happening, which is the
                      difference between a quiet rep and a broken link. */
                   <div style={{
-                    fontSize: 13, fontStyle: "italic", opacity: 0.8,
+                    fontSize: "var(--text-footnote)", fontStyle: "italic", opacity: 0.8,
                     display: "flex", alignItems: "center", gap: 8,
                   }}>
-                    <span style={{ fontSize: 15 }}>🔒</span>
+                    <span style={{ fontSize: "var(--text-subheadline)" }}>🔒</span>
                     <span>
                       A message came through here that could not be unlocked.
-                      <span style={{ display: "block", fontSize: 11, opacity: 0.75, fontStyle: "normal" }}>
+                      <span style={{ display: "block", fontSize: "var(--text-caption2)", opacity: 0.75, fontStyle: "normal" }}>
                         The link&apos;s security keys are out of date — have the rep link again
                         and everything after that opens normally.
                       </span>
@@ -446,11 +446,11 @@ export function WaThread({
                   </div>
                 ) : m.deleted_at ? (
                   <>
-                    <div style={{ fontSize: 12.5, fontStyle: "italic", opacity: 0.75, marginBottom: 3 }}>
+                    <div style={{ fontSize: "var(--text-caption1)", fontStyle: "italic", opacity: 0.75, marginBottom: 3 }}>
                       🗑 Deleted by {mine ? "the rep" : "them"} — kept below
                     </div>
                     {(m.body_original || m.body) && (
-                      <div style={{ fontSize: 14, whiteSpace: "pre-wrap", wordBreak: "break-word", opacity: 0.85 }}>
+                      <div style={{ fontSize: "var(--text-subheadline)", whiteSpace: "pre-wrap", wordBreak: "break-word", opacity: 0.85 }}>
                         {m.body_original || m.body}
                       </div>
                     )}
@@ -459,17 +459,17 @@ export function WaThread({
                   <>
                     {m.media_kind && <Attachment m={m} url={url} pending={pending} />}
                     {m.body && (
-                      <div style={{ fontSize: 14, lineHeight: 1.35, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      <div style={{ fontSize: "var(--text-subheadline)", lineHeight: 1.35, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                         {m.body}
                       </div>
                     )}
                     {m.transcript && (
-                      <div style={{ fontSize: 12.5, marginTop: 4, fontStyle: "italic", opacity: 0.8 }}>
+                      <div style={{ fontSize: "var(--text-caption1)", marginTop: 4, fontStyle: "italic", opacity: 0.8 }}>
                         “{m.transcript}”
                       </div>
                     )}
                     {m.body_original && m.body_original !== m.body && (
-                      <div style={{ fontSize: 12, marginTop: 4, opacity: 0.7 }}>
+                      <div style={{ fontSize: "var(--text-caption1)", marginTop: 4, opacity: 0.7 }}>
                         Originally: “{m.body_original}”
                       </div>
                     )}
@@ -477,7 +477,7 @@ export function WaThread({
                 )}
 
                 <div style={{
-                  fontSize: 10.5, opacity: 0.65, marginTop: 3,
+                  fontSize: "var(--text-caption2)", opacity: 0.65, marginTop: 3,
                   textAlign: "right", whiteSpace: "nowrap",
                 }}>
                   {m.edited_at && !m.deleted_at ? "edited · " : ""}{clock(m.sent_at)}

@@ -169,10 +169,10 @@ export default async function OverviewPage({
                 const fast = r.median_min > 0 && r.median_min <= 5;
                 return (
                   <tr key={r.id} className="hover-row">
-                    <td style={{ color: "var(--text)", fontWeight: 500 }}>{r.name}</td>
+                    <td style={{ color: "var(--text)", fontWeight: "var(--weight-medium)" }}>{r.name}</td>
                     <td className="num">{r.leads_7d}</td>
                     <td className="num">{r.called_7d}</td>
-                    <td className="num" style={{ color: fast ? "var(--good)" : r.median_min > 60 ? "var(--bad)" : "var(--accent)", fontWeight: 600 }}>
+                    <td className="num" style={{ color: fast ? "var(--good)" : r.median_min > 60 ? "var(--bad)" : "var(--accent)", fontWeight: "var(--weight-semibold)" }}>
                       {fmtMinutes(r.median_min)}
                     </td>
                     <td className="num" style={{ color: "var(--good)" }}>{r.within_5min}</td>
@@ -210,7 +210,7 @@ export default async function OverviewPage({
               {s.leaderboard.map((l, i) => (
                 <tr key={l.id} className="hover-row">
                   <td style={{ color: "var(--muted)" }}>{i + 1}</td>
-                  <td style={{ color: "var(--text)", fontWeight: 500 }}>{l.name}</td>
+                  <td style={{ color: "var(--text)", fontWeight: "var(--weight-medium)" }}>{l.name}</td>
                   <td className="num">{l.calls}</td>
                   <td className="num" style={{ color: "var(--good)" }}>{l.connected}</td>
                   <td className="num" style={{ color: "var(--accent)" }}>{connectRate(l.connected, l.calls)}%</td>

@@ -23,11 +23,20 @@
   --accent-soft: rgba(10, 132, 255, 0.18);
   --accent-glow: rgba(10, 132, 255, 0.18);
   --hover: rgba(255, 255, 255, 0.05);
+  /* The faintest fill in the system: a tint that separates a strip from the
+     card behind it without drawing a box. Sixty places hand-wrote this as
+     rgba(255,255,255,0.02), which is a white film — correct on a dark panel
+     and invisible on a light one. */
+  --tint: rgba(255, 255, 255, 0.035);
   --topbar: rgba(11, 11, 12, 0.72);
 
   --good: #30d158;
   --warn: #ff9f0a;
   --bad: #ff453a;
+  /* Apple's systemPurple. Added because four shades of Tailwind violet were
+     already in use for the "AI / automatic" things — the brain, the coach,
+     the generated draft — and they wanted one colour, not four. */
+  --purple: #bf5af2;
   --success: #30d158;
   --danger: #ff453a;
 
@@ -39,11 +48,45 @@
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --radius: 16px;
 
-  --text-xs: 12px;
-  --text-sm: 13px;
-  --text-base: 15px;
-  --text-lg: 17px;
-  --text-xl: 34px;
+  /* THE TYPE SCALE. Ten steps, and nothing between them.
+   *
+   * These are Apple's own text styles, named as Apple names them, because the
+   * name is the decision: "footnote" tells you what it is for, "13px" only
+   * tells you how big it is, and the second one is how a codebase ends up
+   * with 10.5, 11.5, 12.5, 13.5, 14.5, 15.5 and 16.5 all in use at once —
+   * which this one did, 204 times, across 24 distinct sizes.
+   *
+   * A size that is not on this list is not a size. If something needs to feel
+   * bigger, it takes the next step up or a heavier weight; it does not take
+   * half a pixel. */
+  --text-caption2: 11px;
+  --text-caption1: 12px;
+  --text-footnote: 13px;
+  --text-subheadline: 15px;
+  --text-callout: 16px;
+  --text-body: 17px;
+  --text-title3: 20px;
+  --text-title2: 22px;
+  --text-title1: 28px;
+  --text-large-title: 34px;
+
+  /* The older names, kept pointing at the same steps so every stylesheet and
+     component already using them keeps its exact size. */
+  --text-xs: var(--text-caption1);
+  --text-sm: var(--text-footnote);
+  --text-base: var(--text-subheadline);
+  --text-lg: var(--text-body);
+  --text-xl: var(--text-large-title);
+
+  /* WEIGHTS. Four, and 600 does nearly all the emphasis.
+   *
+   * 650 and 800 were both in use. 650 is not a weight any of these faces ship
+   * — it silently rounds — and extra-bold has no place in interface chrome;
+   * Apple reaches for semibold and stops. */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
 }
 
 html[data-theme="light"] {
@@ -62,10 +105,12 @@ html[data-theme="light"] {
   --accent-hover: #0077ed;
   --accent-soft: rgba(0, 113, 227, 0.12);
   --hover: rgba(0, 0, 0, 0.04);
+  --tint: rgba(0, 0, 0, 0.028);
   --topbar: rgba(245, 245, 247, 0.78);
   --good: #248a3d;
   --warn: #c93400;
   --bad: #d70015;
+  --purple: #8944ab;
   --success: #248a3d;
   --danger: #d70015;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 32px rgba(0, 0, 0, 0.05);

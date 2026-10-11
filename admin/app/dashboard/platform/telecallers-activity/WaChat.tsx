@@ -87,12 +87,12 @@ export function WaChat({
   return (
     <>
       <div style={{ marginBottom: 12 }}>
-        <strong style={{ fontSize: 17 }}>{named || peer}</strong>
-        <div className="subtitle" style={{ fontSize: 12.5, marginTop: 2 }}>
+        <strong style={{ fontSize: "var(--text-body)" }}>{named || peer}</strong>
+        <div className="subtitle" style={{ fontSize: "var(--text-caption1)", marginTop: 2 }}>
           {named ? `${peer} · ` : ""}{ordered.length} messages
         </div>
         {ordered.length > 0 && (
-          <div className="subtitle" style={{ fontSize: 12, marginTop: 2, opacity: 0.85 }}>
+          <div className="subtitle" style={{ fontSize: "var(--text-caption1)", marginTop: 2, opacity: 0.85 }}>
             {day(ordered[0].sent_at)}
             {" → last message "}
             <strong style={{ color: "#e9edef" }}>{day(ordered[ordered.length - 1].sent_at)}</strong>
@@ -103,7 +103,7 @@ export function WaChat({
 
       {warnings.length > 0 && (
         <div className="card" style={{
-          marginBottom: 12, padding: 10, fontSize: 12.5,
+          marginBottom: 12, padding: 10, fontSize: "var(--text-caption1)",
           background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.35)",
         }}>
           {warnings.map((w, i) => <div key={i}>{w}</div>)}
@@ -116,17 +116,17 @@ export function WaChat({
           background: owed ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.03)",
           border: `1px solid ${owed ? "rgba(239,68,68,0.28)" : "var(--border)"}`,
         }}>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: 13 }}>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: "var(--text-footnote)" }}>
             <span>
               {owed
-                ? <><strong style={{ color: "#ef4444" }}>They spoke last</strong> — waiting {human}</>
+                ? <><strong style={{ color: "var(--bad)" }}>They spoke last</strong> — waiting {human}</>
                 : <><strong>Rep spoke last</strong> — ball is with the buyer</>}
             </span>
-            {hot > 0 && <span style={{ color: "#22c55e" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
-            {risk > 0 && <span style={{ color: "#ef4444" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
+            {hot > 0 && <span style={{ color: "var(--good)" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
+            {risk > 0 && <span style={{ color: "var(--bad)" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
             <span style={{ opacity: 0.7 }}>{ordered.length} messages</span>
             {withFile.length > 0 && (
-              <span style={{ color: allIn ? "#22c55e" : coming > 0 ? "#f59e0b" : "#8696a0" }}>
+              <span style={{ color: allIn ? "var(--good)" : coming > 0 ? "var(--warn)" : "#8696a0" }}>
                 📎 {got}/{withFile.length} file{withFile.length === 1 ? "" : "s"} downloaded
                 {!allIn && coming > 0 ? ` · ${coming} still coming` : ""}
               </span>
@@ -158,7 +158,7 @@ export function WaChat({
         </form>
       </div>
 
-      <p className="subtitle" style={{ marginTop: 14, fontSize: 12.5 }}>
+      <p className="subtitle" style={{ marginTop: 14, fontSize: "var(--text-caption1)" }}>
         If it reads like a colleague or something personal, it is neither a buyer nor a problem —
         leave it. This list is a shortlist to judge, not a verdict.
       </p>

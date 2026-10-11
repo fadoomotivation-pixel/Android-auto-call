@@ -28,7 +28,7 @@ export default async function XrayPage({
         what kills deals, what buyers keep asking for, what the winning calls had in common, and which
         &quot;dead&quot; leads are still winnable. Refreshes every Monday.
       </p>
-      <p className="subtitle" style={{ marginTop: -8, fontSize: 12.5 }}>
+      <p className="subtitle" style={{ marginTop: -8, fontSize: "var(--text-caption1)" }}>
         For one day&apos;s work per rep see <a href="/dashboard/pulse" style={{ color: "var(--accent)" }}>Daily Pulse</a>;
         for how fast leads get called see <a href="/dashboard/velocity" style={{ color: "var(--accent)" }}>Sales Velocity</a>.
       </p>

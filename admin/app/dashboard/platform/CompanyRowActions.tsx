@@ -7,8 +7,8 @@ import { deleteCompanyAction, renameCompanyAction, type ActionResult } from "./a
 const init: ActionResult = { ok: false };
 
 const btn: React.CSSProperties = {
-  padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border, #333)",
-  background: "transparent", color: "inherit", cursor: "pointer", fontSize: 13,
+  padding: "4px 10px", borderRadius: 8, border: "1px solid var(--border)",
+  background: "transparent", color: "inherit", cursor: "pointer", fontSize: "var(--text-footnote)",
 };
 
 /** Super-admin per-company actions: rename or delete (with its data). */
@@ -43,7 +43,7 @@ export default function CompanyRowActions({ companyId, name }: { companyId: stri
         }}
       >
         <input type="hidden" name="company_id" value={companyId} />
-        <button type="submit" style={{ ...btn, color: "#ef4444", borderColor: "#ef4444" }}>Delete</button>
+        <button type="submit" style={{ ...btn, color: "var(--bad)", borderColor: "var(--bad)" }}>Delete</button>
       </form>
     </div>
   );

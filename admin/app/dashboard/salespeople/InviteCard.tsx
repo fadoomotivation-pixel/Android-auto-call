@@ -26,8 +26,8 @@ export function InviteCard({ code }: { code: string | null }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <code
           style={{
-            fontSize: 22,
-            fontWeight: 700,
+            fontSize: "var(--text-title2)",
+            fontWeight: "var(--weight-bold)",
             letterSpacing: "0.15em",
             padding: "8px 14px",
             borderRadius: 8,

@@ -40,7 +40,7 @@ export function LiveFeed({ names }: { names: Record<string, string> }) {
     <div className="card" style={{ marginBottom: 28 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         <div className="label">Live activity</div>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: live ? "var(--good)" : "var(--muted)" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "var(--text-caption1)", color: live ? "var(--good)" : "var(--muted)" }}>
           <span style={{ width: 8, height: 8, borderRadius: 999, background: live ? "var(--good)" : "var(--muted)", boxShadow: live ? "0 0 0 4px rgba(56,193,114,.15)" : "none" }} />
           {live ? "Live" : "Connecting…"}
         </span>
@@ -54,12 +54,12 @@ export function LiveFeed({ names }: { names: Record<string, string> }) {
           {items.map((it) => (
             <div key={it.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)", paddingBottom: 8 }}>
               <div>
-                <div style={{ fontWeight: 600 }}>{it.phone}</div>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>{namesRef.current[it.salesperson_id] || "—"}</div>
+                <div style={{ fontWeight: "var(--weight-semibold)" }}>{it.phone}</div>
+                <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>{namesRef.current[it.salesperson_id] || "—"}</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 {it.outcome && <span className={`badge ${it.outcome}`}>{it.outcome}</span>}
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>{new Date(it.created_at).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
+                <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>{new Date(it.created_at).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
               </div>
             </div>
           ))}

@@ -134,13 +134,13 @@ function VoiceNotePlayer({ path }: { path: string }) {
         onClick={load}
         disabled={busy}
         style={{
-          fontSize: 11.5, padding: "3px 10px", borderRadius: 999, cursor: busy ? "wait" : "pointer",
-          border: "1px solid rgba(139,92,246,0.45)", background: "rgba(139,92,246,0.12)", color: "#c4b5fd",
+          fontSize: "var(--text-caption2)", padding: "3px 10px", borderRadius: 999, cursor: busy ? "wait" : "pointer",
+          border: "1px solid rgba(139,92,246,0.45)", background: "rgba(139,92,246,0.12)", color: "var(--purple)",
         }}
       >
         {busy ? "Opening…" : "▶ Play voice note"}
       </button>
-      {err && <span style={{ fontSize: 11.5, color: "var(--bad)", marginLeft: 8 }}>{err}</span>}
+      {err && <span style={{ fontSize: "var(--text-caption2)", color: "var(--bad)", marginLeft: 8 }}>{err}</span>}
     </div>
   );
 }
@@ -280,9 +280,9 @@ export function PulseClient({
               )}
               <div className="cards" style={{ marginBottom: 14 }}>
                 <div className="card stat"><div className="label">Calls</div><div className="value">{c.totals.calls}</div></div>
-                <div className="card stat"><div className="label">Connected</div><div className="value" style={{ color: "#22c55e" }}>{c.totals.connected}</div></div>
-                <div className="card stat"><div className="label">Voice notes</div><div className="value" style={{ color: "#8b5cf6" }}>{c.totals.notes}</div></div>
-                <div className="card stat"><div className="label">Site visits</div><div className="value" style={{ color: "#f59e0b" }}>{c.totals.visits}</div></div>
+                <div className="card stat"><div className="label">Connected</div><div className="value" style={{ color: "var(--good)" }}>{c.totals.connected}</div></div>
+                <div className="card stat"><div className="label">Voice notes</div><div className="value" style={{ color: "var(--purple)" }}>{c.totals.notes}</div></div>
+                <div className="card stat"><div className="label">Site visits</div><div className="value" style={{ color: "var(--warn)" }}>{c.totals.visits}</div></div>
               </div>
             </>
           )}
@@ -296,9 +296,9 @@ export function PulseClient({
               return (
                 <div key={r.id} className="card" style={{ padding: 16, opacity: idle ? 0.65 : 1 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <strong style={{ color: "var(--text)", fontSize: 16 }}>{r.name}</strong>
+                    <strong style={{ color: "var(--text)", fontSize: "var(--text-callout)" }}>{r.name}</strong>
                     {r.hotLeads > 0 && (
-                      <span style={{ fontSize: 12, padding: "2px 8px", borderRadius: 999, background: "rgba(239,68,68,0.15)", color: "#fca5a5" }}>
+                      <span style={{ fontSize: "var(--text-caption1)", padding: "2px 8px", borderRadius: 999, background: "rgba(239,68,68,0.15)", color: "var(--bad)" }}>
                         🔥 {r.hotLeads} hot
                       </span>
                     )}
@@ -308,14 +308,14 @@ export function PulseClient({
                       WhatsApp. A card that opens with calls is a call-centre
                       card, and the owner has to read to the bottom to find out
                       whether anything was actually sold. */}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 14, fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 14, fontSize: "var(--text-footnote)", color: "var(--muted)", marginBottom: 10 }}>
                     {(r.bookings ?? 0) > 0 && (
-                      <span><strong style={{ color: "#22c55e" }}>🎉 {r.bookings}</strong> booked
-                        {(r.revenue ?? 0) > 0 && <> · <strong style={{ color: "#22c55e" }}>{rupees(r.revenue!)}</strong></>}
+                      <span><strong style={{ color: "var(--good)" }}>🎉 {r.bookings}</strong> booked
+                        {(r.revenue ?? 0) > 0 && <> · <strong style={{ color: "var(--good)" }}>{rupees(r.revenue!)}</strong></>}
                       </span>
                     )}
                     {(r.visitsFixed ?? 0) > 0 && (
-                      <span><strong style={{ color: "#f59e0b" }}>📍 {r.visitsFixed}</strong> visits fixed</span>
+                      <span><strong style={{ color: "var(--warn)" }}>📍 {r.visitsFixed}</strong> visits fixed</span>
                     )}
                     {/* A ZERO FROM A PHONE THAT IS NOT REPORTING IS NOT A ZERO.
                         This page kept printing "0 calls · 0 conn. · 0m talk"
@@ -324,14 +324,14 @@ export function PulseClient({
                         happened. You cannot book a site visit on a call that
                         did not take place. The 3 was right and the 0 was the
                         broken number, and the founder had no way to tell which.
-                        The WhatsApp report learned this in #385/#390; the page
+                        The WhatsApp report learned this in var(--good)/var(--good); the page
                         renders the DATA rather than that text, so it never did. */}
                     {/* Only when the phone sent NOTHING. A four-hour-old sync
                         at 11pm is a rep who went home, and blanking 47 real
                         calls to say "not counted" is the failure this guard was
                         supposed to prevent, not cause. */}
                     {r.callsTrusted === false ? (
-                      <span style={{ color: "#fca5a5" }}>
+                      <span style={{ color: "var(--bad)" }}>
                         <strong>⚠️ calls not counted</strong> — phone not sending its call log
                       </span>
                     ) : r.calls === 0 && (r.offCrmCalls ?? 0) > 0 ? (
@@ -352,19 +352,19 @@ export function PulseClient({
                       <>
                         <span><strong style={{ color: "var(--text)" }}>{r.offCrmCalls}</strong> calls</span>
                         <span><strong style={{ color: "var(--text)" }}>{fmtDur(r.offCrmTalkSeconds ?? 0)}</strong> talk</span>
-                        <span style={{ color: "#fbbf24" }}><strong>0</strong> to CRM leads</span>
+                        <span style={{ color: "var(--warn)" }}><strong>0</strong> to CRM leads</span>
                       </>
                     ) : (
                       <>
                         <span><strong style={{ color: "var(--text)" }}>{r.calls}</strong> calls</span>
-                        <span><strong style={{ color: "#22c55e" }}>{r.connected}</strong> conn.</span>
+                        <span><strong style={{ color: "var(--good)" }}>{r.connected}</strong> conn.</span>
                         <span><strong style={{ color: "var(--text)" }}>{fmtDur(r.talkSeconds)}</strong> talk</span>
                       </>
                     )}
                   </div>
 
                   {r.callsTrusted !== false && r.rawTrusted === false && r.calls > 0 && (
-                    <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 8 }}>
+                    <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginBottom: 8 }}>
                       ℹ️ Phone last sent a while ago — later calls may not be counted yet.
                     </div>
                   )}
@@ -380,10 +380,10 @@ export function PulseClient({
                       this must never inflate the numbers the business judges. */}
                   {(r.offCrmCalls ?? 0) > 0 && (
                     <div style={{
-                      fontSize: 13, color: "#fbbf24", marginBottom: 10,
+                      fontSize: "var(--text-footnote)", color: "var(--warn)", marginBottom: 10,
                       background: "rgba(251,191,36,0.08)",
                       border: "1px solid rgba(251,191,36,0.25)",
-                      borderRadius: 10, padding: "8px 12px",
+                      borderRadius: 12, padding: "8px 12px",
                     }}>
                       📵 These numbers are <strong>not in the CRM</strong>
                       {r.calls === 0
@@ -399,7 +399,7 @@ export function PulseClient({
                       doubt — unlike the call log, which needs a background
                       worker the OEM is free to kill. */}
                   {r.callsTrusted === false && (
-                    <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
+                    <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", marginBottom: 10 }}>
                       Recorded by hand today:{" "}
                       <strong style={{ color: "var(--text)" }}>
                         {[
@@ -417,25 +417,25 @@ export function PulseClient({
                       version and only shows on days the new fields are absent,
                       so an un-redeployed function still renders something. */}
                   {r.win && (
-                    <div style={{ fontSize: 14, color: "var(--text)", background: "rgba(34,197,94,0.08)", padding: "9px 12px", borderRadius: 8, borderLeft: "3px solid #22c55e", marginBottom: 8 }}>
-                      <strong style={{ color: "#86efac" }}>✅ </strong>{r.win}
+                    <div style={{ fontSize: "var(--text-subheadline)", color: "var(--text)", background: "rgba(34,197,94,0.08)", padding: "9px 12px", borderRadius: 8, borderLeft: "3px solid var(--good)", marginBottom: 8 }}>
+                      <strong style={{ color: "var(--good)" }}>✅ </strong>{r.win}
                     </div>
                   )}
                   {r.risk && (
-                    <div style={{ fontSize: 14, color: "var(--text)", background: "rgba(245,158,11,0.08)", padding: "9px 12px", borderRadius: 8, borderLeft: "3px solid #f59e0b", marginBottom: 8 }}>
-                      <strong style={{ color: "#fcd34d" }}>⚠️ </strong>{r.risk}
+                    <div style={{ fontSize: "var(--text-subheadline)", color: "var(--text)", background: "rgba(245,158,11,0.08)", padding: "9px 12px", borderRadius: 8, borderLeft: "3px solid var(--warn)", marginBottom: 8 }}>
+                      <strong style={{ color: "var(--warn)" }}>⚠️ </strong>{r.risk}
                     </div>
                   )}
                   {!r.win && !r.risk && r.narrative && (
-                    <div style={{ fontSize: 14, color: "var(--text)", background: "rgba(139,92,246,0.08)", padding: "10px 12px", borderRadius: 8, borderLeft: "3px solid #8b5cf6", marginBottom: 10 }}>
-                      <strong style={{ color: "#c4b5fd" }}>✨ </strong>{r.narrative}
+                    <div style={{ fontSize: "var(--text-subheadline)", color: "var(--text)", background: "rgba(139,92,246,0.08)", padding: "10px 12px", borderRadius: 8, borderLeft: "3px solid var(--purple)", marginBottom: 10 }}>
+                      <strong style={{ color: "var(--purple)" }}>✨ </strong>{r.narrative}
                     </div>
                   )}
 
                   {/* What is booked next — the half of the report that can still
                       be acted on. The day's numbers are history by 7pm. */}
                   {(r.nextSteps ?? []).slice(0, 3).map((s, i) => (
-                    <div key={i} style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 3 }}>
+                    <div key={i} style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginBottom: 3 }}>
                       🎯 <strong style={{ color: "var(--text)" }}>{s.lead}</strong> — {s.when}
                     </div>
                   ))}
@@ -445,7 +445,7 @@ export function PulseClient({
                       identical "Marked cold" rows and one lead that got two
                       callbacks a minute apart printed both. */}
                   {(r.aiUpdates ?? []).map((u, i) => (
-                    <div key={i} style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>🤖 {u}</div>
+                    <div key={i} style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 3 }}>🤖 {u}</div>
                   ))}
 
                   {/* The evidence, behind a click.
@@ -456,18 +456,18 @@ export function PulseClient({
                       lines you scroll past to reach the decision. */}
                   {(realNotes(r).length > 0 || newsworthyMoves(r).length > 0) && (
                     <details style={{ marginTop: 10 }}>
-                      <summary style={{ fontSize: 12, color: "var(--muted)", cursor: "pointer" }}>
+                      <summary style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", cursor: "pointer" }}>
                         Call detail — {realNotes(r).length} voice {realNotes(r).length === 1 ? "note" : "notes"}, {newsworthyMoves(r).length} lead {newsworthyMoves(r).length === 1 ? "move" : "moves"}
                       </summary>
                       <div style={{ marginTop: 8 }}>
                         {realNotes(r).slice(0, 5).map((v, i) => (
-                          <div key={i} style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
+                          <div key={i} style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", marginBottom: 6 }}>
                             <div>🎤 <strong style={{ color: "var(--text)" }}>{v.lead}:</strong> {v.summary}</div>
                             {v.audioPath && <VoiceNotePlayer path={v.audioPath} />}
                           </div>
                         ))}
                         {newsworthyMoves(r).slice(0, 8).map((m, i) => (
-                          <div key={i} style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 4 }}>
+                          <div key={i} style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginBottom: 4 }}>
                             {m.byAi ? "🤖" : "•"} <strong style={{ color: "var(--text)" }}>{m.lead}:</strong> {m.detail}
                           </div>
                         ))}
@@ -481,12 +481,12 @@ export function PulseClient({
                       visited. Green is someone who came; amber is someone who
                       said they would. */}
                   {(r.visitsArrived ?? []).length > 0 && (
-                    <div style={{ fontSize: 12.5, color: "#16a34a", marginTop: 6 }}>
+                    <div style={{ fontSize: "var(--text-caption1)", color: "var(--good)", marginTop: 6 }}>
                       ✅ Came to site: {(r.visitsArrived ?? []).join(", ")}
                     </div>
                   )}
                   {r.siteVisits.filter((v) => !(r.visitsArrived ?? []).includes(v)).length > 0 && (
-                    <div style={{ fontSize: 12.5, color: "#f59e0b", marginTop: 6 }}>
+                    <div style={{ fontSize: "var(--text-caption1)", color: "var(--warn)", marginTop: 6 }}>
                       📍 Due at site today, arrival not confirmed:{" "}
                       {r.siteVisits.filter((v) => !(r.visitsArrived ?? []).includes(v)).join(", ")}
                     </div>
@@ -496,7 +496,7 @@ export function PulseClient({
                       tell them apart: someone who didn't work, or a phone that
                       stopped feeding the CRM. Phone Health knows which. */}
                   {idle && (
-                    <div style={{ fontSize: 13, color: "var(--muted)" }}>
+                    <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)" }}>
                       No activity today.{" "}
                       <a href="/dashboard/health" style={{ color: "var(--accent)" }}>
                         Phone working? →

@@ -25,10 +25,10 @@ type Row = {
  * Walked top-down; D's thresholds are zero so something always matches.
  */
 const GRADES: { grade: string; tone: string; qr: number; br: number }[] = [
-  { grade: "A", tone: "#22c55e", qr: 0.40, br: 0.03 },
-  { grade: "B", tone: "#84cc16", qr: 0.25, br: Infinity },
-  { grade: "C", tone: "#f59e0b", qr: 0.10, br: Infinity },
-  { grade: "D", tone: "#ef4444", qr: 0, br: Infinity },
+  { grade: "A", tone: "var(--good)", qr: 0.40, br: 0.03 },
+  { grade: "B", tone: "var(--good)", qr: 0.25, br: Infinity },
+  { grade: "C", tone: "var(--warn)", qr: 0.10, br: Infinity },
+  { grade: "D", tone: "var(--bad)", qr: 0, br: Infinity },
 ];
 
 /** Lead quality from CRM outcomes — the thing Meta can't see. 0-100 + a grade. */
@@ -99,42 +99,42 @@ function nextMove(a: Autopsy): { tone: string; icon: string; title: string; deta
   const pct = (n: number) => Math.round((n / a.leads) * 100);
 
   if (a.never >= 3 && a.never / a.leads >= 0.15) {
-    return { tone: "#ef4444", icon: "📞", title: `${a.never} leads were never called at all`,
+    return { tone: "var(--bad)", icon: "📞", title: `${a.never} leads were never called at all`,
       detail: `That is ${pct(a.never)}% of what this ad already paid for, sitting untouched. Assign and dial them before you judge the ad — until they are called, this grade is measuring the team, not the ad. This is the cheapest lift on the page: the money is already spent.` };
   }
   if (a.mins >= 60) {
-    return { tone: "#f59e0b", icon: "⏱", title: `First call goes out after ${fmtMins(a.mins)}`,
+    return { tone: "var(--warn)", icon: "⏱", title: `First call goes out after ${fmtMins(a.mins)}`,
       detail: `A Meta lead is warm for minutes, not hours. Half of these were rung ${fmtMins(a.mins)} after they filled the form, so a lot of the "not interested" below is really "too late". Get the first dial under 30 minutes and the same ad, unchanged, will grade higher.` };
   }
   if (a.junk / a.leads >= 0.15) {
-    return { tone: "#f59e0b", icon: "🧹", title: `${pct(a.junk)}% wrong numbers or do-not-call`,
+    return { tone: "var(--warn)", icon: "🧹", title: `${pct(a.junk)}% wrong numbers or do-not-call`,
       detail: `The form is collecting junk taps. Switch the lead form to the higher-intent version, turn on phone confirmation, or add one qualifying question (budget or location) so the casual taps drop out before you pay for them.` };
   }
   if (a.missed / a.leads >= 0.4) {
-    return { tone: "#f59e0b", icon: "📵", title: `${pct(a.missed)}% picked up nobody`,
+    return { tone: "var(--warn)", icon: "📵", title: `${pct(a.missed)}% picked up nobody`,
       detail: `They were dialled but never connected. Either the numbers are poor or the calling hour is wrong. Try this ad's leads inside the first hour and again in the 7-9pm slot before spending more on it.` };
   }
   if (a.spoke >= 5 && a.no / a.spoke >= 0.6) {
-    return { tone: "#ef4444", icon: "🎯", title: `${a.no} of the ${a.spoke} who answered said no`,
+    return { tone: "var(--bad)", icon: "🎯", title: `${a.no} of the ${a.spoke} who answered said no`,
       detail: `They picked up, so the numbers are real and the follow-up happened — this one is genuinely the ad. It is reaching the wrong audience, or promising something the project doesn't deliver. Change the targeting or the creative; more calls will not fix it.` };
   }
   if (a.open >= 5 && a.open / a.leads >= 0.4) {
-    return { tone: "#f59e0b", icon: "🔁", title: `${a.open} leads are still sitting open`,
+    return { tone: "var(--warn)", icon: "🔁", title: `${a.open} leads are still sitting open`,
       detail: `Not lost and not won — no decision yet. This ad's real grade is not knowable until they close, so give them their follow-up calls before deciding to pause or scale it.` };
   }
   if (a.booked > 0 || a.qualified / a.leads >= 0.25) {
-    return { tone: "#22c55e", icon: "🚀", title: `This ad is working — put more budget behind it`,
+    return { tone: "var(--good)", icon: "🚀", title: `This ad is working — put more budget behind it`,
       detail: `${a.qualified} of ${a.leads} reached Interested or better${a.booked ? ` and ${a.booked} booked` : ""}, with the leads properly worked. This is the one to scale, and the one to copy the creative and audience from.` };
   }
-  return { tone: "#f59e0b", icon: "🔬", title: `Worked properly, but few turned into anything`,
+  return { tone: "var(--warn)", icon: "🔬", title: `Worked properly, but few turned into anything`,
       detail: `The leads were called and reached, so follow-up isn't the gap. Test a different audience or a sharper creative on this one before adding budget.` };
 }
 
 /** Creative fatigue: seen too often, clicks drying up. */
 function fatigue(frequency: number | undefined, ctr: number): { level: string; tone: string } | null {
   const f = frequency ?? 0;
-  if (f >= 4 && ctr < 1.0) return { level: "High", tone: "#ef4444" };
-  if (f >= 3 && ctr < 1.2) return { level: "Rising", tone: "#f59e0b" };
+  if (f >= 4 && ctr < 1.0) return { level: "High", tone: "var(--bad)" };
+  if (f >= 3 && ctr < 1.2) return { level: "Rising", tone: "var(--warn)" };
   return null;
 }
 
@@ -471,10 +471,10 @@ export function AdsManager({
     .filter((a) => a.crm_never_called > 0)
     .sort((x, y) => y.crm_never_called - x.crm_never_called);
 
-  const card: React.CSSProperties = { background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)", borderRadius: 16, padding: 24 };
-  const input: React.CSSProperties = { width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", outline: "none" };
-  const th: React.CSSProperties = { textAlign: "right", padding: "8px 10px", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--muted)", whiteSpace: "nowrap" };
-  const td: React.CSSProperties = { textAlign: "right", padding: "9px 10px", fontSize: 13, whiteSpace: "nowrap" };
+  const card: React.CSSProperties = { background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 16, padding: 24 };
+  const input: React.CSSProperties = { width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", outline: "none" };
+  const th: React.CSSProperties = { textAlign: "right", padding: "8px 10px", fontSize: "var(--text-caption2)", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--muted)", whiteSpace: "nowrap" };
+  const td: React.CSSProperties = { textAlign: "right", padding: "9px 10px", fontSize: "var(--text-footnote)", whiteSpace: "nowrap" };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -482,13 +482,13 @@ export function AdsManager({
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <h3 style={{ margin: "0 0 4px", color: "var(--accent)", fontSize: 15, letterSpacing: "1px", textTransform: "uppercase" }}>Central ad account</h3>
-            <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+            <h3 style={{ margin: "0 0 4px", color: "var(--accent)", fontSize: "var(--text-subheadline)", letterSpacing: "1px", textTransform: "uppercase" }}>Central ad account</h3>
+            <p style={{ margin: 0, fontSize: "var(--text-footnote)", color: "var(--muted)" }}>
               {isConfigured ? <>Connected: <b style={{ color: "var(--text)" }}>{savedAccount || acctId}</b></> : "Connect the central Meta ad account to see performance here."}
             </p>
           </div>
           <button type="button" onClick={() => setSetupOpen((s) => !s)}
-            style={{ fontSize: 12, padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.04)", color: "var(--muted)", cursor: "pointer" }}>
+            style={{ fontSize: "var(--text-caption1)", padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--muted)", cursor: "pointer" }}>
             {setupOpen ? "Hide" : isConfigured ? "Edit" : "Set up"}
           </button>
         </div>
@@ -496,25 +496,25 @@ export function AdsManager({
         {setupOpen && (
           <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
-              <label style={{ display: "block", fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>Ad Account ID</label>
+              <label style={{ display: "block", fontSize: "var(--text-footnote)", color: "var(--muted)", marginBottom: 6 }}>Ad Account ID</label>
               <input style={input} value={acctId} onChange={(e) => setAcctId(e.target.value)} placeholder="act_1234567890 (Ads Manager → account dropdown)" />
             </div>
             <div>
-              <label style={{ display: "block", fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: "var(--text-footnote)", color: "var(--muted)", marginBottom: 6 }}>
                 Marketing API token {isConfigured && <span style={{ color: "#1877F2" }}>· saved 🔒</span>}
               </label>
               <input type="password" autoComplete="off" style={input} value={token} onChange={(e) => setToken(e.target.value)}
                 placeholder={isConfigured ? "Stored securely — leave blank to keep current" : "A token with ads_read on this account"} />
-              <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 2px 0" }}>
+              <p style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", margin: "6px 2px 0" }}>
                 Needs the <b>ads_read</b> permission. Graph API Explorer → your app → add <b>ads_read</b> → generate token.
               </p>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <button type="button" onClick={save} disabled={saving}
-                style={{ background: "linear-gradient(135deg, #1877F2, #0A52CC)", color: "#fff", padding: "10px 20px", borderRadius: 8, border: "none", fontWeight: 600, cursor: saving ? "wait" : "pointer" }}>
+                style={{ background: "linear-gradient(135deg, #1877F2, var(--accent))", color: "#fff", padding: "10px 20px", borderRadius: 8, border: "none", fontWeight: "var(--weight-semibold)", cursor: saving ? "wait" : "pointer" }}>
                 {saving ? "Saving…" : "Save"}
               </button>
-              {saveMsg && <span style={{ fontSize: 13, color: saveMsg.startsWith("Saved") ? "#22c55e" : "#f87171" }}>{saveMsg}</span>}
+              {saveMsg && <span style={{ fontSize: "var(--text-footnote)", color: saveMsg.startsWith("Saved") ? "var(--good)" : "var(--bad)" }}>{saveMsg}</span>}
             </div>
           </div>
         )}
@@ -527,7 +527,7 @@ export function AdsManager({
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {[...PRESETS, { key: "custom", label: "Custom" }].map((p) => (
                 <button key={p.key} onClick={() => setPreset(p.key)}
-                  style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: 13,
+                  style={{ padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: "var(--text-footnote)",
                     border: `1px solid ${preset === p.key ? "var(--accent)" : "var(--border)"}`,
                     background: preset === p.key ? "var(--accent)" : "rgba(255,255,255,0.03)",
                     color: preset === p.key ? "#fff" : "var(--text)" }}>
@@ -537,34 +537,34 @@ export function AdsManager({
               {preset === "custom" && (
                 <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                   <input type="date" value={customFrom} max={customTo || undefined} onChange={(e) => setCustomFrom(e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.03)", color: "var(--text)", fontSize: 13 }} />
-                  <span style={{ color: "var(--muted)", fontSize: 13 }}>→</span>
+                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", fontSize: "var(--text-footnote)" }} />
+                  <span style={{ color: "var(--muted)", fontSize: "var(--text-footnote)" }}>→</span>
                   <input type="date" value={customTo} min={customFrom || undefined} onChange={(e) => setCustomTo(e.target.value)}
-                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.03)", color: "var(--text)", fontSize: 13 }} />
+                    style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", fontSize: "var(--text-footnote)" }} />
                 </span>
               )}
             </div>
             <button onClick={() => load()} disabled={loading}
-              style={{ fontSize: 12, padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.04)", color: "var(--muted)", cursor: "pointer" }}>
+              style={{ fontSize: "var(--text-caption1)", padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--muted)", cursor: "pointer" }}>
               {loading ? "Loading…" : "🔄 Refresh"}
             </button>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-            <Stat label="Spend" value={money(sym, totals.spend)} tone="#f59e0b" delta={deltaFor(totals.spend, prevTotals?.spend, false)} />
+            <Stat label="Spend" value={money(sym, totals.spend)} tone="var(--warn)" delta={deltaFor(totals.spend, prevTotals?.spend, false)} />
             <Stat label="Leads (CRM)" value={totals.leads.toLocaleString("en-IN")} tone="#1877F2" delta={deltaFor(totals.leads, prevTotals?.leads, true)} />
-            <Stat label="Qualified" value={totals.qualified.toLocaleString("en-IN")} tone="#a855f7" delta={deltaFor(totals.qualified, prevTotals?.qualified, true)} />
-            <Stat label="Booked" value={totals.booked.toLocaleString("en-IN")} tone="#22c55e" delta={deltaFor(totals.booked, prevTotals?.booked, true)} />
-            <Stat label="Cost / Booked" value={totals.booked ? money(sym, totals.spend / totals.booked) : "—"} tone="#ef4444"
+            <Stat label="Qualified" value={totals.qualified.toLocaleString("en-IN")} tone="var(--purple)" delta={deltaFor(totals.qualified, prevTotals?.qualified, true)} />
+            <Stat label="Booked" value={totals.booked.toLocaleString("en-IN")} tone="var(--good)" delta={deltaFor(totals.booked, prevTotals?.booked, true)} />
+            <Stat label="Cost / Booked" value={totals.booked ? money(sym, totals.spend / totals.booked) : "—"} tone="var(--bad)"
               delta={deltaFor(totals.booked ? totals.spend / totals.booked : 0, prevTotals && prevTotals.booked ? prevTotals.spend / prevTotals.booked : undefined, false)} />
             {(() => {
               const q = leadQuality(totals.leads, totals.qualified, totals.booked);
               const gap = gapToGrade(totals.leads, totals.qualified, totals.booked);
-              return <Stat label="Lead Quality" value={q ? `${q.grade} · ${q.score}` : "—"} tone={q?.tone ?? "#86868B"}
+              return <Stat label="Lead Quality" value={q ? `${q.grade} · ${q.score}` : "—"} tone={q?.tone ?? "var(--muted)"}
                 hint={gap ? `${gap.need} more qualified → ${gap.grade}` : q ? "Top grade — copy this everywhere" : undefined} />;
             })()}
           </div>
-          {prevTotals && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: -6 }}>▲▼ = change vs the previous {preset === "custom" ? "period" : (PRESETS.find((p) => p.key === preset)?.label ?? "period").toLowerCase()}.</div>}
+          {prevTotals && <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: -6 }}>▲▼ = change vs the previous {preset === "custom" ? "period" : (PRESETS.find((p) => p.key === preset)?.label ?? "period").toLowerCase()}.</div>}
 
           {/* Leads you have already paid for and nobody rang.
               Every other fix on this page costs money or a new creative. This one
@@ -572,18 +572,18 @@ export function AdsManager({
               produced them — so it goes first, before the advisor and the table. */}
           {unworked.length > 0 && (
             <div style={{ ...card, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.35)", padding: 18 }}>
-              <strong style={{ color: "#fca5a5", fontSize: 15 }}>
+              <strong style={{ color: "var(--bad)", fontSize: "var(--text-subheadline)" }}>
                 📞 {totals.never} lead{totals.never === 1 ? "" : "s"} you paid for were never called
               </strong>
-              <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text)", lineHeight: 1.6 }}>
+              <p style={{ margin: "6px 0 0", fontSize: "var(--text-footnote)", color: "var(--text)", lineHeight: 1.6 }}>
                 {Math.round((totals.never / Math.max(1, totals.leads)) * 100)}% of this period&apos;s leads never got a single dial.
                 They still count against the ad&apos;s grade, so these campaigns are scoring worse than they really are —
                 call them before pausing or judging anything here.
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
                 {unworked.slice(0, 5).map((a) => (
-                  <span key={a.campaign_id} style={{ fontSize: 12.5, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", borderRadius: 999, padding: "4px 12px", color: "var(--text)" }}>
-                    {a.campaign_name} · <b style={{ color: "#fca5a5" }}>{a.crm_never_called}</b> of {a.crm_leads}
+                  <span key={a.campaign_id} style={{ fontSize: "var(--text-caption1)", background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 999, padding: "4px 12px", color: "var(--text)" }}>
+                    {a.campaign_name} · <b style={{ color: "var(--bad)" }}>{a.crm_never_called}</b> of {a.crm_leads}
                   </span>
                 ))}
               </div>
@@ -595,15 +595,15 @@ export function AdsManager({
             const v = creativeVariety(rows);
             return (
               <div style={card}>
-                <strong style={{ color: "var(--text)", fontSize: 15 }}>Creative variety</strong>
-                <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55 }}>
+                <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>Creative variety</strong>
+                <p style={{ margin: "6px 0 0", fontSize: "var(--text-footnote)", color: "var(--muted)", lineHeight: 1.55 }}>
                   Counted from the ads loaded for this period. A campaign with one ad has nothing else to show.
                   This page does not change Meta, and it does not write ads.
                 </p>
                 {v.creatives === 0 ? (
-                  <p style={{ margin: "12px 0 0", fontSize: 13.5, color: "var(--text)" }}>No ads with delivery in this period, so there is nothing to count.</p>
+                  <p style={{ margin: "12px 0 0", fontSize: "var(--text-footnote)", color: "var(--text)" }}>No ads with delivery in this period, so there is nothing to count.</p>
                 ) : (
-                  <ul style={{ margin: "12px 0 0", paddingLeft: 18, fontSize: 13.5, color: "var(--text)", lineHeight: 1.6 }}>
+                  <ul style={{ margin: "12px 0 0", paddingLeft: 18, fontSize: "var(--text-footnote)", color: "var(--text)", lineHeight: 1.6 }}>
                     <li><b>{v.creatives}</b> different {v.creatives === 1 ? "ad" : "ads"} had delivery, across {v.campaigns} {v.campaigns === 1 ? "campaign" : "campaigns"}.</li>
                     <li>
                       {v.single.length === 0
@@ -618,7 +618,7 @@ export function AdsManager({
                     <li>Housing ads: do not promise guaranteed returns, rental yield, or appreciation. This page will not write that.</li>
                   </ul>
                 )}
-                <p style={{ margin: "10px 0 0", fontSize: 12.5, color: "var(--muted)" }}>
+                <p style={{ margin: "10px 0 0", fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
                   Add or pause creatives in Meta Ads Manager. This CRM only reads them.
                 </p>
               </div>
@@ -629,7 +629,7 @@ export function AdsManager({
           <div style={{ ...card, background: "rgba(99,102,241,0.05)", border: "1px solid rgba(99,102,241,0.25)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ minWidth: 220, flex: 1 }}>
-                <strong style={{ color: "#fff", fontSize: 15 }}>🧠 AI Ad Advisor</strong>
+                <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>🧠 AI Ad Advisor</strong>
                 <p className="subtitle" style={{ margin: "2px 0 0" }}>
                   Analyses your live campaigns — CTR, CPC, CPM, CPA, ROAS — and the creative
                   counts on this page. It does not turn anything on in Meta.
@@ -639,7 +639,7 @@ export function AdsManager({
                 {advising ? "Analysing…" : advice ? "Re-analyse" : "Analyse my ads"}
               </button>
             </div>
-            {advErr && <div style={{ marginTop: 10, color: "#f87171", fontSize: 13 }}>{advErr}</div>}
+            {advErr && <div style={{ marginTop: 10, color: "var(--bad)", fontSize: "var(--text-footnote)" }}>{advErr}</div>}
 
             {advice && (
               <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -648,32 +648,32 @@ export function AdsManager({
                     {advice.alerts.map((al, i) => {
                       const hi = al.severity === "high";
                       return (
-                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 12px", borderRadius: 10,
+                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 12px", borderRadius: 12,
                           background: hi ? "rgba(239,68,68,0.1)" : "rgba(245,158,11,0.1)",
                           border: `1px solid ${hi ? "rgba(239,68,68,0.35)" : "rgba(245,158,11,0.35)"}` }}>
                           <span>{hi ? "🚨" : "⚠️"}</span>
-                          <span style={{ fontSize: 13.5, color: hi ? "#fca5a5" : "#fcd34d" }}>{al.text}</span>
+                          <span style={{ fontSize: "var(--text-footnote)", color: hi ? "var(--bad)" : "var(--warn)" }}>{al.text}</span>
                         </div>
                       );
                     })}
                   </div>
                 )}
                 {advice.headline && (
-                  <div style={{ fontSize: 16, fontWeight: 600, color: "#fff", letterSpacing: "-0.01em" }}>
+                  <div style={{ fontSize: "var(--text-callout)", fontWeight: "var(--weight-semibold)", color: "var(--text)", letterSpacing: "-0.01em" }}>
                     {advice.headline}
                   </div>
                 )}
                 {advice.funnel && (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
                     {([
-                      ["📣 Awareness", advice.funnel.awareness, "#f59e0b"],
-                      ["🔁 Retargeting", advice.funnel.retargeting, "#a855f7"],
-                      ["🎯 Conversion", advice.funnel.conversion, "#22c55e"],
+                      ["📣 Awareness", advice.funnel.awareness, "var(--warn)"],
+                      ["🔁 Retargeting", advice.funnel.retargeting, "var(--purple)"],
+                      ["🎯 Conversion", advice.funnel.conversion, "var(--good)"],
                     ] as const).map(([label, text, tone]) =>
                       text ? (
-                        <div key={label} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 12, padding: 14 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: tone, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>{label}</div>
-                          <div style={{ fontSize: 13.5, color: "var(--text)", lineHeight: 1.5 }}>{text}</div>
+                        <div key={label} style={{ background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 12, padding: 14 }}>
+                          <div style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-bold)", color: tone, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>{label}</div>
+                          <div style={{ fontSize: "var(--text-footnote)", color: "var(--text)", lineHeight: 1.5 }}>{text}</div>
                         </div>
                       ) : null,
                     )}
@@ -681,19 +681,19 @@ export function AdsManager({
                 )}
                 {Array.isArray(advice.actions) && advice.actions.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Do this next</div>
+                    <div style={{ fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Do this next</div>
                     {advice.actions.map((a, i) => {
-                      const tone = a.priority === "high" ? "#ef4444" : a.priority === "medium" ? "#f59e0b" : "#86868B";
+                      const tone = a.priority === "high" ? "var(--bad)" : a.priority === "medium" ? "var(--warn)" : "var(--muted)";
                       return (
-                        <div key={i} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px" }}>
+                        <div key={i} style={{ background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: "1px 8px", textTransform: "uppercase" }}>{a.priority ?? "action"}</span>
-                            <strong style={{ color: "#fff", fontSize: 14 }}>{a.title}</strong>
-                            {a.metric && <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>↳ {a.metric}</span>}
+                            <span style={{ fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: "1px 8px", textTransform: "uppercase" }}>{a.priority ?? "action"}</span>
+                            <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>{a.title}</strong>
+                            {a.metric && <span style={{ marginLeft: "auto", fontSize: "var(--text-caption1)", color: "var(--muted)" }}>↳ {a.metric}</span>}
                           </div>
-                          {a.why && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 5 }}>{a.why}</div>}
-                          {a.how && <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 5 }}>👉 {a.how}</div>}
-                          {a.source && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5, opacity: 0.8 }}>📊 Source: {a.source}</div>}
+                          {a.why && <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", marginTop: 5 }}>{a.why}</div>}
+                          {a.how && <div style={{ fontSize: "var(--text-footnote)", color: "var(--text)", marginTop: 5 }}>👉 {a.how}</div>}
+                          {a.source && <div style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", marginTop: 5, opacity: 0.8 }}>📊 Source: {a.source}</div>}
                         </div>
                       );
                     })}
@@ -701,9 +701,9 @@ export function AdsManager({
                 )}
                 {Array.isArray(advice.watch) && advice.watch.length > 0 && (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <span style={{ fontSize: 12, color: "var(--muted)" }}>Watch:</span>
+                    <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>Watch:</span>
                     {advice.watch.map((w, i) => (
-                      <span key={i} style={{ fontSize: 12, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", borderRadius: 999, padding: "3px 10px", color: "var(--text)" }}>{w}</span>
+                      <span key={i} style={{ fontSize: "var(--text-caption1)", background: "var(--tint)", border: "1px solid var(--border)", borderRadius: 999, padding: "3px 10px", color: "var(--text)" }}>{w}</span>
                     ))}
                   </div>
                 )}
@@ -719,25 +719,25 @@ export function AdsManager({
           {!error && (
             <div style={card}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-                <strong style={{ color: "#fff", fontSize: 15 }}>🔍 What&apos;s working</strong>
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>Compare by:</span>
+                <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>🔍 What&apos;s working</strong>
+                <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>Compare by:</span>
                 {[
                   ["placement", "Placement"], ["audience", "Audience"], ["region", "Region"],
                   ["device", "Device"], ["adset", "Ad set"], ["creative", "Creative"],
                 ].map(([k, lbl]) => (
                   <button key={k} onClick={() => loadBreakdown(k)}
-                    style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+                    style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: "var(--text-caption1)",
                       border: `1px solid ${bdKind === k ? "var(--accent)" : "var(--border)"}`,
                       background: bdKind === k ? "var(--accent)" : "rgba(255,255,255,0.03)",
                       color: bdKind === k ? "#fff" : "var(--text)" }}>{lbl}</button>
                 ))}
               </div>
               {!bdKind ? (
-                <div style={{ fontSize: 13, color: "var(--muted)" }}>Pick a dimension to see which placements, audiences or creatives get the best CTR and cheapest clicks.</div>
+                <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)" }}>Pick a dimension to see which placements, audiences or creatives get the best CTR and cheapest clicks.</div>
               ) : bdLoading ? (
-                <div style={{ fontSize: 13, color: "var(--muted)" }}>Loading…</div>
+                <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)" }}>Loading…</div>
               ) : bdRows.length === 0 ? (
-                <div style={{ fontSize: 13, color: "var(--muted)" }}>No breakdown data for this range.</div>
+                <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)" }}>No breakdown data for this range.</div>
               ) : (
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
@@ -749,11 +749,11 @@ export function AdsManager({
                     </thead>
                     <tbody>
                       {bdRows.slice(0, 20).map((r, i) => (
-                        <tr key={i} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                          <td style={{ ...td, textAlign: "left", color: "#fff" }}>{r.key}</td>
+                        <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
+                          <td style={{ ...td, textAlign: "left", color: "var(--text)" }}>{r.key}</td>
                           <td style={td}>{r.impressions.toLocaleString("en-IN")}</td>
                           <td style={td}>{r.clicks.toLocaleString("en-IN")}</td>
-                          <td style={{ ...td, color: r.ctr >= 1 ? "#22c55e" : r.ctr < 0.6 ? "#ef4444" : undefined }}>{r.ctr.toFixed(2)}%</td>
+                          <td style={{ ...td, color: r.ctr >= 1 ? "var(--good)" : r.ctr < 0.6 ? "var(--bad)" : undefined }}>{r.ctr.toFixed(2)}%</td>
                           <td style={td}>{money(sym, r.cpc)}</td>
                           <td style={td}>{money(sym, r.spend)}</td>
                         </tr>
@@ -771,26 +771,26 @@ export function AdsManager({
               // tells an owner nothing about what to do. The token simply has to
               // be replaced, so say that and open the box that takes it.
               <div style={{ ...card, borderColor: "rgba(245,158,11,0.45)" }}>
-                <strong style={{ color: "#f59e0b", fontSize: 15 }}>🔑 Facebook token expired</strong>
-                <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "var(--text)", lineHeight: 1.6 }}>
+                <strong style={{ color: "var(--warn)", fontSize: "var(--text-subheadline)" }}>🔑 Facebook token expired</strong>
+                <p style={{ margin: "6px 0 0", fontSize: "var(--text-footnote)", color: "var(--text)", lineHeight: 1.6 }}>
                   Meta&apos;s token ended on {expiredOn(error)}.
                   Ad numbers (spend, CTR, CPC) are not coming in right now.
                   <b> Leads are not affected.</b> They use a different token, and they are still coming in.
                 </p>
-                <p style={{ margin: "8px 0 0", fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
+                <p style={{ margin: "8px 0 0", fontSize: "var(--text-footnote)", color: "var(--muted)", lineHeight: 1.6 }}>
                   Make a new token: <b>Graph API Explorer</b> → choose your app → add the <b>ads_read</b> permission
                   → <b>Generate Access Token</b> → copy the long code.
                   Paste it with the button below, then tap Save.
                   Leave the Ad Account ID as it is.
                 </p>
                 <button type="button" onClick={() => setSetupOpen(true)}
-                  style={{ marginTop: 12, background: "linear-gradient(135deg, #1877F2, #0A52CC)", color: "#fff",
-                    padding: "9px 18px", borderRadius: 8, border: "none", fontWeight: 600, cursor: "pointer" }}>
+                  style={{ marginTop: 12, background: "linear-gradient(135deg, #1877F2, var(--accent))", color: "#fff",
+                    padding: "9px 18px", borderRadius: 8, border: "none", fontWeight: "var(--weight-semibold)", cursor: "pointer" }}>
                   Add new token
                 </button>
               </div>
             ) : (
-              <div style={{ ...card, borderColor: "rgba(248,113,113,0.4)", color: "#f87171", fontSize: 14 }}>{error}</div>
+              <div style={{ ...card, borderColor: "rgba(248,113,113,0.4)", color: "var(--bad)", fontSize: "var(--text-subheadline)" }}>{error}</div>
             )
           )}
 
@@ -806,14 +806,14 @@ export function AdsManager({
                       <th style={th}>CTR</th>
                       <th style={th}>Spend</th>
                       <th style={{ ...th, color: "#1877F2" }}>Leads</th>
-                      <th style={{ ...th, color: "#a855f7" }}>Qual.</th>
-                      <th style={{ ...th, color: "#22c55e" }}>Booked</th>
-                      <th style={{ ...th, color: "#ef4444" }}>Cost/Book</th>
+                      <th style={{ ...th, color: "var(--purple)" }}>Qual.</th>
+                      <th style={{ ...th, color: "var(--good)" }}>Booked</th>
+                      <th style={{ ...th, color: "var(--bad)" }}>Cost/Book</th>
                     </tr>
                   </thead>
                   <tbody>
                     {aggs.length === 0 && (
-                      <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: "var(--muted)", fontSize: 14 }}>
+                      <tr><td colSpan={9} style={{ padding: 24, textAlign: "center", color: "var(--muted)", fontSize: "var(--text-subheadline)" }}>
                         {loaded ? "No ad activity in this period." : "Loading…"}
                       </td></tr>
                     )}
@@ -828,54 +828,54 @@ export function AdsManager({
                       return (
                         <Fragment key={a.campaign_id}>
                           <tr onClick={() => setExpanded((s) => { const n = new Set(s); n.has(a.campaign_id) ? n.delete(a.campaign_id) : n.add(a.campaign_id); return n; })}
-                            style={{ borderTop: "1px solid var(--border)", cursor: "pointer", background: "rgba(255,255,255,0.02)" }}>
-                            <td style={{ padding: "10px 10px", fontSize: 13.5, fontWeight: 600, color: "var(--text)", maxWidth: 320 }}>
+                            style={{ borderTop: "1px solid var(--border)", cursor: "pointer", background: "var(--tint)" }}>
+                            <td style={{ padding: "10px 10px", fontSize: "var(--text-footnote)", fontWeight: "var(--weight-semibold)", color: "var(--text)", maxWidth: 320 }}>
                               <span style={{ color: "var(--muted)", marginRight: 6 }}>{open ? "▾" : "▸"}</span>
                               {a.campaign_name}
                               {q && (
                                 <span title={`Lead quality ${q.score}/100 (from CRM outcomes)`}
-                                  style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: q.tone, border: `1px solid ${q.tone}`, borderRadius: 999, padding: "1px 7px" }}>
+                                  style={{ marginLeft: 8, fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", color: q.tone, border: `1px solid ${q.tone}`, borderRadius: 999, padding: "1px 7px" }}>
                                   Lead {q.grade}
                                 </span>
                               )}
                               {(() => {
                                 const d = diag[a.campaign_id];
                                 if (!d?.verdict || d.verdict === "unknown") return null;
-                                const tone = d.verdict === "followup_problem" ? "#f59e0b" : d.verdict === "ad_problem" ? "#ef4444" : "#22c55e";
+                                const tone = d.verdict === "followup_problem" ? "var(--warn)" : d.verdict === "ad_problem" ? "var(--bad)" : "var(--good)";
                                 const icon = d.verdict === "followup_problem" ? "\u260E\uFE0F" : d.verdict === "ad_problem" ? "\uD83C\uDFAF" : "\u2705";
                                 const short = d.verdict === "followup_problem" ? "Follow-up problem" : d.verdict === "ad_problem" ? "Ad problem" : "Working";
                                 return (
                                   <span title={d.verdict_label ?? short}
-                                    style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: "1px 7px" }}>
+                                    style={{ marginLeft: 8, fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", color: tone, border: `1px solid ${tone}`, borderRadius: 999, padding: "1px 7px" }}>
                                     {icon} {short}
                                   </span>
                                 );
                               })()}
                               {a.crm_never_called > 0 && (
                                 <span title={`${a.crm_never_called} of this campaign's ${a.crm_leads} leads have never been dialled — they drag the grade down without ever getting a chance`}
-                                  style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "#ef4444", border: "1px solid #ef4444", borderRadius: 999, padding: "1px 7px" }}>
+                                  style={{ marginLeft: 6, fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", color: "var(--bad)", border: "1px solid var(--bad)", borderRadius: 999, padding: "1px 7px" }}>
                                   {a.crm_never_called} not called
                                 </span>
                               )}
                               {anyFatigued && (
                                 <span title="A creative here is fatiguing — high frequency, falling CTR"
-                                  style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "#f59e0b" }}>🔥 fatigue</span>
+                                  style={{ marginLeft: 6, fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", color: "var(--warn)" }}>🔥 fatigue</span>
                               )}
                               {a.campaign_status && a.campaign_status !== "ACTIVE" && (
-                                <span style={{ marginLeft: 8, fontSize: 11, color: "#f59e0b" }}>{a.campaign_status.toLowerCase().replace(/_/g, " ")}</span>
+                                <span style={{ marginLeft: 8, fontSize: "var(--text-caption2)", color: "var(--warn)" }}>{a.campaign_status.toLowerCase().replace(/_/g, " ")}</span>
                               )}
                             </td>
                             <td style={td}>{a.impressions.toLocaleString("en-IN")}</td>
                             <td style={td}>{a.clicks.toLocaleString("en-IN")}</td>
                             <td style={td}>{ctr.toFixed(2)}%</td>
                             <td style={td}>{money(sym, a.spend)}</td>
-                            <td style={{ ...td, color: "#1877F2", fontWeight: 600 }}>{a.crm_leads}</td>
-                            <td style={{ ...td, color: "#a855f7", fontWeight: 600 }}>{a.crm_qualified}</td>
-                            <td style={{ ...td, color: "#22c55e", fontWeight: 600 }}>{a.crm_booked}</td>
-                            <td style={{ ...td, color: "#ef4444" }}>{a.crm_booked ? money(sym, a.spend / a.crm_booked) : "—"}</td>
+                            <td style={{ ...td, color: "#1877F2", fontWeight: "var(--weight-semibold)" }}>{a.crm_leads}</td>
+                            <td style={{ ...td, color: "var(--purple)", fontWeight: "var(--weight-semibold)" }}>{a.crm_qualified}</td>
+                            <td style={{ ...td, color: "var(--good)", fontWeight: "var(--weight-semibold)" }}>{a.crm_booked}</td>
+                            <td style={{ ...td, color: "var(--bad)" }}>{a.crm_booked ? money(sym, a.spend / a.crm_booked) : "—"}</td>
                           </tr>
                           {open && a.crm_leads > 0 && (
-                            <tr style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                            <tr style={{ borderTop: "1px solid var(--border)" }}>
                               <td colSpan={9} style={{ padding: 0 }}><WhyThisGrade a={autopsyOf(a)} /></td>
                             </tr>
                           )}
@@ -883,13 +883,13 @@ export function AdsManager({
                             const actr = r.impressions ? (r.clicks / r.impressions) * 100 : 0;
                             const fat = fatigue(r.frequency, actr);
                             return (
-                              <tr key={r.ad_id} style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-                                <td style={{ padding: "8px 10px 8px 30px", fontSize: 13, color: "var(--muted)", maxWidth: 320 }}>
+                              <tr key={r.ad_id} style={{ borderTop: "1px solid var(--border)" }}>
+                                <td style={{ padding: "8px 10px 8px 30px", fontSize: "var(--text-footnote)", color: "var(--muted)", maxWidth: 320 }}>
                                   {r.ad_name}
                                   {r.adset_name && <span style={{ opacity: 0.6 }}> · {r.adset_name}</span>}
                                   {fat && (
                                     <span title={`Frequency ${(r.frequency ?? 0).toFixed(1)}, CTR ${actr.toFixed(2)}% — refresh the creative`}
-                                      style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: fat.tone, border: `1px solid ${fat.tone}`, borderRadius: 999, padding: "0 6px" }}>
+                                      style={{ marginLeft: 6, fontSize: "var(--text-caption2)", fontWeight: "var(--weight-bold)", color: fat.tone, border: `1px solid ${fat.tone}`, borderRadius: 999, padding: "0 6px" }}>
                                       🔥 {fat.level}
                                     </span>
                                   )}
@@ -899,8 +899,8 @@ export function AdsManager({
                                 <td style={{ ...td, color: "var(--muted)" }}>{actr.toFixed(2)}%</td>
                                 <td style={{ ...td, color: "var(--muted)" }}>{money(sym, r.spend)}</td>
                                 <td style={{ ...td, color: "#1877F2" }}>{r.crm_leads}</td>
-                                <td style={{ ...td, color: "#a855f7" }}>{r.crm_qualified}</td>
-                                <td style={{ ...td, color: "#22c55e" }}>{r.crm_booked}</td>
+                                <td style={{ ...td, color: "var(--purple)" }}>{r.crm_qualified}</td>
+                                <td style={{ ...td, color: "var(--good)" }}>{r.crm_booked}</td>
                                 <td style={{ ...td, color: "var(--muted)" }}>{r.crm_booked ? money(sym, r.spend / r.crm_booked) : "—"}</td>
                               </tr>
                             );
@@ -914,7 +914,7 @@ export function AdsManager({
             </div>
           )}
 
-          <p style={{ fontSize: 12.5, color: "var(--muted)", margin: 0, lineHeight: 1.6 }}>
+          <p style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", margin: 0, lineHeight: 1.6 }}>
             <b style={{ color: "var(--text)" }}>Leads / Qualified / Booked</b> come from YOUR CRM (matched to each ad by its Meta ad id), so
             you see which ads bring real buyers — not just form-fills. <b style={{ color: "var(--text)" }}>Open any campaign</b> to see why it
             got its grade: how many of its leads were never dialled, how long the first call took, and what the people who answered actually
@@ -950,30 +950,30 @@ function WhyThisGrade({ a }: { a: Autopsy }) {
   const pct = (n: number) => (n / Math.max(1, a.leads)) * 100;
 
   const bar: { n: number; tone: string; label: string }[] = [
-    { n: a.never, tone: "#ef4444", label: "Never called" },
-    { n: a.missed, tone: "#f59e0b", label: "Called, no answer" },
-    { n: a.spoke, tone: "#22c55e", label: "Actually spoke" },
+    { n: a.never, tone: "var(--bad)", label: "Never called" },
+    { n: a.missed, tone: "var(--warn)", label: "Called, no answer" },
+    { n: a.spoke, tone: "var(--good)", label: "Actually spoke" },
   ];
   const chip: React.CSSProperties = {
-    fontSize: 12, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)",
+    fontSize: "var(--text-caption1)", background: "var(--tint)", border: "1px solid var(--border)",
     borderRadius: 999, padding: "4px 11px", color: "var(--text)", whiteSpace: "nowrap",
   };
 
   return (
-    <div style={{ padding: "16px 18px 18px 30px", background: "rgba(255,255,255,0.02)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+    <div style={{ padding: "16px 18px 18px 30px", background: "var(--tint)", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: "var(--text-caption1)", fontWeight: "var(--weight-bold)", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
         Why this is a {raw?.grade ?? "—"}
       </div>
 
       {/* Was the lead even reached? These three add up to every lead. */}
       <div>
-        <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", background: "var(--tint)" }}>
           {bar.map((s) => s.n > 0 ? <div key={s.label} title={`${s.label}: ${s.n}`} style={{ width: `${pct(s.n)}%`, background: s.tone }} /> : null)}
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
           {bar.map((s) => (
-            <span key={s.label} style={{ fontSize: 12.5, color: "var(--muted)" }}>
-              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: s.tone, marginRight: 6 }} />
+            <span key={s.label} style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 8, background: s.tone, marginRight: 6 }} />
               {s.label} <b style={{ color: "var(--text)" }}>{s.n}</b>
               <span style={{ opacity: 0.7 }}> · {Math.round(pct(s.n))}%</span>
             </span>
@@ -983,7 +983,7 @@ function WhyThisGrade({ a }: { a: Autopsy }) {
 
       {/* The grade with our own follow-up taken out of it. */}
       {worked && a.never + a.missed > 0 && (
-        <div style={{ fontSize: 13.5, color: "var(--text)", lineHeight: 1.6 }}>
+        <div style={{ fontSize: "var(--text-footnote)", color: "var(--text)", lineHeight: 1.6 }}>
           Judged only on the <b>{a.spoke}</b> leads someone actually spoke to, this ad is a{" "}
           <b style={{ color: worked.tone }}>{worked.grade}</b>
           {raw && worked.grade !== raw.grade
@@ -994,17 +994,17 @@ function WhyThisGrade({ a }: { a: Autopsy }) {
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <span style={{ ...chip, borderColor: a.mins >= 60 ? "rgba(245,158,11,0.5)" : undefined }}>
-          ⏱ First call after <b style={{ color: a.mins >= 60 ? "#f59e0b" : "#22c55e" }}>{fmtMins(a.mins)}</b>
+          ⏱ First call after <b style={{ color: a.mins >= 60 ? "var(--warn)" : "var(--good)" }}>{fmtMins(a.mins)}</b>
         </span>
-        <span style={chip}>✅ Qualified <b style={{ color: "#a855f7" }}>{a.qualified}</b></span>
-        <span style={chip}>🏆 Booked <b style={{ color: "#22c55e" }}>{a.booked}</b></span>
+        <span style={chip}>✅ Qualified <b style={{ color: "var(--purple)" }}>{a.qualified}</b></span>
+        <span style={chip}>🏆 Booked <b style={{ color: "var(--good)" }}>{a.booked}</b></span>
         <span style={chip}>🙅 Said no <b>{a.no}</b></span>
         <span style={chip}>🚫 Wrong number / DNC <b>{a.junk}</b></span>
         <span style={chip}>🔁 Still open <b>{a.open}</b></span>
       </div>
 
       {gap && (
-        <div style={{ fontSize: 13.5, color: "var(--text)" }}>
+        <div style={{ fontSize: "var(--text-footnote)", color: "var(--text)" }}>
           <b style={{ color: gap.tone }}>{gap.need} more</b> of these {a.leads} leads reaching Interested would have made this a{" "}
           <b style={{ color: gap.tone }}>{gap.grade}</b>.
         </div>
@@ -1012,8 +1012,8 @@ function WhyThisGrade({ a }: { a: Autopsy }) {
 
       {move && (
         <div style={{ background: `${move.tone}12`, border: `1px solid ${move.tone}55`, borderRadius: 12, padding: "12px 14px" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: move.tone }}>{move.icon} {move.title}</div>
-          <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 5, lineHeight: 1.6 }}>{move.detail}</div>
+          <div style={{ fontSize: "var(--text-subheadline)", fontWeight: "var(--weight-bold)", color: move.tone }}>{move.icon} {move.title}</div>
+          <div style={{ fontSize: "var(--text-footnote)", color: "var(--text)", marginTop: 5, lineHeight: 1.6 }}>{move.detail}</div>
         </div>
       )}
     </div>
@@ -1022,15 +1022,15 @@ function WhyThisGrade({ a }: { a: Autopsy }) {
 
 function Stat({ label, value, tone, delta, hint }:{ label: string; value: string; tone: string; delta?: { pct: number; good: boolean } | null; hint?: string }) {
   return (
-    <div style={{ background: `${tone}0d`, border: `1px solid ${tone}22`, borderRadius: 14, padding: "16px 18px" }}>
-      <div style={{ color: tone, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
-      <div style={{ color: tone, fontSize: 24, fontWeight: 800, marginTop: 6 }}>{value}</div>
+    <div style={{ background: `${tone}0d`, border: `1px solid ${tone}22`, borderRadius: 12, padding: "16px 18px" }}>
+      <div style={{ color: tone, fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+      <div style={{ color: tone, fontSize: "var(--text-title2)", fontWeight: "var(--weight-bold)", marginTop: 6 }}>{value}</div>
       {delta && (
-        <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600, color: delta.good ? "#22c55e" : "#ef4444" }}>
-          {delta.pct >= 0 ? "▲" : "▼"} {Math.abs(delta.pct)}% <span style={{ color: "var(--muted)", fontWeight: 400 }}>vs prev</span>
+        <div style={{ marginTop: 4, fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", color: delta.good ? "var(--good)" : "var(--bad)" }}>
+          {delta.pct >= 0 ? "▲" : "▼"} {Math.abs(delta.pct)}% <span style={{ color: "var(--muted)", fontWeight: "var(--weight-regular)" }}>vs prev</span>
         </div>
       )}
-      {hint && <div style={{ marginTop: 4, fontSize: 11.5, color: "var(--muted)" }}>{hint}</div>}
+      {hint && <div style={{ marginTop: 4, fontSize: "var(--text-caption2)", color: "var(--muted)" }}>{hint}</div>}
     </div>
   );
 }

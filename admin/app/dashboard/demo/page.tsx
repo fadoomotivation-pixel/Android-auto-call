@@ -243,7 +243,7 @@ export default async function DemoPage() {
             <tbody>
               {saved.map((l) => (
                 <tr key={l.id}>
-                  <td style={{ color: "var(--text)", fontWeight: 500 }}>{l.name}</td>
+                  <td style={{ color: "var(--text)", fontWeight: "var(--weight-medium)" }}>{l.name}</td>
                   <td>{l.company_name}</td>
                   <td>{stageLabel(l.stage)}</td>
                   <td>{l.extra?.demo_saved}</td>
@@ -382,7 +382,7 @@ export default async function DemoPage() {
           <tbody>
             {camps.map((c) => (
               <tr key={c.name}>
-                <td style={{ color: "var(--text)", fontWeight: 500 }}>{c.name}</td>
+                <td style={{ color: "var(--text)", fontWeight: "var(--weight-medium)" }}>{c.name}</td>
                 <td className="num">{rupees(c.spend)}</td>
                 <td className="num">{c.leads}</td>
                 <td className="num">{c.leads ? rupees(c.spend / c.leads) : "—"}</td>
@@ -454,7 +454,7 @@ function Stat({ k, v, sub, tone }: { k: string; v: string; sub: string; tone?: "
     <div className="card stat">
       <div className="label">{k}</div>
       <div className="value" style={tone === "warn" ? { color: "var(--warn)" } : undefined}>{v}</div>
-      {sub && <div className="subtitle" style={{ margin: "4px 0 0", fontSize: 12.5 }}>{sub}</div>}
+      {sub && <div className="subtitle" style={{ margin: "4px 0 0", fontSize: "var(--text-caption1)" }}>{sub}</div>}
     </div>
   );
 }

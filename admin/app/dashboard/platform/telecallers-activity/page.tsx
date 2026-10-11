@@ -209,7 +209,7 @@ const WATCH_LABEL: Record<Row["wa_watch"], string> = {
   stale: "stale",
 };
 const WATCH_TONE: Record<Row["wa_watch"], string | undefined> = {
-  none: undefined, ok: "#22c55e", stale: "#f59e0b",
+  none: undefined, ok: "var(--good)", stale: "var(--warn)",
 };
 
 export default function TelecallerActivityPage({
@@ -364,17 +364,17 @@ async function ActivityBody({
             through above it. */}
         <div style={{
           display: "flex", alignItems: "center", gap: 12, paddingBottom: 12,
-          borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: 14,
+          borderBottom: "1px solid var(--border)", marginBottom: 14,
           position: "sticky", top: -16, zIndex: 2,
           background: "#0b1411", paddingTop: 16, marginTop: -16,
         }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: "#e9edef" }}>{label}</div>
-            <div className="subtitle" style={{ fontSize: 12.5, marginTop: 2 }}>
+            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-bold)", color: "#e9edef" }}>{label}</div>
+            <div className="subtitle" style={{ fontSize: "var(--text-caption1)", marginTop: 2 }}>
               {peer} · {thread.length} messages
               {inCrm
-                ? <> · <span style={{ color: "#22c55e" }}>a lead in {current.company_name.trim()}</span></>
-                : <> · <span style={{ color: "#f59e0b" }}>not in the CRM</span></>}
+                ? <> · <span style={{ color: "var(--good)" }}>a lead in {current.company_name.trim()}</span></>
+                : <> · <span style={{ color: "var(--warn)" }}>not in the CRM</span></>}
             </div>
             {/* WHEN THIS CONVERSATION ACTUALLY STOPPED.
                 "Today's messages aren't showing" is the reasonable conclusion
@@ -383,7 +383,7 @@ async function ActivityBody({
                 the fold. It belongs in the header, where the question is
                 asked. */}
             {ordered.length > 0 && (
-              <div className="subtitle" style={{ fontSize: 12, marginTop: 2, opacity: 0.85 }}>
+              <div className="subtitle" style={{ fontSize: "var(--text-caption1)", marginTop: 2, opacity: 0.85 }}>
                 {new Date(ordered[0].sent_at).toLocaleDateString("en-IN", {
                   timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric",
                 })}
@@ -424,14 +424,14 @@ async function ActivityBody({
               background: owed ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.03)",
               border: `1px solid ${owed ? "rgba(239,68,68,0.28)" : "var(--border)"}`,
             }}>
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: 13 }}>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: "var(--text-footnote)" }}>
                 <span>
                   {owed
-                    ? <><strong style={{ color: "#ef4444" }}>They spoke last</strong> — waiting {human}</>
+                    ? <><strong style={{ color: "var(--bad)" }}>They spoke last</strong> — waiting {human}</>
                     : <><strong>Rep spoke last</strong> — ball is with the buyer</>}
                 </span>
-                {hot > 0 && <span style={{ color: "#22c55e" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
-                {risk > 0 && <span style={{ color: "#ef4444" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
+                {hot > 0 && <span style={{ color: "var(--good)" }}>🔥 {hot} buying signal{hot === 1 ? "" : "s"}</span>}
+                {risk > 0 && <span style={{ color: "var(--bad)" }}>⚠️ {risk} walk-away signal{risk === 1 ? "" : "s"}</span>}
                 <span style={{ opacity: 0.7 }}>{ordered.length} messages</span>
                 {/* "KITNA DOWNLOAD HO GAYA", ANSWERED WITH A NUMBER.
                     A photo arrives as a message first and as a file a few
@@ -450,7 +450,7 @@ async function ActivityBody({
                   ).length;
                   const done = got === withFile.length;
                   return (
-                    <span style={{ color: done ? "#22c55e" : coming > 0 ? "#f59e0b" : "#8696a0" }}>
+                    <span style={{ color: done ? "var(--good)" : coming > 0 ? "var(--warn)" : "#8696a0" }}>
                       📎 {got}/{withFile.length} file{withFile.length === 1 ? "" : "s"}
                       {done ? " downloaded" : coming > 0 ? ` downloaded · ${coming} still coming` : " downloaded"}
                     </span>
@@ -487,13 +487,13 @@ async function ActivityBody({
             <input name="name" placeholder="Their name (optional)" defaultValue={named ?? ""}
               style={{
                 padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)",
-                background: "rgba(255,255,255,0.02)", color: "var(--text)", minWidth: 220,
+                background: "var(--tint)", color: "var(--text)", minWidth: 220,
               }} />
             <button className="btn" type="submit">Add as lead</button>
           </form>
         </div>
 
-        <p className="subtitle" style={{ marginTop: 14, fontSize: 12.5 }}>
+        <p className="subtitle" style={{ marginTop: 14, fontSize: "var(--text-caption1)" }}>
           If it reads like a colleague or something personal, it is neither a buyer nor a problem —
           leave it. This list is a shortlist to judge, not a verdict.
         </p>
@@ -583,7 +583,7 @@ async function ActivityBody({
                 Excel: every message
               </a>
             </div>
-            <p className="subtitle" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
+            <p className="subtitle" style={{ marginTop: 8, marginBottom: 0, fontSize: "var(--text-caption1)" }}>
               The Excel files list every number, busiest first, with what the client
               first said and where the chat was left — names are usually blank
               because WhatsApp only sends a name for numbers saved in the phone.
@@ -597,7 +597,7 @@ async function ActivityBody({
             marginBottom: 16, padding: 14,
             background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.35)",
           }}>
-            <strong style={{ color: "#f59e0b" }}>
+            <strong style={{ color: "var(--warn)" }}>
               ⚠️ This WhatsApp is probably not the number they use for leads
             </strong>
             <p className="subtitle" style={{ marginTop: 6, marginBottom: 8 }}>
@@ -618,14 +618,14 @@ async function ActivityBody({
                 all-clear is part of why that took a fortnight to find.
                 A reassurance is only worth printing if it can be justified,
                 and this one names what it rests on. */}
-            <p className="subtitle" style={{ margin: 0, fontSize: 12.5 }}>
+            <p className="subtitle" style={{ margin: 0, fontSize: "var(--text-caption1)" }}>
               This compares the numbers they DIAL against the numbers they MESSAGE. It is
               worth checking the second number first — but if their WhatsApp capture is also
               missing recent chats or is all groups, that is a different problem and the
               worker version on this page will say so.
             </p>
             {fit.called_and_messaged > 0 && (
-              <p style={{ marginTop: 10, marginBottom: 0, fontSize: 13 }}>
+              <p style={{ marginTop: 10, marginBottom: 0, fontSize: "var(--text-footnote)" }}>
                 💡 <strong>{fit.called_and_messaged}</strong> people here were both{" "}
                 <strong>called and messaged</strong> by this rep and are <strong>not in the CRM
                 at all</strong> — the likeliest uncaptured leads on the platform. They are at the
@@ -638,12 +638,12 @@ async function ActivityBody({
         {(current.wa_hot > 0 || current.wa_risk > 0) && (
           <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
             {current.wa_risk > 0 && (
-              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, background: "rgba(239,68,68,0.14)", color: "#ef4444" }}>
+              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", background: "rgba(239,68,68,0.14)", color: "var(--bad)" }}>
                 ⚠️ {current.wa_risk} buyer message{current.wa_risk === 1 ? "" : "s"} read as about to walk
               </span>
             )}
             {current.wa_hot > 0 && (
-              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12.5, fontWeight: 600, background: "rgba(34,197,94,0.14)", color: "#22c55e" }}>
+              <span style={{ padding: "4px 10px", borderRadius: 999, fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)", background: "rgba(34,197,94,0.14)", color: "var(--good)" }}>
                 🔥 {current.wa_hot} buyer message{current.wa_hot === 1 ? "" : "s"} read as ready to move
               </span>
             )}
@@ -688,7 +688,7 @@ async function ActivityBody({
             marginBottom: 16, padding: 14,
             background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.45)",
           }}>
-            <strong style={{ color: "#ef4444" }}>
+            <strong style={{ color: "var(--bad)" }}>
               {current.wa_watch === "none"
                 ? "⚠️ This telecaller's WhatsApp is not connected"
                 : "⚠️ Nothing is being captured right now"}
@@ -714,7 +714,7 @@ async function ActivityBody({
             marginBottom: 16, padding: 14,
             background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.35)",
           }}>
-            <strong style={{ color: "#ef4444" }}>
+            <strong style={{ color: "var(--bad)" }}>
               🔒 {locked.reduce((a, c) => a + c.locked, 0)} messages arrived that could not be read
             </strong>
             <p className="subtitle" style={{ marginTop: 6, marginBottom: 8 }}>
@@ -723,7 +723,7 @@ async function ActivityBody({
               match, so the contents cannot be opened. This is not a sync delay and it does not
               clear on its own.
             </p>
-            <p className="subtitle" style={{ margin: 0, fontSize: 12.5 }}>
+            <p className="subtitle" style={{ margin: 0, fontSize: "var(--text-caption1)" }}>
               <strong>Have the rep link again once</strong> — WhatsApp → Linked devices → Link a
               device. Everything from that moment on arrives readable. The messages already locked
               stay locked; nothing can recover those.
@@ -763,8 +763,8 @@ async function ActivityBody({
               });
               return (
                 <p style={{
-                  marginTop: -4, marginBottom: 12, fontSize: 13,
-                  color: hours >= 24 ? "#ef4444" : "#8696a0",
+                  marginTop: -4, marginBottom: 12, fontSize: "var(--text-footnote)",
+                  color: hours >= 24 ? "var(--bad)" : "#8696a0",
                   fontWeight: hours >= 24 ? 600 : 400,
                 }}>
                   {hours >= 24
@@ -789,10 +789,10 @@ async function ActivityBody({
               }}>
                 <div>
                   <div style={{ fontSize: 40, marginBottom: 10, opacity: 0.5 }}>💬</div>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: "#e9edef" }}>
+                  <div style={{ fontSize: "var(--text-subheadline)", fontWeight: "var(--weight-semibold)", color: "#e9edef" }}>
                     Pick a conversation
                   </div>
-                  <p style={{ fontSize: 13, maxWidth: 360, margin: "8px auto 0", lineHeight: 1.5 }}>
+                  <p style={{ fontSize: "var(--text-footnote)", maxWidth: 360, margin: "8px auto 0", lineHeight: 1.5 }}>
                     Photos, documents and voice notes open inside the chat.
                     Anything sent before this CRM started keeping files says so
                     rather than showing an empty bubble.
@@ -843,7 +843,7 @@ async function ActivityBody({
               <div className="card" key={cid} style={{ marginBottom: 16, padding: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                   <strong>{head.lead_name || head.lead_phone || "Lead"}</strong>
-                  <span className="subtitle" style={{ fontSize: 12 }}>
+                  <span className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
                     {head.lead_phone}{head.stage ? ` · ${head.stage}` : ""} · {ordered.length} messages
                   </span>
                 </div>
@@ -891,14 +891,14 @@ async function ActivityBody({
                         {u.peer_phone}
                       </a>
                     </td>
-                    <td style={{ fontSize: 13 }}>
+                    <td style={{ fontSize: "var(--text-footnote)" }}>
                       {u.peer_name || <span style={{ opacity: 0.4 }}>—</span>}
                     </td>
                     {/* Rang AND messaged, and still not in the CRM. That is a
                         working relationship living on one person's phone. */}
                     <td style={{ textAlign: "right" }}>
                       {u.calls > 0
-                        ? <strong style={{ color: "#f59e0b" }}>{u.calls}×</strong>
+                        ? <strong style={{ color: "var(--warn)" }}>{u.calls}×</strong>
                         : <span style={{ opacity: 0.3 }}>—</span>}
                     </td>
                     <td style={{ textAlign: "right" }}>{u.messages}</td>
@@ -906,10 +906,10 @@ async function ActivityBody({
                         never replied is noise; one that wrote BACK is a person. */}
                     <td style={{ textAlign: "right" }}>
                       {u.they_sent > 0
-                        ? <strong style={{ color: "#22c55e" }}>{u.they_sent}</strong>
+                        ? <strong style={{ color: "var(--good)" }}>{u.they_sent}</strong>
                         : <span style={{ opacity: 0.4 }}>0</span>}
                     </td>
-                    <td className="subtitle" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                    <td className="subtitle" style={{ fontSize: "var(--text-caption1)", whiteSpace: "nowrap" }}>
                       {ago(u.last_seen)}
                     </td>
                   </tr>
@@ -948,15 +948,15 @@ async function ActivityBody({
                   const dead = b.replies_from === 0;
                   return (
                     <tr key={i}>
-                      <td style={{ fontSize: 12.5, maxWidth: 420 }}>
+                      <td style={{ fontSize: "var(--text-caption1)", maxWidth: 420 }}>
                         {b.body.length > 120 ? `${b.body.slice(0, 119)}…` : b.body}
                       </td>
                       <td style={{ textAlign: "right" }}>{b.sent_to}</td>
                       <td style={{ textAlign: "right" }}>{b.times_sent}</td>
                       <td style={{ textAlign: "right" }}>
                         {dead
-                          ? <strong style={{ color: "#ef4444" }}>0</strong>
-                          : <strong style={{ color: "#22c55e" }}>{b.replies_from}</strong>}
+                          ? <strong style={{ color: "var(--bad)" }}>0</strong>
+                          : <strong style={{ color: "var(--good)" }}>{b.replies_from}</strong>}
                       </td>
                     </tr>
                   );
@@ -966,7 +966,7 @@ async function ActivityBody({
           </>
         )}
 
-        <p className="subtitle" style={{ marginTop: 16, fontSize: 12.5 }}>
+        <p className="subtitle" style={{ marginTop: 16, fontSize: "var(--text-caption1)" }}>
           These are company-allotted SIMs, so every conversation on them is kept — the ones with
           known leads appear as threads above, and any other number can be opened by clicking it.
           That is the point: a buyer messaging a company number who was never added to the CRM is
@@ -996,7 +996,7 @@ async function ActivityBody({
               padding: "6px 14px", textDecoration: "none",
               fontWeight: d === days ? 700 : 400,
               color: d === days ? "#fff" : "inherit",
-              background: d === days ? "var(--accent, #4353B8)" : undefined,
+              background: d === days ? "var(--accent)" : undefined,
             }}>
             {d === 1 ? "Today" : `${d} days`}
           </a>
@@ -1005,16 +1005,16 @@ async function ActivityBody({
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
         <div className="card" style={{ flex: 1, minWidth: 160, padding: "14px 12px" }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: silent.length ? "#ef4444" : undefined }}>
+          <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)", color: silent.length ? "var(--bad)" : undefined }}>
             {silent.length}/{rows.length}
           </div>
-          <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
+          <div className="subtitle" style={{ margin: 0, fontSize: "var(--text-caption1)" }}>
             nothing recorded in {days} day{days === 1 ? "" : "s"} — no call, no WhatsApp
           </div>
         </div>
         <div className="card" style={{ flex: 1, minWidth: 160, padding: "14px 12px" }}>
-          <div style={{ fontSize: 26, fontWeight: 700 }}>{watched}/{rows.length}</div>
-          <div className="subtitle" style={{ margin: 0, fontSize: 12 }}>
+          <div style={{ fontSize: "var(--text-title1)", fontWeight: "var(--weight-bold)" }}>{watched}/{rows.length}</div>
+          <div className="subtitle" style={{ margin: 0, fontSize: "var(--text-caption1)" }}>
             on WhatsApp watching — the rest have no WhatsApp half to measure
           </div>
         </div>
@@ -1041,20 +1041,20 @@ async function ActivityBody({
                 <a href={`/dashboard/platform/telecallers-activity${qs({ rep: r.rep_id, days })}`}>
                   <strong>{r.rep_name || "Telecaller"}</strong>
                 </a>
-                <div className="subtitle" style={{ fontSize: 12 }}>
+                <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
                   {r.company_name.trim()} · {r.leads_assigned} leads
                   {!r.is_active && " · inactive account"}
                 </div>
                 {r.silent && (
-                  <div style={{ color: "#ef4444", fontSize: 12, fontWeight: 600 }}>
+                  <div style={{ color: "var(--bad)", fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)" }}>
                     Nothing recorded in {days} day{days === 1 ? "" : "s"}
                   </div>
                 )}
               </td>
               <td style={{ textAlign: "right" }}>
-                {r.calls === 0 ? <strong style={{ color: "#ef4444" }}>0</strong> : r.calls}
+                {r.calls === 0 ? <strong style={{ color: "var(--bad)" }}>0</strong> : r.calls}
                 {r.connected_calls > 0 && (
-                  <div className="subtitle" style={{ fontSize: 12 }}>{r.connected_calls} got through</div>
+                  <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>{r.connected_calls} got through</div>
                 )}
               </td>
               <td style={{ textAlign: "right" }}>{r.talk_seconds ? fmtTalk(r.talk_seconds) : <span style={{ opacity: 0.3 }}>—</span>}</td>
@@ -1069,42 +1069,42 @@ async function ActivityBody({
               <td style={{ textAlign: "right" }}>
                 {r.wa_watch === "ok" ? <strong>{r.wa_replies}</strong> : <span style={{ opacity: 0.3 }}>—</span>}
               </td>
-              <td style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+              <td style={{ fontSize: "var(--text-caption1)", whiteSpace: "nowrap" }}>
                 {r.wa_risk > 0 && (
-                  <div style={{ color: "#ef4444", fontWeight: 700 }}>⚠️ {r.wa_risk} about to walk</div>
+                  <div style={{ color: "var(--bad)", fontWeight: "var(--weight-bold)" }}>⚠️ {r.wa_risk} about to walk</div>
                 )}
                 {r.wa_hot > 0 && (
-                  <div style={{ color: "#22c55e", fontWeight: 700 }}>🔥 {r.wa_hot} ready to move</div>
+                  <div style={{ color: "var(--good)", fontWeight: "var(--weight-bold)" }}>🔥 {r.wa_hot} ready to move</div>
                 )}
                 {r.wa_risk === 0 && r.wa_hot === 0 && <span style={{ opacity: 0.3 }}>—</span>}
               </td>
-              <td style={{ fontSize: 12.5 }}>
+              <td style={{ fontSize: "var(--text-caption1)" }}>
                 <span style={{ color: WATCH_TONE[r.wa_watch] }}>{WATCH_LABEL[r.wa_watch]}</span>
                 {r.wa_watch === "ok" && r.wa_messages === 0 && r.wa_offbook > 0 && (
-                  <div className="subtitle" style={{ fontSize: 12 }}>
+                  <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
                     {r.wa_offbook} seen, none with your leads
                   </div>
                 )}
                 {r.wa_calls > 0 && (
-                  <div className="subtitle" style={{ fontSize: 12 }}>{r.wa_calls} WhatsApp calls</div>
+                  <div className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>{r.wa_calls} WhatsApp calls</div>
                 )}
               </td>
-              <td className="subtitle" style={{ fontSize: 12.5 }}>{ago(r.last_call_at)}</td>
+              <td className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>{ago(r.last_call_at)}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <p className="subtitle" style={{ marginTop: 16, fontSize: 12.5 }}>
+      <p className="subtitle" style={{ marginTop: 16, fontSize: "var(--text-caption1)" }}>
         Click a name to read their WhatsApp conversations with leads — the evidence behind the
         number. <strong>Nothing recorded</strong> means no call, no WhatsApp message and no
         WhatsApp call in the period; it is deliberately hard to earn.
       </p>
-      <p className="subtitle" style={{ fontSize: 12.5 }}>
+      <p className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
         A dash means <strong>not measured</strong>, not zero: that rep&apos;s WhatsApp is not
         connected, so their WhatsApp half is unknown and they should not be judged on it.
       </p>
-      <p className="subtitle" style={{ fontSize: 12.5 }}>
+      <p className="subtitle" style={{ fontSize: "var(--text-caption1)" }}>
         <strong>Signals</strong> read the buyer&apos;s own words for plain phrases — price/booking/site
         visit questions read as ready to move, cancel/competitor/too-expensive read as about to
         walk. It is a keyword read, not a verdict on the rep: open a name to see the actual message.

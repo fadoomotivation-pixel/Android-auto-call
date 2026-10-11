@@ -96,13 +96,13 @@ export function BestCalls({
   }, [rows, company, rep]);
 
   const card: CSSProperties = {
-    background: "rgba(255,255,255,0.015)", border: "1px solid var(--border)",
+    background: "var(--tint)", border: "1px solid var(--border)",
     borderRadius: 16, padding: 18, marginBottom: 12,
   };
 
   return (
     <div style={{ marginTop: 26 }}>
-      <h3 style={{ margin: 0, color: "#fff" }}>🏆 Best call of the {period === "day" ? "day" : "week"}</h3>
+      <h3 style={{ margin: 0, color: "var(--text)" }}>🏆 Best call of the {period === "day" ? "day" : "week"}</h3>
       <p className="subtitle" style={{ margin: "6px 0 0" }}>
         Each telecaller&apos;s highest-rated call, with the coach&apos;s own reason for the score. Rated 1-5 by the
         AI Coach — the same score the rep sees. Between two equal scores the longer call wins.
@@ -150,34 +150,34 @@ export function BestCalls({
         <div key={r.call_id} style={card}>
           <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
             <span style={{
-              fontSize: 13, fontWeight: 700,
-              color: r.rating >= 4 ? "#22c55e" : r.rating >= 3 ? "#f59e0b" : "#ef4444",
-              border: `1px solid ${r.rating >= 4 ? "#22c55e" : r.rating >= 3 ? "#f59e0b" : "#ef4444"}`,
+              fontSize: "var(--text-footnote)", fontWeight: "var(--weight-bold)",
+              color: r.rating >= 4 ? "var(--good)" : r.rating >= 3 ? "var(--warn)" : "var(--bad)",
+              border: `1px solid ${r.rating >= 4 ? "var(--good)" : r.rating >= 3 ? "var(--warn)" : "var(--bad)"}`,
               borderRadius: 999, padding: "2px 10px",
             }}>{r.rating}/5</span>
-            <strong style={{ color: "#fff", fontSize: 15 }}>{r.rep_name ?? "Telecaller"}</strong>
-            {isSuper && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>· {r.company_name ?? "—"}</span>}
-            <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+            <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>{r.rep_name ?? "Telecaller"}</strong>
+            {isSuper && <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>· {r.company_name ?? "—"}</span>}
+            <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
               · {period === "day" ? "on" : "week of"}{" "}
               {istDate(r.period_start)}
             </span>
-            <span style={{ marginLeft: "auto", fontSize: 12.5, color: "var(--muted)" }}>
+            <span style={{ marginLeft: "auto", fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
               {mmss(r.duration_seconds)} · {ist(r.started_at)}
             </span>
           </div>
 
-          <div style={{ fontSize: 13, color: "var(--text)", marginTop: 8 }}>
+          <div style={{ fontSize: "var(--text-footnote)", color: "var(--text)", marginTop: 8 }}>
             Customer: <strong>{r.contact_name || r.phone || "—"}</strong>
             {!r.has_recording && <span style={{ color: "var(--muted)" }}> · recording not saved</span>}
           </div>
 
           {r.good && (
-            <div style={{ fontSize: 13, color: "#22c55e", marginTop: 6, lineHeight: 1.55 }}>
+            <div style={{ fontSize: "var(--text-footnote)", color: "var(--good)", marginTop: 6, lineHeight: 1.55 }}>
               ✅ {r.good}
             </div>
           )}
           {r.improve && (
-            <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, lineHeight: 1.55 }}>
+            <div style={{ fontSize: "var(--text-caption1)", color: "var(--muted)", marginTop: 4, lineHeight: 1.55 }}>
               💡 {r.improve}
             </div>
           )}

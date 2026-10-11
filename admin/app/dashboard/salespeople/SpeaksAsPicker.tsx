@@ -63,7 +63,7 @@ export function SpeaksAsPicker({ userId, value }: { userId: string; value: strin
                 padding: "3px 9px",
                 borderRadius: 999,
                 cursor: busy ? "wait" : "pointer",
-                fontSize: 11.5,
+                fontSize: "var(--text-caption2)",
                 fontWeight: on ? 700 : 500,
                 whiteSpace: "nowrap",
                 border: `1px solid ${on ? "var(--accent)" : "var(--border)"}`,
@@ -76,7 +76,7 @@ export function SpeaksAsPicker({ userId, value }: { userId: string; value: strin
           );
         })}
       </div>
-      {err && <span style={{ fontSize: 11, color: "var(--bad)" }}>{err}</span>}
+      {err && <span style={{ fontSize: "var(--text-caption2)", color: "var(--bad)" }}>{err}</span>}
     </div>
   );
 }

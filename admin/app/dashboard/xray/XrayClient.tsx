@@ -178,7 +178,7 @@ export function XrayClient({
           <select
             value={companyId}
             onChange={(e) => setCompanyId(e.target.value)}
-            style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "rgba(255,255,255,0.02)", color: "var(--text)", minWidth: 200 }}
+            style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--tint)", color: "var(--text)", minWidth: 200 }}
           >
             <option value="">🏢 All companies</option>
             {companies.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
@@ -208,25 +208,25 @@ export function XrayClient({
               return (
                 <div key={a.companyId} className="card" style={{ padding: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                    <strong style={{ color: "#fff", fontSize: 15 }}>🏢 {a.name}</strong>
+                    <strong style={{ color: "var(--text)", fontSize: "var(--text-subheadline)" }}>🏢 {a.name}</strong>
                     <button className="link" onClick={() => setCompanyId(a.companyId)}>Open →</button>
                   </div>
                   {a.headline && (
-                    <div style={{ fontSize: 13.5, color: "var(--text)", marginTop: 8, lineHeight: 1.55 }}>
+                    <div style={{ fontSize: "var(--text-footnote)", color: "var(--text)", marginTop: 8, lineHeight: 1.55 }}>
                       {a.headline}
                     </div>
                   )}
                   {a.topLabel && (
-                    <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 10 }}>
-                      ☠️ Biggest deal killer: <strong style={{ color: "#fff" }}>{a.topLabel}</strong> ({a.topCount ?? 0} leads)
+                    <div style={{ fontSize: "var(--text-footnote)", color: "var(--muted)", marginTop: 10 }}>
+                      ☠️ Biggest deal killer: <strong style={{ color: "var(--text)" }}>{a.topLabel}</strong> ({a.topCount ?? 0} leads)
                     </div>
                   )}
                   {a.gold > 0 && (
-                    <div style={{ fontSize: 13, color: "var(--good)", marginTop: 4 }}>
+                    <div style={{ fontSize: "var(--text-footnote)", color: "var(--good)", marginTop: 4 }}>
                       💰 {a.gold} dead {a.gold === 1 ? "lead" : "leads"} the AI thinks are winnable
                     </div>
                   )}
-                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10 }}>
+                  <div style={{ fontSize: "var(--text-caption2)", color: "var(--muted)", marginTop: 10 }}>
                     Scanned {istDate(a.at)}
                   </div>
                 </div>
@@ -245,7 +245,7 @@ export function XrayClient({
         <>
           {report.headline && (
             <div className="card" style={{ marginBottom: 20, borderLeft: "3px solid var(--accent)" }}>
-              <div style={{ fontSize: 17, fontWeight: 600, color: "#fff", lineHeight: 1.5 }}>{report.headline}</div>
+              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-semibold)", color: "var(--text)", lineHeight: 1.5 }}>{report.headline}</div>
             </div>
           )}
 
@@ -256,13 +256,13 @@ export function XrayClient({
               {(report.objections ?? []).map((o, i) => (
                 <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                    <span style={{ color: "#fff", fontWeight: 600 }}>{o.label}</span>
+                    <span style={{ color: "var(--text)", fontWeight: "var(--weight-semibold)" }}>{o.label}</span>
                     <span className="badge dnc">{o.count} leads</span>
                   </div>
-                  <div style={{ color: "var(--muted)", fontSize: 13, margin: "4px 0", fontStyle: "italic" }}>
+                  <div style={{ color: "var(--muted)", fontSize: "var(--text-footnote)", margin: "4px 0", fontStyle: "italic" }}>
                     &ldquo;{o.quote}&rdquo;
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--good)" }}>↳ {o.fix}</div>
+                  <div style={{ fontSize: "var(--text-footnote)", color: "var(--good)" }}>↳ {o.fix}</div>
                 </div>
               ))}
             </div>
@@ -272,15 +272,15 @@ export function XrayClient({
               <div className="label">📈 Demand — what buyers are asking for</div>
               {(report.demand ?? []).map((d, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-                  <span style={{ color: "#fff" }}>{d.what}</span>
-                  <span style={{ color: "var(--accent)", fontWeight: 700 }}>{d.count}</span>
+                  <span style={{ color: "var(--text)" }}>{d.what}</span>
+                  <span style={{ color: "var(--accent)", fontWeight: "var(--weight-bold)" }}>{d.count}</span>
                 </div>
               ))}
               {(report.winning ?? []).length > 0 && (
                 <>
                   <div className="label" style={{ marginTop: 18 }}>🏆 Common on winning calls</div>
                   {(report.winning ?? []).map((w, i) => (
-                    <div key={i} style={{ padding: "6px 0", fontSize: 14, color: "var(--muted)" }}>• {w}</div>
+                    <div key={i} style={{ padding: "6px 0", fontSize: "var(--text-subheadline)", color: "var(--muted)" }}>• {w}</div>
                   ))}
                 </>
               )}
@@ -300,7 +300,7 @@ export function XrayClient({
                 <tbody>
                   {(report.gold ?? []).map((g, i) => (
                     <tr key={i} className="hover-row">
-                      <td style={{ color: "#fff", fontWeight: 500 }}>{g.name}</td>
+                      <td style={{ color: "var(--text)", fontWeight: "var(--weight-medium)" }}>{g.name}</td>
                       <td style={{ whiteSpace: "nowrap" }}>{g.phone}</td>
                       <td style={{ color: "var(--muted)" }}>{g.why}</td>
                       <td style={{ color: "var(--good)" }}>&ldquo;{g.opener}&rdquo;</td>
@@ -316,7 +316,7 @@ export function XrayClient({
             <div className="card" style={{ marginTop: 20 }}>
               <div className="label">🎯 This week&apos;s 3 moves for the owner</div>
               {(report.advice ?? []).map((a, i) => (
-                <div key={i} style={{ padding: "6px 0", color: "#fff", fontSize: 14 }}>{i + 1}. {a}</div>
+                <div key={i} style={{ padding: "6px 0", color: "var(--text)", fontSize: "var(--text-subheadline)" }}>{i + 1}. {a}</div>
               ))}
             </div>
           )}

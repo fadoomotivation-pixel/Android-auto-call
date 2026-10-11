@@ -58,7 +58,7 @@ export function OpenAtLatest({ count }: { count: number }) {
             position: "sticky", bottom: 12, left: "50%", transform: "translateX(-50%)",
             display: "block", padding: "7px 16px", borderRadius: 999, cursor: "pointer",
             border: "1px solid rgba(255,255,255,0.14)", background: "#202c33",
-            color: "#e9edef", fontSize: 12.5, fontWeight: 600,
+            color: "#e9edef", fontSize: "var(--text-caption1)", fontWeight: "var(--weight-semibold)",
             boxShadow: "0 6px 20px -8px rgba(0,0,0,0.8)",
           }}
         >

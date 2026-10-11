@@ -328,7 +328,7 @@ export function WaInbox({
             </div>
           )}
           {!loading && failed && (
-            <div className="wai-load" style={{ color: "#fca5a5" }}>
+            <div className="wai-load" style={{ color: "var(--bad)" }}>
               Could not open this conversation: {failed}
             </div>
           )}
@@ -404,16 +404,16 @@ const CSS = `
 .wai-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
 .wai-tags .tag{font-style:normal;font-size:10px;font-weight:600;
   padding:1px 6px;border-radius:4px;white-space:nowrap}
-.tag.warn{background:rgba(245,158,11,.16);color:#f5b342}
-.tag.lead{background:rgba(0,168,132,.2);color:#4fd6ae}
-.tag.grp{background:rgba(129,140,248,.16);color:#a5b4fc}
+.tag.warn{background:rgba(245,158,11,.16);color:var(--warn)}
+.tag.lead{background:rgba(0,168,132,.2);color:var(--good)}
+.tag.grp{background:rgba(129,140,248,.16);color:var(--accent)}
 .wai-load{display:flex;align-items:center;gap:10px;justify-content:center;
   height:100%;color:#8696a0;font-size:13.5}
 .wai-spin{width:15px;height:15px;border-radius:50%;
   border:2px solid rgba(255,255,255,0.18);border-top-color:#25d366;
   animation:wai-sp 0.7s linear infinite}
 @keyframes wai-sp{to{transform:rotate(360deg)}}
-.tag.file{background:rgba(59,130,246,0.16);color:#93c5fd}
+.tag.file{background:rgba(59,130,246,0.16);color:var(--accent)}
 .tag.in{background:rgba(255,255,255,.07);color:#8696a0}
 .wai-anon{font-size:18px;opacity:.75;line-height:1}
 .wai-pane{min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;

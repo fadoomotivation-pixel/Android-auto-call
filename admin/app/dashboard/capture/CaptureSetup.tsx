@@ -16,10 +16,10 @@ type Member = { id: string; full_name: string | null };
 
 const input: React.CSSProperties = {
   padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)",
-  background: "rgba(255,255,255,0.02)", color: "var(--text)", width: "100%", outline: "none",
+  background: "var(--tint)", color: "var(--text)", width: "100%", outline: "none",
 };
 const field: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, minWidth: 0 };
-const lbl: React.CSSProperties = { fontSize: 13, color: "var(--muted)", fontWeight: 500 };
+const lbl: React.CSSProperties = { fontSize: "var(--text-footnote)", color: "var(--muted)", fontWeight: "var(--weight-medium)" };
 
 export function CaptureSetup({
   companyId, config, functionUrl, members,
@@ -64,11 +64,11 @@ export function CaptureSetup({
   // site builder's HTML/embed block; it POSTs straight to the capture URL.
   const embedCode = captureUrl
     ? `<form onsubmit="event.preventDefault();var f=this,b=f.querySelector('button');b.disabled=true;fetch('${captureUrl}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:f.name.value,phone:f.phone.value,email:f.email.value,source:'website'})}).then(function(r){return r.json()}).then(function(){f.reset();b.disabled=false;f.querySelector('.msg').textContent='Thank you! We will call you shortly.'}).catch(function(){b.disabled=false;f.querySelector('.msg').textContent='Something went wrong, please try again.'});return false;" style="max-width:360px;display:flex;flex-direction:column;gap:10px;font-family:sans-serif">
-  <input name="name" placeholder="Your name" required style="padding:10px;border:1px solid #ccc;border-radius:8px" />
-  <input name="phone" placeholder="Phone number" required style="padding:10px;border:1px solid #ccc;border-radius:8px" />
-  <input name="email" type="email" placeholder="Email (optional)" style="padding:10px;border:1px solid #ccc;border-radius:8px" />
-  <button type="submit" style="padding:12px;border:0;border-radius:8px;background:#4353B8;color:#fff;font-weight:600;cursor:pointer">Get a call back</button>
-  <span class="msg" style="font-size:13px;color:#16a34a"></span>
+  <input name="name" placeholder="Your name" required style="padding:10px;border:1px solid var(--border-strong);border-radius:8px" />
+  <input name="phone" placeholder="Phone number" required style="padding:10px;border:1px solid var(--border-strong);border-radius:8px" />
+  <input name="email" type="email" placeholder="Email (optional)" style="padding:10px;border:1px solid var(--border-strong);border-radius:8px" />
+  <button type="submit" style="padding:12px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer">Get a call back</button>
+  <span class="msg" style="font-size:13px;color:var(--good)"></span>
 </form>`
     : null;
 
@@ -121,7 +121,7 @@ export function CaptureSetup({
         {captureUrl ? (
           <>
             <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              <code style={{ ...input, fontSize: 12, overflowX: "auto", whiteSpace: "nowrap" }}>{captureUrl}</code>
+              <code style={{ ...input, fontSize: "var(--text-caption1)", overflowX: "auto", whiteSpace: "nowrap" }}>{captureUrl}</code>
               <button className="primary" type="button" style={{ whiteSpace: "nowrap" }}
                 onClick={() => { navigator.clipboard.writeText(captureUrl); setCopied(true); setTimeout(() => setCopied(false), 1200); }}>
                 {copied ? "Copied ✓" : "Copy"}
@@ -129,7 +129,7 @@ export function CaptureSetup({
               <a
                 href={`https://wa.me/?text=${encodeURIComponent("Please share your details here, we'll call you back: " + captureUrl)}`}
                 target="_blank" rel="noopener noreferrer"
-                style={{ whiteSpace: "nowrap", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: "rgba(37,211,102,0.14)", color: "#25D366", border: "1px solid rgba(37,211,102,0.4)", fontWeight: 600, fontSize: 13 }}
+                style={{ whiteSpace: "nowrap", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 14px", borderRadius: 8, background: "rgba(37,211,102,0.14)", color: "#25D366", border: "1px solid rgba(37,211,102,0.4)", fontWeight: "var(--weight-semibold)", fontSize: "var(--text-footnote)" }}
               >
                 Share on WhatsApp
               </a>
@@ -141,7 +141,7 @@ export function CaptureSetup({
             </div>
           </>
         ) : (
-          <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>Save once to generate your unique capture URL.</p>
+          <p style={{ color: "var(--muted)", fontSize: "var(--text-footnote)", marginTop: 6 }}>Save once to generate your unique capture URL.</p>
         )}
       </div>
 
@@ -171,7 +171,7 @@ export function CaptureSetup({
           </div>
         )}
         {form.welcome_enabled && (
-          <p style={{ color: "var(--muted)", fontSize: 12 }}>
+          <p style={{ color: "var(--muted)", fontSize: "var(--text-caption1)" }}>
             WhatsApp must be connected, and this must be a <b>Meta-approved template</b> (business-initiated messages can&apos;t be free text).
           </p>
         )}
@@ -179,22 +179,22 @@ export function CaptureSetup({
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button className="primary" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
-        {saved && <span style={{ color: "#16a34a", fontSize: 13 }}>Saved ✓</span>}
-        {err && <span className="error" style={{ fontSize: 13 }}>{err}</span>}
+        {saved && <span style={{ color: "var(--good)", fontSize: "var(--text-footnote)" }}>Saved ✓</span>}
+        {err && <span className="error" style={{ fontSize: "var(--text-footnote)" }}>{err}</span>}
       </div>
 
       {/* Test it — one click proves the whole pipeline works. */}
       {captureUrl && (
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-          <span style={{ ...lbl, color: "var(--text)", fontWeight: 600 }}>Test it</span>
+          <span style={{ ...lbl, color: "var(--text)", fontWeight: "var(--weight-semibold)" }}>Test it</span>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <button className="primary" type="button" onClick={sendTest} disabled={testing || !form.active}
-              style={{ background: "rgba(67,83,184,0.15)", color: "var(--accent, #4353B8)", border: "1px solid rgba(67,83,184,0.4)" }}>
+              style={{ background: "rgba(67,83,184,0.15)", color: "var(--accent)", border: "1px solid rgba(67,83,184,0.4)" }}>
               {testing ? "Sending…" : "🧪 Send a test lead"}
             </button>
-            {!form.active && <span style={{ fontSize: 12, color: "#f59e0b" }}>Turn on “Capture active” and Save first.</span>}
+            {!form.active && <span style={{ fontSize: "var(--text-caption1)", color: "var(--warn)" }}>Turn on “Capture active” and Save first.</span>}
             {testResult && (
-              <span style={{ fontSize: 13, color: testResult.ok ? "#16a34a" : "#f87171" }}>{testResult.msg}</span>
+              <span style={{ fontSize: "var(--text-footnote)", color: testResult.ok ? "var(--good)" : "var(--bad)" }}>{testResult.msg}</span>
             )}
           </div>
         </div>
@@ -204,28 +204,28 @@ export function CaptureSetup({
       {embedCode && (
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ ...lbl, color: "var(--text)", fontWeight: 600 }}>Add to your website — no code</span>
+            <span style={{ ...lbl, color: "var(--text)", fontWeight: "var(--weight-semibold)" }}>Add to your website — no code</span>
             <button className="primary" type="button"
               onClick={() => { navigator.clipboard.writeText(embedCode); setCopiedEmbed(true); setTimeout(() => setCopiedEmbed(false), 1200); }}>
               {copiedEmbed ? "Copied ✓" : "📋 Copy form code"}
             </button>
           </div>
-          <p style={{ color: "var(--muted)", fontSize: 12.5, margin: 0 }}>
+          <p style={{ color: "var(--muted)", fontSize: "var(--text-caption1)", margin: 0 }}>
             Copy this and paste it into any website builder’s <b>HTML / embed</b> block (WordPress, Wix, Framer, Shopify, a landing page…).
             Every submission lands here as a new lead — no Zapier, no coding.
           </p>
-          <code style={{ display: "block", padding: 12, background: "rgba(0,0,0,0.25)", borderRadius: 8, color: "var(--text)", fontSize: 11.5, whiteSpace: "pre-wrap", maxHeight: 190, overflowY: "auto" }}>
+          <code style={{ display: "block", padding: 12, background: "rgba(0,0,0,0.25)", borderRadius: 8, color: "var(--text)", fontSize: "var(--text-caption2)", whiteSpace: "pre-wrap", maxHeight: 190, overflowY: "auto" }}>
             {embedCode}
           </code>
         </div>
       )}
 
       {captureUrl && (
-        <details style={{ borderTop: "1px solid var(--border)", paddingTop: 14, fontSize: 13, color: "var(--muted)" }}>
-          <summary style={{ cursor: "pointer", color: "var(--text)", fontWeight: 600 }}>Advanced — send leads from your own code / CRM</summary>
+        <details style={{ borderTop: "1px solid var(--border)", paddingTop: 14, fontSize: "var(--text-footnote)", color: "var(--muted)" }}>
+          <summary style={{ cursor: "pointer", color: "var(--text)", fontWeight: "var(--weight-semibold)" }}>Advanced — send leads from your own code / CRM</summary>
           <div style={{ marginTop: 8 }}>
             POST JSON to the capture URL above —
-            <code style={{ display: "block", marginTop: 6, padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 8, color: "var(--text)", fontSize: 12, whiteSpace: "pre-wrap" }}>
+            <code style={{ display: "block", marginTop: 6, padding: 10, background: "rgba(0,0,0,0.2)", borderRadius: 8, color: "var(--text)", fontSize: "var(--text-caption1)", whiteSpace: "pre-wrap" }}>
 {`{ "name": "Ramesh", "phone": "98765 43210", "email": "r@x.com", "source": "website", "external_id": "form-123" }`}
             </code>
             <span>Only <code>phone</code> is required. Repeat submissions with the same phone/<code>external_id</code> are de-duplicated.</span>
@@ -239,8 +239,8 @@ export function CaptureSetup({
 function CapStat({ label, value, loading }: { label: string; value: number; loading: boolean }) {
   return (
     <div style={{ flex: "1 1 140px", minWidth: 140, background: "rgba(67,83,184,0.06)", border: "1px solid rgba(67,83,184,0.2)", borderRadius: 12, padding: "12px 14px" }}>
-      <div style={{ fontSize: 11.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.4px", color: "var(--muted)" }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--accent, #4353B8)" }}>{loading ? "…" : value.toLocaleString("en-IN")}</div>
+      <div style={{ fontSize: "var(--text-caption2)", fontWeight: "var(--weight-semibold)", textTransform: "uppercase", letterSpacing: "0.4px", color: "var(--muted)" }}>{label}</div>
+      <div style={{ fontSize: "var(--text-title2)", fontWeight: "var(--weight-bold)", marginTop: 4, color: "var(--accent)" }}>{loading ? "…" : value.toLocaleString("en-IN")}</div>
     </div>
   );
 }
