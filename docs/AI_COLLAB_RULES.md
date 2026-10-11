@@ -88,7 +88,7 @@ already here.
 
 ## 7. Product & style
 - Android: Kotlin + Jetpack Compose. `MainViewModel` uses `set { it.copy(...) }`.
-- Design system: one action blue `#007AFF` (token still named Indigo), graphite ink, grouped grey canvas `#F2F2F7`, white cards.
+- Design system: brand indigo `#5B5BF0` → sky `#4AA3FF` gradient (token still named Indigo), navy ink `#0F172A`, canvas `#F3F5FB`, white soft-shadow cards. See `ui/design/BrandKit.kt`.
 - **AI text the customer/rep reads = Hinglish, aap-form. UI chrome = professional
   English.** Keep WhatsApp green only on WhatsApp buttons.
 - Leads buckets: **New (fresh only) → Today (called-today / due-today / visit-today)

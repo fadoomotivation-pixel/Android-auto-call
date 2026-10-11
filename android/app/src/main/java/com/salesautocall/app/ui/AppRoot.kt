@@ -132,6 +132,9 @@ import androidx.navigation.compose.rememberNavController
 import com.salesautocall.app.data.AppPrefs
 import kotlinx.coroutines.launch
 import com.salesautocall.app.ui.design.AppColors
+import com.salesautocall.app.ui.design.Brand
+import com.salesautocall.app.ui.design.gradientCard
+import com.salesautocall.app.ui.design.softCard
 import com.salesautocall.app.ui.design.AppType
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -420,22 +423,25 @@ private fun LoginScreen(vm: MainViewModel) {
         Spacer(Modifier.height(Space.xxl))
         // Brand mark: the app icon shape, the name, one line of purpose.
         Box(
-            Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(AppColors.Indigo)
-                .align(Alignment.CenterHorizontally),
+            Modifier.size(84.dp).align(Alignment.CenterHorizontally)
+                .gradientCard(androidx.compose.foundation.shape.CircleShape, elevation = 16.dp)
+                .border(4.dp, Color.White.copy(alpha = 0.6f), androidx.compose.foundation.shape.CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+            Icon(Icons.Default.Call, contentDescription = null, tint = Color.White, modifier = Modifier.size(38.dp))
         }
         Spacer(Modifier.height(Space.l))
-        Text("Call Pro AI", style = AppType.title2, color = AppColors.TextPrimary,
+        Text("Call Pro AI",
+            style = AppType.title2.copy(brush = Brand.gradientHorizontal, fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold),
             modifier = Modifier.align(Alignment.CenterHorizontally))
         Text(
             if (signUp) "Create your account" else "Sign in to start your day",
             style = AppType.footnote, color = AppColors.TextSecondary,
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
-        Spacer(Modifier.height(Space.xxxl))
+        Spacer(Modifier.height(Space.xxl))
 
+        Column(Modifier.fillMaxWidth().softCard(Radii.sheet, elevation = 16.dp).padding(Space.l)) {
         if (signUp) {
             IosSegmented(
                 options = listOf("Join a company", "Create a company"),
@@ -506,6 +512,7 @@ private fun LoginScreen(vm: MainViewModel) {
             if (signUp) "Already have an account? Sign in" else "New here? Create an account",
             modifier = Modifier.fillMaxWidth(),
         ) { signUp = !signUp; formError = null }
+        }
     }
 }
 
@@ -523,14 +530,18 @@ private fun LoginField(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxWidth()) {
-        Text(label, style = AppType.footnote, color = AppColors.TextSecondary,
-            modifier = Modifier.padding(start = Space.l, bottom = Space.xs))
+        Text(label, style = AppType.label, color = AppColors.TextPrimary,
+            modifier = Modifier.padding(start = Space.xs, bottom = Space.s))
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(Radii.control).background(AppColors.Surface)
-                .padding(start = Space.l, end = if (trailing != null) Space.xs else Space.l),
+            Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(Radii.control).background(AppColors.Canvas)
+                .border(1.dp, AppColors.Border, Radii.control)
+                .padding(start = 6.dp, end = if (trailing != null) Space.xs else Space.l),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = null, tint = AppColors.TextTertiary, modifier = Modifier.size(20.dp))
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(AppColors.IndigoSoft),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, contentDescription = null, tint = AppColors.Indigo, modifier = Modifier.size(20.dp)) }
             Spacer(Modifier.width(Space.m))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty() && placeholder != null) {
@@ -644,7 +655,7 @@ private fun MainShell(vm: MainViewModel) {
                     if (downloading) {
                         Spacer(Modifier.height(14.dp))
                         val pct = (state.updateProgress * 100).toInt().coerceIn(0, 100)
-                        LinearProgressIndicator(progress = state.updateProgress, modifier = Modifier.fillMaxWidth())
+                        com.salesautocall.app.ui.design.GradientProgress(state.updateProgress)
                         Spacer(Modifier.height(6.dp))
                         Text("Downloading $pct% — the installer opens on its own.",
                             style = MaterialTheme.typography.bodySmall,
@@ -715,12 +726,12 @@ private fun MainShell(vm: MainViewModel) {
                         Column {
                             Text("Call Pro AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text("Real Estate Sales Simplified", style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                color = Color.White.copy(alpha = 0.82f))
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        Box(Modifier.padding(start = 8.dp)) {
+                            com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.Menu, "Menu") { scope.launch { drawerState.open() } }
                         }
                     },
                     actions = {
@@ -740,21 +751,19 @@ private fun MainShell(vm: MainViewModel) {
                         // that should be the brightest is the button that dials.
                         // Same weight as Settings now — the sparkle is what makes
                         // it findable, not the colour.
-                        if (state.coachOn) IconButton(onClick = { vm.openCoach() }) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = "AI Coach",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(21.dp))
-                        }
-                        IconButton(onClick = { vm.openSettings() }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
-                        }
+                        if (state.coachOn) com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.AutoAwesome, "AI Coach") { vm.openCoach() }
+                        com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.Settings, "Settings") { vm.openSettings() }
+                        Spacer(Modifier.width(8.dp))
                     },
-                    // Clean white app bar with a blue menu icon — modern CRM signature.
+                    // Brand-gradient app bar with translucent rounded icon buttons.
+                    modifier = Modifier
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
+                        .background(com.salesautocall.app.ui.design.Brand.gradient),
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                        navigationIconContentColor = MaterialTheme.colorScheme.primary,
-                        actionIconContentColor = MaterialTheme.colorScheme.onSurface,
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                        actionIconContentColor = Color.White,
                     ),
                 )
             },
@@ -1485,7 +1494,7 @@ private fun AppDrawer(
         Modifier.fillMaxWidth(0.86f),
         drawerContainerColor = AppColors.Canvas,
         drawerContentColor = MenuText,
-        drawerShape = ContinuousShape(16.dp, top = true, bottom = true),
+        drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
     ) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -1493,20 +1502,20 @@ private fun AppDrawer(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             // Brand header — the app icon, the name, the Premium tag.
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().gradientCard().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.size(48.dp).clip(ContinuousShape(12.dp))
-                        .background(Brush.linearGradient(listOf(Color(0xFF3B9BFF), IosColors.Blue))),
+                    Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Brand.OnGradientFill)
+                        .border(1.dp, Brand.OnGradientBorder, RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Default.Call, contentDescription = "Call Pro AI", tint = Color.White, modifier = Modifier.size(24.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Call Pro AI", style = AppType.title3, color = MenuText)
-                    Text("Real Estate Sales Simplified", style = AppType.footnote, color = MenuMuted)
+                    Text("Call Pro AI", style = AppType.title3, color = Color.White)
+                    Text("Real Estate Sales Simplified", style = AppType.footnote, color = Color.White.copy(alpha = 0.85f))
                 }
-                IosTag("Premium", fg = Color(0xFFB86E00), bg = IosColors.Orange.copy(alpha = 0.14f))
+                IosTag("Premium", fg = Color.White, bg = Brand.OnGradientFill)
             }
 
             // Today's Opportunities — one white group, three numbers.
@@ -1526,8 +1535,7 @@ private fun AppDrawer(
             }
 
             Column {
-                Text("QUICK ACTIONS", style = AppType.groupHeader, color = MenuMuted,
-                    modifier = Modifier.padding(start = 16.dp, bottom = 6.dp))
+                AccentHeader("Quick actions", Modifier.padding(start = 4.dp, bottom = 8.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     quick.chunked(2).forEach { pair ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

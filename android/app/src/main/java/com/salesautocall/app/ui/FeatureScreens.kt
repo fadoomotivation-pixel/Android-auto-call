@@ -853,7 +853,7 @@ private fun CallingPanel(dial: DialerUiState, vm: MainViewModel) {
 
         Spacer(Modifier.height(28.dp))
         val progress = if (dial.total > 0) dial.completed.toFloat() / dial.total else 0f
-        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+        com.salesautocall.app.ui.design.GradientProgress(progress)
         Spacer(Modifier.height(8.dp))
         Text("${dial.completed} / ${dial.total}  ·  last: ${dial.lastOutcome ?: "—"}")
 
@@ -1194,7 +1194,7 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Column(
         Modifier.fillMaxSize().verticalScroll(scroll)
-            .padding(start = 16.dp, end = 16.dp, top = 48.dp, bottom = 96.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 64.dp, bottom = 96.dp),
     ) {
         IosLargeTitle("Settings", "Your changes are saved automatically.", Modifier.padding(start = 0.dp))
         Spacer(Modifier.height(16.dp))

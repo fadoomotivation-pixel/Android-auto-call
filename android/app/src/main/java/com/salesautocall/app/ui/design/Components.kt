@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -111,10 +112,15 @@ fun SectionLabel(
             .padding(horizontal = Space.gutter, vertical = Space.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Box(
+            Modifier.width(4.dp).height(16.dp).clip(RoundedCornerShape(2.dp))
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Brand.Start, Brand.End))),
+        )
+        Spacer(Modifier.width(Space.s))
         Text(
-            text.uppercase(),
-            style = AppType.sectionLabel,
-            color = AppColors.TextTertiary,
+            text,
+            style = AppType.label,
+            color = AppColors.TextPrimary,
             modifier = Modifier.weight(1f),
         )
         if (actionLabel != null && onAction != null) {
@@ -143,7 +149,7 @@ fun HairLine(inset: Boolean = true) {
     )
 }
 
-/** Grouped white container. No outline: white on the grouped grey is the iOS card. */
+/** White card with soft corners and a soft coloured shadow. */
 @Composable
 fun AppSurface(
     modifier: Modifier = Modifier,
@@ -153,8 +159,7 @@ fun AppSurface(
 ) {
     val base = modifier
         .fillMaxWidth()
-        .clip(Radii.card)
-        .background(AppColors.Surface)
+        .softCard()
     Box((if (onClick != null) base.iosPress(scaleTo = 0.985f) { onClick() } else base).padding(padding)) {
         content()
     }
@@ -168,6 +173,7 @@ fun StatusTag(text: String, tone: StatusTone) {
         Modifier
             .clip(Radii.tag)
             .background(tone.bg)
+            .border(1.dp, tone.fg.copy(alpha = 0.30f), Radii.tag)
             .padding(horizontal = Space.s, vertical = 3.dp),
     ) {
         Text(text, style = AppType.tag, color = tone.fg, maxLines = 1)
@@ -199,11 +205,15 @@ fun InitialsAvatar(name: String, size: Int = 40) {
     Box(
         Modifier
             .size(size.dp)
-            .clip(CircleShape)
-            .background(AppColors.avatarTints[idx]),
+            .clip(RoundedCornerShape((size / 3).dp))
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(AppColors.avatarInk[idx], AppColors.avatarInk[idx].copy(alpha = 0.72f)),
+                ),
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        Text(initials, style = AppType.metaStrong, color = AppColors.avatarInk[idx])
+        Text(initials, style = AppType.metaStrong, color = Color.White)
     }
 }
 
@@ -219,9 +229,11 @@ fun PrimaryButton(
 ) {
     Row(
         modifier
-            .heightIn(min = 46.dp)
-            .clip(Radii.control)
-            .background(if (enabled) AppColors.Indigo else AppColors.SurfaceMuted)
+            .heightIn(min = 48.dp)
+            .then(
+                if (enabled) Modifier.gradientCard(Radii.control, Brand.gradientHorizontal, elevation = 8.dp)
+                else Modifier.clip(Radii.control).background(AppColors.SurfaceMuted),
+            )
             .iosPress(enabled = enabled) { onClick() }
             .padding(horizontal = Space.l),
         verticalAlignment = Alignment.CenterVertically,
@@ -251,8 +263,9 @@ fun SecondaryButton(
             .padding(vertical = 4.dp)
             .heightIn(min = 36.dp)
             .clip(Radii.control)
-            // iOS "gray" button: a quiet fill, no outline.
-            .background(IosColors.Fill)
+            // Quiet tinted fill with a hairline, so it never competes with the gradient primary.
+            .background(AppColors.Surface)
+            .border(1.dp, AppColors.Border, Radii.control)
             .iosPress(enabled = enabled) { onClick() }
             .padding(horizontal = Space.l),
         verticalAlignment = Alignment.CenterVertically,
@@ -298,7 +311,7 @@ fun RoundIconButton(
     Box(
         Modifier
             .size(size.dp)
-            .clip(CircleShape)
+            .clip(RoundedCornerShape((size * 0.32f).dp))
             .background(background)
             .iosPress(scaleTo = 0.92f) { onClick() },
         contentAlignment = Alignment.Center,
@@ -320,8 +333,8 @@ fun AppSearchField(
         modifier
             .fillMaxWidth()
             .heightIn(min = Space.touch)
-            .clip(Radii.control)
-            .background(AppColors.SurfaceMuted)
+            .softCard(Radii.control, elevation = 4.dp)
+            .border(1.dp, AppColors.Border, Radii.control)
             .padding(horizontal = Space.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -399,7 +412,7 @@ fun ScrollableTabs(
                 label = tab,
                 count = counts[tab]?.takeIf { it > 0 }?.toString(),
                 selected = tab == selected,
-                accent = AppColors.TextPrimary,
+                accent = AppColors.Indigo,
                 onClick = { onSelect(tab) },
             )
         }
@@ -453,6 +466,7 @@ fun AiPanel(
             .fillMaxWidth()
             .clip(Radii.card)
             .background(AppColors.IndigoSoft)
+            .border(1.dp, AppColors.Indigo.copy(alpha = 0.15f), Radii.card)
             .padding(Space.l),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
