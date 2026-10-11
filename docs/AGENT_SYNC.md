@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-11 — Grok Bot (premium alignment pass + Coach switch + human coach v2)
+- Leads: Next call card ≤35% of screen (name+budget one line, one meta line, Why + Next step as 2 lines with More, one primary Call, WhatsApp / Start calling N / Skip text row, progress footnote).
+- ONE segmented level (Call now / Scheduled / Win back); sub-filters are wrapping chips with counts in the list header. Top bar icons monochrome 44dp. Single 16dp margin (IosLargeTitle got an `inset` param; Leads passes 0 because the list already has 16).
+- AiRecommendationBlock (Leads + lead page) is 2 lines with More. TextTertiary = #8E8E93.
+- Settings › Coach (AppPrefs `coach_on`, default true, local): off hides good morning, coaching time, Home coach card, CoachDock/Ask Coach, coach icons. openCoach/openAskCoach/maybeCoachMoment no-op when off. Lead page "What to say" (AiCoachCard) stays: it is scripts, not the character.
+- CoachCharacter redrawn (gradients, hair, brows, eyes with iris+highlight, nose, ears, tie, arm+hand wave, glance, brow raise, smile change). `drawCoach(k, CoachPose)`.
+- No Supabase changes.
+
 ## 2026-10-11 — Grok Bot (calm iOS visual-fatigue pass + human coach character)
 
 - **Follow Ups:** callbacks are now ONE inset-grouped list (rounded only at the ends, 0.5dp hairline between rows, inset 64dp) instead of separate boxed cards. Name 20sp → 17sp semibold. The grey filled "why" box is gone; it is plain 13sp secondary text, indented under the name. Update/WhatsApp: 44dp bordered → 36dp grey fill, 13sp semibold → 14sp medium. Call (the only primary) 52dp → 40dp, 16sp → 15sp. Memory lines grey. Every number, tag and warning kept.

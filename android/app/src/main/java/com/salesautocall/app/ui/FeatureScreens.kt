@@ -1279,6 +1279,22 @@ fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
         }
         Spacer(Modifier.height(16.dp))
+        // Coach on/off. Local to this phone. Off hides good morning, coaching
+        // time, coach cards and Ask Coach; this switch is how it comes back.
+        PaperCard(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    SettingHeader(Icons.Default.Lightbulb, "Coach",
+                        "Good morning, coaching time, coach cards and Ask Coach. Turn off for a quiet app.")
+                }
+                IosSwitch(checked = app.coachOn, onCheckedChange = { vm.setCoachOn(it) })
+            }
+        }
+        Spacer(Modifier.height(16.dp))
         PaperCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 SettingHeader(Icons.Default.Flag, "Daily call goal", "Target calls per day, shown on your Today card.")

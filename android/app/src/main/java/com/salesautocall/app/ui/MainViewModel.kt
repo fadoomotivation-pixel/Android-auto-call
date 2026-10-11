@@ -249,6 +249,8 @@ data class AppState(
     val recordingWarnings: Map<String, String> = emptyMap(),
     /** Master switch for the assistant's own questions. */
     val assistantOn: Boolean = true,
+    /** Settings › Coach (local). Off hides all coach surfaces. */
+    val coachOn: Boolean = true,
     /** The one question the assistant is asking right now (null = silent). */
     val assistantAsk: AssistantAsk? = null,
     /** The coached half of the 7pm card — score, wins, the habit to fix,
@@ -483,6 +485,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             autoAnswer = AppPrefs.getAutoAnswer(app),
             postCallPopup = AppPrefs.getPostCallPopup(app),
             assistantOn = AppPrefs.getAssistantOn(app),
+            coachOn = AppPrefs.getCoachOn(app),
         ),
     )
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -1858,7 +1861,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun maybeCoachMoment() {
         val s = _state.value
-        if (s.coachMoment != null || momentBusy) return
+        if (!s.coachOn || s.coachMoment != null || momentBusy) return
         val ctx = getApplication<Application>()
         val today = java.time.LocalDate.now().toString()
         val base = AppPrefs.getMomentBase(ctx).split("|")
@@ -2667,6 +2670,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      *  The backend caches per call / per day-slot; the picks load once per
      *  session — so repeat opens are instant and cheap. */
     fun openCoach() {
+        if (!_state.value.coachOn) return
         set {
             it.copy(
                 coachOpen = true,
@@ -2681,7 +2685,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         prefetchFocus()
     }
     fun closeCoach() = set { it.copy(coachOpen = false) }
-    fun openAskCoach() = set { it.copy(askCoachOpen = true) }
+    fun openAskCoach() { if (_state.value.coachOn) set { it.copy(askCoachOpen = true) } }
     fun closeAskCoach() = set { it.copy(askCoachOpen = false) }
 
     // ---- Ask the coach (open Q&A inside the floating coach) ----
@@ -3626,6 +3630,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // back. Fifteen seconds keeps a tab switch from refetching the view
         // she just loaded, and still refreshes a queue she has been away from.
         if (System.currentTimeMillis() - lastWorkFetchAt > 15_000L) refreshWorkStates()
+    }
+
+    fun setCoachOn(value: Boolean) {
+        AppPrefs.setCoachOn(getApplication(), value)
+        set { it.copy(coachOn = value, coachMoment = if (value) it.coachMoment else null,
+            askCoachOpen = if (value) it.askCoachOpen else false) }
     }
 
     fun setAssistantOn(value: Boolean) {

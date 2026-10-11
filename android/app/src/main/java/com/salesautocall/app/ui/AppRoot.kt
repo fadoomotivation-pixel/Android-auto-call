@@ -226,7 +226,7 @@ fun AppRoot(vm: MainViewModel) {
     // assistant's question or Settings. It never opens by itself.
     if (state.signedIn && state.authResolved && state.cloudCallNumber == null &&
         state.postCallContactId == null && state.assistantAsk == null &&
-        !state.showSettings && !state.showAddLead && !state.coachOpen
+        !state.showSettings && !state.showAddLead && !state.coachOpen && state.coachOn
     ) {
         CoachDock(vm, state)
     }
@@ -705,7 +705,7 @@ private fun MainShell(vm: MainViewModel) {
                         // that should be the brightest is the button that dials.
                         // Same weight as Settings now — the sparkle is what makes
                         // it findable, not the colour.
-                        IconButton(onClick = { vm.openCoach() }) {
+                        if (state.coachOn) IconButton(onClick = { vm.openCoach() }) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = "AI Coach",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(21.dp))
@@ -741,7 +741,7 @@ private fun MainShell(vm: MainViewModel) {
                     // the screen, and this has to catch them without doing that.
                     // Coaching time: slides up at the first break after 5+
                     // calls; hides the moment a call starts. Never blocks.
-                    CoachMomentBar(vm, state)
+                    if (state.coachOn) CoachMomentBar(vm, state)
                     PendingUpdateBar(vm)
                     // The way back out of a mis-tap. Here, next to the nudge
                     // bar, because the sheet that recorded the outcome has

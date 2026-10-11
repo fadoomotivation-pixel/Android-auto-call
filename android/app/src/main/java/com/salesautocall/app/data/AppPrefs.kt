@@ -173,6 +173,9 @@ object AppPrefs {
     // ---------- the assistant's own questions ----------
 
     /** Master switch for every assistant prompt (site visit / callback / day review). */
+    /** Settings › Coach. Off hides every coach card, coaching time, good morning and Ask Coach. */
+    fun getCoachOn(context: Context): Boolean = prefs(context).getBoolean("coach_on", true)
+    fun setCoachOn(context: Context, v: Boolean) = prefs(context).edit().putBoolean("coach_on", v).apply()
     fun getAssistantOn(context: Context): Boolean = prefs(context).getBoolean("assistant_on", true)
     fun setAssistantOn(context: Context, v: Boolean) = prefs(context).edit().putBoolean("assistant_on", v).apply()
 
