@@ -448,6 +448,11 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         onEdit = { editIdentityOpen = true },
                         onCallAlt = { contact.altPhone?.let { doCallNumber(it) } },
                         lastTalk = lastTalk,
+                        voiceRecording = app.voiceRecording,
+                        voiceUploading = app.voiceUploading,
+                        onVoiceStart = { vm.startVoiceNote() },
+                        onVoiceSave = { vm.finishVoiceNote() },
+                        onVoiceDiscard = { vm.cancelVoiceNote() },
                     )
                 }
 
@@ -1114,6 +1119,11 @@ private fun IdentityBlock(
     onCallAlt: () -> Unit,
     /** "3m 4s · 16 Aug, 8:50 PM", or why there is none. Second = show it as a warning. */
     lastTalk: Pair<String, Boolean>,
+    voiceRecording: Boolean,
+    voiceUploading: Boolean,
+    onVoiceStart: () -> Unit,
+    onVoiceSave: () -> Unit,
+    onVoiceDiscard: () -> Unit,
 ) {
     val ring = tempRing(contact.temperature)
     Column(Modifier.fillMaxWidth().padding(horizontal = Space.l)) {
@@ -1155,6 +1165,60 @@ private fun IdentityBlock(
                         Icon(Icons.Default.Add, null, tint = JadeL, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("Add another number", color = JadeL, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            // THE EMPTY QUARTER OF THIS SCREEN NOW DOES SOMETHING.
+            //
+            // A name is one line and the space to its right was blank on every
+            // lead, while "Record voice note" — the thing a rep reaches for
+            // straight after hanging up — sat in the fourth section down,
+            // past the funnel. The page is eleven sections deep; that is a
+            // long way to scroll for the one action that has a time limit on
+            // it, because what the customer said is forgotten in a minute.
+            if (!voiceRecording && !voiceUploading) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape).background(IndigoL.copy(alpha = 0.12f))
+                        .clickable { onVoiceStart() },
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Default.Mic, "Record voice note", tint = IndigoL, modifier = Modifier.size(20.dp)) }
+            }
+        }
+        // Recording runs as a full-width bar under the name rather than inside
+        // the 44dp circle. The three-second save lock is kept exactly as the
+        // card below has it: reps were losing takes because the second tap —
+        // the natural "did that register?" tap — landed on Save.
+        if (voiceRecording || voiceUploading) {
+            Spacer(Modifier.height(10.dp))
+            var seconds by remember { mutableStateOf(0) }
+            LaunchedEffect(voiceRecording) { seconds = 0; while (voiceRecording) { kotlinx.coroutines.delay(1000); seconds++ } }
+            if (voiceUploading) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Saving voice note…", style = MaterialTheme.typography.bodyMedium, color = Ink)
+                }
+            } else {
+                val canSave = seconds >= 3
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(RedL))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Recording…  %d:%02d".format(seconds / 60, seconds % 60),
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = RedL)
+                    Spacer(Modifier.weight(1f))
+                    Text("Discard", color = SubInk, style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { onVoiceDiscard() }
+                            .padding(horizontal = 10.dp, vertical = 6.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        Modifier.clip(RoundedCornerShape(10.dp))
+                            .background(if (canSave) GreenL else GreenL.copy(alpha = 0.25f))
+                            .clickable(enabled = canSave) { onVoiceSave() }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                    ) {
+                        Text(if (canSave) "✓ Save" else "Save in ${3 - seconds}s",
+                            color = Color.White, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

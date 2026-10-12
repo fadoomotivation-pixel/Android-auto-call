@@ -1631,7 +1631,13 @@ private fun PlanBucket(
                     if (onOpen != null && r.contactId != null) Modifier.clip(RoundedCornerShape(10.dp)).clickable { onOpen(r.contactId) }
                     else Modifier,
                 )
-                .padding(start = Space.xs, top = Space.m, bottom = Space.m),
+                // 8dp, not 12. With the 48dp call disc inside it, 12dp made
+                // EVERY row 72dp tall — so "Vimal Gupta", which is one line
+                // and nothing else, stood as tall as Mahesh, who has three.
+                // A list whose rhythm ignores its content reads as padding,
+                // not as a list. iOS gives a single line 44dp and lets the
+                // taller rows be taller; that is the whole trick.
+                .padding(start = Space.xs, top = Space.s, bottom = Space.s),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -1663,9 +1669,11 @@ private fun PlanBucket(
                     }
                 }
                 Spacer(Modifier.width(Space.s))
-                // 48dp touch target, 40dp soft disc. Small to the eye, not to the thumb.
+                // 44dp: Apple's minimum touch target, and the thing that sets
+                // the height of a one-line row. At 48 it was the tallest item
+                // in the row and dragged every row up with it.
                 Box(
-                    Modifier.size(48.dp).clip(CircleShape).clickable { onCall(r.phone) },
+                    Modifier.size(44.dp).clip(CircleShape).clickable { onCall(r.phone) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Outlined.Call, contentDescription = "Call ${r.name}", tint = AppColors.Indigo, modifier = Modifier.size(22.dp))
@@ -5709,18 +5717,22 @@ private fun NextCallHero(
     // primary, then three aligned text actions. Progress is a footnote.
     val who = prettyName(lead.name) ?: prettyPhone(lead.phone)
     val firstName = who.trim().substringBefore(' ').ifBlank { "now" }
-    // THE REASONING FOLDS AWAY. THE ACTIONS DO NOT.
+    // THE WHOLE CARD FOLDS TO ONE LINE, AND I ARGUED AGAINST THIS ONCE.
     //
-    // Why / Next step / context / the queue note are the AI explaining itself,
-    // and they were costing about 66dp on every visit to a screen that could
-    // not fit a single lead above the fold. Folded shut by default; the
-    // chevron opens them.
+    // The argument was "never hide the primary action". It was wrong here,
+    // because the action was never the only copy of itself: the list directly
+    // beneath this card opens with the SAME lead and its own call button, and
+    // Home's Today's Plan shows him a third time. Mahesh appeared three times
+    // on two screens, and this card spent 270dp being the least useful of the
+    // three — the one that pushed the actual list below the fold.
     //
-    // Call and Start calling stay out. It would have saved another 48dp to
-    // hide them too, and it would have defeated the point: the reason to free
-    // this space is so a rep can see WHO TO RING without scrolling, and an
-    // action behind a tap is not something she can see. An explanation is
-    // worth a tap. The work is not.
+    // Duplicating something is not the same as making it visible. A card that
+    // repeats row one of the list under it is not a shortcut, it is a second
+    // voice saying the same sentence.
+    //
+    // So: collapsed by default to a single line that still names him, because
+    // the name is the one fact worth 16dp. Open it and everything is back —
+    // budget, why, next step, Call, WhatsApp, Start calling, Skip, the tally.
     var more by remember { mutableStateOf(false) }
     val ellipsis = androidx.compose.ui.text.style.TextOverflow.Ellipsis
     Column(
@@ -5728,15 +5740,22 @@ private fun NextCallHero(
             .clickable { onOpen() }.padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("NEXT CALL", style = AppType.sectionLabel, color = AppColors.Indigo,
-                modifier = Modifier.weight(1f))
+            Text("NEXT CALL", style = AppType.sectionLabel, color = AppColors.Indigo)
+            if (!more) {
+                Spacer(Modifier.width(8.dp))
+                Text(who, style = AppType.label, color = AppColors.TextPrimary,
+                    maxLines = 1, overflow = ellipsis, modifier = Modifier.weight(1f))
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
             Icon(
                 if (more) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (more) "Hide why" else "Why this lead",
+                contentDescription = if (more) "Hide the next call" else "Show the next call",
                 tint = AppColors.TextSecondary,
                 modifier = Modifier.size(28.dp).clip(CircleShape).clickable { more = !more }.padding(4.dp),
             )
         }
+        if (!more) return@Column
         Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(who, style = AppType.title, color = AppColors.TextPrimary, maxLines = 1, overflow = ellipsis,
@@ -5749,22 +5768,20 @@ private fun NextCallHero(
         Spacer(Modifier.height(4.dp))
         Text(lastContact?.let { "Last contact $it" } ?: "Never called",
             style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1, overflow = ellipsis)
-        if (more) {
-            Spacer(Modifier.height(12.dp))
-            Text(androidx.compose.ui.text.buildAnnotatedString {
-                withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Why ") }
-                append(reason)
-            }, style = AppType.meta, color = AppColors.TextSecondary)
-            Text(androidx.compose.ui.text.buildAnnotatedString {
-                withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Next step ") }
-                append(reco.nextStep)
-            }, style = AppType.meta, color = AppColors.TextSecondary)
-            Spacer(Modifier.height(4.dp))
-            Text(reco.context, style = AppType.footnote, color = AppColors.TextSecondary)
-            reco.missing?.let { Text(it, style = AppType.footnote, color = AppColors.TextSecondary) }
-            sayLine?.let { Text(it, style = AppType.footnote, color = AppColors.TextSecondary) }
-            if (left > 1) Text(QUEUE_ORDER_TEXT, style = AppType.footnote, color = AppColors.TextSecondary)
-        }
+        Spacer(Modifier.height(12.dp))
+        Text(androidx.compose.ui.text.buildAnnotatedString {
+            withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Why ") }
+            append(reason)
+        }, style = AppType.meta, color = AppColors.TextSecondary)
+        Text(androidx.compose.ui.text.buildAnnotatedString {
+            withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Next step ") }
+            append(reco.nextStep)
+        }, style = AppType.meta, color = AppColors.TextSecondary)
+        Spacer(Modifier.height(4.dp))
+        Text(reco.context, style = AppType.footnote, color = AppColors.TextSecondary)
+        reco.missing?.let { Text(it, style = AppType.footnote, color = AppColors.TextSecondary) }
+        sayLine?.let { Text(it, style = AppType.footnote, color = AppColors.TextSecondary) }
+        if (left > 1) Text(QUEUE_ORDER_TEXT, style = AppType.footnote, color = AppColors.TextSecondary)
         Spacer(Modifier.height(12.dp))
         Row(
             Modifier.fillMaxWidth().height(48.dp).clip(com.salesautocall.app.ui.design.Radii.control).background(AppColors.Indigo)
@@ -5793,14 +5810,9 @@ private fun NextCallHero(
                 quiet("Skip", 0.7f) { onSkip() }
             }
         }
-        // The running tally folds away with the reasoning. "Left 361" is
-        // already on the Start calling button beside it, and "Called today 0 ·
-        // Skipped 0" is a scoreboard, not an instruction.
-        if (more) {
-            Spacer(Modifier.height(8.dp))
-            Text("Called today $calledToday · Skipped $skipped · Left $left",
-                style = AppType.footnote, color = AppColors.TextTertiary, maxLines = 1, overflow = ellipsis)
-        }
+        Spacer(Modifier.height(8.dp))
+        Text("Called today $calledToday · Skipped $skipped · Left $left",
+            style = AppType.footnote, color = AppColors.TextTertiary, maxLines = 1, overflow = ellipsis)
     }
 }
 
