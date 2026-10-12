@@ -2413,14 +2413,30 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
     // iOS large title: "Leads" scrolls with the list; once it is gone the
     // small centred title and a hairline fade into the slim bar on top.
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    val titleCollapsed by remember {
-        androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 60 }
-    }
+    // The derivedStateOf that faded the title in on scroll is gone with the
+    // large title it was watching. It recomputed on every scroll frame to
+    // decide something this screen no longer asks.
     Box(Modifier.fillMaxSize().background(AppColors.Canvas)) {
     Column(Modifier.fillMaxSize()) {
         IosNavBar(
             title = if (selectMode) "Select leads" else "Leads",
-            collapsed = titleCollapsed,
+            // THE TITLE LIVES IN THE BAR NOW, NOT IN A ROW OF ITS OWN.
+            //
+            // A large "Leads" plus its grey line cost about 70dp at the top of
+            // every visit, and on a 6-inch phone this screen was already
+            // spending its whole first view on chrome: title, insight strip,
+            // the Next call card, search, lane tabs, filter chips — and then
+            // the fold. A screen called Leads showed no leads.
+            //
+            // So the title and its one fact move into the 52dp bar, which was
+            // sitting there half empty, and the row below them is gone.
+            // collapsed is true always because there is no large title left to
+            // collapse FROM; the bar is the title.
+            collapsed = true,
+            subtitle = if (selectMode) null else buildString {
+                append("${app.leads.size} leads")
+                if (deck.pipelineValue > 0) append(" · ${formatRupees(deck.pipelineValue)} on the table")
+            },
             leading = {
                 Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White,
                     modifier = Modifier.size(44.dp).clip(CircleShape).iosPress { onMenu() }.padding(10.dp))
@@ -2464,18 +2480,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             // at 7 the list read as one sheet.
             verticalArrangement = Arrangement.Top,
         ) {
-            item(key = "large_title") {
-                // The ₹ card is gone: its facts are one line under the title.
-                IosLargeTitle(
-                    if (selectMode) "Select leads" else "Leads",
-                    subtitle = if (selectMode) null else buildString {
-                        append("${app.leads.size} leads")
-                        if (deck.pipelineValue > 0) append(" · ${formatRupees(deck.pipelineValue)} on the table")
-                    },
-                    // The list already sits on the 16dp margin; no second inset.
-                    inset = 0.dp,
-                )
-            }
+            // The large title row was here. Both its lines are in the nav bar
+            // now — see the note on IosNavBar above.
             item {
                 if (!selectMode) {
                     // The hero: a brand-gradient command deck — pipeline ₹ value
@@ -5703,13 +5709,34 @@ private fun NextCallHero(
     // primary, then three aligned text actions. Progress is a footnote.
     val who = prettyName(lead.name) ?: prettyPhone(lead.phone)
     val firstName = who.trim().substringBefore(' ').ifBlank { "now" }
+    // THE REASONING FOLDS AWAY. THE ACTIONS DO NOT.
+    //
+    // Why / Next step / context / the queue note are the AI explaining itself,
+    // and they were costing about 66dp on every visit to a screen that could
+    // not fit a single lead above the fold. Folded shut by default; the
+    // chevron opens them.
+    //
+    // Call and Start calling stay out. It would have saved another 48dp to
+    // hide them too, and it would have defeated the point: the reason to free
+    // this space is so a rep can see WHO TO RING without scrolling, and an
+    // action behind a tap is not something she can see. An explanation is
+    // worth a tap. The work is not.
     var more by remember { mutableStateOf(false) }
     val ellipsis = androidx.compose.ui.text.style.TextOverflow.Ellipsis
     Column(
         Modifier.fillMaxWidth().softCard(com.salesautocall.app.ui.design.Radii.hero)
             .clickable { onOpen() }.padding(16.dp),
     ) {
-        Text("NEXT CALL", style = AppType.sectionLabel, color = AppColors.Indigo)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("NEXT CALL", style = AppType.sectionLabel, color = AppColors.Indigo,
+                modifier = Modifier.weight(1f))
+            Icon(
+                if (more) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (more) "Hide why" else "Why this lead",
+                tint = AppColors.TextSecondary,
+                modifier = Modifier.size(28.dp).clip(CircleShape).clickable { more = !more }.padding(4.dp),
+            )
+        }
         Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(who, style = AppType.title, color = AppColors.TextPrimary, maxLines = 1, overflow = ellipsis,
@@ -5722,30 +5749,21 @@ private fun NextCallHero(
         Spacer(Modifier.height(4.dp))
         Text(lastContact?.let { "Last contact $it" } ?: "Never called",
             style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1, overflow = ellipsis)
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Text(androidx.compose.ui.text.buildAnnotatedString {
-                    withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Why ") }
-                    append(reason)
-                }, style = AppType.meta, color = AppColors.TextSecondary,
-                    maxLines = if (more) Int.MAX_VALUE else 1, overflow = ellipsis)
-                Text(androidx.compose.ui.text.buildAnnotatedString {
-                    withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Next step ") }
-                    append(reco.nextStep)
-                }, style = AppType.meta, color = AppColors.TextSecondary,
-                    maxLines = if (more) Int.MAX_VALUE else 1, overflow = ellipsis)
-                if (more) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(reco.context, style = AppType.footnote, color = AppColors.TextSecondary)
-                    reco.missing?.let { Text(it, style = AppType.footnote, color = AppColors.TextSecondary) }
-                    sayLine?.let { Text(it, style = AppType.footnote, color = AppColors.TextSecondary) }
-                    if (left > 1) Text(QUEUE_ORDER_TEXT, style = AppType.footnote, color = AppColors.TextSecondary)
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(if (more) "Less" else "More", style = AppType.footnote, color = IosColors.Blue,
-                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { more = !more }.padding(vertical = 2.dp))
+        if (more) {
+            Spacer(Modifier.height(12.dp))
+            Text(androidx.compose.ui.text.buildAnnotatedString {
+                withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Why ") }
+                append(reason)
+            }, style = AppType.meta, color = AppColors.TextSecondary)
+            Text(androidx.compose.ui.text.buildAnnotatedString {
+                withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.SemiBold, color = AppColors.TextPrimary)) { append("Next step ") }
+                append(reco.nextStep)
+            }, style = AppType.meta, color = AppColors.TextSecondary)
+            Spacer(Modifier.height(4.dp))
+            Text(reco.context, style = AppType.footnote, color = AppColors.TextSecondary)
+            reco.missing?.let { Text(it, style = AppType.footnote, color = AppColors.TextSecondary) }
+            sayLine?.let { Text(it, style = AppType.footnote, color = AppColors.TextSecondary) }
+            if (left > 1) Text(QUEUE_ORDER_TEXT, style = AppType.footnote, color = AppColors.TextSecondary)
         }
         Spacer(Modifier.height(12.dp))
         Row(
@@ -5775,9 +5793,14 @@ private fun NextCallHero(
                 quiet("Skip", 0.7f) { onSkip() }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Text("Called today $calledToday · Skipped $skipped · Left $left",
-            style = AppType.footnote, color = AppColors.TextTertiary, maxLines = 1, overflow = ellipsis)
+        // The running tally folds away with the reasoning. "Left 361" is
+        // already on the Start calling button beside it, and "Called today 0 ·
+        // Skipped 0" is a scoreboard, not an instruction.
+        if (more) {
+            Spacer(Modifier.height(8.dp))
+            Text("Called today $calledToday · Skipped $skipped · Left $left",
+                style = AppType.footnote, color = AppColors.TextTertiary, maxLines = 1, overflow = ellipsis)
+        }
     }
 }
 
