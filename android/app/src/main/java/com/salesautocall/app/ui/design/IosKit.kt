@@ -513,16 +513,32 @@ fun IosNavBar(
     onBack: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
+    /**
+     * The one grey line under the title — "545 leads · ₹14.62 Cr on the
+     * table". When a screen passes this it is saying "my title belongs in the
+     * bar", and the bar grows to 52dp to hold both lines. It is how Phone and
+     * Messages carry a name and a status without spending a whole row on it.
+     */
+    subtitle: String? = null,
 ) {
     val a by animateFloatAsState(if (collapsed) 1f else 0f, tween(180), label = "nav")
+    // THE TITLE IS CENTRED, which is what iOS does and what this was not.
+    //
+    // It used to sit in a weight(1f) slot after the leading button, so it
+    // started wherever the hamburger ended — left-aligned and a different
+    // distance from the edge on every screen depending on what was beside it.
+    // A Box lets the leading and trailing controls hold the edges while the
+    // title holds the middle regardless of them, and the 72dp side padding
+    // stops a long title from sliding underneath either one.
     Column(modifier.fillMaxWidth().background(AppColors.Canvas.copy(alpha = 0.96f))) {
-        Row(
-            Modifier.fillMaxWidth().height(44.dp).padding(horizontal = Space.s),
-            verticalAlignment = Alignment.CenterVertically,
+        Box(
+            Modifier.fillMaxWidth()
+                .height(if (subtitle.isNullOrBlank()) 44.dp else 52.dp)
+                .padding(horizontal = Space.s),
         ) {
             if (onBack != null) {
                 Row(
-                    Modifier.heightIn(min = 44.dp).iosPress { onBack() }.padding(end = Space.s),
+                    Modifier.align(Alignment.CenterStart).heightIn(min = 44.dp).iosPress { onBack() },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = backLabel ?: "Back",
@@ -530,17 +546,31 @@ fun IosNavBar(
                     if (!backLabel.isNullOrBlank()) Text(backLabel, style = AppType.body, color = AppColors.Indigo, maxLines = 1)
                 }
             } else if (leading != null) {
-                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) {
-                    GlassBox { leading() }
+                Box(Modifier.align(Alignment.CenterStart)) {
+                    CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) {
+                        GlassBox { leading() }
+                    }
                 }
             }
-            Spacer(Modifier.width(Space.s))
-            Text(
-                title, style = AppType.headline, color = AppColors.TextPrimary.copy(alpha = a), maxLines = 1,
-                modifier = Modifier.weight(1f),
-            )
+            Column(
+                Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    title, style = AppType.headline, color = AppColors.TextPrimary.copy(alpha = a),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        subtitle, style = AppType.footnote, color = AppColors.TextSecondary.copy(alpha = a),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
             trailing?.let {
-                CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) { it() }
+                Box(Modifier.align(Alignment.CenterEnd)) {
+                    CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) { it() }
+                }
             }
         }
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(AppColors.Separator.copy(alpha = a)))
