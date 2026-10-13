@@ -54,6 +54,23 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+          # THE DEPENDENCY CACHE WAS NEVER BEING WRITTEN. THIS IS WHY MAVEN
+          # CENTRAL KEEPS 403-ING US.
+          #
+          # setup-gradle only saves the cache from the repository's DEFAULT
+          # branch, and this repo's default branch is
+          # claude/sales-app-auto-call-logging-Bb7e6 — not main. So every run
+          # anywhere, main included, started cold and re-downloaded the whole
+          # dependency graph from repo.maven.apache.org. Every build was a
+          # fresh fistful of requests at a registry that rate-limits, which is
+          # exactly the failure the retry loop below was built to survive:
+          # see the 8 Aug note, and 12 Oct, when an identical tree went green
+          # on its branch and 403'd on main sixteen minutes later.
+          #
+          # Writing the cache on main turns that fistful into a handful of
+          # revalidations. Branches stay read-only so one person's experiment
+          # cannot poison the cache everyone else reads.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       # One build produces every brand's debug APK (all share applicationId +
       # the committed debug keystore, so each installs cleanly over its own line).
@@ -85,8 +102,14 @@ jobs:
               exit 0
             fi
             if [ "$attempt" -lt 3 ]; then
-              echo "::warning::Gradle attempt $attempt failed — retrying in $((attempt * 30))s. Usually Maven Central throttling, not the code."
-              sleep $((attempt * 30))
+              # 60s then 120s, not 30s then 60s. The three attempts used to be
+              # over inside sixteen minutes, which is nothing to a registry
+              # that has decided to rate-limit this runner — all three ran
+              # inside the same penalty window and all three died. Three
+              # minutes of waiting costs nothing on a green build, because on
+              # a green build the first attempt returns.
+              echo "::warning::Gradle attempt $attempt failed — retrying in $((attempt * 60))s. Usually Maven Central throttling, not the code."
+              sleep $((attempt * 60))
             fi
           done
           echo "::error::Gradle failed three times. A 'Could not GET' or 403 from repo.maven.apache.org means the registry, not the build. Anything else is real."
