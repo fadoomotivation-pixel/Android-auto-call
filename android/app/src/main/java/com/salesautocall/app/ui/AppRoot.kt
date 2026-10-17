@@ -2,6 +2,7 @@
 
 package com.salesautocall.app.ui
 
+import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Leaderboard
@@ -727,6 +728,7 @@ private fun MainShell(vm: MainViewModel) {
                     vm.clearMessage()
                     scope.launch { drawerState.close() }
                     if (route == "add_lead") vm.openAddLead()
+                    else if (route == "scan_list") vm.openScanList()
                     else nav.navigate(route) {
                         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                         launchSingleTop = true
@@ -852,6 +854,7 @@ private fun MainShell(vm: MainViewModel) {
                             },
                             onNavigate = { route ->
                                 if (route == "add_lead") vm.openAddLead()
+                    else if (route == "scan_list") vm.openScanList()
                                 else nav.navigate(route) { launchSingleTop = true }
                             },
                         )
@@ -1501,6 +1504,7 @@ private fun AppDrawer(
         QuickAction("Start Calling", Icons.Outlined.Call, "dialer"),
         QuickAction("Add Lead", Icons.Default.Add, "add_lead"),
         QuickAction("Schedule Follow-up", Icons.Outlined.CalendarMonth, "calendar"),
+        QuickAction("Scan list", Icons.Outlined.DocumentScanner, "scan_list"),
         QuickAction("Import Call List", Icons.AutoMirrored.Outlined.List, "campaign"),
     )
     // "Projects" stays gone: a menu entry whose only behaviour is "coming

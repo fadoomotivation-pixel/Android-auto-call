@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-17 — Grok Bot (Scan list easier to find)
+
+- Drawer › Quick actions: new **Scan list** row (DocumentScanner icon, route `scan_list`)
+  right above Import Call List. Import Call List is unchanged: it opens the campaign
+  screen (CSV/Excel file → `ContactImport` → campaign + auto-dialer), a different flow
+  from Scan list (photo/paste → OCR → leads in Call now).
+- Leads top bar: a scan icon button opens Scan list; the More sheet entry stays.
+
 ## 2026-10-17 — Grok Bot (Scan list: free photo / paste → leads in Call now)
 
 - **What:** Leads › More › **Scan list** opens a 3-step wizard (`ui/ScanListScreen.kt`):
