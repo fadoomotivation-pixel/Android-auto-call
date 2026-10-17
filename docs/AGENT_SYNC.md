@@ -37,6 +37,27 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-17 — Grok Bot (Scan list: free photo / paste → leads in Call now)
+
+- **What:** Leads › More › **Scan list** opens a 3-step wizard (`ui/ScanListScreen.kt`):
+  Source (Camera via `TakePicture`, Photo via `PickVisualMedia`, Paste text) → Read
+  (ML Kit bundled Latin OCR on the phone, numbers boxed on the photo) → Review
+  (editable names, ×, flags Already in CRM / Duplicate in list / Invalid number,
+  source tag `Scanned list · <d MMM>`, optional project) → **Add N to Call now**.
+  "Add lead" was also added to the same sheet. Free, no limit, no paywall.
+- **Parser:** `data/ScanListParser.kt` (pure Kotlin, `ScanListParserTest`). Indian
+  mobiles only (+91 / 91 / 0 / spaces / dashes, 10 digits 6–9). OCR lines are
+  regrouped into visual rows (`ScanOcr.toRows`) so table columns pair up.
+- **Lead creation:** the existing `Repository.addLead` (same company/owner), now with
+  an optional `leadSource` written to the existing `contacts.lead_source` column
+  (0024). `Contact.leadSource` added. No migration. The dedup trigger's silent skip
+  is counted as "already in CRM".
+- **No** CAMERA permission, no post-call popup, no new scheduler. `file_paths.xml`
+  gained a `cache-path scans/`.
+- **APK:** standard debug 40.33 MB → 51.05 MB (+10.7 MB = `libmlkit_google_ocr_pipeline.so`
+  for arm64 + v7a plus ~1 MB models). ARM-only and R8 unchanged; ML Kit ships its own
+  consumer keep rules.
+
 ## 2026-10-11 — Grok Bot (Apple family: the founder's six picks, replaces the #523 gradient look)
 
 - **Visual layer + two small local settings.** Tokens: canvas `#F2F2F7`, white

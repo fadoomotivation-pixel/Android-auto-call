@@ -2463,6 +2463,8 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                             IosActionSheet(
                                 onDismiss = { leadsMenuOpen = false },
                                 actions = listOf(
+                                    SheetAction("Scan list") { vm.openScanList() },
+                                    SheetAction("Add lead") { vm.openAddLead() },
                                     SheetAction("Refresh") { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
                                     SheetAction(if (app.aiScoringLeads) "Scoring…" else "AI Score leads", enabled = !app.aiScoringLeads) { vm.scoreLeads() },
                                     SheetAction("Select leads") { selectMode = true },

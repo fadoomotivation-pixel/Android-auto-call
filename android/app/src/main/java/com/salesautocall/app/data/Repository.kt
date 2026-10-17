@@ -2156,7 +2156,7 @@ object Repository {
     }
 
     /** Creates one lead, owned by the current rep's company. Returns the new row. */
-    suspend fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?): Contact {
+    suspend fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?, leadSource: String? = null): Contact {
         val profile = myProfile() ?: error("No profile yet. Ask your admin to add you to a company.")
         val companyId = profile.companyId ?: error("You are not linked to a company yet.")
         val contact = Contact(
@@ -2168,6 +2168,7 @@ object Repository {
             budget = budget?.trim()?.ifBlank { null },
             notes = note?.trim()?.ifBlank { null },
             status = "new",
+            leadSource = leadSource?.trim()?.ifBlank { null },
         )
         return client.from("contacts").insert(contact) { select() }.decodeSingle<Contact>()
     }

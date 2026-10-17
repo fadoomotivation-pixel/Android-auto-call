@@ -250,12 +250,17 @@ fun AppRoot(vm: MainViewModel) {
         AddLeadSheet(vm)
     }
 
+    // Scan list wizard (free, no limit).
+    if (state.signedIn && state.showScanList) {
+        ScanListScreen(vm)
+    }
+
     // Coach anywhere: a small orb tucked into the right edge, on every main
     // screen and the lead page. Never over a call, a post-call sheet, the
     // assistant's question or Settings. It never opens by itself.
     if (state.signedIn && state.authResolved && state.cloudCallNumber == null &&
         state.postCallContactId == null && state.assistantAsk == null &&
-        !state.showSettings && !state.showAddLead && !state.coachOpen && state.coachOn
+        !state.showSettings && !state.showAddLead && !state.showScanList && !state.coachOpen && state.coachOn
     ) {
         CoachDock(vm, state)
     }

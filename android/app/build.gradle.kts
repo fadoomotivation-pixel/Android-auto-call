@@ -173,6 +173,10 @@ dependencies {
     // Remote images (company logo on the branded home hero).
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // Scan list: on-device text recognition, bundled Latin model (offline,
+    // nothing uploaded). Free feature, see ui/ScanListScreen.kt.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.auth)
