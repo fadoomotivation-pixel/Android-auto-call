@@ -2,4 +2,6 @@
 <paths>
     <!-- The downloaded update APK lives in the app's external files/Download dir. -->
     <external-files-path name="updates" path="Download/" />
+    <!-- Scan list: the camera writes the photo here; it never leaves the phone. -->
+    <cache-path name="scans" path="scans/" />
 </paths>

@@ -175,6 +175,8 @@ data class AppState(
     val leadsSelectRequested: Boolean = false,
     /** Drives the quick "Add lead" sheet + its in-flight saving state. */
     val showAddLead: Boolean = false,
+    /** Scan list wizard (free): photo / paste → leads in Call now. */
+    val showScanList: Boolean = false,
     val addingLead: Boolean = false,
     /** Settings is a full-screen overlay (like lead detail), not a nav route, so
      *  it never lingers behind another screen. */
@@ -1920,7 +1922,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val s = _state.value
         if (!s.signedIn) return false
         if (s.postCallContactId != null || s.cloudCallNumber != null || s.update != null) return false
-        if (s.leadDetailId != null || s.showAddLead || s.showSettings || s.assistantAsk != null) return false
+        if (s.leadDetailId != null || s.showAddLead || s.showScanList || s.showSettings || s.assistantAsk != null) return false
         if (s.pendingUpdates.isNotEmpty()) return false
         if (DialerController.state.value.isRunning) return false
         if (com.salesautocall.app.dialer.SimCallMonitor.state.value != null) return false
@@ -2678,6 +2680,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- quick add lead ----------
     fun openAddLead() = set { it.copy(showAddLead = true) }
     fun closeAddLead() = set { it.copy(showAddLead = false) }
+    fun openScanList() = set { it.copy(showScanList = true) }
+    fun closeScanList() = set { it.copy(showScanList = false) }
+
+    /**
+     * Scan list → leads, through the SAME Repository.addLead as the Add lead
+     * sheet (company + owner rules unchanged). The dedup trigger silently
+     * skips a phone the company already has, which makes that insert return
+     * no row — counted as "already in CRM", never shown as an error.
+     */
+    fun addScannedLeads(rows: List<Pair<String, String>>, source: String, project: String?) {
+        if (rows.isEmpty() || _state.value.addingLead) return
+        viewModelScope.launch {
+            set { it.copy(addingLead = true) }
+            val added = ArrayList<Contact>()
+            var skipped = 0
+            var lastError: String? = null
+            for ((name, phone) in rows) {
+                runCatching { Repository.addLead(name, phone, project, null, null, leadSource = source) }
+                    .onSuccess { added += it }
+                    .onFailure { e -> skipped++; lastError = e.message }
+            }
+            set { st ->
+                st.copy(
+                    leads = added + st.leads,
+                    addingLead = false,
+                    showScanList = added.isEmpty() && st.showScanList,
+                    pendingTab = if (added.isNotEmpty()) "leads" else st.pendingTab,
+                    message = if (added.isNotEmpty()) "Added ${added.size} to Call now" + (if (skipped > 0) " · $skipped already in CRM" else "") else null,
+                    error = if (added.isEmpty()) (lastError ?: "Nothing was added.") else null,
+                )
+            }
+            if (added.isNotEmpty()) loadLeads(force = true)
+        }
+    }
 
     fun openSettings() = set { it.copy(showSettings = true) }
 
@@ -3692,7 +3728,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!s.signedIn || !s.assistantOn || s.assistantAsk != null) return
         // Never on top of something the rep is already doing.
         if (s.postCallContactId != null || s.cloudCallNumber != null || s.update != null) return
-        if (s.leadDetailId != null || s.showAddLead || s.showSettings) return
+        if (s.leadDetailId != null || s.showAddLead || s.showScanList || s.showSettings) return
         if (DialerController.state.value.isRunning) return
         if (com.salesautocall.app.dialer.SimCallMonitor.state.value != null) return
         // An unanswered call outranks anything we might want to ask about.

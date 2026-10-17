@@ -96,6 +96,8 @@ data class Contact(
     @SerialName("alt_phone") val altPhone: String? = null,
     val email: String? = null,
     @SerialName("company_name") val companyName: String? = null,
+    /** Where the lead came from ("facebook", "Scanned list · 17 Oct"…). */
+    @SerialName("lead_source") val leadSource: String? = null,
     val notes: String? = null,
     /**
      * The LAST DISPOSITION — what happened on the most recent call.
