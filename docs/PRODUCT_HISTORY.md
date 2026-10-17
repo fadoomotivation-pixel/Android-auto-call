@@ -119,6 +119,12 @@ recordings instead of trusting a copied number (`audio_seconds`).
 | `whatsapp-observe` | ingest from the Baileys worker |
 | `recording-upload` / `recording-url` | store and serve call audio |
 | `facebook-poll` | pulls leads every 10 min (Meta's webhook is unreliable) |
+| `create_my_company` / `load_demo_leads` (RPC, 0226) | free self sign-up: Google users name their company; optional 10 demo leads |
+
+**callproai.in sign-up (Oct 2026).** The product is free, so sign-up is the front door:
+Continue with Google or email + password, company name, an optional "Load demo leads"
+switch, straight into the dashboard. No trial, no OTP (there is no SMS provider), and no
+competitor is ever named on the site — a builder should judge the product, not a table.
 
 ---
 

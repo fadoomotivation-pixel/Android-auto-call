@@ -26,6 +26,8 @@ export const metadata: Metadata = {
   description:
     "The AI calling CRM for real-estate teams — auto-dialer, call recordings, hot-lead alerts, follow-ups and a clear funnel to booking.",
   metadataBase: new URL("https://callproai.in"),
+  applicationName: "Call Pro AI",
+  alternates: { languages: { "en-IN": "/", "x-default": "/" } },
 };
 
 export default function RootLayout({
@@ -34,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable}`} suppressHydrationWarning>
+    <html lang="en-IN" className={`${display.variable} ${body.variable}`} suppressHydrationWarning>
       <body>
         <script
           dangerouslySetInnerHTML={{

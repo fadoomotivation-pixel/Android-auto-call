@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { GoogleButton } from "@/app/components/GoogleButton";
+import "../signup/signup.css";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -67,6 +69,12 @@ export default function LoginPage() {
         <h1>Call Pro AI</h1>
         <p>{mode === "signin" ? "Admin sign in" : "Create your company"}</p>
 
+        {mode === "signin" && (
+          <div style={{ marginBottom: 16 }}>
+            <GoogleButton />
+          </div>
+        )}
+
         {mode === "signup" && (
           <>
             <div className="field">
@@ -127,9 +135,9 @@ export default function LoginPage() {
 
         <div style={{ marginTop: 16, textAlign: "center" }}>
           {mode === "signin" ? (
-            <button type="button" className="link" onClick={() => setMode("signup")}>
-              No company yet? Create one
-            </button>
+            <a className="link" href="/signup">
+              No company yet? Create one free
+            </a>
           ) : (
             <button type="button" className="link" onClick={() => setMode("signin")}>
               Already have an account? Sign in

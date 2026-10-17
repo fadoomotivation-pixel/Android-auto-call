@@ -1,0 +1,32 @@
+/* Sign-up card — Apple family: Inter, #F2F2F7 canvas, white 12px card,
+   one blue #007AFF, four sizes (28 / 17 / 15 / 12), 16px margins. */
+.su-page { min-height: 100vh; background: #F2F2F7; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; font-family: var(--font-body), -apple-system, sans-serif; color: #1C1C1E; }
+.su-brand { font-size: 17px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; color: #1C1C1E; text-decoration: none; }
+.su-brand i { width: 24px; height: 24px; border-radius: 7px; background: #007AFF; display: inline-block; }
+.su-h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; text-align: center; margin: 0 0 4px; }
+.su-lead { font-size: 15px; color: #8E8E93; text-align: center; margin: 0 0 16px; max-width: 360px; }
+.su-card { width: 100%; max-width: 400px; background: #FFFFFF; border-radius: 12px; padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.06); color: #1C1C1E; font-family: var(--font-body), -apple-system, sans-serif; text-align: left; }
+.su-title { font-size: 17px; font-weight: 600; }
+.su-sub { font-size: 12px; color: #8E8E93; margin: 4px 0 16px; }
+.su-google { width: 100%; height: 44px; border-radius: 12px; border: 0.5px solid #D1D1D6; background: #FFFFFF; color: #1C1C1E; font: 600 15px var(--font-body), -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+.su-google:disabled { opacity: .6; }
+.su-or { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 12px; color: #8E8E93; }
+.su-or::before, .su-or::after { content: ""; flex: 1; height: 0.5px; background: #D1D1D6; }
+.su-in { width: 100%; height: 44px; border-radius: 10px; border: 0.5px solid #D1D1D6; background: #FFFFFF; padding: 0 12px; font: 400 15px var(--font-body), -apple-system, sans-serif; color: #1C1C1E; margin: 0 0 8px; outline: none; }
+.su-in:focus { border: 2px solid #007AFF; padding: 0 11px; }
+.su-toggle { display: flex; align-items: center; gap: 12px; padding: 8px 0 16px; cursor: pointer; position: relative; }
+.su-toggle span { flex: 1; display: flex; flex-direction: column; }
+.su-toggle b { font-size: 15px; font-weight: 600; }
+.su-toggle small { font-size: 12px; color: #8E8E93; }
+.su-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.su-toggle i { width: 51px; height: 31px; border-radius: 16px; background: #E5E5EA; position: relative; transition: background .2s; flex: none; }
+.su-toggle i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 2px 4px rgba(0,0,0,.2); transition: transform .2s; }
+.su-toggle input:checked + i { background: #34C759; }
+.su-toggle input:checked + i::after { transform: translateX(20px); }
+.su-primary { width: 100%; height: 44px; border-radius: 12px; border: 0; background: #007AFF; color: #FFFFFF; font: 600 15px var(--font-body), -apple-system, sans-serif; cursor: pointer; }
+.su-primary:disabled { opacity: .6; }
+.su-error { margin-top: 12px; font-size: 12px; color: #FF3B30; }
+.su-notice { margin-top: 12px; font-size: 12px; color: #34C759; }
+.su-foot { margin-top: 16px; font-size: 12px; color: #8E8E93; text-align: center; }
+.su-foot a { color: #007AFF; font-weight: 600; text-decoration: none; }
+.su-compact .su-in { margin-bottom: 8px; }
