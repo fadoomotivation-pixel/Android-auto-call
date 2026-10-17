@@ -7,21 +7,21 @@
    ========================================================================== */
 
 .cp {
-  --ink: #0b1020;
-  --ink-soft: #3a4257;
-  --muted: #6b7488;
+  --ink: #1C1C1E;
+  --ink-soft: #3A3A3C;
+  --muted: #8E8E93;
   --faint: #97a0b2;
   --line: #e8eaf0;
   --line-2: #eef0f5;
-  --bg: #f6f7fb;
+  --bg: #F2F2F7;
   --bg-2: #ffffff;
-  --accent: #4f46e5;
-  --accent-2: #7c3aed;
-  --accent-3: #2563eb;
-  --hot: #f0476a;
-  --warm: #f59e0b;
+  --accent: #007AFF;
+  --accent-2: #007AFF;
+  --accent-3: #007AFF;
+  --hot: #FF3B30;
+  --warm: #FF9500;
   --cold: #64748b;
-  --ok: #10b981;
+  --ok: #34C759;
   --shadow-sm: 0 1px 2px rgba(16, 24, 64, 0.04), 0 4px 14px rgba(16, 24, 64, 0.05);
   --shadow-md: 0 10px 30px rgba(16, 24, 64, 0.08), 0 2px 8px rgba(16, 24, 64, 0.04);
   --shadow-xl: 0 40px 90px -30px rgba(28, 24, 90, 0.35), 0 12px 30px rgba(16, 24, 64, 0.1);
@@ -1035,7 +1035,7 @@
   .cp-reveal { opacity: 1; transform: none; }
 }
 
-/* ── Proof stats band (competitor-style big-number credibility) ───────── */
+/* ── Proof stats band (big-number credibility) ───────── */
 .cp-stats { padding: 18px 0 6px; }
 .cp-stats-grid {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
@@ -1087,3 +1087,16 @@
 }
 .cp-why-tick svg { width: 15px; height: 15px; }
 @media (max-width: 900px) { .cp-why-grid { grid-template-columns: 1fr; } }
+
+/* Hero with the sign-up card (Apple family, flat, no wash). */
+.cp-bg { background: var(--bg); }
+.cp-hero-su h1 { font-size: clamp(40px, 5vw, 56px); font-weight: 700; letter-spacing: -0.03em; }
+.cp-hero-su .cp-hero-sub { font-size: 17px; }
+.cp-hero-signup { display: flex; justify-content: flex-end; }
+@media (max-width: 940px) { .cp-hero-signup { justify-content: center; } }
+.cp .cp-btn-primary { background: #007AFF; box-shadow: none; }
+.cp-btn-primary:hover { box-shadow: none; background: #0071E3; }
+.cp-logo-mark { background: #007AFF; box-shadow: none; }
+.cp-hero-su .cp-hero-sub { margin-top: 20px; }
+.cp-hero-su h1 { line-height: 1.08; }
+.cp-grad { background: none; -webkit-text-fill-color: currentColor; color: #007AFF; }

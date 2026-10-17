@@ -3,11 +3,16 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  const isAuthRoute = path.startsWith("/login");
+  const isAuthRoute = path.startsWith("/login") || path === "/signup";
   // Publicly reachable without signing in: the marketing landing page (root) and
   // the Play-required privacy policy. These must NEVER touch Supabase/auth, so a
   // missing env var or an auth-backend hiccup at the edge can't 500 the site.
-  const isPublicRoute = path === "/" || path.startsWith("/privacy");
+  const isPublicRoute =
+    path === "/" ||
+    path.startsWith("/privacy") ||
+    path === "/robots.txt" ||
+    path === "/sitemap.xml" ||
+    path.startsWith("/auth/callback");
   if (isPublicRoute) return NextResponse.next({ request });
 
   // No Supabase env configured (e.g. a preview without env vars) → don't crash

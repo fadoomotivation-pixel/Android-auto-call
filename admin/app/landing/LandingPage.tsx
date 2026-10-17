@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import "./landing.css";
 import {
-  PhoneFrame,
   ScreenLeads,
   ScreenAlert,
   ScreenCall,
   ScreenPipeline,
   ScreenDashboard,
 } from "./AppMockups";
+import { SignupForm } from "../signup/SignupForm";
 
 // Clean monochrome line icons (feather-style) — no emoji, B2B-professional.
 function Icon({ name }: { name: string }) {
@@ -219,44 +219,18 @@ function FeatureViz({ type }: { type: string }) {
 
 // Comparison: y = has it, p = partial/limited, n = doesn't. Ordered so Call Pro
 // AI is the only column that's all-green.
-const COMPARE = [
-  { ic: "home", f: "Made for", us: "Real estate", tele: "Generic", sell: "Enterprise", cally: "Tracking" },
-  { ic: "building", f: "Built for the property sale", us: "y", tele: "n", sell: "y", cally: "n" },
-  { ic: "cloud", f: "Cloud calling, no SIM", us: "y", tele: "y", sell: "p", cally: "n" },
-  { ic: "phone", f: "AI auto-dialer", us: "y", tele: "y", sell: "p", cally: "n" },
-  { ic: "bell", f: "10-second lead alerts", us: "y", tele: "p", sell: "p", cally: "n" },
-  { ic: "doc", f: "AI call summary", us: "y", tele: "n", sell: "n", cally: "n" },
-  { ic: "refresh", f: "Automatic follow-ups", us: "y", tele: "y", sell: "y", cally: "n" },
-  { ic: "chart", f: "Live funnel to booking", us: "y", tele: "n", sell: "y", cally: "n" },
-  { ic: "zap", f: "Runs itself, no data entry", us: "y", tele: "n", sell: "n", cally: "n" },
-  { ic: "clock", f: "Setup time", us: "Same day", tele: "Days", sell: "Weeks", cally: "Days" },
-];
-
-const COMP_COLS = [
-  { key: "tele", name: "TeleCRM", mono: "T" },
-  { key: "sell", name: "Sell.Do", mono: "S" },
-  { key: "cally", name: "Callyzer", mono: "C" },
-] as const;
-
-function Mark({ v }: { v: string }) {
-  if (v === "y") return <span className="cmp-yes" aria-label="Yes"><Icon name="check" /></span>;
-  if (v === "p") return <span className="cmp-part" aria-label="Limited">–</span>;
-  if (v === "n") return <span className="cmp-no" aria-label="No">✕</span>;
-  return <span className="cmp-txt">{v}</span>;
-}
-
 // "What's included" in the custom plan — the full done-for-you selling system.
 const INCLUDED = [
-  { ic: "phone", t: "AI Calling CRM", b: "Auto-dialer, smart follow-ups, call recordings" },
-  { ic: "cloud", t: "Cloud Telephony", b: "No SIM hassle. 100% virtual & scalable" },
-  { ic: "sparkle", t: "AI Voice Agent", b: "Never miss a lead. 24/7 AI calling assistant" },
-  { ic: "chart", t: "Lead & Sales Dashboard", b: "Real-time insights. Track every opportunity" },
-  { ic: "shield", t: "Owner Dashboard", b: "Full visibility. Zero manual updates" },
-  { ic: "megaphone", t: "Lead Generation", b: "Facebook Ads, Google Ads & campaign setup" },
-  { ic: "video", t: "AI Sales Videos", b: "Personalised videos that warm up your leads" },
-  { ic: "doc", t: "Brochures & PDFs", b: "High-converting project brochures" },
-  { ic: "cap", t: "Team Training & Support", b: "Onboarding, training & ongoing support" },
-  { ic: "users", t: "Dedicated Success Manager", b: "Your growth partner, not just a support rep" },
+  { ic: "phone", t: "Auto-dialer", b: "One tap and the next call starts (Android app)" },
+  { ic: "inbox", t: "Call now · Scheduled · Win back", b: "Every lead in the right bucket, every day" },
+  { ic: "calendar", t: "Follow ups", b: "Overdue, Today and Upcoming, nothing forgotten" },
+  { ic: "doc", t: "Scan list", b: "Photo of a printed list → leads, read on the phone" },
+  { ic: "sparkle", t: "AI coach", b: "A tip after every call, from your team's wins" },
+  { ic: "pin", t: "Attendance + GPS visits", b: "Check-ins and site visits, verified" },
+  { ic: "megaphone", t: "Meta lead sync", b: "Facebook and Instagram leads arrive in minutes" },
+  { ic: "chat", t: "WhatsApp", b: "Templates and one-tap messages to buyers" },
+  { ic: "chart", t: "Owner dashboard", b: "Calls, connects, visits and bookings by telecaller" },
+  { ic: "users", t: "Team roles", b: "Admin and telecallers, joined with your company code" },
 ];
 
 // The end-to-end flow shown as "your complete sales engine".
@@ -274,9 +248,7 @@ const WA = "https://wa.me/919582020136?text=I%20want%20a%20Call%20Pro%20AI%20dem
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [active, setActive] = useState(0);
-  const [rival, setRival] = useState<"tele" | "sell" | "cally">("tele");
   const rootRef = useRef<HTMLDivElement>(null);
-  const rivalName = COMP_COLS.find((c) => c.key === rival)?.name ?? "";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -356,71 +328,49 @@ export default function LandingPage() {
           </a>
           <div className="cp-nav-links">
             <a href="#how">How it works</a>
-            <a href="#compare">Why us</a>
+            <a href="#features">Features</a>
             <a href="#pricing">Pricing</a>
             <a href="#faq">FAQ</a>
-            <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
-              Book a demo
+            <a href="/login">Sign in</a>
+            <a className="cp-btn cp-btn-primary" href="/signup">
+              Start free
             </a>
           </div>
         </div>
       </nav>
 
-      {/* HERO */}
-      <header className="cp-hero" id="top">
+      {/* HERO — free messaging + the sign-up card right in the hero */}
+      <header className="cp-hero cp-hero-su" id="top">
         <div className="cp-shell cp-hero-grid">
           <div>
-            <span className="cp-eyebrow">AI calling CRM for real estate</span>
-            <h1>
-              Turn every lead into a <span className="cp-grad">booking.</span>
-            </h1>
+            <span className="cp-eyebrow">Free calling CRM for real estate</span>
+            <h1>Turn every Meta lead into a site visit.</h1>
             <p className="cp-hero-sub">
-              Call Pro AI auto-dials your leads, records every call, and rings the right
-              salesperson the second a hot buyer arrives — so plots and flats sell faster.
+              Auto-dialer, follow-ups and an AI coach for your telecallers. Leads from Meta,
+              your website, Excel or a scanned list land in one Call now queue.
             </p>
             <div className="cp-hero-cta">
-              <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
-                Book a free demo →
+              <a className="cp-btn cp-btn-primary" href="/signup">
+                Create free account
               </a>
               <a className="cp-btn cp-btn-ghost" href="#how">
                 See how it works
               </a>
             </div>
             <div className="cp-hero-trust">
-              <span><b>Built for</b> Indian real-estate teams</span>
+              <span><b>Free</b> to use, no card</span>
               <span><b>Android app</b> + web dashboard</span>
+              <span><b>Made for</b> Indian real estate</span>
             </div>
           </div>
 
-          <div className="cp-hero-visual">
-            <div className="cp-stage3d">
-              <PhoneFrame className="cp-hero-phone">
-                <ScreenLeads />
-              </PhoneFrame>
-            </div>
-            <div className="cp-float cp-float-a">
-              <span className="ic" style={{ background: "rgba(240,71,106,0.12)" }}>🔥</span>
-              <span>
-                New hot lead<small>Facebook · ₹45L</small>
-              </span>
-            </div>
-            <div className="cp-float cp-float-b">
-              <span className="ic" style={{ background: "rgba(16,185,129,0.12)" }}>✅</span>
-              <span>
-                Booking confirmed<small>Plot · ₹2,00,000 token</small>
-              </span>
-            </div>
-            <div className="cp-float cp-float-c">
-              <span className="ic" style={{ background: "rgba(79,70,229,0.12)" }}>📞</span>
-              <span>
-                118 calls today<small>across your team</small>
-              </span>
-            </div>
+          <div className="cp-hero-signup">
+            <SignupForm compact />
           </div>
         </div>
       </header>
 
-      {/* PROOF STATS — big numbers, competitor-style credibility band */}
+      {/* PROOF STATS — big numbers */}
       <section className="cp-stats cp-reveal">
         <div className="cp-shell cp-stats-grid">
           {[
@@ -440,7 +390,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* WHY CALL PRO AI — competitor-style green-tick reasons */}
+      {/* WHY CALL PRO AI — green-tick reasons */}
       <section className="cp-why cp-reveal">
         <div className="cp-shell">
           <h2 className="cp-why-h">Why <span className="cp-grad">Call Pro AI?</span></h2>
@@ -588,75 +538,26 @@ export default function LandingPage() {
       </section>
 
       {/* COMPARISON — Call Pro AI vs the alternatives */}
-      <section className="cp-section" id="compare">
-        <div className="cp-shell">
-          <div className="cp-section-head cp-reveal">
-            <span className="cp-eyebrow">Why Call Pro AI</span>
-            <h2>
-              See why Call Pro AI is <span className="cp-grad">built for real estate.</span>
-            </h2>
-            <p>Compare us with any tool — one at a time, feature by feature.</p>
-          </div>
-
-          {/* pick a competitor to compare against */}
-          <div className="cp-seg cp-reveal" role="tablist" aria-label="Compare against">
-            {COMP_COLS.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                role="tab"
-                aria-selected={rival === c.key}
-                className={`cp-seg-btn ${rival === c.key ? "on" : ""}`}
-                onClick={() => setRival(c.key)}
-              >
-                vs {c.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="cp-vs cp-reveal">
-            <div className="cp-vs-row cp-vs-head">
-              <div className="cp-vs-feat" />
-              <div className="cp-vs-c cp-vs-us">
-                <span className="cp-vs-badge">★ Best for Real Estate</span>
-                <span className="cp-vs-name">Call Pro AI</span>
-              </div>
-              <div className="cp-vs-c cp-vs-rival">{rivalName}</div>
-            </div>
-            {COMPARE.map((r) => (
-              <div className="cp-vs-row" key={r.f}>
-                <div className="cp-vs-feat">
-                  <span className="cp-vs-fic"><Icon name={r.ic} /></span>
-                  {r.f}
-                </div>
-                <div className="cp-vs-c cp-vs-us"><Mark v={r.us} /></div>
-                <div className="cp-vs-c"><Mark v={r[rival]} /></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* PRICING — custom plan card + what's included + the sales engine flow */}
       <section className="cp-section" id="pricing">
         <div className="cp-shell">
           <div className="cp-plan cp-reveal">
             <div className="cp-plan-left">
               <h3>
-                One plan.<br />
-                <span className="cp-grad">100% built for you.</span>
+                Free to use.<br />
+                <span className="cp-grad">For your whole team.</span>
               </h3>
               <span className="cp-plan-rule" />
               <p>
-                No fixed package. We design a complete sales system around your business model,
-                team size, lead volume and goals.
+                Create your company, invite your telecallers and start calling today. No card,
+                no setup fee.
               </p>
               <div className="cp-plan-shield">
                 <span className="ic"><Icon name="shield" /></span>
-                <span><b>No hidden charges</b><br />No setup surprises</span>
+                <span><b>No card needed</b><br />No hidden charges</span>
               </div>
-              <a className="cp-btn cp-btn-primary cp-plan-btn" href={WA} target="_blank" rel="noopener noreferrer">
-                <Icon name="calendar" /> Book a Strategy Call
+              <a className="cp-btn cp-btn-primary cp-plan-btn" href="/signup">
+                Create free account
               </a>
               <div className="cp-plan-resp"><span className="dot" /> Average response within 10 minutes</div>
             </div>
@@ -714,14 +615,17 @@ export default function LandingPage() {
       <section className="cp-section" id="demo">
         <div className="cp-shell">
           <div className="cp-cta cp-reveal">
-            <h2>Start closing more, starting today.</h2>
+            <h2>Start calling today. It&apos;s free.</h2>
             <p>
-              Book a 15-minute demo on your own leads. We&apos;ll set up your team and show the
-              first calls going out — live, on WhatsApp.
+              Create your company in 2 minutes, load demo leads if you like, and share your
+              company code with your telecallers.
             </p>
             <div className="cp-cta-row">
-              <a className="cp-btn cp-btn-primary" href={WA} target="_blank" rel="noopener noreferrer">
-                Book a demo on WhatsApp
+              <a className="cp-btn cp-btn-primary" href="/signup">
+                Create free account
+              </a>
+              <a className="cp-btn cp-btn-ghost" href={WA} target="_blank" rel="noopener noreferrer">
+                WhatsApp us
               </a>
               <a className="cp-btn cp-btn-ghost" href="mailto:admin@callproai.in">
                 Email us

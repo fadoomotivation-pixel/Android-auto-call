@@ -37,6 +37,30 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (callproai.in: free self sign-up + SEO basics, PR 1 of the web plan)
+
+- **Free product.** No trial, no timer, no OTP anywhere. Never name a competitor in copy,
+  pages or keywords — the landing's "vs" comparison section was removed for that reason.
+- **Sign-up** (`admin/app/signup/`): one `SignupForm` card used in the landing hero and on
+  `/signup`. Email + password keeps the existing path (`handle_new_user()` creates the
+  company from `role: admin` + `company_name` metadata, plus `load_demo`). **Continue with
+  Google** (`app/components/GoogleButton.tsx`, Supabase OAuth) → `/auth/callback` →
+  new user without a company → `/signup/company` → `create_my_company()` RPC.
+- **Migration `0226_a_builder_can_start_from_google.sql` — NOT applied.** Founder applies by
+  hand. Adds `create_my_company(name, full_name, load_demo)` (only when the caller has no
+  company) and `load_demo_leads()` (admin, own company, once, 10 leads on +91 555 numbers,
+  `extra.demo_seed`, `lead_source 'demo'`). Does not touch `handle_new_user()`.
+  Until it is applied, Google sign-up stops at /signup/company with an error and the demo
+  toggle silently does nothing; email sign-up works as before.
+- **Middleware:** public = `/`, `/privacy`, `/robots.txt`, `/sitemap.xml`, `/auth/callback`;
+  `/signup` behaves like `/login` (signed-in users go to the dashboard).
+- **SEO:** `app/sitemap.ts`, `app/robots.ts` (disallows /dashboard, /auth, /api),
+  Organization + SoftwareApplication JSON-LD (price 0 INR) on `/`, `lang="en-IN"` and
+  hreflang en-IN + x-default. **No `hi-IN` tag yet** — there is no Hindi page; add it with
+  the Hindi city pages.
+- Landing palette moved to Apple system colours (#007AFF, #F2F2F7) and the hero gradients
+  removed; the rest of the page is unchanged.
+
 ## 2026-10-17 — Grok Bot (Scan list easier to find)
 
 - Drawer › Quick actions: new **Scan list** row (DocumentScanner icon, route `scan_list`)
