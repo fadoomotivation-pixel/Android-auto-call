@@ -37,6 +37,20 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (Scan list: photo → OCR path fixed and hardened)
+
+- **Bug:** after #537, Scan list step 2 showed a black preview, "Couldn't open that photo." and 0 numbers, for camera and gallery photos alike.
+- **Root cause:** `ScanOcr.loadUpright` read the image size with `BitmapFactory.decodeStream(..., inJustDecodeBounds = true)` and then wrote `?: return null`. With `inJustDecodeBounds` that call **always returns null** by design (the size is in the options), so every photo was rejected before decoding. The black box is the empty preview container.
+- **Also hardened:**
+  - `cameraUri`/`step`/`source` are `rememberSaveable`, so the photo isn't lost if Android recreates the activity while the camera app is open.
+  - The TakePicture `false` result now shows a message.
+  - The uri is copied into `cache/scans`, waiting for a non-empty, size-stable file (survives a lost gallery read grant and camera apps that are still writing).
+  - Decoding uses ImageDecoder on Android 9+ (HEIC/WEBP/PNG/JPEG, EXIF rotation, software allocator) or BitmapFactory with a proper bounds pass + EXIF below that, long side ≤ 2000 px, one retry.
+  - OCR runs on `Dispatchers.Default`.
+  - Errors are specific: empty photo, unreadable format, no text (the preview still shows), no numbers, each with "Try again" and "Pick from gallery". The layout is otherwise unchanged.
+- **Parser:** fixes OCR look-alikes inside number tokens (O/D→0, I/l/|→1, S→5, B→8, Z→2) and re-joins numbers split over two lines (the line count is kept so photo boxes still line up). Dedupe and the 6–9 / 10-digit validity rules are unchanged.
+- **Tests:** `ScanListParserOcrTest` (8 tests) plus the existing 5 pass with plain JUnit. CI only assembles; it doesn't run unit tests.
+
 ## 2026-10-18 — Grok Bot (SEO B–E recovery: bring the stacked work into main)
 
 - PRs #539–#542 were merged into their stacked base branches, not into main, because their bases were not retargeted after #538 merged. Main only had SEO A.

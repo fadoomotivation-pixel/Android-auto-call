@@ -65,6 +65,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
@@ -74,6 +75,7 @@ import com.salesautocall.app.data.ScanListParser
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
 import com.salesautocall.app.ui.design.IosActionSheet
+import com.salesautocall.app.ui.design.GhostButton
 import com.salesautocall.app.ui.design.IosColors
 import com.salesautocall.app.ui.design.IosGroup
 import com.salesautocall.app.ui.design.IosNavBar
@@ -140,8 +142,8 @@ fun ScanListScreen(vm: MainViewModel) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var step by remember { mutableStateOf(1) }
-    var source by remember { mutableStateOf(ScanSource.Camera) }
+    var step by rememberSaveable { mutableStateOf(1) }
+    var source by rememberSaveable { mutableStateOf(ScanSource.Camera) }
     var reading by remember { mutableStateOf(false) }
     var readError by remember { mutableStateOf<String?>(null) }
     var photo by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -151,7 +153,7 @@ fun ScanListScreen(vm: MainViewModel) {
     val items = remember { mutableStateListOf<ScanItem>() }
     var tag by remember { mutableStateOf(defaultScanTag()) }
     var project by remember { mutableStateOf<String?>(null) }
-    var cameraUri by remember { mutableStateOf<Uri?>(null) }
+    var cameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
 
     val crmKeys = remember(app.leads) { app.leads.mapNotNull { ScanListParser.key(it.phone) }.toHashSet() }
     val projects = remember(app.leads, app.projectSites) {
@@ -164,13 +166,15 @@ fun ScanListScreen(vm: MainViewModel) {
         found = rows.size
     }
 
+    fun showPhoto(bmp: android.graphics.Bitmap) { photo = bmp.asImageBitmap() }
+
     fun readUri(uri: Uri) {
         step = 2; reading = true; readError = null; found = null; photo = null; boxes = emptyList()
         scope.launch {
             runCatching { ScanOcr.read(ctx, uri) }
                 .onSuccess { r ->
                     val rows = ScanListParser.parseLines(r.rows)
-                    photo = r.bitmap.asImageBitmap()
+                    showPhoto(r.bitmap)
                     boxes = rows.groupBy { it.line }.flatMap { (line, rs) ->
                         r.numberBoxes.getOrNull(line).orEmpty().map { b ->
                             ScanBox(b.left / r.bitmap.width.toFloat(), b.top / r.bitmap.height.toFloat(),
@@ -178,15 +182,24 @@ fun ScanListScreen(vm: MainViewModel) {
                         }
                     }
                     applyRows(rows)
+                    if (rows.isEmpty()) readError = "Text was read, but no phone numbers were found. Make sure the number column is in the photo."
                 }
-                .onFailure { readError = it.message ?: "Couldn't read that photo." }
+                .onFailure { e ->
+                    if (e is ScanOcr.NoText) showPhoto(e.bitmap)
+                    readError = e.message ?: "Couldn't read that photo. Please try again."
+                }
             reading = false
         }
     }
 
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val u = cameraUri
-        if (ok && u != null) readUri(u)
+        when {
+            ok && u != null -> readUri(u)
+            // Cancelled, or the camera app failed to save: stay on step 1 and say so.
+            u != null -> readError = "No photo was taken. Tap Continue to try again."
+            else -> readError = "The camera closed before the photo was saved. Please try again."
+        }
     }
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) readUri(uri)
@@ -243,6 +256,12 @@ fun ScanListScreen(vm: MainViewModel) {
                     found = found,
                     onReadPaste = { applyRows(ScanListParser.parse(pasteText)) },
                     onNext = { step = 3 },
+                    onRetry = { readError = null; start() },
+                    onGallery = {
+                        readError = null; source = ScanSource.Photo
+                        runCatching { pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                            .onFailure { readError = "Couldn't open your photos." }
+                    },
                 )
                 else -> ScanStepReview(
                     items = items,
@@ -337,6 +356,8 @@ fun ScanStepRead(
     found: Int?,
     onReadPaste: () -> Unit,
     onNext: () -> Unit,
+    onRetry: () -> Unit = {},
+    onGallery: () -> Unit = {},
 ) {
     Column(Modifier.fillMaxSize().padding(horizontal = Space.l)) {
         Spacer(Modifier.height(Space.s))
@@ -383,6 +404,12 @@ fun ScanStepRead(
         if (error != null) {
             Spacer(Modifier.height(Space.s))
             Text(error, style = AppType.footnote, color = IosColors.Red)
+            if (!paste && !reading) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                    GhostButton("Try again", onClick = onRetry)
+                    GhostButton("Pick from gallery", onClick = onGallery)
+                }
+            }
         }
         Spacer(Modifier.height(Space.l))
         when {
