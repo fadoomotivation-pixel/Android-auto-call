@@ -11,6 +11,7 @@ export function SiteShell({ children, hi = false }: { children: React.ReactNode;
           <a className="st-brand" href="/"><i aria-hidden />Call Pro AI</a>
           <div className="st-links">
             <a href="/real-estate-crm">{hi ? "शहर" : "Cities"}</a>
+            <a href="/tools">{hi ? "फ़्री टूल्स" : "Free tools"}</a>
             <a href="/about">{hi ? "हमारे बारे में" : "About"}</a>
             <a className="st-btn" href="/signup">{hi ? "फ़्री शुरू करें" : "Start free"}</a>
           </div>
@@ -28,7 +29,7 @@ export function SiteShell({ children, hi = false }: { children: React.ReactNode;
           </div>
           <div>
             Call Pro AI · free calling CRM for real estate · <a href="mailto:admin@callproai.in">admin@callproai.in</a> ·{" "}
-            <a href="/about">About</a> · <a href="/privacy">Privacy</a>
+            <a href="/tools">Free tools</a> · <a href="/about">About</a> · <a href="/privacy">Privacy</a>
           </div>
         </footer>
       </div>
