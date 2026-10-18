@@ -37,6 +37,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (SEO B: free tools hub)
+
+- `/tools`, `/tools/emi-calculator`, `/tools/meta-lead-cost-calculator`. Client-side only,
+  nothing sent anywhere. Standard reducing-balance EMI formula. Default inputs are labelled
+  "examples, not benchmarks". WebApplication (free) + Breadcrumb + FAQ JSON-LD, CTA to /signup.
+- List in `lib/seo/tools.ts` feeds the hub and the sitemap. Nav, footer and city pages link to the tools.
+- Stacked on SEO A (#538).
+
 ## 2026-10-18 — Grok Bot (SEO A: city pages, EN + Hindi)
 
 - `/real-estate-crm/<city>` and `/hi/real-estate-crm/<city>` from one data file,

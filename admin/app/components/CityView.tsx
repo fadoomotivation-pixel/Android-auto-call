@@ -45,6 +45,12 @@ export function CityView({ city, hi }: { city: City; hi: boolean }) {
         {p.nearby.map((n) => (<a className="st-tile" key={n.href} href={n.href}>{n.label}</a>))}
       </div>
 
+      <h2>{hi ? "फ़्री टूल्स" : "Free tools"}</h2>
+      <div className="st-grid">
+        <a className="st-tile" href="/tools/emi-calculator">{hi ? "होम लोन EMI कैलकुलेटर" : "Home loan EMI calculator"}</a>
+        <a className="st-tile" href="/tools/meta-lead-cost-calculator">{hi ? "Meta lead cost कैलकुलेटर" : "Meta lead-cost calculator"}</a>
+      </div>
+
       <div className="st-cta">
         <h3>{p.cta}</h3>
         <p>{p.ctaSub}</p>
