@@ -37,6 +37,46 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (SEO B–E recovery: bring the stacked work into main)
+
+- PRs #539–#542 were merged into their stacked base branches, not into main, because their bases were not retargeted after #538 merged. Main only had SEO A.
+- This PR merges `cursor/seo-d-script-tools` (which holds B+C+D+E) into main. No new code.
+- Lesson: with stacked PRs, retarget the next PR to main, or delete the merged head branch, before merging it.
+
+## 2026-10-18 — Grok Bot (SEO E: 20 more cities + Core Web Vitals pass)
+
+- 20 more cities (30 total) added through the generator (`seo-gen/cities2.py` → `lib/seo/cities.ts`). Notes and tips are qualitative, with no numbers and no competitor names.
+- Generated OG images (1200x630) through `opengraph-image.tsx`:
+  - site root, `/tools`, every EN and HI city page, and every blog post;
+  - shared card in `lib/seo/og.tsx`; colours live in `lib/seo/ogTheme.ts`, so there's no hex in .tsx;
+  - HI cards use Latin text, because the OG font has no Devanagari.
+- Root metadata: openGraph defaults, twitter summary_large_image, formatDetection. Space Grotesk set to `preload: false` (dashboard-only); Inter stays `display: swap`.
+- next.config: `images.formats` avif/webp. Middleware: `/opengraph-image` public.
+- Stacked on SEO D (#541).
+
+## 2026-10-18 — Grok Bot (SEO D: call script + WhatsApp tools)
+
+- `/tools/call-script-generator` and `/tools/whatsapp-template-maker`. Both use fixed templates filled in the browser: no AI, no network calls, no data stored.
+- Shared `app/tools/CopyBox.tsx` (copy button, wa.me link, inputs). Added both tools to `lib/seo/tools.ts`, so the hub, sitemap, footer and city pages pick them up. City pages now map over TOOLS.
+- Stacked on SEO C (#540).
+
+## 2026-10-18 — Grok Bot (SEO C: blog + RSS)
+
+- Posts are data in `admin/lib/seo/posts.ts` (sections of headings, paragraphs, lists), in 4 groups:
+  Meta leads, Telecaller team, Follow-up and site visits, Tools and how-to. 6 starter posts.
+  Honest how-to content, Hinglish where natural, no made-up stats, no competitor names.
+- `/blog` index, `/blog/<slug>` static pages with Article + BreadcrumbList JSON-LD, related
+  posts, a tools link and a sign-up CTA. `/rss.xml` (static RSS 2.0). Sitemap + nav + footer updated.
+- Stacked on SEO B (#539).
+
+## 2026-10-18 — Grok Bot (SEO B: free tools hub)
+
+- `/tools`, `/tools/emi-calculator`, `/tools/meta-lead-cost-calculator`. Client-side only,
+  nothing sent anywhere. Standard reducing-balance EMI formula. Default inputs are labelled
+  "examples, not benchmarks". WebApplication (free) + Breadcrumb + FAQ JSON-LD, CTA to /signup.
+- List in `lib/seo/tools.ts` feeds the hub and the sitemap. Nav, footer and city pages link to the tools.
+- Stacked on SEO A (#538).
+
 ## 2026-10-18 — Grok Bot (SEO A: city pages, EN + Hindi)
 
 - `/real-estate-crm/<city>` and `/hi/real-estate-crm/<city>` from one data file,
