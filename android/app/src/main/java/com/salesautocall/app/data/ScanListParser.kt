@@ -16,6 +16,11 @@ package com.salesautocall.app.data
  *    bullets and labels ("Mob", "Name:") are removed. If the line has none,
  *    the previous line is used when it has words and no number of its own.
  *  - The second time a number appears it is marked [Row.duplicate].
+ *  - OCR look-alikes inside a digit run are fixed first (O/o/D→0, I/l/|/i→1,
+ *    S/s→5, B→8, Z→2), only when the run is clearly a number (6+ real digits,
+ *    at most 3 look-alikes), so names are never touched.
+ *  - A number split across two OCR lines ("98290" / "41237") is re-joined
+ *    when neither line holds a full number and together they make one.
  */
 object ScanListParser {
 
@@ -42,7 +47,55 @@ object ScanListParser {
 
     fun parse(text: String): List<Row> = parseLines(text.lines())
 
-    fun parseLines(lines: List<String>): List<Row> {
+    private val LOOKALIKE = mapOf('O' to '0', 'o' to '0', 'D' to '0', 'I' to '1', 'l' to '1', '|' to '1', 'i' to '1', 'S' to '5', 's' to '5', 'B' to '8', 'Z' to '2')
+    private val TOKEN = Regex("""[^\s.\-()/,:]+""")
+
+    /**
+     * Fixes OCR letter/digit confusions inside number-looking tokens only: a token
+     * with 2+ real digits whose other characters are all look-alikes (at most 3).
+     * "98290 4l237" -> "98290 41237"; "Sunil", "BOSS", "10:30" are left alone.
+     */
+    fun fixOcrDigits(line: String): String = TOKEN.replace(line) { m ->
+        val v = m.value
+        val core = v.removePrefix("+")
+        val digits = core.count { it.isDigit() }
+        val looks = core.count { !it.isDigit() }
+        if (digits >= 2 && looks in 1..3 && core.all { it.isDigit() || it in LOOKALIKE } && core.first().let { it.isDigit() || core.last().isDigit() })
+            v.map { LOOKALIKE[it] ?: it }.joinToString("")
+        else v
+    }
+
+    private val TAIL = Regex("""\d[\d \-.]*$""")
+    private val HEAD = Regex("""^\s*\d[\d \-.]*""")
+
+    /**
+     * Re-joins a number OCR split over two lines. The line count is kept (the
+     * joined number goes on the first line, the rest of the second line stays
+     * in place) so row indexes still match the photo's boxes.
+     */
+    internal fun joinSplit(lines: List<String>): List<String> {
+        val out = lines.toMutableList()
+        var i = 0
+        while (i < out.size - 1) {
+            val a = out[i].trimEnd(); val b = out[i + 1]
+            val full = { s: String -> findNumbers(s).any { normalize(it.digits) != null } }
+            val t = TAIL.find(a); val h = HEAD.find(b)
+            if (t != null && h != null && !full(a) && !full(b)) {
+                val td = t.value.filter { it.isDigit() }; val hd = h.value.filter { it.isDigit() }
+                if (td.length in 3..8 && hd.length in 2..8 && normalize(td + hd) != null) {
+                    out[i] = a.substring(0, t.range.first) + td + hd
+                    out[i + 1] = b.substring(h.range.last + 1)
+                    i += 2
+                    continue
+                }
+            }
+            i++
+        }
+        return out
+    }
+
+    fun parseLines(linesIn: List<String>): List<Row> {
+        val lines = joinSplit(linesIn.map(::fixOcrDigits))
         val out = ArrayList<Row>()
         val seen = HashSet<String>()
         var prevNameLine: String? = null
