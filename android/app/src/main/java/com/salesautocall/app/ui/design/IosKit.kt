@@ -19,6 +19,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -531,46 +532,61 @@ fun IosNavBar(
     // title holds the middle regardless of them, and the 72dp side padding
     // stops a long title from sliding underneath either one.
     Column(modifier.fillMaxWidth().background(AppColors.Canvas.copy(alpha = 0.96f))) {
-        Box(
-            Modifier.fillMaxWidth()
+        // NOTHING CAN OVERLAP THE TITLE. A custom layout measures the leading
+        // and trailing controls first, then gives the title only the width left
+        // between them, kept symmetric (2 x the wider side) so it stays centred.
+        // A long title or subtitle ellipsizes instead of sliding under an icon,
+        // whatever the phone width or font scale.
+        androidx.compose.ui.layout.Layout(
+            modifier = Modifier.fillMaxWidth()
                 .height(if (subtitle.isNullOrBlank()) 44.dp else 52.dp)
                 .padding(horizontal = Space.s),
-        ) {
-            if (onBack != null) {
-                Row(
-                    Modifier.align(Alignment.CenterStart).heightIn(min = 44.dp).iosPress { onBack() },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = backLabel ?: "Back",
-                        tint = AppColors.Indigo, modifier = Modifier.size(28.dp))
-                    if (!backLabel.isNullOrBlank()) Text(backLabel, style = AppType.body, color = AppColors.Indigo, maxLines = 1)
-                }
-            } else if (leading != null) {
-                Box(Modifier.align(Alignment.CenterStart)) {
-                    CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) {
-                        GlassBox { leading() }
+            content = {
+                Box(Modifier.layoutId("lead")) {
+                    if (onBack != null) {
+                        Row(
+                            Modifier.heightIn(min = 44.dp).iosPress { onBack() },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = backLabel ?: "Back",
+                                tint = AppColors.Indigo, modifier = Modifier.size(28.dp))
+                            if (!backLabel.isNullOrBlank()) Text(backLabel, style = AppType.body, color = AppColors.Indigo, maxLines = 1)
+                        }
+                    } else if (leading != null) {
+                        CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) {
+                            GlassBox { leading() }
+                        }
                     }
                 }
-            }
-            Column(
-                Modifier.align(Alignment.Center).padding(horizontal = 72.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    title, style = AppType.headline, color = AppColors.TextPrimary.copy(alpha = a),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                if (!subtitle.isNullOrBlank()) {
+                Column(Modifier.layoutId("title"), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        subtitle, style = AppType.footnote, color = AppColors.TextSecondary.copy(alpha = a),
+                        title, style = AppType.headline, color = AppColors.TextPrimary.copy(alpha = a),
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            subtitle, style = AppType.footnote, color = AppColors.TextSecondary.copy(alpha = a),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
-            }
-            trailing?.let {
-                Box(Modifier.align(Alignment.CenterEnd)) {
-                    CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) { it() }
+                Box(Modifier.layoutId("trail")) {
+                    trailing?.let { CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides AppColors.TextPrimary) { it() } }
                 }
+            },
+        ) { measurables, cons ->
+            val w = cons.maxWidth; val h = cons.maxHeight
+            val loose = cons.copy(minWidth = 0, minHeight = 0)
+            val lead = measurables.first { it.layoutId == "lead" }.measure(loose.copy(maxWidth = w / 2))
+            val trail = measurables.first { it.layoutId == "trail" }.measure(loose.copy(maxWidth = w / 2))
+            val gap = 4.dp.roundToPx()
+            val side = maxOf(lead.width, trail.width, 44.dp.roundToPx()) + gap
+            val titleMax = (w - 2 * side).coerceAtLeast(0)
+            val title = measurables.first { it.layoutId == "title" }.measure(loose.copy(maxWidth = titleMax))
+            layout(w, h) {
+                lead.placeRelative(0, (h - lead.height) / 2)
+                trail.placeRelative(w - trail.width, (h - trail.height) / 2)
+                title.placeRelative((w - title.width) / 2, (h - title.height) / 2)
             }
         }
         Box(Modifier.fillMaxWidth().height(0.5.dp).background(AppColors.Separator.copy(alpha = a)))

@@ -120,6 +120,15 @@ android {
         }
     }
 
+    testOptions {
+        // Robolectric + Roborazzi screenshot tests render Compose on the JVM.
+        unitTests {
+            isIncludeAndroidResources = true
+            // `gradle testStandardDebugUnitTest -Proborazzi.record=true` writes the PNGs.
+            all { it.systemProperty("roborazzi.test.record", (project.findProperty("roborazzi.record") ?: "false").toString()) }
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -201,4 +210,12 @@ dependencies {
 
     // Plain JVM tests for pure calculations (My report numbers).
     testImplementation("junit:junit:4.13.2")
+
+    // Screenshot tests (JVM, no emulator): Leads top bar at 360dp and 390dp.
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.26.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.26.0")
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
