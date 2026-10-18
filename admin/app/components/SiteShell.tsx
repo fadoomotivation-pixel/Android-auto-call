@@ -1,5 +1,6 @@
 import "./site.css";
 import { CITIES } from "@/lib/seo/cities";
+import { INTENTS } from "@/lib/seo/intents";
 
 // Shared nav + footer for the public SEO pages. The footer links every city
 // page so search engines and people can reach all of them in one click.
@@ -21,6 +22,9 @@ export function SiteShell({ children, hi = false }: { children: React.ReactNode;
       <div className="st-wrap">
         {children}
         <footer className="st-foot">
+          <div className="st-foot-cols">
+            {INTENTS.map((i) => (<a key={i.slug} href={`/${i.slug}`}>{i.short}</a>))}
+          </div>
           <div className="st-foot-cols">
             {CITIES.map((c) => (
               <a key={c.slug} href={hi ? `/hi/real-estate-crm/${c.slug}` : `/real-estate-crm/${c.slug}`}>

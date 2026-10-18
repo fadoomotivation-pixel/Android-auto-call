@@ -1,3 +1,4 @@
+import { INTENT_SLUGS } from "@/lib/seo/intentSlugs";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -18,7 +19,9 @@ export async function updateSession(request: NextRequest) {
     // Public SEO pages: city pages (EN + /hi), free tools, blog and its feed.
     ["/real-estate-crm", "/hi", "/tools", "/blog"].some((p) => path === p || path.startsWith(p + "/")) ||
     path === "/rss.xml" ||
-    path === "/opengraph-image";
+    path === "/opengraph-image" ||
+    // Feature / use-case landing pages.
+    INTENT_SLUGS.some((s) => path === "/" + s || path.startsWith("/" + s + "/"));
   if (isPublicRoute) return NextResponse.next({ request });
 
   // No Supabase env configured (e.g. a preview without env vars) → don't crash

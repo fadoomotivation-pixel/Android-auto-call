@@ -37,6 +37,19 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (SEO: 12 feature/use-case landing pages + 4 posts)
+
+- Intent research is internal, in `/workspace/search_intent_map.md` on the box: autocomplete-sourced vs guessed, no volumes.
+- 12 landing pages at the root (e.g. `/auto-dialer-app`, `/facebook-lead-crm`), all driven by `lib/seo/intents.ts` and rendered by `app/components/IntentView.tsx`:
+  - answer-first intro, steps with HowTo schema, FAQ, Breadcrumb and SoftwareApplication schema, and an **honest limits** section on every page;
+  - links to tools, blog posts, city pages and the other features;
+  - an OG image for each page.
+- Hindi versions for 4 pages (`/hi/[intent]`: free CRM, auto-dialer, Facebook leads, telecaller CRM) with hreflang.
+- `lib/seo/intentSlugs.ts` is a light slug list used by middleware (public routes) and the sitemap. The footer now links every feature page.
+- 4 new posts: call-facebook-leads-fast, track-telecaller-performance, choose-free-crm-real-estate-telecallers, record-sales-calls-android.
+- Claims are kept to `/about` facts. Not claimed: portal integrations, auto or bulk WhatsApp, CP portals, deal value in CAPI, payroll.
+- Stacked on the B–E recovery PR (#543).
+
 ## 2026-10-18 — Grok Bot (SEO B–E recovery: bring the stacked work into main)
 
 - PRs #539–#542 were merged into their stacked base branches, not into main, because their bases were not retargeted after #538 merged. Main only had SEO A.

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { CITIES } from "@/lib/seo/cities";
+import { INTENT_SLUGS, HI_INTENT_SLUGS } from "@/lib/seo/intentSlugs";
 import { TOOLS } from "@/lib/seo/tools";
 import { POSTS } from "@/lib/seo/posts";
 
@@ -13,6 +14,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE}/signup`, lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: `${BASE}/login`, lastModified: now, changeFrequency: "yearly", priority: 0.3 },
     { url: `${BASE}/privacy`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
+    ...INTENT_SLUGS.map((s) => ({
+      url: `${BASE}/${s}`, lastModified: now, changeFrequency: "monthly" as const, priority: 0.8,
+      ...(HI_INTENT_SLUGS.includes(s) ? { alternates: { languages: { "en-IN": `${BASE}/${s}`, "hi-IN": `${BASE}/hi/${s}` } } } : {}),
+    })),
+    ...HI_INTENT_SLUGS.map((s) => ({
+      url: `${BASE}/hi/${s}`, lastModified: now, changeFrequency: "monthly" as const, priority: 0.6,
+      alternates: { languages: { "en-IN": `${BASE}/${s}`, "hi-IN": `${BASE}/hi/${s}` } },
+    })),
     { url: `${BASE}/real-estate-crm`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${BASE}/tools`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     ...TOOLS.map((t) => ({ url: `${BASE}/tools/${t.slug}`, lastModified: now, changeFrequency: "monthly" as const, priority: 0.7 })),

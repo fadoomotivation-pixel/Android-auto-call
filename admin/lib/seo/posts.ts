@@ -105,6 +105,62 @@ export const POSTS: Post[] = [
       { h: "Is it free?", p: ["Yes. Scan list is part of Call Pro AI, which is free to use, with no limit on scans."] },
     ],
   },
+  {
+    slug: "call-facebook-leads-fast",
+    title: "How to call Facebook leads fast (a simple setup for real-estate teams)",
+    description: "A plain setup so Facebook and Instagram leads get a call the same day: no sheet copying, a clear first-call order and exact callbacks.",
+    group: "Meta leads", date: "2026-10-18", minutes: 4, related: ["call-meta-leads-same-day", "send-site-visits-back-to-meta"],
+    sections: [
+      { p: ["Most teams lose time on Facebook leads before anyone even dials. The lead sits in a Google Sheet or an email, someone copies it, someone else assigns it, and by evening the buyer has forgotten the ad. Calling fast is mostly about removing those steps."] },
+      { h: "1. Stop copying leads by hand", p: ["Connect your Meta lead forms to your CRM, so each new lead appears in the telecaller's list by itself. In Call Pro AI, new Meta leads land in Call now."] },
+      { h: "2. Fix the calling order", list: ["New leads from today first", "Then follow-ups due today", "Then older leads to win back"], p: ["Write this order on the wall. When everyone follows the same order, new leads never wait behind old ones."] },
+      { h: "3. Let the phone do the dialing", p: ["An auto-dialer removes the gap between calls: the telecaller marks the result and the next call starts. Fewer gaps mean new leads get reached sooner."] },
+      { h: "4. Never end a call without a time", p: ["\"Baad mein call karna\" is not a follow-up. Ask \"Sunday 11 baje theek rahega?\" and save that exact time."] },
+      { h: "5. Check it every evening", p: ["The owner or team lead should look at one thing each evening: which of today's new leads were not called yet. Call them first tomorrow morning."] },
+    ],
+  },
+  {
+    slug: "track-telecaller-performance",
+    title: "How to track telecaller performance without micromanaging",
+    description: "Five simple numbers a real-estate team lead can check daily: calls, connects, follow-ups done on time, site visits booked and visits done.",
+    group: "Telecaller team", date: "2026-10-18", minutes: 5, related: ["telecaller-daily-routine", "buyer-objections-replies"],
+    sections: [
+      { p: ["You do not need to listen to every call to know how your team is doing. A few honest numbers, checked at the same time every day, tell you most of the story."] },
+      { h: "The five numbers", list: ["Calls made", "Connects: calls where the buyer actually spoke", "Follow-ups done on time vs overdue", "Site visits booked", "Site visits done"], p: ["Calls show effort. Connects show list quality and timing. Overdue follow-ups show discipline. Visits show results."] },
+      { h: "How to read them", list: ["Many calls, few connects: the list is old or the calling times are wrong. Try evenings.", "Good connects, few visits: work on the pitch and objection replies.", "Many overdue follow-ups: the telecaller has too many leads, or is not starting the day with Follow Ups.", "Visits booked but not done: confirm every visit the day before."] },
+      { h: "Coach, do not shout", p: ["Pick one number per person per week. Listen to two of their recorded calls together, if your phones allow recording, and agree on one change. Small fixes repeated daily beat a big meeting once a month."] },
+      { h: "Where to see it", p: ["In Call Pro AI the owner dashboard shows calls, connects, follow-ups, site visits and bookings per telecaller, plus attendance. Use whatever tool you have, but check the same numbers every day."] },
+    ],
+  },
+  {
+    slug: "choose-free-crm-real-estate-telecallers",
+    title: "Choosing a free CRM for real-estate telecallers in India: a checklist",
+    description: "What to check before you pick a free CRM for a property calling team: dialing, follow-ups, Meta leads, recording limits, the hidden-cost questions and what to test in week one.",
+    group: "Tools and how-to", date: "2026-10-18", minutes: 5, related: ["track-telecaller-performance", "call-facebook-leads-fast"],
+    sections: [
+      { p: ["\"Free\" can mean many things: a short trial, a free plan with key features locked, or truly free. Before you move your team, check these points. We build Call Pro AI, so we note our own answers too, honestly, limits included."] },
+      { h: "1. Is it really free?", list: ["Is there a trial that ends?", "Are calling, follow-ups or users locked behind a paid plan?", "Is a card needed to sign up?"], p: ["Call Pro AI: free (₹0), no trial and no card."] },
+      { h: "2. Does it fit how telecallers work?", list: ["Does the app tell the telecaller whom to call next?", "Is there an auto-dialer?", "Can a callback be booked for an exact time?"], p: ["Call Pro AI: an Android app with Call now, an auto-dialer and Follow Ups. There is no iPhone telecaller app yet."] },
+      { h: "3. Do Meta leads arrive by themselves?", p: ["If leads still travel through a sheet, you lose hours. Call Pro AI pulls Meta lead-form leads automatically. Other portals need an Excel/CSV import."] },
+      { h: "4. Ask honestly about call recording", p: ["Recording depends on the phone and its dialer. Any honest tool should tell you this. Test on your team's actual phones in week one."] },
+      { h: "5. Can the owner see the day?", p: ["Calls, connects, overdue follow-ups and site visits per telecaller should be visible without asking anyone."] },
+      { h: "What to test in week one", list: ["Add 50 real leads and call them all with the app", "Book callbacks and check they come back on time", "Try recording on each phone model you use", "Check the owner view every evening"] },
+    ],
+  },
+  {
+    slug: "record-sales-calls-android",
+    title: "How to record sales calls automatically on Android (and why some phones can't)",
+    description: "An honest guide to automatic call recording for real-estate sales teams on Android: what works, what depends on the phone, and how to tell buyers.",
+    group: "Tools and how-to", date: "2026-10-18", minutes: 4, related: ["track-telecaller-performance", "buyer-objections-replies"],
+    sections: [
+      { p: ["Recorded calls are the best coaching tool a sales team has. But on Android, whether a call can be recorded automatically depends on the phone, not only on the app."] },
+      { h: "Why it depends on the phone", p: ["Android limits apps from recording calls directly. On many phones, the phone's own dialer can record calls, and a CRM can then pick up that recording. Some dialers do not offer recording at all, and on those phones no app can record reliably."] },
+      { h: "How to check your team's phones", list: ["Open the phone's own dialer settings and look for call recording", "If it is there, turn on automatic recording", "Make a test call and check the recording is saved", "Repeat on each phone model in your team"] },
+      { h: "How Call Pro AI handles it", p: ["On phones that allow recording, the recording is attached to the lead and the app writes a short summary and a coaching tip. On phones that do not, the call is still logged on the lead, just without audio."] },
+      { h: "Tell buyers", p: ["Let buyers know calls may be recorded, as your local rules require. A short line at the start of the call is enough."] },
+      { h: "Use recordings for coaching", p: ["Do not just store them. Once a week, listen to two calls with each telecaller and agree on one thing to change."] },
+    ],
+  },
 ];
 
 export const getPost = (slug: string) => POSTS.find((p) => p.slug === slug);
