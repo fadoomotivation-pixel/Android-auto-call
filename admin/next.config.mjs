@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Serve modern formats when next/image is used.
+  images: { formats: ["image/avif", "image/webp"] },
+  compress: true,
   experimental: {
     // ffmpeg-static ships a native binary whose path is resolved at runtime via
     // __dirname. Marking it external keeps it in node_modules (not webpack-
