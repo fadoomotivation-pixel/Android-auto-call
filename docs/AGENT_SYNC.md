@@ -37,6 +37,22 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (GEO PR: /about fact page, FAQ schema, llms.txt, GSC + GA4)
+
+- **/about** (`admin/app/about/`): plain fact page for people and AI assistants. Answer-first
+  lead sentence, key facts, features, roles, limits, FAQ, "facts checked on" date. Only
+  repo-true facts, no competitor names, no unmeasured numbers. Update `CHECKED` when facts change.
+- **One FAQ source:** `admin/lib/seo/faq.ts` feeds the landing FAQ, the /about FAQ and the
+  FAQPage JSON-LD on both, so markup always matches the visible text. The old landing FAQ
+  said "cloud calling, no special SIM" and "Google ad leads flow in" — not how the app
+  works — so it was replaced.
+- **/llms.txt** (`admin/public/llms.txt`). Google ignores it; it is a cheap extra for agents.
+- Sitemap adds /about; middleware makes `/about` and `/llms.txt` public.
+- **Env-driven tags, render nothing when unset:** `NEXT_PUBLIC_GSC_VERIFICATION` → Search
+  Console meta via `metadata.verification`; `NEXT_PUBLIC_GA4_ID` (G-XXXX) → gtag via
+  `app/components/Analytics.tsx`. Set them in Vercel (Production) and redeploy.
+- No Supabase change.
+
 ## 2026-10-18 — Grok Bot (callproai.in: free self sign-up + SEO basics, PR 1 of the web plan)
 
 - **Free product.** No trial, no timer, no OTP anywhere. Never name a competitor in copy,

@@ -10,6 +10,8 @@ export async function updateSession(request: NextRequest) {
   const isPublicRoute =
     path === "/" ||
     path.startsWith("/privacy") ||
+    path === "/about" ||
+    path === "/llms.txt" ||
     path === "/robots.txt" ||
     path === "/sitemap.xml" ||
     path.startsWith("/auth/callback");

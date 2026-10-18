@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LandingPage from "./landing/LandingPage";
+import { faqJsonLd } from "@/lib/seo/faq";
 
 export const metadata: Metadata = {
   title: { absolute: "Call Pro AI — Free Calling CRM for Real Estate Teams" },
@@ -65,6 +66,10 @@ export default function Page() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd()) }}
       />
       <LandingPage />
     </>

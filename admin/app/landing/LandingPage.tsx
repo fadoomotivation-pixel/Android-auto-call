@@ -10,6 +10,7 @@ import {
   ScreenDashboard,
 } from "./AppMockups";
 import { SignupForm } from "../signup/SignupForm";
+import { FAQ } from "@/lib/seo/faq";
 
 // Clean monochrome line icons (feather-style) — no emoji, B2B-professional.
 function Icon({ name }: { name: string }) {
@@ -85,32 +86,7 @@ const STORY = [
 
 const STORY_SCREENS = [ScreenLeads, ScreenAlert, ScreenCall, ScreenPipeline, ScreenDashboard];
 
-const FAQS = [
-  {
-    q: "Do my telecallers need training?",
-    a: "No. It's simpler than WhatsApp — one screen, one tap to call. Most teams are calling within an hour of setup.",
-  },
-  {
-    q: "Does it work with our existing phones and numbers?",
-    a: "Yes. It runs on any Android phone using cloud calling — no special SIM, no hardware to buy.",
-  },
-  {
-    q: "What happens to my data if a caller leaves?",
-    a: "Everything — leads, phone numbers and call recordings — stays with you, the owner. Callers can't export or take your data with them.",
-  },
-  {
-    q: "Where do the leads come from?",
-    a: "Facebook & Google ad leads flow in automatically, and you can import your existing leads from a CSV in one click.",
-  },
-  {
-    q: "Can I use it if I'm not in the office?",
-    a: "That's exactly the point. The owner dashboard shows calls, leads and bookings live from your phone, wherever you are.",
-  },
-  {
-    q: "How soon can we start?",
-    a: "Same day. Add your team, import your leads, and start calling. Book a demo and we'll set it up with you.",
-  },
-];
+const FAQS = FAQ;
 
 const FEATURES = [
   { type: "alert", title: "10-second hot-lead alerts", body: "New lead in? The right phone rings instantly. Win the buyer before the competition calls." },
@@ -331,6 +307,7 @@ export default function LandingPage() {
             <a href="#features">Features</a>
             <a href="#pricing">Pricing</a>
             <a href="#faq">FAQ</a>
+            <a href="/about">About</a>
             <a href="/login">Sign in</a>
             <a className="cp-btn cp-btn-primary" href="/signup">
               Start free
@@ -657,6 +634,7 @@ export default function LandingPage() {
                 <h4>Company</h4>
                 <a href={WA} target="_blank" rel="noopener noreferrer">WhatsApp us</a>
                 <a href="mailto:admin@callproai.in">Contact</a>
+                <a href="/about">About</a>
                 <a href="/privacy">Privacy</a>
                 <a href="/login">Sign in</a>
               </div>
