@@ -37,6 +37,12 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (SEO D: call script + WhatsApp tools)
+
+- `/tools/call-script-generator` and `/tools/whatsapp-template-maker`. Both use fixed templates filled in the browser: no AI, no network calls, no data stored.
+- Shared `app/tools/CopyBox.tsx` (copy button, wa.me link, inputs). Added both tools to `lib/seo/tools.ts`, so the hub, sitemap, footer and city pages pick them up. City pages now map over TOOLS.
+- Stacked on SEO C (#540).
+
 ## 2026-10-18 — Grok Bot (SEO C: blog + RSS)
 
 - Posts are data in `admin/lib/seo/posts.ts` (sections of headings, paragraphs, lists), in 4 groups:

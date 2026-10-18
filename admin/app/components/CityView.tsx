@@ -3,6 +3,7 @@ import { cityPage } from "@/lib/seo/cityContent";
 import { breadcrumb, faqPage, softwareApp } from "@/lib/seo/schema";
 import { JsonLd } from "./JsonLd";
 import { SiteShell } from "./SiteShell";
+import { TOOLS } from "@/lib/seo/tools";
 
 export function CityView({ city, hi }: { city: City; hi: boolean }) {
   const p = cityPage(city, hi);
@@ -47,8 +48,7 @@ export function CityView({ city, hi }: { city: City; hi: boolean }) {
 
       <h2>{hi ? "फ़्री टूल्स" : "Free tools"}</h2>
       <div className="st-grid">
-        <a className="st-tile" href="/tools/emi-calculator">{hi ? "होम लोन EMI कैलकुलेटर" : "Home loan EMI calculator"}</a>
-        <a className="st-tile" href="/tools/meta-lead-cost-calculator">{hi ? "Meta lead cost कैलकुलेटर" : "Meta lead-cost calculator"}</a>
+        {TOOLS.map((t) => (<a className="st-tile" key={t.slug} href={`/tools/${t.slug}`}>{hi ? t.nameHi : t.name}</a>))}
       </div>
 
       <div className="st-cta">

@@ -6,7 +6,7 @@ import { TOOLS } from "@/lib/seo/tools";
 
 export const metadata: Metadata = {
   title: { absolute: "Free tools for real-estate sales teams · Call Pro AI" },
-  description: "Free tools for Indian real-estate teams: home loan EMI calculator and Meta lead-cost calculator. No sign-up needed.",
+  description: "Free tools for Indian real-estate teams: home loan EMI calculator, Meta lead-cost calculator, call script generator and WhatsApp template maker. No sign-up needed.",
   alternates: { canonical: "/tools" },
 };
 
