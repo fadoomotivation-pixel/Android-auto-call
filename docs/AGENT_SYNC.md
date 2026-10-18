@@ -71,6 +71,18 @@ entry before you start, and add an entry after every change.**
 - First 10 cities: Mathura, Vrindavan, Agra, Noida, Greater Noida, Gurugram, Jaipur,
   Lucknow, Indore, Pune.
 
+## 2026-10-18 — Grok Bot (Scan list Camera: ask for camera permission first)
+
+- **Bug:** Scan list › Camera said "No camera app found. Try Photo." on a phone with a camera.
+- **Root cause:** the manifest declares `CAMERA` (attendance selfie). When an app declares
+  CAMERA but it is not granted, Android throws `SecurityException` on `ACTION_IMAGE_CAPTURE`.
+  `runCatching` turned every failure into "No camera app found".
+- **Fix (`ui/ScanListScreen.kt`):** check CAMERA → request it with `RequestPermission` if
+  missing → then `TakePicture` with the existing FileProvider uri (`cache-path scans/`, already
+  in `file_paths.xml`). `ActivityNotFoundException` still says "No camera app found";
+  a denied permission says "Allow camera access to scan a list. Or try Photo." UI unchanged.
+- Manifest `<queries>` also gains an `IMAGE_CAPTURE` intent for Android 11+ visibility.
+
 ## 2026-10-18 — Grok Bot (Search Console code in the code)
 
 - `admin/app/layout.tsx`: `verification.google` now defaults to the founder's Search Console
