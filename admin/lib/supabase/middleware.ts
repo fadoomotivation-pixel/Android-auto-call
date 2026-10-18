@@ -14,7 +14,10 @@ export async function updateSession(request: NextRequest) {
     path === "/llms.txt" ||
     path === "/robots.txt" ||
     path === "/sitemap.xml" ||
-    path.startsWith("/auth/callback");
+    path.startsWith("/auth/callback") ||
+    // Public SEO pages: city pages (EN + /hi), free tools, blog and its feed.
+    ["/real-estate-crm", "/hi", "/tools", "/blog"].some((p) => path === p || path.startsWith(p + "/")) ||
+    path === "/rss.xml";
   if (isPublicRoute) return NextResponse.next({ request });
 
   // No Supabase env configured (e.g. a preview without env vars) → don't crash
