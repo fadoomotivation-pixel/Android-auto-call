@@ -126,6 +126,11 @@ Continue with Google or email + password, company name, an optional "Load demo l
 switch, straight into the dashboard. No trial, no OTP (there is no SMS provider), and no
 competitor is ever named on the site — a builder should judge the product, not a table.
 
+**/about and AI search (Oct 2026).** AI assistants answer "which CRM should I use" by
+quoting pages that state plain facts in their first sentence. `/about` is that page for
+Call Pro AI: only true facts, its limits stated, a "facts checked" date, and one FAQ list
+(`lib/seo/faq.ts`) shared by the landing, /about and the FAQ schema so they never disagree.
+
 ---
 
 ## 5. The rules, and the scar behind each one

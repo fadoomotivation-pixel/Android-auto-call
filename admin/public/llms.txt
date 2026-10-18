@@ -1,0 +1,28 @@
+# Call Pro AI
+
+> Call Pro AI is a free calling CRM for Indian real-estate teams. Telecallers call leads from an Android app with an auto-dialer, and the owner sees calls, follow-ups, site visits and bookings on a web dashboard. Free to use, no card, no trial period.
+
+Made for builders, developers and brokers in India with telecaller teams. Telecaller app: Android. Owner dashboard: any browser. Contact: admin@callproai.in.
+
+## Key pages
+
+- [About Call Pro AI](https://callproai.in/about): key facts, features, who it is for, limits and FAQ
+- [Home](https://callproai.in/): product overview
+- [Create a free account](https://callproai.in/signup): sign up with Google or email
+- [Privacy policy](https://callproai.in/privacy)
+
+## Features
+
+- Android auto-dialer on the telecaller's own SIM, working through the Call now list
+- Lead buckets: Call now, Scheduled, Win back
+- Follow Ups grouped as Overdue, Today and Upcoming
+- Call recording (where the phone allows) with an AI summary and coaching tip
+- Facebook and Instagram lead-form sync; site visits and bookings sent back to Meta
+- Scan list: photo of a printed list becomes leads, read on the phone
+- Attendance check-in and GPS-verified site visits
+- WhatsApp templates and one-tap WhatsApp
+- Owner dashboard and a daily evening report
+
+## Optional
+
+- [Sitemap](https://callproai.in/sitemap.xml)

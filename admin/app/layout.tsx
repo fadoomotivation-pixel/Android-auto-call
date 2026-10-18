@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "./components/Analytics";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -27,6 +28,9 @@ export const metadata: Metadata = {
     "The AI calling CRM for real-estate teams — auto-dialer, call recordings, hot-lead alerts, follow-ups and a clear funnel to booking.",
   metadataBase: new URL("https://callproai.in"),
   applicationName: "Call Pro AI",
+  ...(process.env.NEXT_PUBLIC_GSC_VERIFICATION
+    ? { verification: { google: process.env.NEXT_PUBLIC_GSC_VERIFICATION } }
+    : {}),
   alternates: { languages: { "en-IN": "/", "x-default": "/" } },
 };
 
@@ -44,6 +48,7 @@ export default function RootLayout({
           }}
         />
         {children}
+        <Analytics />
       </body>
     </html>
   );
