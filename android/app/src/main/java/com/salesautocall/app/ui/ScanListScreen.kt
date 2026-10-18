@@ -66,6 +66,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import android.content.ActivityNotFoundException
+import android.Manifest
 import com.salesautocall.app.data.ScanListParser
 import com.salesautocall.app.ui.design.AppColors
 import com.salesautocall.app.ui.design.AppType
@@ -188,14 +192,33 @@ fun ScanListScreen(vm: MainViewModel) {
         if (uri != null) readUri(uri)
     }
 
+    fun openCamera() {
+        readError = null
+        val dir = File(ctx.cacheDir, "scans").apply { mkdirs() }
+        val f = File(dir, "scan_${System.currentTimeMillis()}.jpg")
+        val u = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
+        cameraUri = u
+        try {
+            takePicture.launch(u)
+        } catch (e: ActivityNotFoundException) {
+            readError = "No camera app found. Try Photo."
+        } catch (e: SecurityException) {
+            readError = "Allow camera access to scan a list. Or try Photo."
+        }
+    }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) openCamera() else readError = "Allow camera access to scan a list. Or try Photo."
+    }
+
     fun start() {
         when (source) {
             ScanSource.Camera -> {
-                val dir = File(ctx.cacheDir, "scans").apply { mkdirs() }
-                val f = File(dir, "scan_${System.currentTimeMillis()}.jpg")
-                val u = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
-                cameraUri = u
-                runCatching { takePicture.launch(u) }.onFailure { readError = "No camera app found. Try Photo." }
+                // The manifest declares CAMERA (attendance selfie), so Android refuses
+                // ACTION_IMAGE_CAPTURE with a SecurityException until it is granted.
+                // That exception used to be reported as "No camera app found".
+                val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) ==
+                    PackageManager.PERMISSION_GRANTED
+                if (granted) openCamera() else cameraPermission.launch(Manifest.permission.CAMERA)
             }
             ScanSource.Photo -> runCatching {
                 pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))

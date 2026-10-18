@@ -8,6 +8,10 @@
     <queries>
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
+        <!-- Scan list › Camera: lets the app see the phone's camera app on Android 11+. -->
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET" />
