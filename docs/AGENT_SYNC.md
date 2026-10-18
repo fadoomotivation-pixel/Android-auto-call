@@ -37,6 +37,12 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (Search Console code in the code)
+
+- `admin/app/layout.tsx`: `verification.google` now defaults to the founder's Search Console
+  code (`GSC_DEFAULT`) when `NEXT_PUBLIC_GSC_VERIFICATION` is unset; the env var still wins.
+  The code is a public meta tag, not a secret. Removing it un-verifies the site in Search Console.
+
 ## 2026-10-18 — Grok Bot (GEO PR: /about fact page, FAQ schema, llms.txt, GSC + GA4)
 
 - **/about** (`admin/app/about/`): plain fact page for people and AI assistants. Answer-first

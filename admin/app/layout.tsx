@@ -19,6 +19,8 @@ const body = Inter({
   fallback: ["ui-sans-serif", "system-ui", "sans-serif"],
 });
 
+const GSC_DEFAULT = "P8DiYEuneITCUi2Lko7NzBtDm--fKJHsejRqU_YVd1U";
+
 export const metadata: Metadata = {
   title: {
     default: "Call Pro AI — Real Estate Sales, Simplified",
@@ -28,9 +30,9 @@ export const metadata: Metadata = {
     "The AI calling CRM for real-estate teams — auto-dialer, call recordings, hot-lead alerts, follow-ups and a clear funnel to booking.",
   metadataBase: new URL("https://callproai.in"),
   applicationName: "Call Pro AI",
-  ...(process.env.NEXT_PUBLIC_GSC_VERIFICATION
-    ? { verification: { google: process.env.NEXT_PUBLIC_GSC_VERIFICATION } }
-    : {}),
+  // Google Search Console ownership check for callproai.in. Not a secret: it is
+  // a public meta tag. The env var still overrides it.
+  verification: { google: process.env.NEXT_PUBLIC_GSC_VERIFICATION || GSC_DEFAULT },
   alternates: { languages: { "en-IN": "/", "x-default": "/" } },
 };
 
