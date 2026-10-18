@@ -37,6 +37,15 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (SEO C: blog + RSS)
+
+- Posts are data in `admin/lib/seo/posts.ts` (sections of headings, paragraphs, lists), in 4 groups:
+  Meta leads, Telecaller team, Follow-up and site visits, Tools and how-to. 6 starter posts.
+  Honest how-to content, Hinglish where natural, no made-up stats, no competitor names.
+- `/blog` index, `/blog/<slug>` static pages with Article + BreadcrumbList JSON-LD, related
+  posts, a tools link and a sign-up CTA. `/rss.xml` (static RSS 2.0). Sitemap + nav + footer updated.
+- Stacked on SEO B (#539).
+
 ## 2026-10-18 — Grok Bot (SEO B: free tools hub)
 
 - `/tools`, `/tools/emi-calculator`, `/tools/meta-lead-cost-calculator`. Client-side only,
