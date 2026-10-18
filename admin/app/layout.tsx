@@ -8,6 +8,8 @@ const display = Space_Grotesk({
   weight: ["400", "500", "600", "700"],
   variable: "--font-display",
   display: "swap",
+  // Only the dashboard uses this face; don't preload it on public pages.
+  preload: false,
 });
 
 const body = Inter({
@@ -34,6 +36,9 @@ export const metadata: Metadata = {
   // a public meta tag. The env var still overrides it.
   verification: { google: process.env.NEXT_PUBLIC_GSC_VERIFICATION || GSC_DEFAULT },
   alternates: { languages: { "en-IN": "/", "x-default": "/" } },
+  openGraph: { siteName: "Call Pro AI", locale: "en_IN", type: "website" },
+  twitter: { card: "summary_large_image" },
+  formatDetection: { telephone: false },
 };
 
 export default function RootLayout({

@@ -37,6 +37,17 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (SEO E: 20 more cities + Core Web Vitals pass)
+
+- 20 more cities (30 total) added through the generator (`seo-gen/cities2.py` → `lib/seo/cities.ts`). Notes and tips are qualitative, with no numbers and no competitor names.
+- Generated OG images (1200x630) through `opengraph-image.tsx`:
+  - site root, `/tools`, every EN and HI city page, and every blog post;
+  - shared card in `lib/seo/og.tsx`; colours live in `lib/seo/ogTheme.ts`, so there's no hex in .tsx;
+  - HI cards use Latin text, because the OG font has no Devanagari.
+- Root metadata: openGraph defaults, twitter summary_large_image, formatDetection. Space Grotesk set to `preload: false` (dashboard-only); Inter stays `display: swap`.
+- next.config: `images.formats` avif/webp. Middleware: `/opengraph-image` public.
+- Stacked on SEO D (#541).
+
 ## 2026-10-18 — Grok Bot (SEO D: call script + WhatsApp tools)
 
 - `/tools/call-script-generator` and `/tools/whatsapp-template-maker`. Both use fixed templates filled in the browser: no AI, no network calls, no data stored.
