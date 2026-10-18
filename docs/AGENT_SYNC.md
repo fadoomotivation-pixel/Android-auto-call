@@ -37,6 +37,12 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (SEO B–E recovery: bring the stacked work into main)
+
+- PRs #539–#542 were merged into their stacked base branches, not into main, because their bases were not retargeted after #538 merged. Main only had SEO A.
+- This PR merges `cursor/seo-d-script-tools` (which holds B+C+D+E) into main. No new code.
+- Lesson: with stacked PRs, retarget the next PR to main, or delete the merged head branch, before merging it.
+
 ## 2026-10-18 — Grok Bot (SEO E: 20 more cities + Core Web Vitals pass)
 
 - 20 more cities (30 total) added through the generator (`seo-gen/cities2.py` → `lib/seo/cities.ts`). Notes and tips are qualitative, with no numbers and no competitor names.
