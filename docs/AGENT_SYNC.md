@@ -37,6 +37,23 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (SEO A: city pages, EN + Hindi)
+
+- `/real-estate-crm/<city>` and `/hi/real-estate-crm/<city>` from one data file,
+  `admin/lib/seo/cities.ts` (generated from qualitative notes: market note, calling tip,
+  buyer languages, nearby cities, in EN + HI). Text lives in `lib/seo/cityContent.ts`,
+  view in `app/components/CityView.tsx`, shared nav/footer `SiteShell.tsx` + `site.css`.
+- **Rules for city text:** true and qualitative only. No prices, no market sizes, no
+  unmeasured numbers, never a competitor name.
+- Each page: hreflang en-IN / hi-IN / x-default, FAQPage + BreadcrumbList +
+  SoftwareApplication (price 0) JSON-LD, nearby-city links, footer links to every city.
+  Hindi content sits in `<div lang="hi-IN">` (the root `<html lang>` is shared).
+- Index `/real-estate-crm`. Sitemap adds all city URLs with language alternates.
+- Middleware: `/real-estate-crm`, `/hi`, `/tools`, `/blog` (and `/rss.xml`) are public,
+  ready for the next SEO PRs.
+- First 10 cities: Mathura, Vrindavan, Agra, Noida, Greater Noida, Gurugram, Jaipur,
+  Lucknow, Indore, Pune.
+
 ## 2026-10-18 — Grok Bot (Scan list Camera: ask for camera permission first)
 
 - **Bug:** Scan list › Camera said "No camera app found. Try Photo." on a phone with a camera.

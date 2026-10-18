@@ -1,0 +1,49 @@
+/* Public marketing pages (city, tools, blog). Apple family: Inter, #F2F2F7,
+   white 12px cards, one blue #007AFF, sizes 28 / 17 / 15 / 12, 16px margins. */
+.st { min-height: 100vh; background: #F2F2F7; color: #1C1C1E; font-family: var(--font-body), -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+.st a { color: inherit; text-decoration: none; }
+.st-wrap { max-width: 880px; margin: 0 auto; padding: 0 16px 48px; }
+.st-nav { position: sticky; top: 0; z-index: 5; background: rgba(242,242,247,.92); backdrop-filter: saturate(180%) blur(12px); border-bottom: 0.5px solid #D1D1D6; }
+.st-nav-in { max-width: 880px; margin: 0 auto; height: 52px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.st-brand { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; }
+.st-brand i { width: 24px; height: 24px; border-radius: 7px; background: #007AFF; display: inline-block; }
+.st-links { display: flex; align-items: center; gap: 20px; font-size: 15px; color: #3A3A3C; }
+@media (max-width: 640px) { .st-links a:not(.st-btn) { display: none; } }
+.st-btn { height: 36px; padding: 0 16px; border-radius: 10px; background: #007AFF; color: #FFFFFF !important; font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; }
+.st-btn-lg { height: 44px; padding: 0 20px; border-radius: 12px; }
+.st-btn-ghost { background: #FFFFFF; color: #007AFF !important; border: 0.5px solid #D1D1D6; }
+.st-crumb { font-size: 12px; color: #8E8E93; margin: 16px 0 0; }
+.st-crumb a { color: #007AFF; }
+.st h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; margin: 12px 0 8px; }
+.st-lead { font-size: 17px; line-height: 1.5; margin: 0; }
+.st-sub { font-size: 12px; color: #8E8E93; margin-top: 8px; }
+.st h2 { font-size: 12px; font-weight: 600; color: #8E8E93; letter-spacing: .5px; text-transform: uppercase; margin: 24px 0 8px 16px; }
+.st h3 { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+.st-card { background: #FFFFFF; border-radius: 12px; overflow: hidden; }
+.st-pad { padding: 16px; }
+.st-row { padding: 12px 16px; border-bottom: 0.5px solid #E5E5EA; font-size: 15px; line-height: 1.45; }
+.st-row:last-child { border-bottom: 0; }
+.st-row b { font-weight: 600; }
+.st-row span { display: block; font-size: 12px; color: #8E8E93; margin-top: 2px; }
+.st-p { font-size: 15px; line-height: 1.6; margin: 0 0 12px; }
+.st-p:last-child { margin-bottom: 0; }
+.st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.st-tile { background: #FFFFFF; border-radius: 12px; padding: 12px 16px; font-size: 15px; font-weight: 600; }
+.st-tile span { display: block; font-size: 12px; font-weight: 400; color: #8E8E93; margin-top: 2px; }
+.st-cta { margin-top: 24px; background: #FFFFFF; border-radius: 12px; padding: 24px 16px; text-align: center; }
+.st-cta p { font-size: 15px; color: #3A3A3C; margin: 8px 0 16px; }
+.st-cta .st-row-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.st-steps { counter-reset: s; }
+.st-steps .st-row { position: relative; padding-left: 52px; }
+.st-steps .st-row::before { counter-increment: s; content: counter(s); position: absolute; left: 16px; top: 12px; width: 24px; height: 24px; border-radius: 12px; background: #007AFF1F; color: #007AFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.st-lang { font-size: 12px; color: #007AFF; font-weight: 600; }
+.st-foot { border-top: 0.5px solid #D1D1D6; margin-top: 32px; padding-top: 16px; font-size: 12px; color: #8E8E93; }
+.st-foot-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px 16px; margin: 8px 0 16px; }
+.st-foot a { color: #3A3A3C; }
+.st-foot b { display: block; color: #1C1C1E; font-size: 12px; margin-bottom: 4px; }
+.st-in { width: 100%; height: 44px; border-radius: 10px; border: 0.5px solid #D1D1D6; background: #FFFFFF; padding: 0 12px; font: 400 15px var(--font-body), -apple-system, sans-serif; color: #1C1C1E; outline: none; }
+.st-in:focus { border: 2px solid #007AFF; padding: 0 11px; }
+.st-label { font-size: 12px; color: #8E8E93; margin: 12px 0 4px; display: block; }
+.st-out { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+.st-kv { display: flex; justify-content: space-between; gap: 16px; }
+.st-kv span { display: inline; margin: 0; font-size: 15px; color: #3A3A3C; text-align: right; }
