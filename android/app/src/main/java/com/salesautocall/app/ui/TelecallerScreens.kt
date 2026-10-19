@@ -33,7 +33,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.BarChart
@@ -99,6 +98,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -2187,6 +2187,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
     // Next call "Skip": ids pushed behind the rest of the queue, this session only.
     var skippedIds by remember { mutableStateOf(listOf<String>()) }
     var leadsMenuOpen by remember { mutableStateOf(false) }
+    var coachSeenKey by rememberSaveable { mutableStateOf("") }
     var sub by remember { mutableStateOf("new") }
     val bucket = laneBucket(sub)
     var stageFilter by remember { mutableStateOf<String?>(null) } // exact stage from the sheet
@@ -2444,7 +2445,7 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             collapsed = true,
             subtitle = if (selectMode) null else buildString {
                 append("${app.leads.size} leads")
-                if (deck.pipelineValue > 0) append(" · ${formatRupees(deck.pipelineValue)} on the table")
+                if (deck.pipelineValue > 0) append(" · ${formatRupees(deck.pipelineValue)}")
             },
             leading = {
                 Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White,
@@ -2452,13 +2453,9 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
             },
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Coach lives in the bar now (no floating orb over leads).
-                    if (app.coachOn) com.salesautocall.app.ui.design.GlassBox {
-                        Box(Modifier.size(44.dp).clip(CircleShape).iosPress { vm.openAskCoach() }, contentAlignment = Alignment.Center) {
-                            SparkleGlyph(20.dp, tint = Color.White)
-                        }
-                    }
-                    com.salesautocall.app.ui.design.GlassIconButton(Icons.Outlined.DocumentScanner, "Scan list") { vm.openScanList() }
+                    // Leads bar, option C: ☰ left, ••• right, nothing else up here.
+                    // Only ••• in the bar now. The coach and Scan moved down beside
+                    // search (always visible); Settings and Sort/filter are in •••.
                     Box {
                         com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.MoreHoriz, "More") { leadsMenuOpen = true }
                         if (leadsMenuOpen) {
@@ -2466,16 +2463,17 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                                 onDismiss = { leadsMenuOpen = false },
                                 actions = listOf(
                                     SheetAction("Scan list") { vm.openScanList() },
+                                    SheetAction("Sort and filter") { sheetOpen = true },
                                     SheetAction("Add lead") { vm.openAddLead() },
                                     SheetAction("Refresh") { vm.loadLeads(force = true); vm.loadFollowUps(force = true) },
                                     SheetAction(if (app.aiScoringLeads) "Scoring…" else "AI Score leads", enabled = !app.aiScoringLeads) { vm.scoreLeads() },
                                     SheetAction("Select leads") { selectMode = true },
                                     SheetAction("What I did today") { todayOpen = true; vm.loadTodayActivities() },
+                                    SheetAction("Settings") { vm.openSettings() },
                                 ),
                             )
                         }
                     }
-                    com.salesautocall.app.ui.design.GlassIconButton(Icons.Default.Settings, "Settings") { vm.openSettings() }
                 }
             },
         )
@@ -2597,9 +2595,22 @@ fun LeadsScreen(vm: MainViewModel, onStartCampaign: () -> Unit, onMenu: () -> Un
                     IosSearchField(
                         value = query,
                         onValueChange = { query = it },
-                        placeholder = "Search name or phone",
+                        // Scan + coach now share this row; on a phone under 420dp the
+                        // long hint would be cut mid-word, so it shortens instead.
+                        placeholder = if (androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 420) "Search" else "Search name or phone",
                         modifier = Modifier.weight(1f),
                     )
+                    com.salesautocall.app.ui.design.ScanChip(onClick = { vm.openScanList() })
+                    if (app.coachOn) {
+                        // Unread = the coach has something the rep has not opened yet:
+                        // a Coaching-time moment, or a fresh focus list. Local UI
+                        // state only; opening the coach marks it seen.
+                        val tipKey = app.coachPicks.joinToString(",") { it.contactId }
+                        com.salesautocall.app.ui.design.CoachPulseButton(
+                            unread = app.coachMoment != null || (app.coachPicks.isNotEmpty() && tipKey != coachSeenKey),
+                            onClick = { coachSeenKey = tipKey; vm.openAskCoach() },
+                        )
+                    }
                     val filtersOn = stageFilter != null || tempFilter != null || quick != null || sortBy != "default"
                     // Same height and radius as the search field beside it, so the
                     // pair reads as one control group rather than a field and a

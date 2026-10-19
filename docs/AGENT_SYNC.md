@@ -37,6 +37,21 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-18 — Grok Bot (Leads top bar: option C + visible animated coach)
+
+- **Bug:** on a real phone the coach sparkle and Scan icon overlapped the centred "Leads" title. Four icons on the right were wider than `IosNavBar`'s fixed 72dp title padding.
+- **`IosNavBar` (all screens):** a custom `Layout` measures leading and trailing first and gives the title only the symmetric space left between them, so the title and subtitle ellipsize and can never overlap. Visually the same on screens that already fit.
+- **Leads bar:** ☰ on the left and ••• on the right, nothing else. The subtitle is now "545 leads · ₹14.62 Cr" (live values, without "on the table").
+  - ••• gained **Sort and filter** and **Settings**; it keeps Scan list, Add lead, Refresh, AI Score, Select, What I did today.
+- **Beside search:** a blue **Scan** chip (`design/LeadsBarKit.kt` `ScanChip`) and **`CoachPulseButton`**:
+  - a breathing blue→violet glow on a 2.5s loop (1.25s each way);
+  - one animated float read only in `drawBehind`, so it redraws without recomposing;
+  - a still image when animator scale is 0 (reduced motion);
+  - a red dot when `coachMoment != null`, or when the focus list changed since the rep last opened the coach (local `rememberSaveable`, no VM change);
+  - it opens the same `vm.openAskCoach()`.
+- **Search hint:** shortens to "Search" under 420dp.
+- **Tests:** Roborazzi/Robolectric `LeadsBarScreenshotTest` checks for overlap at 360dp and 390dp plus a long-subtitle case. Record PNGs with `gradle testStandardDebugUnitTest -Proborazzi.record=true`.
+
 ## 2026-10-18 — Grok Bot (Scan list: photo → OCR path fixed and hardened)
 
 - **Bug:** after #537, Scan list step 2 showed a black preview, "Couldn't open that photo." and 0 numbers, for camera and gallery photos alike.
