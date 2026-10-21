@@ -138,6 +138,7 @@ export const NAV: NavSection[] = [
     tabs: [
       { href: "/dashboard/platform/hq", label: "Platform HQ", hint: "Today across every company", who: "super", keywords: "hq all companies" },
       { href: "/dashboard/platform", label: "Companies", hint: "Add and manage companies", who: "super", keywords: "new company tenant" },
+      { href: "/dashboard/platform/enquiries", label: "Website enquiries", hint: "Clients from the ₹999 website form", who: "super", keywords: "website 999 onboarding enquiry client form" },
     ],
   },
 ];

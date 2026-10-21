@@ -19,6 +19,7 @@ const TITLES: [string, string][] = [
   ["/dashboard/platform/storage", "Recording storage"],
   ["/dashboard/platform/leaks", "Where leads are dying"],
   ["/dashboard/platform/hq", "Platform HQ"],
+  ["/dashboard/platform/enquiries", "Website enquiries"],
   ["/dashboard/platform/companies/new", "Create New Company"],
   ["/dashboard/platform", "Companies"],
   ["/dashboard/demo", "Demo account"],

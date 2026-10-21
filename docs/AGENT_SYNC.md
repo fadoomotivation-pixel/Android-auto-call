@@ -37,6 +37,15 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-21 — Grok Bot (Super admin: Website enquiries page)
+- New page `admin/app/dashboard/platform/enquiries/` (Platform section tab "Website enquiries", `who: "super"`).
+- Lists `public.site999_onboarding` (₹999 website form): status tabs new/contacted/won/lost/all with counts, search,
+  detail with every `data` answer, Call / WhatsApp / Email buttons, status + notes save (server action),
+  1-hour signed URLs for `data.files` paths in private bucket `site999-uploads`.
+- Access: server-side `platform_admins` check on page and action; reads/writes use the service role. Table has RLS on
+  with only an anon INSERT policy (for the form), so no one but the service role can read it. No DB change, no migration.
+- Sidebar has no badge support, so the "new" count shows on the page's first tab instead.
+
 ## 2026-10-21 — Telecaller web app at /app (installable, Chrome + iPhone Safari)
 - New `/app` in admin/: entry (company owner → /signup, telecaller → log in or join with company code; `/app/join?code=XYZ` prefills), 4 tabs Home / Leads / Scan / Follow Ups, profile in a sheet.
 - Writes mirror Android Repository.kt exactly (lib/tele/data.ts): contacts status/notes/site_visit_at, lead_activities, attempts + retry-ladder follow-up, one pending follow_up per lead, completeFollowUp, call_logs row (duration 0, recording "none" — the browser can't read the dialer). Join = RPC join_company_by_code. No migration.
