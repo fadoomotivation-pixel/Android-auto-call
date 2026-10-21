@@ -37,7 +37,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 .steps3 li{display:flex;gap:12px;align-items:flex-start;padding:14px}
 .steps3 b.n{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111}
 .privacy{font-size:14px;color:var(--mu);display:flex;gap:10px;padding:14px;margin-top:12px}
-.resume{padding:14px;margin-bottom:14px;display:flex;gap:12px;align-items:center}
 /* top: AI designer guide with a tip per step */
 .app .top .guide{margin:4px 0 2px}
 .ai{flex:none;width:48px;height:48px;border-radius:15px;position:relative;background:linear-gradient(145deg,rgba(255,255,255,.18),rgba(255,255,255,.05));border:1px solid rgba(246,220,132,.55);box-shadow:0 10px 22px -8px rgba(212,175,55,.6)}
@@ -126,6 +125,23 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
 .offer .cd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border-radius:12px;background:rgba(0,0,0,.35);font-size:13px;color:var(--mu)}.offer .cd b{color:var(--gold2);font-variant-numeric:tabular-nums;font-size:15px}
 .offer .fine{font-size:11.5px;color:#8f8f9a;margin:8px 0 0;line-height:1.4}
 .lock{padding:12px 14px;border-radius:14px;border:1px solid rgba(212,175,55,.4);background:rgba(212,175,55,.08);font-size:14px;margin:0 0 14px}
+/* Landing polish: 8pt grid, one bottom bar */
+.land{padding:32px 16px calc(168px + var(--sab))}
+.land h1{font-size:34px;line-height:1.1;letter-spacing:-.6px;margin:16px 0 16px;font-weight:800}
+.land .ask{font-size:17px;line-height:1.45;color:var(--tx);margin:0 0 8px;padding-left:12px}
+.land .lead{font-size:15px;line-height:1.5;color:var(--mu);margin:0 0 24px}
+.offer{margin:0 0 32px;padding:24px}
+.offer .pr{flex-direction:column;align-items:flex-start;gap:4px}.offer .pr b{font-size:48px;letter-spacing:-1.5px}.offer .pr span{font-size:15px}
+.offer ul{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;margin:16px 0;font-size:15px}.offer li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.offer .cd{padding:12px 16px;border-radius:14px}.offer .cd span{min-width:0}.offer .cd b{white-space:nowrap;flex:none;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";letter-spacing:.2px}
+.offer .fine{margin:16px 0 0;font-size:12px;line-height:1.5}
+.jmap{margin:0 0 32px;gap:16px}.privacy{margin:0}
+.cta{position:fixed;left:0;right:0;bottom:0;z-index:6;padding:12px 16px calc(12px + var(--sab));background:linear-gradient(to top,var(--bg) 70%,rgba(7,7,10,0));display:grid;gap:8px;justify-items:center}
+.cta .btn{width:100%;max-width:528px}
+.cta-note{margin:0;font-size:13px;color:var(--mu)}
+.lnk{background:none;border:0;color:var(--mu);font:500 15px system-ui,sans-serif;text-decoration:underline;text-underline-offset:3px;min-height:44px;padding:0 16px;cursor:pointer}
+.land.hide~.cta,.land.hide .cta{display:none}
+@media (max-width:359px){.land h1{font-size:30px}.offer{padding:20px 16px}.offer ul{font-size:14px;gap:8px 12px}}
 /* done: calm gold check */
 .okc{display:block;margin:8px 0 6px}.okc circle{fill:none;stroke:var(--gold2);stroke-width:2.5;stroke-dasharray:151;stroke-dashoffset:151;animation:okd .8s ease-out forwards}
 .okc path{fill:none;stroke:var(--gold2);stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:40;stroke-dashoffset:40;animation:okd .45s .65s ease-out forwards}
@@ -142,7 +158,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
 .jmap li:before{content:"";position:absolute;left:-34px;top:20px;width:13px;height:13px;border-radius:50%;background:#d4af37;box-shadow:0 0 0 4px rgba(212,175,55,.2),0 0 12px #d4af37}
 .jmap b.n{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111}
 .land .ask{font-size:16px;color:var(--tx);margin:0 0 18px;padding-left:12px;border-left:3px solid var(--gold2)}
-@media (max-width:899px){.land{padding-bottom:110px}.land>#startBtn{position:fixed;left:16px;right:16px;bottom:calc(14px + var(--sab));width:auto;z-index:5}}
 @media (prefers-reduced-motion:reduce){.jmap li{opacity:1;transform:none}.jmap .jl{transform:none}}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
@@ -155,22 +170,25 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
  <span class="tag">Website onboarding</span>
  <h1>Let's build your <span class="gold">business website</span></h1>
  <p class="ask">We need a few answers to understand your business and make your website.</p>
+ <p class="lead" id="hello">Thanks for messaging us on WhatsApp! Answer a few questions so we can plan your website before our call.</p>
  <section class="offer" id="offer" aria-label="Website offer">
   <span class="tag">Launch offer</span>
   <div class="pr" style="margin-top:8px"><b>₹999</b><span>Your complete business website</span></div>
-  <ul><li>5 pages</li><li id="ofDom">Free domain, 1st year</li><li>Basic SEO</li><li>AI-made images</li><li>Mobile-ready design</li><li>Hosting</li></ul>
-  <div class="cd" id="ofCd"><span id="ofLbl">Free domain offer ends in</span><b id="ofT" aria-live="off"></b></div>
+  <ul><li>5 pages</li><li id="ofDom">Free domain</li><li>Basic SEO</li><li>AI images</li><li>Mobile-ready</li><li>Hosting</li></ul>
+  <div class="cd" id="ofCd"><span id="ofLbl">Free domain ends in</span><b id="ofT" aria-live="off"></b></div>
   <p class="fine" id="ofFine">Free domain means a standard .in or .com for the first year. Premium domains are not included. From year 2, domain renewal is paid by you.</p>
  </section>
- <p class="lead" id="hello">Thanks for messaging us on WhatsApp! Answer a few questions so we can plan your website before our call.</p>
- <div id="resume" class="resume glass hide"><span style="flex:1">You have answers saved on this phone.</span><button class="btn" type="button" data-start>Continue</button></div>
- <button class="btn" type="button" id="startBtn">Start</button>
  <ol class="jmap" id="jmap" aria-label="How it works"><span class="jl" aria-hidden="true"></span>
   <li class="glass"><b class="n">1</b><span><b>Tell us about your business.</b><br><span class="mu">Most questions are a tap. Skip anything you are not sure about.</span></span></li>
   <li class="glass"><b class="n">2</b><span><b>We plan your website.</b><br><span class="mu">Our AI designer plans your website from your answers.</span></span></li>
   <li class="glass"><b class="n">3</b><span><b>We call you.</b><br><span class="mu">We talk about your business and start building your website.</span></span></li>
  </ol>
  <p class="privacy glass"><span aria-hidden="true">🔒</span><span>Your answers are used only to plan your website and to contact you. We do not share them. Files you upload are stored privately.</span></p>
+ <div class="cta" id="cta">
+  <p class="cta-note hide" id="resume">Your answers are saved on this phone.</p>
+  <button class="btn" type="button" id="startBtn">Start</button>
+  <button class="lnk hide" type="button" id="restart">Start again</button>
+ </div>
 </main>
 
 <!-- ===== Form ===== -->
@@ -352,9 +370,9 @@ function offerTick() {
  const left = offerEnd - Date.now();
  const lockTxt = offerLive() ? "🔒 Your ₹999 offer is locked in, with a free domain for the first year." : "🔒 Your ₹999 offer is locked in. Domain at actual cost.";
  for (const id of ["lock1", "lock2"]) { const e = document.getElementById(id); if (e) e.textContent = lockTxt; }
- if (left <= 0) { $("#ofLbl").textContent = "Free domain offer has ended."; $("#ofT").textContent = ""; $("#ofDom").textContent = "Domain at actual cost"; $("#ofFine").textContent = "Domain is charged at actual cost. Renewal from year 2 is paid by you."; return false; }
+ if (left <= 0) { $("#ofLbl").textContent = "Free domain offer has ended."; $("#ofT").textContent = ""; $("#ofDom").textContent = "Domain at cost"; $("#ofFine").textContent = "Domain is charged at actual cost. Renewal from year 2 is paid by you."; return false; }
  const d = Math.floor(left / 864e5), h = Math.floor(left / 36e5) % 24, m = Math.floor(left / 6e4) % 60, sec = Math.floor(left / 1e3) % 60, p = n => String(n).padStart(2, "0");
- $("#ofT").textContent = `${d}d ${p(h)}h ${p(m)}m ${p(sec)}s`; return true;
+ $("#ofT").textContent = `${d}d ${p(h)}:${p(m)}:${p(sec)}`; return true;
 }
 if (offerTick()) { const iv = setInterval(() => { if (!offerTick()) clearInterval(iv); }, 1000); }
 // Warm leads: ?n=Name&w=WhatsApp&src=adname (+ utm_*). Prefill, greet, and keep the source.
@@ -613,9 +631,9 @@ function start() {
  $("#land").classList.add("hide"); $("#app").classList.remove("hide"); $("#nav").classList.remove("hide");
  show(Math.min(cur, N - 1));
 }
-$$("[data-start]").forEach(b => b.addEventListener("click", start));
 let hasDraft = false;
-$("#startBtn").addEventListener("click", () => hasDraft ? resetDraft() : start());
+$("#startBtn").addEventListener("click", start);
+$("#restart").addEventListener("click", () => { if (confirm("Start again? Your saved answers on this phone will be cleared.")) resetDraft(); });
 (async function init() {
  let s = null;
  try { s = JSON.parse(localStorage.getItem(DRAFT) || "null"); } catch {}
@@ -628,7 +646,7 @@ $("#startBtn").addEventListener("click", () => hasDraft ? resetDraft() : start()
  cur = Math.min(s?.step || 0, N - 1);
  for (const k of ["logo", "photos"]) { const v = await idb.get(k); if (Array.isArray(v)) { files[k] = v; showFiles(k); } }
 
- if (s && Object.keys(saved).length) { hasDraft = true; $("#resume").classList.remove("hide"); $("#startBtn").textContent = "Start again"; $("#startBtn").classList.add("btn2"); }
+ if (s && Object.keys(saved).length) { hasDraft = true; $("#resume").classList.remove("hide"); $("#restart").classList.remove("hide"); $("#startBtn").textContent = "Continue where you left off"; }
  flushOutbox();
 })();
 function resetDraft() { try { localStorage.removeItem(DRAFT); } catch {} idb.clear(); location.reload(); }

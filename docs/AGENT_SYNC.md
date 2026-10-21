@@ -6,6 +6,11 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-22 · Grok Bot · site999 landing: one bottom bar + polish
+- Fix: with a saved draft, "Start again" and the "answers saved / Continue" bar were both fixed and overlapped text. Now one fixed bar (`#cta`, inside env(safe-area-inset-bottom)): primary "Continue where you left off" (or "Start"), a quiet "Start again" link with confirm() before clearing, and a small "Your answers are saved on this phone." note. Landing has bottom padding so nothing hides behind it.
+- Polish: 8pt spacing, one large title, warm-lead line moved above the offer, offer card with even 2-column checklist (short labels, no wraps), countdown in tabular numbers (`2d 23:59:58`).
+- Deployed to Vercel `website999-onboarding` after opening the PR.
+
 ## 2026-10-22 · Grok Bot · site999: ₹999 offer back, live preview removed
 - Landing: calm "Launch offer" card (₹999, 5 pages, free domain 1st year, basic SEO, AI-made images, mobile-ready, hosting). Free-domain countdown is 3 days from this visitor's first visit (localStorage `o999_offer_t`); set `OFFER_END` (ISO with +05:30) to use one end time for everyone. After it ends: "Domain at actual cost". Fine print: standard .in/.com only, no premium domains, renewal from year 2 paid by the client. No struck-through price (no fake anchor).
 - Final step + done screen: "Your ₹999 offer is locked in…". Saved as `data.offer = {price: 999, domain_included}`; shown in site999/admin (detail + CSV) and super admin detail.
