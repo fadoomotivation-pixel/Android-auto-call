@@ -177,6 +177,34 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
  .nav .in{max-width:none}
 }
 @media (max-width:359px){.tiles{grid-template-columns:1fr}.site .mn .p{display:none}.site .mn .x{display:inline}}
+/* Preview D: phones show only the form; a badge opens a 3D dark-gold preview sheet */
+.site{background:#0e0d0a;color:#f4f4f6}.site .nv{background:#0e0d0a;border-bottom-color:rgba(212,175,55,.22)}
+.site .lg{background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111;font-size:11px}
+.site .hero{background:radial-gradient(120% 90% at 100% 0,rgba(212,175,55,.22),transparent 60%),#0e0d0a}.site .eb{color:var(--gold2)}
+.site .hero p,.site .mn,.site .ft{color:#b4b4c0}.site .c1{background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111}
+.site .sec{border-top-color:#ffffff12}.site .cards div,.site .q{background:#ffffff0a;border-color:rgba(212,175,55,.2);color:#b4b4c0}.site .cards b,.site .q b{color:#f4f4f6}
+.site .chips span{background:rgba(212,175,55,.14);color:var(--gold2)}.site .ghost{border-color:#ffffff30;color:#9a9aa6}.site .ct{background:#17150e;border:1px solid rgba(212,175,55,.3)}.site .sk{background:#ffffff14}
+.pv .vp{background:#0e0d0a}
+.pvb,.pvx,.pvt{display:none}
+@media (max-width:899px){
+ .app .top{position:fixed;inset:0;z-index:20;margin:0;padding:calc(16px + env(safe-area-inset-top)) 16px 16px;background:rgba(5,5,8,.96);display:flex;flex-direction:column;justify-content:center;perspective:900px;opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s}
+ .pvopen .app .top{opacity:1;visibility:visible}
+ .app .top .pv{transform:rotateX(9deg) rotateY(-10deg) scale(.94);transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+ .pvopen .app .top .pv{transform:rotateX(6deg) rotateY(-6deg);animation:pvdrift 6s ease-in-out infinite alternate}
+ @keyframes pvdrift{to{transform:rotateX(3deg) rotateY(6deg)}}
+ .app .top .pv .vp{height:62vh;min-height:300px}.app .top .pvtg{display:none}
+ .pvx{display:block;width:100%;margin-top:14px}.pvt{display:block;text-align:center;color:var(--gold2);font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px}
+ .pvb{display:flex;position:fixed;right:14px;bottom:calc(84px + var(--sab));z-index:6;align-items:center;gap:8px;min-height:48px;padding:6px 14px 6px 6px;border-radius:30px;border:1px solid var(--gold2);background:#16130a;color:var(--gold2);font:700 14px system-ui,sans-serif;box-shadow:0 0 22px rgba(212,175,55,.45);animation:pvpulse 2.6s ease-in-out infinite}
+ .pvb .nd{position:absolute;right:0;bottom:56px;white-space:nowrap;padding:8px 12px;border-radius:14px 14px 4px 14px;background:#1e1a0c;border:1px solid rgba(212,175,55,.5);color:var(--tx);font-weight:500;font-size:13px;opacity:0;transform:translateY(6px);transition:opacity .3s,transform .3s;pointer-events:none}
+ .pvb.nudge .nd{opacity:1;transform:none}
+ @keyframes pvpulse{50%{box-shadow:0 0 34px rgba(212,175,55,.8);transform:scale(1.04)}}
+ .app.hide~.pvb,.pvopen .pvb{display:none}}
+.rv{position:fixed;inset:0;z-index:30;background:#050508;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px;perspective:900px;text-align:center}
+.rv h2{font-size:26px;margin:0 0 16px}.rv .pv{text-align:left;width:100%;max-width:420px;animation:rvin 1.2s cubic-bezier(.2,.8,.2,1) both}.rv .pv .vp{height:55vh}
+@keyframes rvin{from{transform:rotateX(35deg) translateY(60px) scale(.7);opacity:0}to{transform:rotateX(6deg) rotateY(-6deg)}}
+.cf{position:fixed;top:-12px;width:8px;height:14px;z-index:31;border-radius:2px;animation:cf 2.4s linear forwards}
+@keyframes cf{to{transform:translate3d(var(--x),105vh,0) rotate(720deg)}}
+@media (prefers-reduced-motion:reduce){.pvb,.pvopen .app .top .pv,.rv .pv,.cf{animation:none!important}.cf{display:none}}
 /* Journey map (option D): transform/opacity only, no blur */
 .jmap{position:relative;list-style:none;padding:0 0 0 46px;margin:26px 0;display:grid;gap:18px;perspective:700px}
 .jmap:before{content:"";position:absolute;left:18px;top:8px;bottom:8px;width:3px;border-radius:2px;background:rgba(212,175,55,.18)}
@@ -216,12 +244,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
 <div id="app" class="wrap app hide">
  <div class="top">
   <div class="guide"><div class="ai" id="ai" aria-hidden="true"><i></i><i></i></div><p class="bub" id="bub" aria-live="polite"></p></div>
-  <div class="pv" id="pv">
+  <span class="pvt">Your website so far</span>
+ <div class="pv" id="pv">
    <div class="url" aria-hidden="true"><i></i><i></i><i></i><span id="pvUrl">yourbusiness.in</span></div>
    <div class="vp" id="vp" aria-hidden="true" tabindex="-1"><div class="site" id="site"></div></div>
    <div class="pvrow"><div class="ai sm" aria-hidden="true"><i></i><i></i></div><p class="bub2" id="bub2" aria-live="polite"></p>
     <button type="button" class="pvtg" id="pvToggle" aria-controls="vp" aria-expanded="true">Hide<span class="sr"> website preview</span></button></div>
   </div>
+   <button type="button" class="btn pvx" id="pvClose">Continue answering</button>
  </div>
  <main id="main" class="formcol">
   <h1 class="sr">Website onboarding form</h1>
@@ -324,7 +354,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
     <div id="msg" role="alert"></div>
    </section>
   </form>
-  <nav class="nav hide" id="nav" aria-label="Form steps"><div class="in"><button type="button" class="btn btn2" id="back">Back</button><button type="button" class="btn" id="next">Next</button></div></nav>
+  <button type="button" class="pvb" id="pvBadge" aria-haspopup="dialog"><span class="ai sm" aria-hidden="true"><i></i><i></i></span>Preview<span class="nd" id="pvNudge" aria-hidden="true">Your site updated. Tap to see</span></button>
+ <nav class="nav hide" id="nav" aria-label="Form steps"><div class="in"><button type="button" class="btn btn2" id="back">Back</button><button type="button" class="btn" id="next">Next</button></div></nav>
  </main>
 </div>
 
@@ -500,16 +531,16 @@ function preview() {
  const dom = (d.hasSite === "Yes" && d.domain) ? d.domain.replace(/^https?:\/\//, "") : (d.brand ? d.brand.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24) + ".in" : "yourbusiness.in");
  $("#pvUrl").textContent = dom;
  const pages = (d.pages || ["Home", "Services", "Contact"]).filter(p => p !== "Home").slice(0, 4);
- const logo = files.logo[0] ? `<img src="${objUrl("logo", files.logo[0])}" alt="">` : esc((d.brand || "Y").trim()[0].toUpperCase());
+ const logo = files.logo[0] ? `<img src="${objUrl("logo", files.logo[0])}" alt="">` : esc((d.brand || "Your Site").trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase());
  put("nav", `<span class="lg">${logo}</span><b>${esc(brand)}</b><span class="mn">${pages.map(p => `<span class="p">${esc(p)}</span>`).join("")}<span class="x">☰</span></span>`);
  const type = d.industry === "Other" ? (d.industryOther || "Business") : (t?.short || "Business");
  const where = d.reach && !/Nearby|city/.test(d.reach) ? (d.reach === "All India" ? "across India" : d.reach.toLowerCase()) : `in ${(d.areas || "").split(",")[0].trim() || city}`;
  const head = d.oneLiner || (d.offers && !d.problem ? d.offers : "") || (t ? t.line : "Your business, online");
  const subParts = [d.years && d.years !== "Just starting" ? d.years + " of experience" : "", (d.uspTags || []).slice(0, 2).join(" · ")].filter(Boolean);
- const act = ACT[d.action] || "WhatsApp us", second = d.action === "WhatsApp" ? "Call now" : "WhatsApp";
- const photo = files.photos[0] ? `<img src="${objUrl("ph0", files.photos[0])}" alt="">` : "Your photo here";
+ const act = ACT[d.action] || "WhatsApp us";
+ const photo = files.photos[0] ? `<img src="${objUrl("ph0", files.photos[0])}" alt="">` : "";
  put("hero", `<span class="eb">${esc(type)} ${esc(where)}</span><h3>${esc(head)}</h3><p>${esc(subParts.join(". ") || "Tell us what makes you special and it shows up here.")}</p>
-  <div class="ctas"><span class="c1">${esc(act)}</span><span class="${second === "WhatsApp" ? "wa" : "c2"}">${second}</span></div>${d.offers && d.oneLiner ? `<p style="margin:10px 0 0;font-weight:700;color:var(--ac)">${esc(d.offers)}</p>` : ""}<div class="ph">${photo}</div>`);
+  <div class="ctas"><span class="c1">${esc(act)}</span></div>${d.offers && d.oneLiner ? `<p style="margin:10px 0 0;font-weight:700;color:var(--ac)">${esc(d.offers)}</p>` : ""}${photo ? `<div class="ph">${photo}</div>` : ""}`);
  const sv = [1, 2, 3, 4, 5].map(i => d[`s${i}_name`] ? `<div><b>${esc(d[`s${i}_name`])}</b>${esc(d[`s${i}_desc`] || "")}</div>` : "").filter(Boolean);
  const svcName = t ? t.svc[0].toUpperCase() + t.svc.slice(1) : "Services";
  put("services", `<h4>Our ${esc(svcName.toLowerCase())}</h4>${d.problem ? `<p style="margin:-4px 0 8px;color:#555">We help with: ${esc(d.problem)}</p>` : ""}<div class="cards">${sv.length ? sv.join("") : '<div><div class="sk"></div><div class="sk" style="width:60%"></div></div><div><div class="sk"></div><div class="sk" style="width:70%"></div></div>'}</div>`);
@@ -521,7 +552,7 @@ function preview() {
  const qs = (d.questions || "").split(/\n|\?/).map(s => s.trim()).filter(s => s.length > 3).slice(0, 3);
  put("faq", `<h4>Questions customers ask</h4>${qs.length ? qs.map(q => `<div class="q"><b>${esc(q)}?</b>We answer this clearly on your website.</div>`).join("") : '<div class="ghost">Add the questions customers ask you. We answer them here.</div>'}`);
  const place = !$("[data-if=place]").classList.contains("hide");
- put("contact", `<b>Talk to ${esc(brand)}</b>${esc(place && d.address ? d.address.split("\n")[0] : city)}${d.areas ? " · " + esc(d.areas) : ""}<div class="ctas" style="margin-top:8px"><span class="wa">WhatsApp</span><span class="c2" style="color:#1d1d1f">Call</span>${place ? '<span class="c2" style="color:#1d1d1f">Directions</span>' : ""}</div>`);
+ put("contact", `<b>Talk to ${esc(brand)}</b>${esc(place && d.address ? d.address.split("\n")[0] : city)}${d.areas ? " · " + esc(d.areas) : ""}<div class="ctas" style="margin-top:8px"><span class="c1">${esc(act)}</span></div>`);
  const social = ["ig", "fb", "yt", "gbp"].filter(k => d[k]).length;
  put("foot", `<span>© ${new Date().getFullYear()} ${esc(brand)}</span><span>${social ? social + " social link" + (social > 1 ? "s" : "") : (d.langs || ["English"]).join(" · ")}</span>`);
 }
@@ -557,7 +588,7 @@ wide.addEventListener("change", liveRegion); liveRegion();
 let cheerT;
 function cheer(text) {
  if (!RM) { const a = $("#ai"); a.classList.remove("happy"); void a.offsetWidth; a.classList.add("happy"); }
- clearTimeout(cheerT); say(esc(text)); cheerT = setTimeout(() => say(TIPS[cur]), 4000);
+ clearTimeout(cheerT); say(esc(text)); nudge(); cheerT = setTimeout(() => say(TIPS[cur]), 4000);
 }
 
 // ===== Steps =====
@@ -620,6 +651,7 @@ f.addEventListener("focusout", () => { typT = setTimeout(() => { document.body.c
 f.addEventListener("input", e => { touched[e.target.name] = 1; if (e.target.getAttribute("aria-invalid")) fieldErr(e.target, ""); conditions(); preview(); save(); });
 f.addEventListener("change", e => {
  const t = e.target; touched[t.name] = 1;
+ if ((t.name === "brand" || t.name === "industry") && t.value) nudge();
  if (t.name === "industry") applyType(true);
  conditions(); preview(); save();
  if (t.name === "action" && t.checked) cheer(`Your main button now says "${ACT[t.value]}".`);
@@ -718,7 +750,8 @@ function finish(job) {
  $("#donePhone").textContent = job.d.whatsapp || "";
  $("#doneRef").textContent = job.id.slice(0, 8).toUpperCase();
  if (OUR_WHATSAPP) { const a = $("#doneWa"); a.href = `https://wa.me/${OUR_WHATSAPP}?text=${encodeURIComponent(`Hi, I just shared details for my website. Business: ${job.d.brand}. Ref: ${job.id.slice(0, 8).toUpperCase()}`)}`; a.classList.remove("hide"); }
- const done = $("#done"); done.classList.remove("hide"); done.focus(); scrollTo(0, 0);
+ const done = $("#done"); const go = () => { done.classList.remove("hide"); done.focus(); scrollTo(0, 0); };
+ reveal(go);
 }
 async function flushOutbox() {
  let job; try { job = JSON.parse(localStorage.getItem(OUTBOX) || "null"); } catch {}
@@ -728,6 +761,18 @@ async function flushOutbox() {
 }
 addEventListener("online", () => { if (localStorage.getItem(OUTBOX)) { msg("wait", "Back online. Sending your answers…"); flushOutbox(); } });
 setInterval(() => { if (localStorage.getItem(OUTBOX)) flushOutbox(); }, 30000);
+</script>
+<script>
+(()=>{const b=document.getElementById("pvBadge"),c=document.getElementById("pvClose"),B=document.body;
+const open=()=>{B.classList.add("pvopen");b.classList.remove("nudge");c.focus()},close=()=>{B.classList.remove("pvopen");b.focus()};
+b.addEventListener("click",open);c.addEventListener("click",close);addEventListener("keydown",e=>{if(e.key==="Escape"&&B.classList.contains("pvopen"))close()});
+const st=()=>b.classList.toggle("hide",document.getElementById("app").classList.contains("hide"));new MutationObserver(st).observe(document.getElementById("app"),{attributes:true});st();
+let t,last=0;window.nudge=()=>{if(B.classList.contains("pvopen")||Date.now()-last<8000)return;last=Date.now();b.classList.add("nudge");clearTimeout(t);t=setTimeout(()=>b.classList.remove("nudge"),3500)};
+window.reveal=go=>{const pv=document.getElementById("pv").cloneNode(true);pv.removeAttribute("id");pv.querySelectorAll("[id]").forEach(e=>e.removeAttribute("id"));pv.querySelector(".pvrow")?.remove();B.classList.remove("pvopen");
+const r=document.createElement("div");r.className="rv";r.setAttribute("role","dialog");r.setAttribute("aria-label","Your website preview");r.innerHTML='<h2>Here is your <span class="gold">website</span> ✨</h2>';r.appendChild(pv);
+const k=document.createElement("button");k.className="btn";k.style.cssText="margin-top:18px;width:100%;max-width:420px";k.textContent="Continue";r.appendChild(k);document.body.appendChild(r);k.focus();
+if(!matchMedia("(prefers-reduced-motion: reduce)").matches)for(let i=0;i<40;i++){const p=document.createElement("i");p.className="cf";p.style.left=Math.random()*100+"vw";p.style.setProperty("--x",(Math.random()*80-40)+"px");p.style.background=["#d4af37","#f0d27a","#fff","#b8860b"][i%4];p.style.animationDelay=Math.random()*.8+"s";document.body.appendChild(p);setTimeout(()=>p.remove(),3400)}
+k.addEventListener("click",()=>{r.remove();go()})}})();
 </script>
 <script>(()=>{const m=document.getElementById("jmap");if(!m)return;const L=m.querySelectorAll("li");if(!("IntersectionObserver"in window)||matchMedia("(prefers-reduced-motion: reduce)").matches){m.classList.add("on");L.forEach(l=>l.classList.add("in"));return}const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");m.classList.add("on");io.unobserve(e.target)}}),{rootMargin:"0px 0px -10% 0px"});L.forEach((l,i)=>{l.style.transitionDelay=i*.15+"s";io.observe(l)})})()</script>
 </body>

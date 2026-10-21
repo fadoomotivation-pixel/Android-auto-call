@@ -6,6 +6,12 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-21 · Grok Bot · site999 preview: badge + 3D sheet (option D)
+- Phones (<900px): steps show only the form. A pulsing "Preview" badge with the AI designer sits above Next; it opens a full-screen tilted 3D sheet of the live preview. Nudge "Your site updated. Tap to see" after brand/type and other key answers (max once per 8s).
+- Preview restyled dark-gold. One primary CTA (from the client's main action) in hero + contact; 2-letter monogram logo; no photo box unless a photo is uploaded.
+- After a successful send: full-screen reveal of their site + gold confetti, then the thank-you screen. Reduced motion: no pulse/drift/confetti.
+- Desktop layout unchanged. Full flow tested locally; test rows deleted. Deploy is still a manual upload to Vercel `website999-onboarding`.
+
 ## 2026-10-21 · Grok Bot · site999 landing: journey map (option D)
 - `site999/index.html`: landing "How it works" is now a depth-layered journey map with a glowing gold path. IntersectionObserver reveal, transform/opacity only, no blur, ~+0.7 KB gzip. Reduced motion shows it static.
 - Restored founder heading "We need a few answers to understand your business and make your website." Start button is pinned to the bottom (thumb zone) under 900px.
