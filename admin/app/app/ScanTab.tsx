@@ -10,7 +10,7 @@ import { demoScanText } from "@/lib/tele/demo";
 type Stage = "pick" | "paste" | "reading" | "review";
 
 export function ScanTab({ profile, demo, leads, startAt, onAdded }: {
-  profile: Profile | null; demo: boolean; leads: Lead[]; startAt: string | null; onAdded: (n: number) => void;
+  profile: Profile | null; demo: boolean; leads: Lead[]; startAt: string | null; onAdded: (n: number, taken: number) => void;
 }) {
   const [stage, setStage] = useState<Stage>("pick");
   const [text, setText] = useState("");
@@ -89,8 +89,8 @@ export function ScanTab({ profile, demo, leads, startAt, onAdded }: {
           setBusy(true); setErr(null);
           try {
             const chosen = rows.filter((_, i) => picked.has(i));
-            if (!demo && profile) await addScanned(profile, chosen, defaultScanTag());
-            setStage("pick"); setRows([]); onAdded(chosen.length);
+            const added = !demo && profile ? await addScanned(profile, chosen, defaultScanTag()) : chosen.length;
+            setStage("pick"); setRows([]); onAdded(added, chosen.length - added);
           } catch (x: any) { setErr(x?.message ?? "Couldn't add leads."); } finally { setBusy(false); }
         }}>{busy ? "Adding…" : `Add ${n} lead${n === 1 ? "" : "s"}`}</button>
       </div>
@@ -124,7 +124,7 @@ export function ScanTab({ profile, demo, leads, startAt, onAdded }: {
         <button className="tcard" onClick={() => setStage("paste")}><b>Paste text</b><small>WhatsApp, Excel, notes</small></button>
       </div>
       {err && <p className="err">{err}</p>}
-      <p className="fine">Reading happens on your phone. You check every number before it&apos;s added; numbers already in your leads are skipped.</p>
+      <p className="fine">Reading happens on your phone. You check every number before it&apos;s added; numbers already with you or your team are skipped.</p>
     </div>
   );
 }

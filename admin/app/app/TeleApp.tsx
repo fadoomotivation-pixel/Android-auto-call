@@ -137,7 +137,10 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
           <Leads leads={leads} onOpen={setOpenLead} onCall={call} onProfile={() => setShowProfile(true)} />
         ) : tab === "scan" ? (
           <ScanTab profile={profile} demo={demo} leads={leads} startAt={scanStart}
-            onAdded={(n) => { flash(`${n} lead${n === 1 ? "" : "s"} added`); if (profile && !demo) refresh(profile); setTab("leads"); }} />
+            onAdded={(n, taken) => {
+              flash(`${n} lead${n === 1 ? "" : "s"} added${taken ? ` · ${taken} already with your team` : ""}`);
+              if (profile && !demo) refresh(profile); setTab("leads");
+            }} />
         ) : (
           <FollowUps follows={follows} byId={byId} onOpen={setOpenLead} onCall={call} />
         )}

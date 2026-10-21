@@ -1,7 +1,13 @@
 // Call Pro AI telecaller app (/app) service worker.
-// App shell: cache-first for static build assets; network-first for pages and
-// the Supabase API (data must be fresh); an offline page when nothing works.
-const VERSION = "cpa-app-v1";
+// App shell: cache-first for static build assets; network-first for pages; an
+// offline page when nothing works.
+//
+// The Supabase API is NEVER cached. v1 kept every /rest/ answer — customer
+// names, phones, budgets — in Cache Storage keyed by URL alone. The Cache API
+// ignores the Authorization header, so on a shared phone the next rep to sign
+// in and lose signal was shown the previous rep's leads, and the list stayed on
+// the phone after sign-out. Bumping VERSION makes "activate" delete v1.
+const VERSION = "cpa-app-v2";
 const SHELL = ["/app", "/app/offline.html", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -20,19 +26,7 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return; // writes always go straight to the network
   const url = new URL(req.url);
 
-  // Supabase API / auth: network-first, fall back to the last good copy.
-  if (url.hostname.endsWith(".supabase.co")) {
-    e.respondWith(
-      fetch(req).then((res) => {
-        if (res.ok && url.pathname.startsWith("/rest/")) {
-          const copy = res.clone();
-          caches.open(VERSION).then((c) => c.put(req, copy));
-        }
-        return res;
-      }).catch(() => caches.match(req).then((r) => r || Response.error())),
-    );
-    return;
-  }
+  // Supabase and every other origin go straight to the network, untouched.
   if (url.origin !== self.location.origin) return;
 
   // Immutable build assets: cache-first.

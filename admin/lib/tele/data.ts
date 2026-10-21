@@ -72,6 +72,13 @@ export function nextAttempt(tries: number, now = new Date()): Date {
   return d;
 }
 
+/** "Saved" on screen must mean saved. supabase-js returns errors instead of
+ *  throwing, so a write that is not passed through here fails in silence. */
+function must<T extends { error: { message: string } | null }>(r: T): T {
+  if (r.error) throw new Error(r.error.message);
+  return r;
+}
+
 export async function getProfile(): Promise<Profile | null> {
   const sb = createClient();
   const { data: u } = await sb.auth.getUser();
@@ -85,7 +92,8 @@ export async function loadLeads(uid: string): Promise<Lead[]> {
   const [{ data: c }, { data: w }] = await Promise.all([
     sb.from("contacts").select("id, name, phone, status, temperature, attempts, notes, company_name, updated_at")
       .eq("salesperson_id", uid).order("updated_at", { ascending: false }).limit(1000),
-    sb.from("v_lead_workstate").select("contact_id, action_state, due_at, last_call_at").limit(2000),
+    sb.from("v_lead_workstate").select("contact_id, action_state, due_at, last_call_at")
+      .eq("salesperson_id", uid).limit(2000),
   ]);
   const ws = new Map<string, any>((w ?? []).map((r: any) => [r.contact_id, r]));
   return (c ?? []).map((r: any) => ({ ...r, attempts: r.attempts ?? 0, ...(ws.get(r.id) ? {
@@ -125,18 +133,18 @@ export async function loadToday(uid: string): Promise<Today> {
 }
 
 export async function updateNotes(id: string, notes: string) {
-  await createClient().from("contacts").update({ notes }).eq("id", id);
+  must(await createClient().from("contacts").update({ notes }).eq("id", id));
 }
 
 async function scheduleFollowUp(p: Profile, lead: Lead, due: Date, note: string, mirrorStatus: boolean) {
   const sb = createClient();
-  if (mirrorStatus) await sb.from("contacts").update({ status: "follow_up" }).eq("id", lead.id);
-  const { data: ex } = await sb.from("follow_ups").select("id").eq("contact_id", lead.id).eq("status", "pending").limit(1);
+  if (mirrorStatus) must(await sb.from("contacts").update({ status: "follow_up" }).eq("id", lead.id));
+  const { data: ex } = must(await sb.from("follow_ups").select("id").eq("contact_id", lead.id).eq("status", "pending").limit(1));
   if (ex && ex.length) {
-    await sb.from("follow_ups").update({ due_at: due.toISOString(), note }).eq("id", (ex[0] as any).id);
+    must(await sb.from("follow_ups").update({ due_at: due.toISOString(), note }).eq("id", (ex[0] as any).id));
   } else {
-    await sb.from("follow_ups").insert({ company_id: p.company_id, salesperson_id: p.id, contact_id: lead.id,
-      phone: lead.phone, name: lead.name, due_at: due.toISOString(), note });
+    must(await sb.from("follow_ups").insert({ company_id: p.company_id, salesperson_id: p.id, contact_id: lead.id,
+      phone: lead.phone, name: lead.name, due_at: due.toISOString(), note }));
   }
 }
 
@@ -149,39 +157,51 @@ export type SaveInput = {
 export async function saveOutcome(p: Profile, i: SaveInput) {
   const sb = createClient();
   const conn = OUTCOMES.find((o) => o.code === i.outcome)?.connected ?? false;
-  // Browser can't read the dialer, so duration is unknown (0) and there is no recording.
-  await sb.from("call_logs").insert({ company_id: p.company_id, salesperson_id: p.id, contact_id: i.lead.id,
-    phone: i.lead.phone, direction: "outgoing", outcome: conn ? "connected" : i.outcome === "no_answer" || i.outcome === "busy" ? "no_answer" : "failed",
-    started_at: new Date(i.startedAt).toISOString(), ended_at: new Date().toISOString(), duration_seconds: 0, recording_status: "none" });
 
+  // The lead first: it is the write the database can refuse (closing a lead
+  // that visited the site needs the visit outcome — trg_require_visit_outcome).
+  // Refused here, nothing else is written and the sheet shows the reason.
+  // Written last, the call and a "Stage → Not interested" line were saved for
+  // a lead that never moved, and the rep had already gone to the next one.
   const upd: Record<string, unknown> = { status: i.outcome };
   if (i.note) upd.notes = i.note;
   if (i.outcome === "site_visit" && i.visitAt) upd.site_visit_at = i.visitAt.toISOString();
-  await sb.from("contacts").update(upd).eq("id", i.lead.id);
+  must(await sb.from("contacts").update(upd).eq("id", i.lead.id));
+
+  // A browser can't read the dialer, so the length of the call is unknown and
+  // duration_seconds (NOT NULL) says 0. recording_source names the channel —
+  // sim / sip / callerdesk / web — so a 0 from here is never mistaken for a
+  // phone that rang out.
+  must(await sb.from("call_logs").insert({ company_id: p.company_id, salesperson_id: p.id, contact_id: i.lead.id,
+    phone: i.lead.phone, direction: "outgoing", outcome: conn ? "connected" : i.outcome === "no_answer" || i.outcome === "busy" ? "no_answer" : "failed",
+    started_at: new Date(i.startedAt).toISOString(), ended_at: new Date().toISOString(), duration_seconds: 0,
+    recording_status: "none", recording_source: "web" }));
 
   const acts: [string, string][] = [outcomeDetail(i.outcome, i.stageLabel)];
   if (i.outcome === "site_visit" && i.visitAt) acts.push(["site_visit", `Site visit booked for ${i.visitAt.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}`]);
   if (i.note) acts.push(["note", i.note]);
-  await sb.from("lead_activities").insert(acts.map(([type, detail]) => ({ company_id: p.company_id, contact_id: i.lead.id,
-    actor_id: p.id, actor_name: p.full_name, type, detail })));
+  must(await sb.from("lead_activities").insert(acts.map(([type, detail]) => ({ company_id: p.company_id, contact_id: i.lead.id,
+    actor_id: p.id, actor_name: p.full_name, type, detail }))));
 
   if (RETRY.has(i.outcome)) {
     const tries = (i.lead.attempts ?? 0) + 1;
     const bump: Record<string, unknown> = { attempts: tries };
     if (tries >= 3) bump.temperature = "cold";
-    await sb.from("contacts").update(bump).eq("id", i.lead.id);
+    must(await sb.from("contacts").update(bump).eq("id", i.lead.id));
     if (tries < 3) await scheduleFollowUp(p, i.lead, nextAttempt(tries), `Attempt ${tries + 1} — no answer last time`, false);
   } else if (i.outcome === "follow_up" && i.callbackAt) {
     await scheduleFollowUp(p, i.lead, i.callbackAt, i.note || "Call back", true);
   }
-  if (i.followUpId) await sb.from("follow_ups").update({ status: "done", completed_at: new Date().toISOString() }).eq("id", i.followUpId);
+  if (i.followUpId) must(await sb.from("follow_ups").update({ status: "done", completed_at: new Date().toISOString() }).eq("id", i.followUpId));
 }
 
-/** Mirrors Android addLead for Scan list rows. */
+/** Mirrors Android addLead for Scan list rows. Returns how many were really
+ *  added: trg_dedup_contact_by_phone silently drops a number that is already
+ *  anywhere in the company (another rep's lead included), and the rep should
+ *  hear "8 added", not "10 added" for a list where two were already taken. */
 export async function addScanned(p: Profile, rows: ScanRow[], tag: string): Promise<number> {
   if (!rows.length) return 0;
-  const { error } = await createClient().from("contacts").insert(rows.map((r) => ({ company_id: p.company_id,
-    salesperson_id: p.id, name: r.name || null, phone: r.phone, status: "new", lead_source: tag })));
-  if (error) throw error;
-  return rows.length;
+  const { data } = must(await createClient().from("contacts").insert(rows.map((r) => ({ company_id: p.company_id,
+    salesperson_id: p.id, name: r.name || null, phone: r.phone, status: "new", lead_source: tag }))).select("id"));
+  return data?.length ?? 0;
 }
