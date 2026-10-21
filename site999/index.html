@@ -31,7 +31,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--gold2);border:1px solid rgba(212,175,55,.5);border-radius:99px;padding:4px 12px}
 .land h1{font-size:clamp(30px,8vw,42px);line-height:1.08;letter-spacing:-.5px;margin:14px 0 10px}
 .gold{color:var(--gold2)}
-.land .lead{font-size:18px;color:var(--mu);margin:0 0 20px}
+.land .lead{font-size:17px;color:var(--mu);margin:0 0 14px}
 .land>.btn{width:100%}
 .steps3{list-style:none;padding:0;margin:22px 0;display:grid;gap:10px}
 .steps3 li{display:flex;gap:12px;align-items:flex-start;padding:14px}
@@ -177,6 +177,47 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
  .nav .in{max-width:none}
 }
 @media (max-width:359px){.tiles{grid-template-columns:1fr}.site .mn .p{display:none}.site .mn .x{display:inline}}
+/* Preview D: phones show only the form; a badge opens a 3D dark-gold preview sheet */
+.site{background:#0e0d0a;color:#f4f4f6}.site .nv{background:#0e0d0a;border-bottom-color:rgba(212,175,55,.22)}
+.site .lg{background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111;font-size:11px}
+.site .hero{background:radial-gradient(120% 90% at 100% 0,rgba(212,175,55,.22),transparent 60%),#0e0d0a}.site .eb{color:var(--gold2)}
+.site .hero p,.site .mn,.site .ft{color:#b4b4c0}.site .c1{background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111}
+.site .sec{border-top-color:#ffffff12}.site .cards div,.site .q{background:#ffffff0a;border-color:rgba(212,175,55,.2);color:#b4b4c0}.site .cards b,.site .q b{color:#f4f4f6}
+.site .chips span{background:rgba(212,175,55,.14);color:var(--gold2)}.site .ghost{border-color:#ffffff30;color:#9a9aa6}.site .ct{background:#17150e;border:1px solid rgba(212,175,55,.3)}.site .sk{background:#ffffff14}
+.pv .vp{background:#0e0d0a}
+.pvb,.pvx,.pvt{display:none}
+@media (max-width:899px){
+ .app .top{position:fixed;inset:0;z-index:20;margin:0;padding:calc(16px + env(safe-area-inset-top)) 16px 16px;background:rgba(5,5,8,.96);display:flex;flex-direction:column;justify-content:center;perspective:900px;opacity:0;visibility:hidden;transition:opacity .3s,visibility .3s}
+ .pvopen .app .top{opacity:1;visibility:visible}
+ .app .top .pv{transform:rotateX(9deg) rotateY(-10deg) scale(.94);transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+ .pvopen .app .top .pv{transform:rotateX(6deg) rotateY(-6deg);animation:pvdrift 6s ease-in-out infinite alternate}
+ @keyframes pvdrift{to{transform:rotateX(3deg) rotateY(6deg)}}
+ .app .top .pv .vp{height:62vh;min-height:300px}.app .top .pvtg{display:none}
+ .pvx{display:block;width:100%;margin-top:14px}.pvt{display:block;text-align:center;color:var(--gold2);font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px}
+ .pvb{display:flex;position:fixed;right:14px;bottom:calc(84px + var(--sab));z-index:6;align-items:center;gap:8px;min-height:48px;padding:6px 14px 6px 6px;border-radius:30px;border:1px solid var(--gold2);background:#16130a;color:var(--gold2);font:700 14px system-ui,sans-serif;box-shadow:0 0 22px rgba(212,175,55,.45);animation:pvpulse 2.6s ease-in-out infinite}
+ .pvb .nd{position:absolute;right:0;bottom:56px;white-space:nowrap;padding:8px 12px;border-radius:14px 14px 4px 14px;background:#1e1a0c;border:1px solid rgba(212,175,55,.5);color:var(--tx);font-weight:500;font-size:13px;opacity:0;transform:translateY(6px);transition:opacity .3s,transform .3s;pointer-events:none}
+ .pvb.nudge .nd{opacity:1;transform:none}
+ @keyframes pvpulse{50%{box-shadow:0 0 34px rgba(212,175,55,.8);transform:scale(1.04)}}
+ .app.hide~.pvb,.pvopen .pvb{display:none}}
+.rv{position:fixed;inset:0;z-index:30;background:#050508;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px;perspective:900px;text-align:center}
+.rv h2{font-size:26px;margin:0 0 16px}.rv .pv{text-align:left;width:100%;max-width:420px;animation:rvin 1.2s cubic-bezier(.2,.8,.2,1) both}.rv .pv .vp{height:55vh}
+@keyframes rvin{from{transform:rotateX(35deg) translateY(60px) scale(.7);opacity:0}to{transform:rotateX(6deg) rotateY(-6deg)}}
+.cf{position:fixed;top:-12px;width:8px;height:14px;z-index:31;border-radius:2px;animation:cf 2.4s linear forwards}
+@keyframes cf{to{transform:translate3d(var(--x),105vh,0) rotate(720deg)}}
+@media (prefers-reduced-motion:reduce){.pvb,.pvopen .app .top .pv,.rv .pv,.cf{animation:none!important}.cf{display:none}}
+/* Journey map (option D): transform/opacity only, no blur */
+.jmap{position:relative;list-style:none;padding:0 0 0 46px;margin:26px 0;display:grid;gap:18px;perspective:700px}
+.jmap:before{content:"";position:absolute;left:18px;top:8px;bottom:8px;width:3px;border-radius:2px;background:rgba(212,175,55,.18)}
+.jmap .jl{position:absolute;left:18px;top:8px;bottom:8px;width:3px;border-radius:2px;background:linear-gradient(#f5d77a,#b8860b);box-shadow:0 0 10px rgba(212,175,55,.7);transform-origin:top;transform:scaleY(0);transition:transform 1.4s cubic-bezier(.2,.7,.2,1)}
+.jmap.on .jl{transform:scaleY(1)}
+.jmap li{position:relative;display:flex;gap:12px;padding:14px;opacity:0;transform:translate3d(0,24px,var(--z)) rotateX(10deg);transition:opacity .6s,transform .7s cubic-bezier(.2,.7,.2,1)}
+.jmap li.in{opacity:1;transform:translate3d(0,0,var(--z)) rotateX(0)}
+.jmap li:nth-child(2){--z:0}.jmap li:nth-child(3){--z:-30px;margin-left:10px}.jmap li:nth-child(4){--z:-60px;margin-left:20px}.jmap li:nth-child(3):before{left:-44px}.jmap li:nth-child(4):before{left:-54px}
+.jmap li:before{content:"";position:absolute;left:-34px;top:20px;width:13px;height:13px;border-radius:50%;background:#d4af37;box-shadow:0 0 0 4px rgba(212,175,55,.2),0 0 12px #d4af37}
+.jmap b.n{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111}
+.land .ask{font-size:16px;color:var(--tx);margin:0 0 18px;padding-left:12px;border-left:3px solid var(--gold2)}
+@media (max-width:899px){.land{padding-bottom:110px}.land>#startBtn{position:fixed;left:16px;right:16px;bottom:calc(14px + var(--sab));width:auto;z-index:5}}
+@media (prefers-reduced-motion:reduce){.jmap li{opacity:1;transform:none}.jmap .jl{transform:none}}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
@@ -187,10 +228,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
 <main id="land" class="land">
  <span class="tag">Website onboarding</span>
  <h1>Let's build your <span class="gold">business website</span></h1>
- <p class="lead">Answer a few short questions. It takes about 5 minutes. Then we call you and start building.</p>
+ <p class="ask">We need a few answers to understand your business and make your website.</p>
+ <p class="lead" id="hello">Thanks for messaging us on WhatsApp! Answer a few questions so we can plan your website before our call.</p>
  <div id="resume" class="resume glass hide"><span style="flex:1">You have answers saved on this phone.</span><button class="btn" type="button" data-start>Continue</button></div>
  <button class="btn" type="button" id="startBtn">Start</button>
- <ol class="steps3">
+ <ol class="jmap" id="jmap" aria-label="How it works"><span class="jl" aria-hidden="true"></span>
   <li class="glass"><b class="n">1</b><span><b>Tell us about your business.</b><br><span class="mu">Most questions are a tap. Skip anything you are not sure about.</span></span></li>
   <li class="glass"><b class="n">2</b><span><b>Watch your website take shape.</b><br><span class="mu">Our AI designer builds a live preview from your answers.</span></span></li>
   <li class="glass"><b class="n">3</b><span><b>We call you.</b><br><span class="mu">We talk about your business and start building your website.</span></span></li>
@@ -202,12 +244,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
 <div id="app" class="wrap app hide">
  <div class="top">
   <div class="guide"><div class="ai" id="ai" aria-hidden="true"><i></i><i></i></div><p class="bub" id="bub" aria-live="polite"></p></div>
-  <div class="pv" id="pv">
+  <span class="pvt">Your website so far</span>
+ <div class="pv" id="pv">
    <div class="url" aria-hidden="true"><i></i><i></i><i></i><span id="pvUrl">yourbusiness.in</span></div>
    <div class="vp" id="vp" aria-hidden="true" tabindex="-1"><div class="site" id="site"></div></div>
    <div class="pvrow"><div class="ai sm" aria-hidden="true"><i></i><i></i></div><p class="bub2" id="bub2" aria-live="polite"></p>
     <button type="button" class="pvtg" id="pvToggle" aria-controls="vp" aria-expanded="true">Hide<span class="sr"> website preview</span></button></div>
   </div>
+   <button type="button" class="btn pvx" id="pvClose">Continue answering</button>
  </div>
  <main id="main" class="formcol">
   <h1 class="sr">Website onboarding form</h1>
@@ -219,12 +263,20 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
    <section class="step" data-step="1" data-pv="hero">
     <h2 tabindex="-1">About you and your business</h2>
     <p class="mu">We use this to call you and to name your website.</p>
-    <div class="f"><label for="name">Your name</label><input type="text" id="name" name="name" autocomplete="name" required></div>
-    <div class="f"><label for="whatsapp">WhatsApp number</label><span class="h" id="whatsapp-h">We will call or message you here.</span><input type="tel" id="whatsapp" name="whatsapp" inputmode="tel" autocomplete="tel" placeholder="98765 43210" aria-describedby="whatsapp-h" required></div>
+    <div class="f" data-pre><label for="name">Your name</label><input type="text" id="name" name="name" autocomplete="name" required></div>
+    <div class="f" data-pre><label for="whatsapp">WhatsApp number</label><span class="h" id="whatsapp-h">We will call or message you here.</span><input type="tel" id="whatsapp" name="whatsapp" inputmode="tel" autocomplete="tel" placeholder="98765 43210" aria-describedby="whatsapp-h" required></div>
     <div class="f"><label for="brand">Business name</label><input type="text" id="brand" name="brand" autocomplete="organization" placeholder="e.g. Sharma Dental Care" required></div>
     <div class="f"><label for="industry">Type of business</label><span class="h" id="industry-h">We use this to skip questions that do not fit you.</span><select id="industry" name="industry" aria-describedby="industry-h" required><option value="">Choose one</option></select>
      <input type="text" id="industryOther" name="industryOther" class="hide" placeholder="Tell us your type of business" aria-label="Your type of business" style="margin-top:8px"></div>
     <div class="f"><label for="city">City</label><input type="text" id="city" name="city" autocomplete="address-level2" placeholder="e.g. Indore" required></div>
+   </section>
+
+   <!-- 1b: questions for this type of business -->
+   <section class="step hide" data-step="1b" data-pv="hero">
+    <h2 tabindex="-1" id="tqTitle">About your business</h2>
+    <p class="mu">A few questions for your type of business. Skip anything you are not sure about.</p>
+    <div class="f"><fieldset id="goalSet"><legend>What do you want most from your website?</legend><div class="chips" data-name="goal1" data-type="radio" data-opts="More calls and WhatsApp enquiries|More bookings or visits|Look trusted online|Sell online|Show my work"></div></fieldset></div>
+    <div id="tqBox"></div>
    </section>
 
    <!-- 2 -->
@@ -295,22 +347,28 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
 
    <!-- 7 -->
    <section class="step hide" data-step="7" data-pv="contact">
-    <h2 tabindex="-1">Last details</h2>
-    <p class="mu">Almost done.</p>
+    <h2 tabindex="-1">Almost done</h2>
+    <p class="mu">Pick a call time and send. That is all we need.</p>
+    <div class="f callpick"><fieldset id="callSet"><legend>Pick a good time for our call</legend><span class="h">We call you at this time.</span>
+     <div class="chips" data-name="call_day" data-type="radio" data-opts="Today|Tomorrow"></div>
+     <div class="chips" style="margin-top:8px" data-name="call_slot" data-type="radio" data-opts="Morning (9 am – 12 pm)|Afternoon (12 – 4 pm)|Evening (4 – 8 pm)"></div></fieldset></div>
+    <button type="button" class="btn btn2" id="moreBtn" style="width:100%;margin:4px 0 14px">+ Tell us more (helps us plan better)</button>
+    <details class="more"><summary>A few more details (optional)</summary>
     <div class="f"><fieldset><legend>When would you like to go live?</legend><div class="chips" data-name="deadline" data-type="radio" data-opts="As soon as possible|In 2 weeks|In a month|No rush"></div></fieldset></div>
     <div class="f"><fieldset><legend>Who says yes to the final website?</legend><div class="chips" data-name="decider" data-type="radio" data-opts="Me|Me and a partner|Family member|My manager or team"></div></fieldset></div>
-    <div class="f"><fieldset><legend>Best time to call you</legend><div class="chips" data-name="callTime" data-type="radio" data-opts="Morning|Afternoon|Evening|Any time"></div></fieldset></div>
-    <div class="f" data-if="place"><label for="address">Shop or office address <span class="opt">(optional)</span></label><textarea id="address" name="address" autocomplete="street-address" style="min-height:70px"></textarea></div>
+        <div class="f" data-if="place"><label for="address">Shop or office address <span class="opt">(optional)</span></label><textarea id="address" name="address" autocomplete="street-address" style="min-height:70px"></textarea></div>
     <div class="f" data-if="place"><label for="maps">Google Maps link <span class="opt">(optional)</span></label><input type="url" id="maps" name="maps" inputmode="url" placeholder="https://maps.app.goo.gl/…"></div>
     <div class="f"><label for="email">Email <span class="opt">(optional)</span></label><input type="email" id="email" name="email" autocomplete="email"></div>
     <div class="f"><label for="notes">Anything else we should know? <span class="opt">(optional)</span></label><textarea id="notes" name="notes" style="min-height:70px"></textarea></div>
+    </details>
     <div class="f"><h3 style="font-size:16px;margin:0 0 8px">Check your answers</h3><div class="sum mu" id="sum"></div></div>
     <div class="f"><label class="consent"><input type="checkbox" id="consent" name="consent" value="yes" required><span>These details are correct. You can contact me on WhatsApp or by call.</span></label></div>
     <p class="note">Your answers are used only to plan your website and to contact you. We do not share them. Files are stored privately.</p>
     <div id="msg" role="alert"></div>
    </section>
   </form>
-  <nav class="nav hide" id="nav" aria-label="Form steps"><div class="in"><button type="button" class="btn btn2" id="back">Back</button><button type="button" class="btn" id="next">Next</button></div></nav>
+  <button type="button" class="pvb" id="pvBadge" aria-haspopup="dialog"><span class="ai sm" aria-hidden="true"><i></i><i></i></span>Preview<span class="nd" id="pvNudge" aria-hidden="true">Your site updated. Tap to see</span></button>
+ <nav class="nav hide" id="nav" aria-label="Form steps"><div class="in"><button type="button" class="btn btn2" id="back">Back</button><button type="button" class="btn" id="next">Next</button></div></nav>
  </main>
 </div>
 
@@ -319,7 +377,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
 <main id="done" class="done hide" tabindex="-1">
  <div class="guide"><div class="ai happy" aria-hidden="true"><i></i><i></i></div><p class="bub"><b>All done.</b> Thank you!</p></div>
  <h1>Thank you, <span class="gold" id="doneName"></span></h1>
- <p id="doneTxt">We have your details. We will call you soon on <b id="donePhone"></b> to talk about your website.</p>
+ <p id="doneTxt">Thank you! We will call you at your chosen time on <b id="donePhone"></b>.</p>
+ <div class="glass card" style="text-align:center"><span class="tag">Your call time</span><div class="gold" id="doneCall" style="font-size:22px;font-weight:800;margin-top:6px"></div></div>
  <div class="glass card"><b>What happens next</b><ol class="mu" style="margin:8px 0 0;padding-left:20px"><li>We read your answers.</li><li>We call you to understand your business better.</li><li>We start building your website.</li></ol></div>
  <p class="mu">Reference: <b id="doneRef"></b></p>
  <a class="btn hide" id="doneWa" href="#" style="margin-top:12px">Message us on WhatsApp</a>
@@ -343,7 +402,7 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "
 // place: has a shop/office customers visit. svc: what their offer is called.
 const TYPES = {
  "Shop / Retail": { short: "Store", place: 1, svc: "products", act: "Visit us", pages: ["Home", "Products", "About", "Reviews", "Contact"], col: "Maroon + cream", cust: ["Families", "Young people", "Women", "Men", "Shop owners"], usp: ["Good value", "Wide choice", "Quality", "Home delivery", "Trusted for years", "Near you"], line: "Quality products you can trust" },
- "Restaurant / Café / Food": { short: "Restaurant", place: 1, svc: "dishes", act: "Call", pages: ["Home", "Menu", "Gallery", "Reviews", "Contact"], col: "Warm orange", cust: ["Families", "Students", "Office workers", "Couples", "Party orders"], usp: ["Great taste", "Fresh food", "Fast delivery", "Good value", "Nice place to sit", "Clean kitchen"], line: "Fresh food, made with love" },
+ "Restaurant / Café / Food": { short: "Restaurant", place: 1, svc: "dishes", act: "WhatsApp", pages: ["Home", "Menu", "Gallery", "Reviews", "Contact"], col: "Warm orange", cust: ["Families", "Students", "Office workers", "Couples", "Party orders"], usp: ["Great taste", "Fresh food", "Fast delivery", "Good value", "Nice place to sit", "Clean kitchen"], line: "Fresh food, made with love" },
  "Clinic / Doctor / Dental": { short: "Clinic", place: 1, svc: "treatments", act: "Book a visit", pages: ["Home", "Services", "About", "FAQ", "Contact"], col: "Teal + white", cust: ["Families", "Children", "Elderly", "Women", "Working people"], usp: ["Experienced doctor", "Painless care", "Clean and safe", "Good value", "Open on Sunday", "Easy to reach"], line: "Gentle, trusted care for your family" },
  "Salon / Spa / Gym": { short: "Studio", place: 1, svc: "services", act: "Book a visit", pages: ["Home", "Services", "Gallery", "Reviews", "Contact"], col: "Rose + cream", cust: ["Women", "Men", "Young people", "Brides", "Fitness lovers"], usp: ["Trained staff", "Hygienic", "Good results", "Good value", "Relaxing place", "Flexible timings"], line: "Look good, feel great" },
  "Coaching / School / Tutor": { short: "Institute", place: 1, svc: "courses", act: "Call", pages: ["Home", "Services", "About", "Reviews", "Contact"], col: "Royal blue + white", cust: ["School students", "College students", "Parents", "Job seekers", "Working people"], usp: ["Good results", "Expert teachers", "Small batches", "Good value", "Doubt support", "Online and offline"], line: "Learn better, score higher" },
@@ -359,6 +418,10 @@ const TYPES = {
 const COLS = { "You decide": ["#d4af37", "#fbf3dc"], "Premium dark + gold": ["#a07d1c", "#f7efd6"], "Royal blue + white": ["#2457c5", "#e6eeff"], "Teal + white": ["#0e7c86", "#e3f3f4"], "Green + white": ["#1f8a4c", "#e4f5ea"], "Navy + gold": ["#1f2f57", "#f3ecd8"], "Maroon + cream": ["#8f2433", "#f8ece0"], "Warm orange": ["#c95a12", "#fdeedd"], "Rose + cream": ["#b8436b", "#fbe9ef"], "Steel blue + white": ["#3a5f7d", "#e7eef4"] };
 const ACT = { "Call": "Call now", "WhatsApp": "WhatsApp us", "Book a visit": "Book a visit", "Get a quote": "Get a quote", "Buy online": "Shop now", "Visit us": "Visit us" };
 const T = () => TYPES[f.industry.value] || null;
+// Warm leads: ?n=Name&w=WhatsApp&src=adname (+ utm_*). Prefill, greet, and keep the source.
+const QP = new URLSearchParams(location.search), PRE = { n: (QP.get("n") || "").trim().slice(0, 60), w: (QP.get("w") || "").replace(/[^\d+]/g, "").slice(0, 16) };
+let SRC = null;
+(() => { const o = {}; for (const [k, v] of QP) if (k === "src" || k.startsWith("utm_")) o[k] = v.slice(0, 100); if (Object.keys(o).length) { o.first_seen = new Date().toISOString(); try { const old = JSON.parse(localStorage.getItem("o999_src") || "null"); SRC = old && !o.src ? old : o; localStorage.setItem("o999_src", JSON.stringify(SRC)); } catch { SRC = o; } } else { try { SRC = JSON.parse(localStorage.getItem("o999_src") || "null"); } catch {} } })();
 
 // ===== Build the option controls =====
 function chipGroup(el, opts) {
@@ -383,14 +446,67 @@ let svcN = 0;
 function addSvc(focus) { if (svcN >= 5) return; svcN++; $("#svc").appendChild(svcRow(svcN)); $("#addSvc").classList.toggle("hide", svcN >= 5); if (focus) $(`[name=s${svcN}_name]`).focus(); }
 $("#addSvc").addEventListener("click", () => { addSvc(true); save(); });
 
+// ===== Per-type questions, labels, examples and fallback copy =====
+// q: [key, label, placeholder] text, or [key, label, "a|b|c"] multi-choice chips. cta: nicer button text per action.
+const TQ = {
+ "Shop / Retail": { h: "About your shop", ex: "e.g. Gupta Fashion House", one: "e.g. Latest sarees and suits at fair prices", svcL: "Products", svcEx: ["New arrivals", "Best sellers", "Festive range"], sub: "Quality products, fair prices and friendly service.", why: ["Good value", "Wide range", "Trusted shop"],
+  q: [["brands", "Brands or ranges you sell", "e.g. Raymond, local handloom"], ["shopOpts", "How can people buy?", "In shop|Home delivery|WhatsApp order|Online payment"], ["hours", "Shop timings", "e.g. 10 am – 9 pm, Sunday closed"], ["stock", "Do you change stock often?", "Every week|Every season|Rarely"]], cta: { "Visit us": "Visit our shop", WhatsApp: "Order on WhatsApp" } },
+ "Restaurant / Café / Food": { h: "About your food", ex: "e.g. Spice Route Kitchen", one: "e.g. Home-style North Indian food, fast delivery", svcL: "Menu items", svcEx: ["Special thali", "Chef's curry", "Fresh desserts"], sub: "Fresh food, made with care. Dine in or order home.", why: ["Fresh food", "Fast delivery", "Family friendly"],
+  q: [["cuisine", "Cuisine", "North Indian|South Indian|Chinese|Fast food|Bakery|Cafe|Sweets"], ["veg", "Food type", "Pure veg|Veg and non-veg|Jain options"], ["delivery", "Where can people order?", "Zomato|Swiggy|Own delivery|WhatsApp order|Dine-in only"], ["table", "Do you take table bookings?", "Yes|No"], ["hours", "Opening hours", "e.g. 11 am – 11 pm"]], cta: { WhatsApp: "Order on WhatsApp", Call: "Call to order", "Book a visit": "Book a table" } },
+ "Clinic / Doctor / Dental": { h: "About your clinic", ex: "e.g. Sharma Dental Care", one: "e.g. Painless dental care for the whole family", svcL: "Treatments", svcEx: ["Check-up", "Cleaning", "Root canal"], sub: "Gentle, trusted care with modern equipment.", why: ["Experienced doctors", "Clean and safe", "On-time appointments"],
+  faq: ["Do I need an appointment", "What are your clinic timings"],
+  q: [["special", "Specialities", "e.g. Dental, Skin, Child care"], ["doctors", "Doctor names and degrees", "e.g. Dr. Anil Sharma, BDS, MDS"], ["hours", "Clinic timings", "e.g. Mon–Sat 10 am – 8 pm"], ["booking", "How do patients book?", "Walk-in|Phone call|WhatsApp|Online booking"], ["insurance", "Insurance or cashless?", "Yes|No|Some"]], cta: { "Book a visit": "Book appointment", Call: "Call the clinic", WhatsApp: "WhatsApp the clinic" } },
+ "Salon / Spa / Gym": { h: "About your studio", ex: "e.g. Iron Fit Gym or Glow Salon", one: "e.g. Get fit with expert trainers", svcL: "Services or plans", svcEx: ["Monthly plan", "Personal training", "Special packages"], sub: "Expert staff, clean space and real results.", why: ["Expert staff", "Clean and hygienic", "Great results"],
+  q: [["kind", "What do you run?", "Salon|Spa|Gym|Yoga studio|Unisex salon"], ["plans", "Plans or packages", "e.g. Monthly, 3 months, bridal package"], ["trainers", "Trainers or experts (names, skills)", "e.g. Ravi – certified trainer"], ["hours", "Timings", "e.g. 6 am – 10 pm"], ["trial", "Free trial or first visit offer?", "Yes|No"]], cta: { "Book a visit": "Book a free trial", WhatsApp: "WhatsApp to book" } },
+ "Coaching / School / Tutor": { h: "About your classes", ex: "e.g. Bright Future Classes", one: "e.g. IIT-JEE and NEET coaching with small batches", svcL: "Courses", svcEx: ["Class 10 board", "JEE / NEET", "Spoken English"], sub: "Expert teachers, small batches and proven results.", why: ["Expert teachers", "Small batches", "Good results"],
+  q: [["courses", "Exams or subjects", "e.g. Class 9–12, JEE, NEET"], ["mode", "Class mode", "Offline|Online|Both"], ["batches", "Batch timings and size", "e.g. Morning and evening, 20 students"], ["results", "Best results (real only)", "e.g. 12 students above 95% in 2025"], ["demo", "Free demo class?", "Yes|No"]], cta: { Call: "Call for admission", "Book a visit": "Book a free demo", WhatsApp: "WhatsApp for admission" } },
+ "Real estate / Builder": { h: "About your projects", ex: "e.g. Shree Homes", one: "e.g. Ready-to-move 2 and 3 BHK flats in Jaipur", svcL: "Projects", svcEx: ["Current project", "Upcoming project", "Completed project"], sub: "Trusted projects in prime locations. Book a site visit.", why: ["Prime location", "On-time delivery", "Clear papers"],
+  faq: ["Is the project RERA approved", "Can I book a site visit"],
+  q: [["ptypes", "Property types", "Flats|Villas|Plots|Shops|Offices|Farmhouse"], ["locations", "Project locations", "e.g. Ajmer Road, Jagatpura"], ["rera", "RERA number (optional)", "e.g. RAJ/P/2025/1234"], ["status", "Project status", "Ready to move|Under construction|New launch"], ["loan", "Home loan help?", "Yes|No"]], cta: { "Book a visit": "Book a site visit", WhatsApp: "Get details on WhatsApp", Call: "Call for details" } },
+ "Manufacturer / Wholesaler": { h: "About your products", ex: "e.g. Raj Steel Industries", one: "e.g. Stainless steel kitchenware, made in India", svcL: "Product ranges", svcEx: ["Main range", "Custom orders", "Bulk supply"], sub: "Quality products made in India. Bulk orders welcome.", why: ["Factory price", "Quality checked", "On-time supply"],
+  q: [["moq", "Minimum order", "e.g. 100 pieces"], ["certs", "Certificates (optional)", "e.g. ISO 9001, BIS"], ["ship", "Where do you supply?", "My city|My state|All India|Export"], ["custom", "Custom or private label?", "Yes|No"]], cta: { "Get a quote": "Get a bulk quote", WhatsApp: "WhatsApp for price list" } },
+ "Service (plumber, electrician, repair…)": { h: "About your service", ex: "e.g. QuickFix Home Services", one: "e.g. Fast plumbing and electrical repair at home", svcL: "Services", svcEx: ["Repair", "New fitting", "Annual service"], sub: "Fast, honest service at your doorstep.", why: ["Fast visit", "Trained staff", "Fair rates"],
+  q: [["visit", "How fast can you visit?", "Same day|Next day|Within 2 hours"], ["hours", "Working hours", "e.g. 8 am – 8 pm, all days"], ["warranty", "Do you give a warranty?", "Yes|No"], ["emergency", "Emergency service?", "Yes|No"]], cta: { Call: "Call now for service", WhatsApp: "Book on WhatsApp" } },
+ "Agency / Consultant / CA / Lawyer": { h: "About your practice", ex: "e.g. Mehta & Associates", one: "e.g. GST, tax and company filing for small businesses", svcL: "Services", svcEx: ["Consultation", "Filing and compliance", "Ongoing support"], sub: "Clear advice from experienced professionals.", why: ["Experienced team", "Clear advice", "On time, every time"],
+  q: [["kind", "Your field", "CA|Lawyer|Digital agency|Consultant|Insurance|Other"], ["team", "Key people (names, degrees)", "e.g. CA Rohit Mehta, FCA"], ["clients", "Types of clients", "e.g. Shops, startups, NRIs"], ["consult", "How do clients meet you?", "Office visit|Phone|Video call"]], cta: { "Get a quote": "Book a consultation", Call: "Call for advice" } },
+ "Hotel / Travel / Events": { h: "About your stays or trips", ex: "e.g. Lake View Resort", one: "e.g. Lake view rooms and wedding lawns in Udaipur", svcL: "Packages or rooms", svcEx: ["Deluxe rooms", "Weekend package", "Events and weddings"], sub: "Comfortable stays and memorable events.", why: ["Great location", "Clean rooms", "Friendly staff"],
+  q: [["rooms", "Rooms, packages or trips", "e.g. 24 rooms, 2 lawns, Goa tour"], ["amen", "Facilities", "Wi-Fi|Parking|Pool|Restaurant|Lawn|AC rooms"], ["booking", "How do people book?", "Call|WhatsApp|Booking apps|Walk-in"], ["season", "Busy season", "e.g. Oct–Feb, weddings"]], cta: { WhatsApp: "Check availability", "Book a visit": "Book your stay" } },
+ "Freelancer / Creator / Artist": { h: "About your work", ex: "e.g. Studio Riya", one: "e.g. Wedding photos and films that tell your story", svcL: "Services", svcEx: ["Main service", "Packages", "Custom work"], sub: "Creative work made with care, on time.", why: ["Creative style", "On-time delivery", "Easy to work with"],
+  q: [["skill", "What do you do?", "e.g. Photography, design, music"], ["work", "Best work links", "e.g. Instagram or YouTube link"], ["clients", "Clients you have worked with", "e.g. Local brands, weddings"]], cta: { WhatsApp: "WhatsApp to book" } },
+ "NGO / Trust": { h: "About your trust", ex: "e.g. Asha Seva Trust", one: "e.g. Free education for 500 village children", svcL: "Programs", svcEx: ["Education", "Health camps", "Food drive"], sub: "Working for the community. Join us or donate.", why: ["Real impact", "Transparent", "Local team"],
+  q: [["cause", "Your cause", "Education|Health|Women|Animals|Environment|Food"], ["reg", "Registration (optional)", "e.g. 80G, 12A, trust number"], ["impact", "Impact so far (real numbers)", "e.g. 500 children helped"], ["help", "How can people help?", "Donate|Volunteer|CSR|Share"]], cta: { WhatsApp: "Help us on WhatsApp" } },
+ "Other": { h: "About your business", ex: "e.g. Your business name", one: "e.g. What you sell, in simple words", svcL: "Services", svcEx: ["Main service", "Popular choice", "Special offer"], sub: "Quality work and friendly service.", why: ["Quality", "Good value", "Trusted"],
+  q: [["hours", "Working hours", "e.g. 10 am – 7 pm"], ["special", "What are you best known for?", "e.g. Fast service"], ["how", "How do customers usually reach you?", "Call|WhatsApp|Walk-in|Online"]] },
+};
+const TQx = () => TQ[f.industry.value] || TQ.Other;
+let tqFor = null;
+function renderTQ() {
+ const k = f.industry.value || "Other"; if (tqFor === k) return; tqFor = k;
+ const c = TQx(); $("#tqTitle").textContent = c.h;
+ $("#tqBox").innerHTML = c.q.map(([key, l, ph]) => {
+  const n = "tq_" + key;
+  if (ph.includes("|") && !ph.startsWith("e.g.")) return `<div class="f"><fieldset><legend>${esc(l)}</legend><div class="chips">${ph.split("|").map(o => `<label><input type="checkbox" name="${n}" value="${esc(o)}" data-multi="1">${esc(o)}</label>`).join("")}</div></fieldset></div>`;
+  return `<div class="f"><label for="${n}">${esc(l)} <span class="opt">(optional)</span></label><input type="text" id="${n}" name="${n}" maxlength="160" placeholder="${esc(ph)}"></div>`;
+ }).join("");
+ $("#brand").placeholder = c.ex; $("#oneLiner").placeholder = c.one;
+ $("#svcLegend").textContent = "Your main " + c.svcL.toLowerCase();
+ $$("#svc .r").forEach((r, i) => { r.children[0].placeholder = (c.svcEx[i] ? "e.g. " + c.svcEx[i] : c.svcL + " " + (i + 1)); });
+ try { TIPS[1] = `Tell me about your <b>${esc(c.h.replace(/^About /, ""))}</b>. Only what you know.`;
+ TIPS[2] = `Add your <b>${esc(c.svcL.toLowerCase())}</b>. Each one becomes a card.`; } catch {}
+}
+// Answers for the admin: [{q, a}] with the question text baked in.
+function typeAnswers(d) {
+ const c = TQx(); return c.q.map(([key, l]) => ({ q: l.replace(/ \(optional\)$/, ""), a: [].concat(d["tq_" + key] || []).join(", ") })).filter(x => x.a);
+}
+const ctaText = (d) => (TQx().cta || {})[d.action] || ACT[d.action] || "WhatsApp us";
+
 // ===== Type-based defaults and skip logic =====
 function applyType(fresh) {
  const t = T(), other = f.industry.value === "Other";
  $("#industryOther").classList.toggle("hide", !other);
- if (!t) return;
- $("#svcLegend").textContent = "Your main " + t.svc;
+ renderTQ();
+ if (!t) { restoreChecks(); return; }
  chipGroup($("#custChips"), t.cust); chipGroup($("#uspChips"), t.usp);
- $$("#svc .r").forEach((r, i) => { const lab = t.svc.replace(/s$/, ""); r.children[0].placeholder = lab[0].toUpperCase() + lab.slice(1) + " " + (i + 1); });
  if (fresh) { // only fill what the client has not touched
   const d = data();
   if (!d.action) setVal("action", t.act);
@@ -424,7 +540,7 @@ function data() {
   if (!el.name || el.type === "file" || el.disabled && el.type !== "checkbox") continue;
   if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
   const v = el.value.trim(); if (!v) continue;
-  if (MULTI.has(el.name)) (o[el.name] = o[el.name] || []).push(v); else o[el.name] = v;
+  if (MULTI.has(el.name) || el.dataset.multi) (o[el.name] = o[el.name] || []).push(v); else o[el.name] = v;
  }
  return o;
 }
@@ -486,28 +602,29 @@ function preview() {
  const dom = (d.hasSite === "Yes" && d.domain) ? d.domain.replace(/^https?:\/\//, "") : (d.brand ? d.brand.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24) + ".in" : "yourbusiness.in");
  $("#pvUrl").textContent = dom;
  const pages = (d.pages || ["Home", "Services", "Contact"]).filter(p => p !== "Home").slice(0, 4);
- const logo = files.logo[0] ? `<img src="${objUrl("logo", files.logo[0])}" alt="">` : esc((d.brand || "Y").trim()[0].toUpperCase());
+ const logo = files.logo[0] ? `<img src="${objUrl("logo", files.logo[0])}" alt="">` : esc((d.brand || "Your Site").trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase());
  put("nav", `<span class="lg">${logo}</span><b>${esc(brand)}</b><span class="mn">${pages.map(p => `<span class="p">${esc(p)}</span>`).join("")}<span class="x">☰</span></span>`);
  const type = d.industry === "Other" ? (d.industryOther || "Business") : (t?.short || "Business");
  const where = d.reach && !/Nearby|city/.test(d.reach) ? (d.reach === "All India" ? "across India" : d.reach.toLowerCase()) : `in ${(d.areas || "").split(",")[0].trim() || city}`;
  const head = d.oneLiner || (d.offers && !d.problem ? d.offers : "") || (t ? t.line : "Your business, online");
  const subParts = [d.years && d.years !== "Just starting" ? d.years + " of experience" : "", (d.uspTags || []).slice(0, 2).join(" · ")].filter(Boolean);
- const act = ACT[d.action] || "WhatsApp us", second = d.action === "WhatsApp" ? "Call now" : "WhatsApp";
- const photo = files.photos[0] ? `<img src="${objUrl("ph0", files.photos[0])}" alt="">` : "Your photo here";
- put("hero", `<span class="eb">${esc(type)} ${esc(where)}</span><h3>${esc(head)}</h3><p>${esc(subParts.join(". ") || "Tell us what makes you special and it shows up here.")}</p>
-  <div class="ctas"><span class="c1">${esc(act)}</span><span class="${second === "WhatsApp" ? "wa" : "c2"}">${second}</span></div>${d.offers && d.oneLiner ? `<p style="margin:10px 0 0;font-weight:700;color:var(--ac)">${esc(d.offers)}</p>` : ""}<div class="ph">${photo}</div>`);
+ const act = ctaText(d), cx = TQx();
+ const photo = files.photos[0] ? `<img src="${objUrl("ph0", files.photos[0])}" alt="">` : "";
+ put("hero", `<span class="eb">${esc(type)} ${esc(where)}</span><h3>${esc(head)}</h3><p>${esc(subParts.join(". ") || cx.sub)}</p>
+  <div class="ctas"><span class="c1">${esc(act)}</span></div>${d.offers && d.oneLiner ? `<p style="margin:10px 0 0;font-weight:700;color:var(--ac)">${esc(d.offers)}</p>` : ""}${photo ? `<div class="ph">${photo}</div>` : ""}`);
  const sv = [1, 2, 3, 4, 5].map(i => d[`s${i}_name`] ? `<div><b>${esc(d[`s${i}_name`])}</b>${esc(d[`s${i}_desc`] || "")}</div>` : "").filter(Boolean);
- const svcName = t ? t.svc[0].toUpperCase() + t.svc.slice(1) : "Services";
- put("services", `<h4>Our ${esc(svcName.toLowerCase())}</h4>${d.problem ? `<p style="margin:-4px 0 8px;color:#555">We help with: ${esc(d.problem)}</p>` : ""}<div class="cards">${sv.length ? sv.join("") : '<div><div class="sk"></div><div class="sk" style="width:60%"></div></div><div><div class="sk"></div><div class="sk" style="width:70%"></div></div>'}</div>`);
- const why = [...(d.uspTags || []), d.usp].filter(Boolean);
+ const svcName = cx.svcL;
+ put("services", `<h4>Our ${esc(svcName.toLowerCase())}</h4>${d.problem ? `<p style="margin:-4px 0 8px;color:#555">We help with: ${esc(d.problem)}</p>` : ""}<div class="cards">${sv.length ? sv.join("") : cx.svcEx.map(x => `<div><b>${esc(x)}</b>Ask us for details.</div>`).join("")}</div>`);
+ const why0 = [...(d.uspTags || []), d.usp].filter(Boolean), why = why0.length ? why0 : cx.why;
  put("why", `<h4>Why customers choose ${esc(d.brand || "us")}</h4>${why.length ? `<div class="chips">${why.map(w => `<span>${esc(w)}</span>`).join("")}</div>` : '<div class="ghost">Your strengths show here.</div>'}`);
  const rv = (d.reviews || []).filter(r => r !== "None yet");
  put("proof", rv.length ? `<h4>What customers say</h4><div class="ghost">Your ${esc(rv.join(", ").toLowerCase())} will show here. We only use real ones you share.</div>` : "");
  blocks.proof.classList.toggle("hide", !rv.length);
  const qs = (d.questions || "").split(/\n|\?/).map(s => s.trim()).filter(s => s.length > 3).slice(0, 3);
+ if (!qs.length) qs.push(...(cx.faq || ["How can I contact you", "Where do you work"]));
  put("faq", `<h4>Questions customers ask</h4>${qs.length ? qs.map(q => `<div class="q"><b>${esc(q)}?</b>We answer this clearly on your website.</div>`).join("") : '<div class="ghost">Add the questions customers ask you. We answer them here.</div>'}`);
  const place = !$("[data-if=place]").classList.contains("hide");
- put("contact", `<b>Talk to ${esc(brand)}</b>${esc(place && d.address ? d.address.split("\n")[0] : city)}${d.areas ? " · " + esc(d.areas) : ""}<div class="ctas" style="margin-top:8px"><span class="wa">WhatsApp</span><span class="c2" style="color:#1d1d1f">Call</span>${place ? '<span class="c2" style="color:#1d1d1f">Directions</span>' : ""}</div>`);
+ put("contact", `<b>Talk to ${esc(brand)}</b>${esc(place && d.address ? d.address.split("\n")[0] : city)}${d.areas ? " · " + esc(d.areas) : ""}<div class="ctas" style="margin-top:8px"><span class="c1">${esc(act)}</span></div>`);
  const social = ["ig", "fb", "yt", "gbp"].filter(k => d[k]).length;
  put("foot", `<span>© ${new Date().getFullYear()} ${esc(brand)}</span><span>${social ? social + " social link" + (social > 1 ? "s" : "") : (d.langs || ["English"]).join(" · ")}</span>`);
 }
@@ -528,6 +645,7 @@ try { if (localStorage.getItem("o999_pv") === "min") pvMin(true); } catch {}
 
 // ===== AI designer =====
 const TIPS = ["Hi! I am your <b>AI designer</b>. Watch your site take shape.",
+ "Tell me a little more. <b>Only what you know.</b>",
  "Add your services. Each one becomes a <b>card</b>.",
  "Your customers decide the <b>words</b> we use.",
  "Your strengths go <b>on the page</b>.",
@@ -543,16 +661,16 @@ wide.addEventListener("change", liveRegion); liveRegion();
 let cheerT;
 function cheer(text) {
  if (!RM) { const a = $("#ai"); a.classList.remove("happy"); void a.offsetWidth; a.classList.add("happy"); }
- clearTimeout(cheerT); say(esc(text)); cheerT = setTimeout(() => say(TIPS[cur]), 4000);
+ clearTimeout(cheerT); say(esc(text)); nudge(); cheerT = setTimeout(() => say(TIPS[cur]), 4000);
 }
 
 // ===== Steps =====
 function show(i, focus = true) {
  cur = i;
  steps.forEach((s, k) => s.classList.toggle("hide", k !== i));
- $("#stepLbl").textContent = `Step ${i + 1} of ${N}`;
- $$("#prog i").forEach((b, k) => b.classList.toggle("d", k <= i));
-  $("#next").textContent = i === N - 1 ? "Send my answers" : "Next";
+ $("#stepLbl").textContent = i < 2 ? `Step ${i + 1} of 3` : i === N - 1 ? "Step 3 of 3" : `Tell us more · ${i - 1} of ${N - 3} (optional)`;
+ { const core = i < 2 || i === N - 1; $$("#prog i").forEach((b, k) => { b.classList.toggle("hide", core && k > 2); b.classList.toggle("d", core ? (i === N - 1 || k <= i) : k <= i); }); }
+  $("#next").textContent = i === N - 1 ? "Send my answers" : i >= 2 ? (i === N - 2 ? "Done, go to send" : "Next (or skip)") : "Next";
  say(TIPS[i]); focusPreview(steps[i].dataset.pv);
  if (i === N - 1) summary();
  if (focus) { $("h2", steps[i]).focus({ preventScroll: true }); scrollTo({ top: 0, behavior: RM ? "auto" : "smooth" }); }
@@ -578,15 +696,18 @@ function check(i) {
  }
  const em = $("#email", steps[i]);
  if (em && em.value.trim() && !em.checkValidity()) { fieldErr(em, "This email does not look right."); first ||= em; } else if (em) fieldErr(em, "");
+ const need = (nm, set, t) => { if (!$(`[name=${nm}]:checked`) && $(`[name=${nm}]`, steps[i])) { const fs = $(set); let e = $("#" + nm + "-err"); if (!e) { e = document.createElement("p"); e.className = "err"; e.id = nm + "-err"; fs.appendChild(e); } e.textContent = t; first ||= $(`[name=${nm}]`); } else $("#" + nm + "-err")?.remove(); };
+ need("goal1", "#goalSet", "Please pick one."); need("call_day", "#callSet", "Please pick a day."); need("call_slot", "#callSet", "Please pick a time.");
  if (i === 0 && f.industry.value === "Other" && !f.industryOther.value.trim()) { fieldErr(f.industryOther, "Please tell us your type of business."); first ||= f.industryOther; }
  if (first) first.focus();
  return !first;
 }
 $("#next").addEventListener("click", () => {
  if (!check(cur)) return;
- if (cur < N - 1) show(cur + 1); else submit();
+ if (cur === 1) show(N - 1); else if (cur < N - 1) show(cur + 1); else submit();
 });
-$("#back").addEventListener("click", () => { if (cur === 0) { $("#app").classList.add("hide"); $("#nav").classList.add("hide"); $("#land").classList.remove("hide"); return; } show(cur - 1); });
+$("#back").addEventListener("click", () => { if (cur === 0) { $("#app").classList.add("hide"); $("#nav").classList.add("hide"); $("#land").classList.remove("hide"); return; } show(cur === N - 1 || cur === 2 ? 1 : cur - 1); });
+$("#moreBtn").addEventListener("click", () => show(2));
 f.addEventListener("submit", e => { e.preventDefault(); $("#next").click(); });
 
 function summary() {
@@ -606,6 +727,7 @@ f.addEventListener("focusout", () => { typT = setTimeout(() => { document.body.c
 f.addEventListener("input", e => { touched[e.target.name] = 1; if (e.target.getAttribute("aria-invalid")) fieldErr(e.target, ""); conditions(); preview(); save(); });
 f.addEventListener("change", e => {
  const t = e.target; touched[t.name] = 1;
+ if ((t.name === "brand" || t.name === "industry") && t.value) nudge();
  if (t.name === "industry") applyType(true);
  conditions(); preview(); save();
  if (t.name === "action" && t.checked) cheer(`Your main button now says "${ACT[t.value]}".`);
@@ -668,7 +790,10 @@ async function submit() {
  const btn = $("#next"); btn.disabled = true; btn.textContent = "Sending…"; msg("", "");
  draftId ||= crypto.randomUUID(); save();
  const d = data(); delete d.consent;
- const job = { id: draftId, d: { ...d, v: 4, svcN, sent_from: location.hostname }, at: Date.now() };
+ if (d.call_day && d.call_slot) d.call_time = `${d.call_day}, ${d.call_slot}`;
+ if (SRC) d.source = SRC;
+ const ta = typeAnswers(d); for (const k of Object.keys(d)) if (k.startsWith("tq_")) delete d[k];
+ const job = { id: draftId, d: { ...d, v: 4, svcN, ...(ta.length ? { type_answers: ta } : {}), sent_from: location.hostname }, at: Date.now() };
  try { localStorage.setItem(OUTBOX, JSON.stringify(job)); } catch {}
  try {
   await send(job);
@@ -702,9 +827,11 @@ function finish(job) {
  $("#app").classList.add("hide"); $("#nav").classList.add("hide"); $("#land").classList.add("hide");
  $("#doneName").textContent = (job.d.name || "").split(" ")[0] || "friend";
  $("#donePhone").textContent = job.d.whatsapp || "";
+ $("#doneCall").textContent = job.d.call_time || "Soon";
  $("#doneRef").textContent = job.id.slice(0, 8).toUpperCase();
  if (OUR_WHATSAPP) { const a = $("#doneWa"); a.href = `https://wa.me/${OUR_WHATSAPP}?text=${encodeURIComponent(`Hi, I just shared details for my website. Business: ${job.d.brand}. Ref: ${job.id.slice(0, 8).toUpperCase()}`)}`; a.classList.remove("hide"); }
- const done = $("#done"); done.classList.remove("hide"); done.focus(); scrollTo(0, 0);
+ const done = $("#done"); const go = () => { done.classList.remove("hide"); done.focus(); scrollTo(0, 0); };
+ reveal(go);
 }
 async function flushOutbox() {
  let job; try { job = JSON.parse(localStorage.getItem(OUTBOX) || "null"); } catch {}
@@ -715,5 +842,22 @@ async function flushOutbox() {
 addEventListener("online", () => { if (localStorage.getItem(OUTBOX)) { msg("wait", "Back online. Sending your answers…"); flushOutbox(); } });
 setInterval(() => { if (localStorage.getItem(OUTBOX)) flushOutbox(); }, 30000);
 </script>
+<script>
+(()=>{const n=PRE.n,w=PRE.w,F=document.getElementById("f");if(n){document.getElementById("hello").innerHTML="Hi <b class=gold></b>! Thanks for messaging us on WhatsApp. Answer a few questions so we can plan your website before our call.";document.querySelector("#hello b").textContent=n.split(" ")[0];if(!F.elements.name.value)F.elements.name.value=n}
+if(w&&!F.elements.whatsapp.value)F.elements.whatsapp.value=w;if(n&&/^(\+?91)?[6-9]\d{9}$/.test(w))document.querySelectorAll("[data-pre]").forEach(e=>e.classList.add("hide"));if(n||w)F.dispatchEvent(new Event("input"))})();
+</script>
+<script>
+(()=>{const b=document.getElementById("pvBadge"),c=document.getElementById("pvClose"),B=document.body;
+const open=()=>{B.classList.add("pvopen");b.classList.remove("nudge");c.focus()},close=()=>{B.classList.remove("pvopen");b.focus()};
+b.addEventListener("click",open);c.addEventListener("click",close);addEventListener("keydown",e=>{if(e.key==="Escape"&&B.classList.contains("pvopen"))close()});
+const st=()=>b.classList.toggle("hide",document.getElementById("app").classList.contains("hide"));new MutationObserver(st).observe(document.getElementById("app"),{attributes:true});st();
+let t,last=0;window.nudge=()=>{if(B.classList.contains("pvopen")||Date.now()-last<8000)return;last=Date.now();b.classList.add("nudge");clearTimeout(t);t=setTimeout(()=>b.classList.remove("nudge"),3500)};
+window.reveal=go=>{const pv=document.getElementById("pv").cloneNode(true);pv.removeAttribute("id");pv.querySelectorAll("[id]").forEach(e=>e.removeAttribute("id"));pv.querySelector(".pvrow")?.remove();B.classList.remove("pvopen");
+const r=document.createElement("div");r.className="rv";r.setAttribute("role","dialog");r.setAttribute("aria-label","Your website preview");r.innerHTML='<h2>Here is your <span class="gold">website</span> ✨</h2>';r.appendChild(pv);
+const k=document.createElement("button");k.className="btn";k.style.cssText="margin-top:18px;width:100%;max-width:420px";k.textContent="Continue";r.appendChild(k);document.body.appendChild(r);k.focus();
+if(!matchMedia("(prefers-reduced-motion: reduce)").matches)for(let i=0;i<40;i++){const p=document.createElement("i");p.className="cf";p.style.left=Math.random()*100+"vw";p.style.setProperty("--x",(Math.random()*80-40)+"px");p.style.background=["#d4af37","#f0d27a","#fff","#b8860b"][i%4];p.style.animationDelay=Math.random()*.8+"s";document.body.appendChild(p);setTimeout(()=>p.remove(),3400)}
+k.addEventListener("click",()=>{r.remove();go()})}})();
+</script>
+<script>(()=>{const m=document.getElementById("jmap");if(!m)return;const L=m.querySelectorAll("li");if(!("IntersectionObserver"in window)||matchMedia("(prefers-reduced-motion: reduce)").matches){m.classList.add("on");L.forEach(l=>l.classList.add("in"));return}const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");m.classList.add("on");io.unobserve(e.target)}}),{rootMargin:"0px 0px -10% 0px"});L.forEach((l,i)=>{l.style.transitionDelay=i*.15+"s";io.observe(l)})})()</script>
 </body>
 </html>

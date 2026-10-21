@@ -6,6 +6,26 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-21 · Grok Bot · site999: adaptive by business type + warm-lead flow
+- `TQ` map in `site999/index.html` (13 types + Other): type step title, 3–5 type questions, services label/examples, brand/one-liner placeholders, CTA text per action (clinic → "Book appointment", restaurant → "Order on WhatsApp", real estate → "Book a site visit"), designer tips, and fallback preview copy (no filler text/grey cards on skipped answers).
+- Saved as `data.type_answers` = [{q, a}] (tq_* keys removed before insert). Shown in site999/admin (own group + CSV column) and super admin enquiries detail.
+- Warm-lead flow: landing says "Thanks for messaging us on WhatsApp…". `?n=&w=&src=&utm_*` prefill name/number (contact fields hidden if both valid), greeting by name, params saved in `data.source`.
+- Core = 3 steps: contact + type → type questions + main goal (`goal1`, required) → call time (`call_day` + `call_slot`, required → `data.call_time`) + consent → send. Steps 3–7 are optional "Tell us more" behind a button.
+- Call time is picked BEFORE send (table is insert-only for anon, so it cannot be added after). Done screen shows it big. Both admins show "📞 Call them: …" and have a personal-link maker (name + number + ad → URL).
+- Tested clinic (with prefill), restaurant (incl. Tell us more), real estate end to end; rows deleted. Admin tsc + lint pass.
+
+## 2026-10-21 · Grok Bot · site999 preview: badge + 3D sheet (option D)
+- Phones (<900px): steps show only the form. A pulsing "Preview" badge with the AI designer sits above Next; it opens a full-screen tilted 3D sheet of the live preview. Nudge "Your site updated. Tap to see" after brand/type and other key answers (max once per 8s).
+- Preview restyled dark-gold. One primary CTA (from the client's main action) in hero + contact; 2-letter monogram logo; no photo box unless a photo is uploaded.
+- After a successful send: full-screen reveal of their site + gold confetti, then the thank-you screen. Reduced motion: no pulse/drift/confetti.
+- Desktop layout unchanged. Full flow tested locally; test rows deleted. Deploy is still a manual upload to Vercel `website999-onboarding`.
+
+## 2026-10-21 · Grok Bot · site999 landing: journey map (option D)
+- `site999/index.html`: landing "How it works" is now a depth-layered journey map with a glowing gold path. IntersectionObserver reveal, transform/opacity only, no blur, ~+0.7 KB gzip. Reduced motion shows it static.
+- Restored founder heading "We need a few answers to understand your business and make your website." Start button is pinned to the bottom (thumb zone) under 900px.
+- Form, preview, AI designer, submit logic untouched. Full local submission tested; test row deleted.
+- Deploy is still manual (upload `site999/` to Vercel project `website999-onboarding`) after merge.
+
 ## NON-NEGOTIABLE RULES
 
 - **Branch:** work only on `claude/fanbe-crm-android-app-wfjzcb`. Never push to `main`.

@@ -1,5 +1,6 @@
 import { getServiceSupabase } from "@/lib/supabase/service";
 import { isSuperAdmin, saveEnquiryAction } from "./actions";
+import LinkMaker from "./LinkMaker";
 
 // Website enquiries — answers from the ₹999 website onboarding form
 // (public.site999_onboarding). Super admin only: the check runs on the server
@@ -18,7 +19,7 @@ const STATUS_TABS = ["new", "contacted", "won", "lost"];
 const BASE = "/dashboard/platform/enquiries";
 // Bookkeeping the onboarding form adds to `data` (form version, how many service
 // rows were open, which host sent it). Not an answer, so not shown as one.
-const INTERNAL = new Set(["files", "v", "svcN", "sent_from", "_ni"]);
+const INTERNAL = new Set(["files", "v", "svcN", "sent_from", "_ni", "type_answers", "call_time", "call_day", "call_slot"]);
 
 function digits(p: string | null) {
   const d = (p ?? "").replace(/\D/g, "");
@@ -100,6 +101,8 @@ export default async function EnquiriesPage({
       <h2>Website enquiries</h2>
       <p className="subtitle">People who filled the website form on website.callproai.in. Call them, set a status and a follow-up date.</p>
 
+      <LinkMaker />
+
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "12px 0" }}>
         {TABS.map((t) => (
           <a key={t} href={`${BASE}${qs({ status: t, q })}`} className={t === tab ? "btn" : "btn btn-secondary"}>
@@ -127,6 +130,7 @@ export default async function EnquiriesPage({
               <div style={{ fontSize: "var(--text-footnote)", opacity: 0.7 }}>
                 {[r.name, r.city, r.whatsapp].filter(Boolean).join(" · ")} · {when(r.created_at)}
               </div>
+              {typeof r.data?.call_time === "string" && <div style={{ fontWeight: 700, marginTop: 2 }}>📞 Call: {r.data.call_time}</div>}
             </a>
           ))}
         </div>
@@ -137,6 +141,7 @@ export default async function EnquiriesPage({
               <div>
                 <h3 style={{ margin: 0 }}>{current.brand || current.name || "Unnamed"}</h3>
                 <div style={{ opacity: 0.7, fontSize: "var(--text-footnote)" }}>{when(current.created_at)}</div>
+                {typeof current.data?.call_time === "string" && <div style={{ fontSize: 18, fontWeight: 800, marginTop: 6 }}>📞 Call them: {current.data.call_time}</div>}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 {current.whatsapp && <a className="btn" href={`tel:+${digits(current.whatsapp)}`}>Call</a>}
@@ -167,6 +172,9 @@ export default async function EnquiriesPage({
               <tbody>
                 {[["Name", current.name], ["WhatsApp", current.whatsapp], ["Email", current.email], ["City", current.city], ["Business", current.brand]]
                   .map(([k, v]) => <tr key={k as string}><td style={{ opacity: 0.7 }}>{k}</td><td>{show(v)}</td></tr>)}
+                {(Array.isArray(current.data?.type_answers) ? (current.data.type_answers as { q?: string; a?: string }[]) : [])
+                  .filter((x) => x && x.q && x.a)
+                  .map((x, i) => <tr key={`ta${i}`}><td style={{ opacity: 0.7, verticalAlign: "top" }}>{x.q}</td><td style={{ whiteSpace: "pre-wrap" }}>{show(x.a)}</td></tr>)}
                 {Object.entries(current.data ?? {}).filter(([k]) => !INTERNAL.has(k)).map(([k, v]) => (
                   <tr key={k}><td style={{ opacity: 0.7, verticalAlign: "top" }}>{label(k)}</td><td style={{ whiteSpace: "pre-wrap" }}>{show(v)}</td></tr>
                 ))}
