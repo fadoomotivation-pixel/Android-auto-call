@@ -177,6 +177,19 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
  .nav .in{max-width:none}
 }
 @media (max-width:359px){.tiles{grid-template-columns:1fr}.site .mn .p{display:none}.site .mn .x{display:inline}}
+/* Journey map (option D): transform/opacity only, no blur */
+.jmap{position:relative;list-style:none;padding:0 0 0 46px;margin:26px 0;display:grid;gap:18px;perspective:700px}
+.jmap:before{content:"";position:absolute;left:18px;top:8px;bottom:8px;width:3px;border-radius:2px;background:rgba(212,175,55,.18)}
+.jmap .jl{position:absolute;left:18px;top:8px;bottom:8px;width:3px;border-radius:2px;background:linear-gradient(#f5d77a,#b8860b);box-shadow:0 0 10px rgba(212,175,55,.7);transform-origin:top;transform:scaleY(0);transition:transform 1.4s cubic-bezier(.2,.7,.2,1)}
+.jmap.on .jl{transform:scaleY(1)}
+.jmap li{position:relative;display:flex;gap:12px;padding:14px;opacity:0;transform:translate3d(0,24px,var(--z)) rotateX(10deg);transition:opacity .6s,transform .7s cubic-bezier(.2,.7,.2,1)}
+.jmap li.in{opacity:1;transform:translate3d(0,0,var(--z)) rotateX(0)}
+.jmap li:nth-child(2){--z:0}.jmap li:nth-child(3){--z:-30px;margin-left:10px}.jmap li:nth-child(4){--z:-60px;margin-left:20px}.jmap li:nth-child(3):before{left:-44px}.jmap li:nth-child(4):before{left:-54px}
+.jmap li:before{content:"";position:absolute;left:-34px;top:20px;width:13px;height:13px;border-radius:50%;background:#d4af37;box-shadow:0 0 0 4px rgba(212,175,55,.2),0 0 12px #d4af37}
+.jmap b.n{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111}
+.land .ask{font-size:16px;color:var(--tx);margin:0 0 18px;padding-left:12px;border-left:3px solid var(--gold2)}
+@media (max-width:899px){.land{padding-bottom:110px}.land>#startBtn{position:fixed;left:16px;right:16px;bottom:calc(14px + var(--sab));width:auto;z-index:5}}
+@media (prefers-reduced-motion:reduce){.jmap li{opacity:1;transform:none}.jmap .jl{transform:none}}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
@@ -187,10 +200,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;bo
 <main id="land" class="land">
  <span class="tag">Website onboarding</span>
  <h1>Let's build your <span class="gold">business website</span></h1>
+ <p class="ask">We need a few answers to understand your business and make your website.</p>
  <p class="lead">Answer a few short questions. It takes about 5 minutes. Then we call you and start building.</p>
  <div id="resume" class="resume glass hide"><span style="flex:1">You have answers saved on this phone.</span><button class="btn" type="button" data-start>Continue</button></div>
  <button class="btn" type="button" id="startBtn">Start</button>
- <ol class="steps3">
+ <ol class="jmap" id="jmap" aria-label="How it works"><span class="jl" aria-hidden="true"></span>
   <li class="glass"><b class="n">1</b><span><b>Tell us about your business.</b><br><span class="mu">Most questions are a tap. Skip anything you are not sure about.</span></span></li>
   <li class="glass"><b class="n">2</b><span><b>Watch your website take shape.</b><br><span class="mu">Our AI designer builds a live preview from your answers.</span></span></li>
   <li class="glass"><b class="n">3</b><span><b>We call you.</b><br><span class="mu">We talk about your business and start building your website.</span></span></li>
@@ -715,5 +729,6 @@ async function flushOutbox() {
 addEventListener("online", () => { if (localStorage.getItem(OUTBOX)) { msg("wait", "Back online. Sending your answers…"); flushOutbox(); } });
 setInterval(() => { if (localStorage.getItem(OUTBOX)) flushOutbox(); }, 30000);
 </script>
+<script>(()=>{const m=document.getElementById("jmap");if(!m)return;const L=m.querySelectorAll("li");if(!("IntersectionObserver"in window)||matchMedia("(prefers-reduced-motion: reduce)").matches){m.classList.add("on");L.forEach(l=>l.classList.add("in"));return}const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");m.classList.add("on");io.unobserve(e.target)}}),{rootMargin:"0px 0px -10% 0px"});L.forEach((l,i)=>{l.style.transitionDelay=i*.15+"s";io.observe(l)})})()</script>
 </body>
 </html>

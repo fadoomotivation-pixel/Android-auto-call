@@ -6,6 +6,12 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-21 · Grok Bot · site999 landing: journey map (option D)
+- `site999/index.html`: landing "How it works" is now a depth-layered journey map with a glowing gold path. IntersectionObserver reveal, transform/opacity only, no blur, ~+0.7 KB gzip. Reduced motion shows it static.
+- Restored founder heading "We need a few answers to understand your business and make your website." Start button is pinned to the bottom (thumb zone) under 900px.
+- Form, preview, AI designer, submit logic untouched. Full local submission tested; test row deleted.
+- Deploy is still manual (upload `site999/` to Vercel project `website999-onboarding`) after merge.
+
 ## NON-NEGOTIABLE RULES
 
 - **Branch:** work only on `claude/fanbe-crm-android-app-wfjzcb`. Never push to `main`.
