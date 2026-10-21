@@ -14,6 +14,9 @@ type Row = {
 
 const TABS = ["new", "contacted", "won", "lost", "all"] as const;
 const BASE = "/dashboard/platform/enquiries";
+// Bookkeeping the onboarding form adds to `data` (form version, how many service
+// rows were open, which host sent it). Not an answer, so not shown as one.
+const INTERNAL = new Set(["files", "v", "svcN", "sent_from", "_ni"]);
 
 function digits(p: string | null) {
   const d = (p ?? "").replace(/\D/g, "");
@@ -146,7 +149,7 @@ export default async function EnquiriesPage({
               <tbody>
                 {[["Name", current.name], ["WhatsApp", current.whatsapp], ["Email", current.email], ["City", current.city], ["Business", current.brand]]
                   .map(([k, v]) => <tr key={k as string}><td style={{ opacity: 0.7 }}>{k}</td><td>{show(v)}</td></tr>)}
-                {Object.entries(current.data ?? {}).filter(([k]) => k !== "files").map(([k, v]) => (
+                {Object.entries(current.data ?? {}).filter(([k]) => !INTERNAL.has(k)).map(([k, v]) => (
                   <tr key={k}><td style={{ opacity: 0.7, verticalAlign: "top" }}>{label(k)}</td><td style={{ whiteSpace: "pre-wrap" }}>{show(v)}</td></tr>
                 ))}
               </tbody>
