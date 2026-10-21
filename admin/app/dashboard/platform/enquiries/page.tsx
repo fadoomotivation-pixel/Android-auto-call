@@ -10,9 +10,11 @@ type Row = {
   id: string; created_at: string; name: string | null; whatsapp: string | null;
   email: string | null; city: string | null; brand: string | null;
   data: Record<string, unknown> | null; status: string | null; notes: string | null;
+  follow_up_at: string | null;
 };
 
-const TABS = ["new", "contacted", "won", "lost", "all"] as const;
+const TABS = ["due", "new", "contacted", "won", "lost", "all"] as const;
+const STATUS_TABS = ["new", "contacted", "won", "lost"];
 const BASE = "/dashboard/platform/enquiries";
 // Bookkeeping the onboarding form adds to `data` (form version, how many service
 // rows were open, which host sent it). Not an answer, so not shown as one.
@@ -24,6 +26,14 @@ function digits(p: string | null) {
 }
 function when(iso: string) {
   return new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) + " IST";
+}
+// IST calendar day, for the date input and for "is it due".
+function istDay(iso: string | Date) {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+function isOpen(r: Row) {
+  const s = r.status ?? "new";
+  return s !== "won" && s !== "lost";
 }
 function label(k: string) {
   return k.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
@@ -47,13 +57,13 @@ export default async function EnquiriesPage({
 }) {
   if (!(await isSuperAdmin())) return <div className="empty">Not authorized — super admin only.</div>;
   const sp = await searchParams;
-  const tab = (TABS as readonly string[]).includes(sp.status ?? "") ? sp.status! : "new";
+  const tabParam = (TABS as readonly string[]).includes(sp.status ?? "") ? sp.status! : null;
   const q = (sp.q ?? "").trim();
   const sb = getServiceSupabase();
 
   const { data: all, error } = await sb
     .from("site999_onboarding")
-    .select("id, created_at, name, whatsapp, email, city, brand, data, status, notes")
+    .select("id, created_at, name, whatsapp, email, city, brand, data, status, notes, follow_up_at")
     .order("created_at", { ascending: false })
     .limit(1000)
     .returns<Row[]>();
@@ -62,10 +72,16 @@ export default async function EnquiriesPage({
 
   const counts: Record<string, number> = { all: rows.length };
   for (const r of rows) counts[r.status ?? "new"] = (counts[r.status ?? "new"] ?? 0) + 1;
+  // Follow up due: an open enquiry whose follow-up day is today or earlier (IST).
+  const today = istDay(new Date());
+  const isDue = (r: Row) => isOpen(r) && !!r.follow_up_at && istDay(r.follow_up_at) <= today;
+  counts.due = rows.filter(isDue).length;
+  // Land on "Follow up due" when something is due, else on "New".
+  const tab = tabParam ?? (counts.due > 0 ? "due" : "new");
 
   const needle = q.toLowerCase();
   const list = rows.filter((r) =>
-    (tab === "all" || (r.status ?? "new") === tab) &&
+    (tab === "all" || (tab === "due" ? isDue(r) : (r.status ?? "new") === tab)) &&
     (!needle || [r.name, r.brand, r.city, r.whatsapp, r.email].some((v) => (v ?? "").toLowerCase().includes(needle))));
 
   const current = sp.id ? rows.find((r) => r.id === sp.id) ?? null : null;
@@ -82,12 +98,12 @@ export default async function EnquiriesPage({
   return (
     <>
       <h2>Website enquiries</h2>
-      <p className="subtitle">Clients who filled the ₹999 website form. Call or WhatsApp them, then set a status.</p>
+      <p className="subtitle">People who filled the website form on website.callproai.in. Call them, set a status and a follow-up date.</p>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "12px 0" }}>
         {TABS.map((t) => (
           <a key={t} href={`${BASE}${qs({ status: t, q })}`} className={t === tab ? "btn" : "btn btn-secondary"}>
-            {label(t)} ({counts[t] ?? 0})
+            {t === "due" ? "Follow up due" : label(t)} ({counts[t] ?? 0})
           </a>
         ))}
         <form method="get" action={BASE} style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
@@ -106,7 +122,7 @@ export default async function EnquiriesPage({
                 background: r.id === current?.id ? "var(--surface-2, rgba(0,0,0,0.04))" : undefined }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                 <strong>{r.brand || r.name || "Unnamed"}</strong>
-                <span className="badge">{r.status ?? "new"}</span>
+                <span className="badge">{isDue(r) ? "follow up" : r.status ?? "new"}</span>
               </div>
               <div style={{ fontSize: "var(--text-footnote)", opacity: 0.7 }}>
                 {[r.name, r.city, r.whatsapp].filter(Boolean).join(" · ")} · {when(r.created_at)}
@@ -126,7 +142,7 @@ export default async function EnquiriesPage({
                 {current.whatsapp && <a className="btn" href={`tel:+${digits(current.whatsapp)}`}>Call</a>}
                 {current.whatsapp && (
                   <a className="btn btn-secondary" target="_blank" rel="noreferrer"
-                    href={`https://wa.me/${digits(current.whatsapp)}?text=${encodeURIComponent(`Hi ${current.name ?? ""}, thanks for filling the ₹999 website form.`)}`}>
+                    href={`https://wa.me/${digits(current.whatsapp)}?text=${encodeURIComponent(`Hi ${current.name ?? ""}, thanks for sharing your business details for your website. When is a good time to call you?`)}`}>
                     WhatsApp
                   </a>
                 )}
@@ -138,8 +154,10 @@ export default async function EnquiriesPage({
               <input type="hidden" name="id" value={current.id} />
               <label className="label">Status</label>
               <select name="status" defaultValue={current.status ?? "new"}>
-                {TABS.filter((t) => t !== "all").map((t) => <option key={t} value={t}>{label(t)}</option>)}
+                {STATUS_TABS.map((t) => <option key={t} value={t}>{label(t)}</option>)}
               </select>
+              <label className="label">Follow-up date (10:00 AM IST)</label>
+              <input type="date" name="follow_up" defaultValue={current.follow_up_at ? istDay(current.follow_up_at) : ""} />
               <label className="label">Notes</label>
               <textarea name="notes" rows={3} defaultValue={current.notes ?? ""} placeholder="What did they say?" />
               <button className="btn" type="submit" style={{ justifySelf: "start" }}>Save</button>
