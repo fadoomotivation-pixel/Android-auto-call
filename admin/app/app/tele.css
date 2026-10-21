@@ -159,5 +159,70 @@
 .reading { padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
 .tbar { width: 100%; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
 .tbar span { display: block; height: 100%; background: var(--blue); transition: width .2s; }
-.scanrow input { width: 22px; height: 22px; flex: none; accent-color: var(--blue); }
+.scanrow input[type="checkbox"] { width: 22px; height: 22px; flex: none; accent-color: var(--blue); }
 .scanrow.off { opacity: .55; }
+
+/* tab badge: Follow Ups carries its Call now count, nothing else does */
+.tab-ic { position: relative; display: block; line-height: 0; }
+.badge { position: absolute; top: -4px; left: 14px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red);
+  color: var(--on); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+
+/* home hero: the one number that matters */
+.hero { padding: 16px; }
+.hero-top { display: flex; align-items: center; gap: 16px; }
+.hero-top > div { display: flex; flex-direction: column; flex: none; }
+.hero-num { font-size: 44px; font-weight: 700; letter-spacing: -.02em; line-height: 1.05; color: var(--orange); }
+.hero-top p { margin: 0; font-size: 14px; }
+.hero .tbtn.big { margin-top: 12px; }
+.rings { margin-top: 12px; }
+
+/* reminders card */
+.remind { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-top: 12px; }
+.remind-ic { font-size: 22px; flex: none; }
+.remind .row-main small { white-space: normal; }
+
+/* in-app "callback due" bar */
+.duebar { display: flex; align-items: center; gap: 8px; background: #FFF4E5; padding: calc(10px + var(--sat)) 16px 10px; border-bottom: 1px solid var(--line); z-index: 6; }
+.duebar span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.duebar b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duebar small { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duebar .x { font-size: 22px; color: var(--muted) !important; padding: 0 4px !important; }
+
+/* lists */
+.late { color: var(--red) !important; }
+.ok { color: var(--green) !important; }
+.dot.now { background: var(--orange); }
+.row.more { color: var(--blue) !important; font-weight: 500; justify-content: center; }
+.tchip.warn:not(.on) .count { color: var(--red); }
+.fuhead { display: flex !important; justify-content: space-between; width: calc(100% - 8px); }
+.chev { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--blue); }
+.allclear { padding: 20px 16px; margin-top: 16px; display: flex; flex-direction: column; gap: 4px; text-align: center; background: #EAF8EE !important; }
+.allclear small { color: var(--muted); }
+
+/* lead detail: when is the next call */
+.nextcall { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--card); display: flex; flex-direction: column; gap: 2px; border-left: 4px solid var(--blue); }
+.nextcall.now { border-left-color: var(--orange); }
+.nextcall small { color: var(--muted); }
+
+/* outcome sheet: the time, and what happens next */
+.when b { color: var(--ink); font-size: 15px; font-weight: 600; }
+.picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.picks .tchip { border: 1px solid var(--line) !important; }
+.after { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #E5F1FF; color: var(--ink); font-size: 14px; }
+
+/* scan review */
+.sum { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.sum span { background: var(--card); border-radius: 12px; padding: 4px 10px; font-size: 13px; color: var(--muted); }
+.sum .sum-new { background: var(--green); color: var(--on); font-weight: 600; }
+.note { font-size: 13px; color: var(--muted); background: var(--card); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; }
+.tele .nameedit { border: 0; padding: 0; background: transparent; font-weight: 600; font-size: 16px; border-radius: 0; }
+.tele .nameedit:focus { border-bottom: 1px solid var(--blue); }
+.tele .nameedit:disabled { color: var(--ink); -webkit-text-fill-color: var(--ink); }
+.scan-more { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.pad-sticky { padding-bottom: 96px; }
+.stickybar { position: fixed; left: 0; right: 0; bottom: calc(57px + var(--sab)); padding: 8px 16px; background: var(--bg); border-top: 1px solid var(--line); z-index: 4; max-width: 560px; margin: 0 auto; }
+.stickybar .tbtn.big { margin-top: 0; }
+.thumb { width: 100%; max-height: 180px; object-fit: contain; border-radius: 8px; background: var(--bg); }
+.chips + .explain { margin-top: 4px; }
+.remind .row-main b { white-space: normal; }
+.title + .explain { margin-top: 6px; }

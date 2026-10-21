@@ -1,15 +1,23 @@
 "use client";
 // Call Pro AI telecaller app (/app): an installable web app for Chrome/Safari.
 // Only browser-reliable features live here: calling via the phone's dialer
-// (tel:), logging the outcome, follow-ups, notes, WhatsApp and Scan list. The
-// auto-dialer, call recordings and call-log sync need the Android app, so this
-// screen has no buttons for them at all.
-import { useCallback, useEffect, useMemo, useState } from "react";
+// (tel:), logging the outcome, follow-ups and their reminders (Web Push), notes,
+// WhatsApp and Scan list. The auto-dialer, call recordings and call-log sync
+// need the Android app, so this screen has no buttons for them at all.
+//
+// Which list a lead sits in is the DATABASE's answer (v_lead_workstate), the
+// same one the Android app shows; lib/tele/work.ts only keeps the clock moving
+// between refreshes. Every tab says in one line what is in it.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  type FollowUp, type Lead, type Profile, type Stage, type Today, type Lane,
-  OUTCOMES, getProfile, laneOf, loadFollowUps, loadLeads, loadStages, loadToday, saveOutcome, updateNotes,
+  type FollowUp, type Lead, type Profile, type PushState, type Stage, type Today,
+  OUTCOMES, afterSave, disableReminders, enableReminders, fmtWhen, getProfile, loadFollowUps, loadLeads,
+  loadStages, loadToday, pushState, saveOutcome, updateNotes,
 } from "@/lib/tele/data";
+import {
+  type Chip, type FuGroup, CHIPS, act, callQueue, callbackPicks, fuGroup, inChip, lateBy, visitPicks,
+} from "@/lib/tele/work";
 import { demoFollowUps, demoLeads, demoProfile, demoStages, demoToday } from "@/lib/tele/demo";
 import { ScanTab } from "./ScanTab";
 
@@ -21,6 +29,14 @@ const GOALS = { calls: 50, connected: 30, visits: 3 };
 const PENDING_KEY = "cpa.pendingCall";
 const JOIN_KEY = "cpa.joinCode";
 const IOS_HINT_KEY = "cpa.iosHintSeen";
+const REFRESH_MS = 2 * 60_000;
+
+/** One tick a minute, so a 3 PM callback is in Call now at 3 PM. */
+function useNow(period = 60_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), period); return () => clearInterval(t); }, [period]);
+  return now;
+}
 
 export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
   const [demo, setDemo] = useState(false);
@@ -37,8 +53,11 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
   const [needsCode, setNeedsCode] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [scanStart, setScanStart] = useState<string | null>(null);
+  const [push, setPush] = useState<PushState>("unsupported");
+  const [dueAlert, setDueAlert] = useState<Lead | null>(null);
+  const now = useNow();
 
-  const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 2400); };
+  const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 3200); };
 
   const refresh = useCallback(async (p: Profile) => {
     const [l, s, f, t] = await Promise.all([loadLeads(p.id), loadStages(), loadFollowUps(p.id), loadToday(p.id)]);
@@ -58,27 +77,56 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
     }
     setProfile(p); setNeedsCode(false); setView("app");
     await refresh(p);
+    pushState().then(setPush).catch(() => {});
   }, [code, refresh, start]);
+
+  // A link from a reminder: /app?lead=<id> or /app?tab=follow.
+  const openFromUrl = useCallback((href: string) => {
+    const q = new URL(href, window.location.origin).searchParams;
+    const lead = q.get("lead");
+    if (lead) { setTab("leads"); setOpenLead(lead); }
+    else if (q.get("tab") === "follow") { setTab("follow"); setOpenLead(null); }
+  }, []);
 
   // Boot: demo mode (mock data, no network) or the real session.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     if (q.get("demo") === "1") {
       setDemo(true); setProfile(demoProfile); setLeads(demoLeads); setStages(demoStages);
-      setFollows(demoFollowUps); setToday(demoToday);
+      setFollows(demoFollowUps); setToday(demoToday); setPush("off");
       const sc = q.get("screen") ?? (start === "join" ? "join" : "home");
       if (sc === "entry" || sc === "login" || sc === "join") { setView(sc); return; }
       setView("app");
       if (sc === "leads") setTab("leads");
       if (sc === "follow") setTab("follow");
       if (sc === "scan" || sc === "scan-review") { setTab("scan"); if (sc === "scan-review") setScanStart("review"); }
-      if (sc === "lead" || sc === "outcome") { setTab("leads"); setOpenLead("1"); }
-      if (sc === "outcome") setOutcomeFor({ contactId: "1", startedAt: Date.now() - 60000, followUpId: "f1" });
+      if (sc === "lead" || sc === "outcome") { setTab("leads"); setOpenLead(sc === "outcome" ? "3" : "1"); }
+      if (sc === "outcome") setOutcomeFor({ contactId: "3", startedAt: Date.now() - 60000, followUpId: "f5" });
       if (sc === "profile") setShowProfile(true);
+      if (sc === "due") setDueAlert(demoLeads[2]);
       return;
     }
-    enter().catch(() => setView("entry"));
-  }, [enter, start]);
+    enter().then(() => {
+      if (q.get("lead") || q.get("tab")) { openFromUrl(window.location.href); window.history.replaceState(null, "", "/app"); }
+    }).catch(() => setView("entry"));
+  }, [enter, openFromUrl, start]);
+
+  // Tapping a reminder while the app is already open (sw.js posts this).
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = (e: MessageEvent) => { if (e.data?.type === "cpa-open") openFromUrl(e.data.url); };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, [openFromUrl]);
+
+  // Fresh lists every two minutes and whenever the app comes back to the front.
+  useEffect(() => {
+    if (demo || !profile?.company_id) return;
+    const go = () => { if (document.visibilityState === "visible") refresh(profile).catch(() => {}); };
+    const t = setInterval(go, REFRESH_MS);
+    document.addEventListener("visibilitychange", go);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", go); };
+  }, [demo, profile, refresh]);
 
   // Back from the dialer → ask "What happened?".
   useEffect(() => {
@@ -102,16 +150,33 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
     };
   }, []);
 
+  // In-app reminder: a callback whose time arrives while the app is open gets a
+  // banner — the push reaches the phone when it is closed.
+  const lastTick = useRef(now);
+  useEffect(() => {
+    const from = lastTick.current;
+    lastTick.current = now;
+    if (from === now) return;
+    const hit = leads.find((l) => l.due_at && Date.parse(l.due_at) > from && Date.parse(l.due_at) <= now);
+    if (hit) setDueAlert(hit);
+  }, [now, leads]);
+
   const byId = useMemo(() => new Map(leads.map((l) => [l.id, l])), [leads]);
-  const queue = useMemo(() => [
-    ...leads.filter((l) => laneOf(l) === "call_now"),
-    ...leads.filter((l) => laneOf(l) === "scheduled" && l.due_at && new Date(l.due_at).getTime() < Date.now() + 86400000),
-  ], [leads]);
+  const noteByLead = useMemo(() => new Map(follows.filter((f) => f.contact_id).map((f) => [f.contact_id as string, f])), [follows]);
+  const queue = useMemo(() => callQueue(leads, now), [leads, now]);
+  const fuNow = useMemo(() => leads.filter((l) => fuGroup(l, now) === "now").length, [leads, now]);
 
   function call(lead: Lead, followUpId: string | null = null) {
-    const p: Pending = { contactId: lead.id, startedAt: Date.now(), followUpId };
+    setDueAlert(null);
+    const p: Pending = { contactId: lead.id, startedAt: Date.now(), followUpId: followUpId ?? noteByLead.get(lead.id)?.id ?? null };
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(p));
     window.location.href = `tel:${lead.phone}`;
+  }
+
+  async function turnOnReminders() {
+    if (demo) { setPush("on"); flash("Reminders on"); return; }
+    try { const s = await enableReminders(); setPush(s); flash(s === "on" ? "Reminders on. Your phone will ring for callbacks." : "Reminders are off."); }
+    catch (x: any) { flash(x?.message ?? "Couldn't turn on reminders."); }
   }
 
   if (view === "loading") return <div className="tele"><div className="tele-center"><div className="spinner" /></div></div>;
@@ -126,31 +191,46 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
   return (
     <div className="tele">
       <InstallHint />
+      {dueAlert && (
+        <div className="duebar" role="alert">
+          <span><b>Callback due: {dueAlert.name || dueAlert.phone}</b><small>{noteByLead.get(dueAlert.id)?.note || "The time you booked is now"}</small></span>
+          <button className="tbtn primary sm" onClick={() => call(dueAlert)}>Call</button>
+          <button className="x" onClick={() => setDueAlert(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
       <main className="tele-main">
         {needsCode ? (
           <JoinCode code={code ?? ""} onJoined={() => enter()} />
         ) : tab === "home" ? (
-          <Home profile={profile} today={today} queue={queue} follows={follows} byId={byId}
-            onStart={() => queue[0] && setOpenLead(queue[0].id)} onOpen={setOpenLead}
-            onProfile={() => setShowProfile(true)} onScan={() => setTab("scan")} />
+          <Home profile={profile} today={today} queue={queue} leads={leads} now={now} noteByLead={noteByLead} push={push}
+            onStart={() => queue[0] && setOpenLead(queue[0].id)} onOpen={setOpenLead} onReminders={turnOnReminders}
+            onProfile={() => setShowProfile(true)} onScan={() => setTab("scan")} onFollow={() => setTab("follow")} />
         ) : tab === "leads" ? (
-          <Leads leads={leads} onOpen={setOpenLead} onCall={call} onProfile={() => setShowProfile(true)} />
+          <Leads leads={leads} now={now} onOpen={setOpenLead} onCall={call} onProfile={() => setShowProfile(true)} />
         ) : tab === "scan" ? (
           <ScanTab profile={profile} demo={demo} leads={leads} startAt={scanStart}
-            onAdded={(n) => { flash(`${n} lead${n === 1 ? "" : "s"} added`); if (profile && !demo) refresh(profile); setTab("leads"); }} />
+            onAdded={(n, taken) => {
+              flash(`${n} lead${n === 1 ? "" : "s"} added${taken ? ` · ${taken} already with your team` : ""}`);
+              if (profile && !demo) refresh(profile); setTab("leads");
+            }} />
         ) : (
-          <FollowUps follows={follows} byId={byId} onOpen={setOpenLead} onCall={call} />
+          <FollowUps leads={leads} now={now} noteByLead={noteByLead} push={push} onReminders={turnOnReminders}
+            onOpen={setOpenLead} onCall={call} />
         )}
       </main>
 
       {!needsCode && (
         <nav className="tabbar" aria-label="Main">
-          {([["home", "Home", "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"],
-            ["leads", "Leads", "M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0M12 3a4 4 0 1 1 0 8"],
-            ["scan", "Scan", "M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"],
-            ["follow", "Follow Ups", "M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"]] as [Tab, string, string][]).map(([t, label, d]) => (
-            <button key={t} className={`tab ${tab === t ? "on" : ""} ${t === "scan" ? "tab-scan" : ""}`} onClick={() => { setTab(t); setOpenLead(null); }}>
-              <svg viewBox="0 0 24 24" aria-hidden><path d={d} /></svg>
+          {([["home", "Home", "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z", 0],
+            ["leads", "Leads", "M16 11a4 4 0 1 0-8 0M4 21a8 8 0 0 1 16 0M12 3a4 4 0 1 1 0 8", 0],
+            ["scan", "Scan", "M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10", 0],
+            ["follow", "Follow Ups", "M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0", fuNow]] as [Tab, string, string, number][]).map(([t, label, d, badge]) => (
+            <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => { setTab(t); setOpenLead(null); }}
+              aria-label={badge ? `${label}, ${badge} to call now` : label}>
+              <span className="tab-ic">
+                <svg viewBox="0 0 24 24" aria-hidden><path d={d} /></svg>
+                {badge > 0 && <span className="badge">{badge > 99 ? "99+" : badge}</span>}
+              </span>
               <span>{label}</span>
             </button>
           ))}
@@ -158,35 +238,37 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
       )}
 
       {lead && (
-        <LeadDetail lead={lead} stages={stages} demo={demo}
-          followUpId={follows.find((f) => f.contact_id === lead.id)?.id ?? null}
+        <LeadDetail lead={lead} stages={stages} demo={demo} now={now} followUp={noteByLead.get(lead.id) ?? null}
           onClose={() => setOpenLead(null)} onCall={call}
           onLog={(fid) => setOutcomeFor({ contactId: lead.id, startedAt: Date.now(), followUpId: fid })}
           onNotes={(n) => setLeads((ls) => ls.map((x) => (x.id === lead.id ? { ...x, notes: n } : x)))} />
       )}
 
       {outcomeFor && outcomeLead && (
-        <OutcomeSheet lead={outcomeLead} stages={stages}
+        <OutcomeSheet lead={outcomeLead}
           onClose={() => setOutcomeFor(null)}
           onSave={async (o, note, when) => {
             if (!demo && profile) {
               await saveOutcome(profile, {
                 lead: outcomeLead, outcome: o, note, startedAt: outcomeFor.startedAt, followUpId: outcomeFor.followUpId,
                 stageLabel: stages.find((s) => s.code === o)?.label ?? OUTCOMES.find((x) => x.code === o)?.label ?? o,
-                visitAt: o === "site_visit" ? when : null, callbackAt: o === "follow_up" ? when : null,
+                visitAt: o === "site_visit" ? when : null, callbackAt: o === "follow_up" || o === "interested" ? when : null,
               });
-              refresh(profile);
+              refresh(profile).catch(() => {});
             }
             setOutcomeFor(null);
-            flash("Saved");
+            flash(`Saved. ${afterSave(o, outcomeLead, when)}`);
             const next = queue.find((q) => q.id !== outcomeLead.id);
             setOpenLead(next ? next.id : null);
           }} />
       )}
 
       {showProfile && (
-        <ProfileSheet profile={profile} demo={demo} onClose={() => setShowProfile(false)}
-          onSignOut={async () => { if (!demo) await createClient().auth.signOut(); setShowProfile(false); setView("entry"); }} />
+        <ProfileSheet profile={profile} demo={demo} push={push} onReminders={turnOnReminders} onClose={() => setShowProfile(false)}
+          onSignOut={async () => {
+            if (!demo) { await disableReminders(); await createClient().auth.signOut(); }
+            setShowProfile(false); setView("entry");
+          }} />
       )}
 
       {toast && <div className="toast" role="status">{toast}</div>}
@@ -298,6 +380,7 @@ function JoinCode({ code, onJoined }: { code: string; onJoined: () => void }) {
   );
 }
 
+
 /* ---------- Home ---------- */
 
 function Ring({ value, goal, label, cls }: { value: number; goal: number; label: string; cls: string }) {
@@ -314,38 +397,52 @@ function Ring({ value, goal, label, cls }: { value: number; goal: number; label:
   );
 }
 
-function Home({ profile, today, queue, follows, byId, onStart, onOpen, onProfile, onScan }: {
-  profile: Profile | null; today: Today; queue: Lead[]; follows: FollowUp[]; byId: Map<string, Lead>;
-  onStart: () => void; onOpen: (id: string) => void; onProfile: () => void; onScan: () => void;
+function Home({ profile, today, queue, leads, now, noteByLead, push, onStart, onOpen, onReminders, onProfile, onScan, onFollow }: {
+  profile: Profile | null; today: Today; queue: Lead[]; leads: Lead[]; now: number; noteByLead: Map<string, FollowUp>; push: PushState;
+  onStart: () => void; onOpen: (id: string) => void; onReminders: () => void; onProfile: () => void; onScan: () => void; onFollow: () => void;
 }) {
   const first = (profile?.full_name ?? "").split(" ")[0];
-  const hr = new Date().getHours();
-  const due = follows.filter((f) => new Date(f.due_at).getTime() < Date.now() + 86400000);
+  const hr = new Date(now).getHours();
+  const eod = new Date(now); eod.setHours(23, 59, 59, 999);
+  // Today's callbacks: the ones due now first, then the rest of today.
+  const plan = leads
+    .filter((l) => { const g = fuGroup(l, now); return g === "now" || (g !== null && l.due_at && Date.parse(l.due_at) <= eod.getTime()); })
+    .sort((a, b) => (a.due_at ? Date.parse(a.due_at) : 0) - (b.due_at ? Date.parse(b.due_at) : 0));
+  const nextLater = leads.filter((l) => l.due_at && Date.parse(l.due_at) > now && act(l, now) !== "none")
+    .sort((a, b) => Date.parse(a.due_at!) - Date.parse(b.due_at!))[0];
   return (
     <div className="pad">
       <header className="top">
         <div><small className="muted">{hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening"}</small><h1 className="title">{first || "Hi"}</h1></div>
         <button className="tavatar" onClick={onProfile} aria-label="Profile and settings">{(first[0] ?? "?").toUpperCase()}</button>
       </header>
+
+      <section className="tcard hero">
+        <div className="hero-top">
+          <div><small className="muted">Call now</small><b className="hero-num">{queue.length}</b></div>
+          <p className="muted">{queue.length ? "Late callbacks, new leads and missed calls. Oldest first." : nextLater?.due_at
+            ? `Nobody to call right now. Next callback ${fmtWhen(new Date(nextLater.due_at), new Date(now))}.` : "Nobody to call right now."}</p>
+        </div>
+        <button className="tbtn primary big" onClick={onStart} disabled={!queue.length}>
+          {queue.length ? `Start calling · ${queue[0].name?.split(" ")[0] || queue[0].phone} first` : "All done for now"}
+        </button>
+      </section>
+
+      <Reminders push={push} onTurnOn={onReminders} />
+
       <section className="tcard rings">
         <Ring value={today.calls} goal={GOALS.calls} label="Calls" cls="c1" />
         <Ring value={today.connected} goal={GOALS.connected} label="Connected" cls="c2" />
         <Ring value={today.visits} goal={GOALS.visits} label="Site visits" cls="c3" />
       </section>
-      <button className="tbtn primary big" onClick={onStart} disabled={!queue.length}>
-        {queue.length ? `Start calling · ${queue.length} lead${queue.length === 1 ? "" : "s"}` : "No calls due — nice work"}
-      </button>
-      <h2 className="sec">Today&apos;s plan</h2>
+
+      <h2 className="sec">Today&apos;s callbacks</h2>
       <div className="tcard list">
-        {due.length === 0 && <p className="tempty">No follow-ups due today.</p>}
-        {due.slice(0, 5).map((f) => (
-          <button key={f.id} className="row" onClick={() => f.contact_id && onOpen(f.contact_id)}>
-            <span className={`dot ${new Date(f.due_at).getTime() < Date.now() ? "late" : ""}`} />
-            <span className="row-main"><b>{f.name || byId.get(f.contact_id ?? "")?.name || f.phone}</b><small>{f.note || "Follow up"}</small></span>
-            <span className="row-meta">{fmtTime(f.due_at)}</span>
-          </button>
-        ))}
+        {plan.length === 0 && <p className="tempty">No callbacks booked for today.</p>}
+        {plan.slice(0, 5).map((l) => <FuRow key={l.id} lead={l} now={now} note={noteByLead.get(l.id)?.note} onOpen={onOpen} />)}
+        {plan.length > 5 && <button className="row more" onClick={onFollow}>See all {plan.length} in Follow Ups</button>}
       </div>
+
       <button className="tcard scan-cta" onClick={onScan}>
         <b>Scan a lead list</b><small>Photo of a register, a screenshot or pasted WhatsApp text → leads in seconds</small>
       </button>
@@ -353,28 +450,36 @@ function Home({ profile, today, queue, follows, byId, onStart, onOpen, onProfile
   );
 }
 
+/** Turn on reminders: said once, in plain words, where the rep already looks. */
+function Reminders({ push, onTurnOn }: { push: PushState; onTurnOn: () => void }) {
+  if (push === "on" || push === "unsupported") return null;
+  return (
+    <section className="tcard remind">
+      <span className="remind-ic" aria-hidden>🔔</span>
+      <span className="row-main">
+        <b>{push === "blocked" ? "Reminders are blocked" : "Callback reminders"}</b>
+        <small>{push === "install-first" ? "On iPhone: tap Share, then “Add to Home Screen”. Open the app from there and turn reminders on."
+          : push === "blocked" ? "Allow notifications for callproai.in in your browser settings."
+          : "Your phone rings at the time you booked, even when this app is closed."}</small>
+      </span>
+      {push === "off" && <button className="tbtn primary sm" onClick={onTurnOn}>Turn on</button>}
+    </section>
+  );
+}
+
 /* ---------- Leads ---------- */
 
-const LANES: { id: Lane; label: string; explain: string }[] = [
-  { id: "call_now", label: "Call now", explain: "Overdue and ready to call" },
-  { id: "scheduled", label: "Scheduled", explain: "Due later today or booked ahead" },
-  { id: "win_back", label: "Win back", explain: "Gone quiet or said no — worth one more try" },
-];
-
-function Leads({ leads, onOpen, onCall, onProfile }: {
-  leads: Lead[]; onOpen: (id: string) => void; onCall: (l: Lead) => void; onProfile: () => void;
+function Leads({ leads, now, onOpen, onCall, onProfile }: {
+  leads: Lead[]; now: number; onOpen: (id: string) => void; onCall: (l: Lead) => void; onProfile: () => void;
 }) {
-  const [lane, setLane] = useState<Lane>("call_now");
+  const [chip, setChip] = useState<Chip>("call_now");
   const [q, setQ] = useState("");
-  const counts = useMemo(() => {
-    const c: Record<Lane, number> = { call_now: 0, scheduled: 0, win_back: 0 };
-    leads.forEach((l) => { const x = laneOf(l); if (x) c[x]++; });
-    return c;
-  }, [leads]);
+  const counts = useMemo(() => Object.fromEntries(CHIPS.map((c) => [c.id, leads.filter((l) => inChip(l, c.id, now)).length])) as Record<Chip, number>, [leads, now]);
   const s = q.trim().toLowerCase();
+  const digits = s.replace(/\D/g, "");
   const shown = s
-    ? leads.filter((l) => (l.name ?? "").toLowerCase().includes(s) || l.phone.includes(s.replace(/\D/g, "") || "\u0000"))
-    : leads.filter((l) => laneOf(l) === lane);
+    ? leads.filter((l) => (l.name ?? "").toLowerCase().includes(s) || (digits.length >= 3 && l.phone.replace(/\D/g, "").includes(digits)))
+    : chip === "call_now" ? callQueue(leads, now) : leads.filter((l) => inChip(l, chip, now));
   return (
     <div className="pad">
       <header className="top">
@@ -384,56 +489,70 @@ function Leads({ leads, onOpen, onCall, onProfile }: {
       <input className="search" type="search" placeholder="Search name or number" value={q} onChange={(e) => setQ(e.target.value)} />
       {!s && (
         <>
-          <div className="tseg lanes">
-            {LANES.map((l) => (
-              <button key={l.id} className={lane === l.id ? "on" : ""} onClick={() => setLane(l.id)}>
-                {l.label} <span className="count">{counts[l.id]}</span>
+          <div className="chips" role="tablist">
+            {CHIPS.map((c) => (
+              <button key={c.id} role="tab" aria-selected={chip === c.id} className={`tchip ${chip === c.id ? "on" : ""} ${c.id === "overdue" && counts.overdue ? "warn" : ""}`}
+                onClick={() => setChip(c.id)}>
+                {c.label} <span className="count">{counts[c.id]}</span>
               </button>
             ))}
           </div>
-          <p className="muted explain">{LANES.find((l) => l.id === lane)?.explain}</p>
+          <p className="muted explain">{CHIPS.find((c) => c.id === chip)?.explain}</p>
         </>
       )}
       <div className="tcard list">
-        {shown.length === 0 && <p className="tempty">{s ? "No match." : "Nothing here right now."}</p>}
-        {shown.map((l) => (
-          <div key={l.id} className="row">
-            <button className="row-main tap" onClick={() => onOpen(l.id)}>
-              <b>{l.name || l.phone}</b>
-              <small>{label(l.status)}{l.due_at ? ` · ${fmtTime(l.due_at)}` : ""}</small>
-            </button>
-            <button className="callbtn" onClick={() => onCall(l)} aria-label={`Call ${l.name ?? l.phone}`}>
-              <svg viewBox="0 0 24 24" aria-hidden><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /></svg>
-            </button>
-          </div>
-        ))}
+        {shown.length === 0 && <p className="tempty">{s ? "No match." : chip === "call_now" ? "Nobody to call right now. Booked callbacks come here on their own, at their time." : "Nothing here right now."}</p>}
+        {shown.slice(0, 300).map((l) => {
+          const late = l.due_at && Date.parse(l.due_at) <= now ? lateBy(l.due_at, now) : null;
+          return (
+            <div key={l.id} className="row">
+              <button className="row-main tap" onClick={() => onOpen(l.id)}>
+                <b>{l.name || l.phone}</b>
+                <small>{label(l.status)}{l.due_at ? ` · ${fmtTime(l.due_at)}` : ""}{late ? <span className="late"> · {late}</span> : null}</small>
+              </button>
+              <button className="callbtn" onClick={() => onCall(l)} aria-label={`Call ${l.name ?? l.phone}`}>
+                <svg viewBox="0 0 24 24" aria-hidden><path d={PHONE} /></svg>
+              </button>
+            </div>
+          );
+        })}
       </div>
+      {shown.length > 300 && <p className="fine">Showing 300 of {shown.length}. Search to find the rest.</p>}
     </div>
   );
 }
 
 /* ---------- Lead detail ---------- */
 
-function LeadDetail({ lead, stages, demo, followUpId, onClose, onCall, onLog, onNotes }: {
-  lead: Lead; stages: Stage[]; demo: boolean; followUpId: string | null;
+function LeadDetail({ lead, stages, demo, now, followUp, onClose, onCall, onLog, onNotes }: {
+  lead: Lead; stages: Stage[]; demo: boolean; now: number; followUp: FollowUp | null;
   onClose: () => void; onCall: (l: Lead, fid: string | null) => void; onLog: (fid: string | null) => void; onNotes: (n: string) => void;
 }) {
   const [notes, setNotes] = useState(lead.notes ?? "");
-  const [saved, setSaved] = useState(false);
-  useEffect(() => { setNotes(lead.notes ?? ""); setSaved(false); }, [lead.id, lead.notes]);
+  const [saved, setSaved] = useState<"" | "saving" | "saved" | "error">("");
+  useEffect(() => { setNotes(lead.notes ?? ""); setSaved(""); }, [lead.id, lead.notes]);
   const steps = stages.filter((s) => s.rep_visible);
-  const idx = steps.findIndex((s) => s.code === lead.status);
+  const idx = steps.findIndex((s) => s.code === (lead.stage ?? lead.status));
   const wa = `https://wa.me/91${lead.phone.replace(/\D/g, "").slice(-10)}`;
+  const due = lead.due_at ? Date.parse(lead.due_at) : null;
+  const late = due !== null && due <= now ? lateBy(lead.due_at!, now) : null;
+  const fid = followUp?.id ?? null;
   return (
     <div className="sheet-full" role="dialog" aria-label={lead.name ?? lead.phone}>
       <header className="detail-top">
-        <button className="back" onClick={onClose}>‹ Leads</button>
+        <button className="back" onClick={onClose}>‹ Back</button>
       </header>
       <div className="pad">
         <h1 className="title">{lead.name || lead.phone}</h1>
         <p className="muted">{lead.phone}{lead.company_name ? ` · ${lead.company_name}` : ""}</p>
-        {steps.length > 0 && (
-          <div className="stepper" aria-label={`Stage: ${label(lead.status)}`}>
+        {due !== null && (
+          <div className={`nextcall ${due <= now ? "now" : ""}`}>
+            <b>{due <= now ? `Call now${late ? ` · ${late}` : ""}` : `Next call ${fmtWhen(new Date(due), new Date(now))}`}</b>
+            {followUp?.note && <small>{followUp.note}</small>}
+          </div>
+        )}
+        {steps.length > 0 && idx >= 0 && (
+          <div className="stepper" aria-label={`Stage: ${steps[idx].label}`}>
             {steps.map((s, i) => (
               <div key={s.code} className={`step ${i < idx ? "done" : ""} ${i === idx ? "cur" : ""}`}>
                 <span className="sdot" /><small>{s.label}</small>
@@ -443,16 +562,20 @@ function LeadDetail({ lead, stages, demo, followUpId, onClose, onCall, onLog, on
         )}
         {idx < 0 && <p className="pill">{label(lead.status)}</p>}
         <div className="actions">
-          <button className="tbtn primary big" onClick={() => onCall(lead, followUpId)}>Call {lead.name?.split(" ")[0] ?? ""}</button>
+          <button className="tbtn primary big" onClick={() => onCall(lead, fid)}>Call {lead.name?.split(" ")[0] ?? ""}</button>
           <a className="tbtn wa" href={wa} target="_blank" rel="noreferrer">WhatsApp</a>
         </div>
-        <button className="link" onClick={() => onLog(followUpId)}>Already called? Log what happened</button>
+        <button className="link" onClick={() => onLog(fid)}>Already called? Save what happened</button>
         <h2 className="sec">Notes</h2>
         <div className="tcard form">
-          <textarea rows={4} value={notes} placeholder="Budget, location, family, timeline…" onChange={(e) => { setNotes(e.target.value); setSaved(false); }} />
-          <button className="tbtn" onClick={async () => { if (!demo) await updateNotes(lead.id, notes); onNotes(notes); setSaved(true); }}>
-            {saved ? "Saved ✓" : "Save note"}
+          <textarea rows={4} value={notes} placeholder="Budget, location, family, timeline…" onChange={(e) => { setNotes(e.target.value); setSaved(""); }} />
+          <button className="tbtn" disabled={saved === "saving"} onClick={async () => {
+            setSaved("saving");
+            try { if (!demo) await updateNotes(lead.id, notes); onNotes(notes); setSaved("saved"); } catch { setSaved("error"); }
+          }}>
+            {saved === "saved" ? "Saved ✓" : saved === "saving" ? "Saving…" : "Save note"}
           </button>
+          {saved === "error" && <p className="err">Couldn&apos;t save the note. Check your signal and try again.</p>}
         </div>
       </div>
     </div>
@@ -462,14 +585,18 @@ function LeadDetail({ lead, stages, demo, followUpId, onClose, onCall, onLog, on
 /* ---------- Outcome sheet ---------- */
 
 function OutcomeSheet({ lead, onClose, onSave }: {
-  lead: Lead; stages: Stage[]; onClose: () => void; onSave: (o: string, note: string, when: Date | null) => Promise<void>;
+  lead: Lead; onClose: () => void; onSave: (o: string, note: string, when: Date | null) => Promise<void>;
 }) {
   const [o, setO] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const [when, setWhen] = useState(defaultWhen());
+  const [when, setWhen] = useState<Date | null>(null);
+  const [custom, setCustom] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const needsWhen = o === "site_visit" || o === "follow_up";
+  const needsWhen = o === "site_visit" || o === "follow_up" || o === "interested";
+  const picks = o === "site_visit" ? visitPicks() : callbackPicks();
+  const pick = (code: string) => { setO(code); setWhen(null); setCustom(false); setErr(null); };
+  const after = o ? afterSave(o, lead, when) : "";
   return (
     <div className="scrim" onClick={onClose}>
       <div className="sheet" role="dialog" aria-label="What happened?" onClick={(e) => e.stopPropagation()}>
@@ -478,21 +605,32 @@ function OutcomeSheet({ lead, onClose, onSave }: {
         <p className="muted">{lead.name || lead.phone}</p>
         <div className="outcomes">
           {OUTCOMES.map((x) => (
-            <button key={x.code} className={`oc ${o === x.code ? "on" : ""}`} onClick={() => setO(x.code)}>{x.label}</button>
+            <button key={x.code} className={`oc ${o === x.code ? "on" : ""}`} onClick={() => pick(x.code)}>{x.label}</button>
           ))}
         </div>
         {needsWhen && (
-          <label className="when">{o === "site_visit" ? "Visit on" : "Call back on"}
-            <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
-          </label>
+          <div className="when">
+            <b>{o === "site_visit" ? "When is the site visit?" : "When will you call again?"}</b>
+            <div className="picks">
+              {picks.map((p) => (
+                <button key={p.label} className={`tchip ${!custom && when?.getTime() === p.at.getTime() ? "on" : ""}`}
+                  onClick={() => { setWhen(p.at); setCustom(false); }}>{p.label}</button>
+              ))}
+              <button className={`tchip ${custom ? "on" : ""}`} onClick={() => { setCustom(true); setWhen(null); }}>Pick date &amp; time</button>
+            </div>
+            {custom && <input type="datetime-local" onChange={(e) => setWhen(e.target.value ? new Date(e.target.value) : null)} />}
+          </div>
         )}
+        {after && <p className="after">→ {after}</p>}
         <textarea rows={2} placeholder="Add a note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
         {err && <p className="err">{err}</p>}
-        <button className="tbtn primary big" disabled={!o || busy} onClick={async () => {
-          if (!o) return; setBusy(true); setErr(null);
-          try { await onSave(o, note.trim(), needsWhen ? new Date(when) : null); }
+        <button className="tbtn primary big" disabled={!o || busy || (needsWhen && !when)} onClick={async () => {
+          if (!o) return;
+          if (needsWhen && when && when.getTime() < Date.now() - 60000) { setErr("That time has already passed. Pick a later one."); return; }
+          setBusy(true); setErr(null);
+          try { await onSave(o, note.trim(), needsWhen ? when : null); }
           catch (x: any) { setErr(x?.message ?? "Couldn't save. Try again."); setBusy(false); }
-        }}>{busy ? "Saving…" : "Save & next call"}</button>
+        }}>{busy ? "Saving…" : !o ? "Pick what happened" : needsWhen && !when ? "Pick a time" : "Save & next call"}</button>
       </div>
     </div>
   );
@@ -500,49 +638,77 @@ function OutcomeSheet({ lead, onClose, onSave }: {
 
 /* ---------- Follow Ups ---------- */
 
-function FollowUps({ follows, byId, onOpen, onCall }: {
-  follows: FollowUp[]; byId: Map<string, Lead>; onOpen: (id: string) => void; onCall: (l: Lead, fid: string | null) => void;
+const FU_HEAD: Record<FuGroup, { title: string; explain: string }> = {
+  now: { title: "Call now", explain: "Their time has come. Oldest first." },
+  done: { title: "Done today", explain: "You updated these today. Their next call is booked." },
+  later: { title: "Booked for later", explain: "They move to Call now on their own, at their time." },
+};
+
+function FuRow({ lead, now, note, onOpen, onCall }: {
+  lead: Lead; now: number; note?: string | null; onOpen: (id: string) => void; onCall?: (l: Lead) => void;
 }) {
-  const [chip, setChip] = useState<"all" | "overdue" | "today" | "upcoming">("all");
-  const now = Date.now();
-  const eod = new Date(); eod.setHours(23, 59, 59, 999);
-  const group = (f: FollowUp) => { const t = new Date(f.due_at).getTime(); return t < now ? "overdue" : t <= eod.getTime() ? "today" : "upcoming"; };
-  const groups = (["overdue", "today", "upcoming"] as const).filter((g) => chip === "all" || chip === g);
+  const due = lead.due_at ? Date.parse(lead.due_at) : null;
+  const late = due !== null && due <= now ? lateBy(lead.due_at!, now) : null;
+  return (
+    <div className="row">
+      <span className={`dot ${late ? "late" : due !== null && due <= now ? "now" : ""}`} />
+      <button className="row-main tap" onClick={() => onOpen(lead.id)}>
+        <b>{lead.name || lead.phone}</b>
+        <small>{note || label(lead.status)}</small>
+      </button>
+      <span className={`row-meta ${late ? "late" : ""}`}>{late ?? (lead.due_at ? fmtTime(lead.due_at) : "No time set")}</span>
+      {onCall && <button className="callbtn" onClick={() => onCall(lead)} aria-label={`Call ${lead.name ?? lead.phone}`}>
+        <svg viewBox="0 0 24 24" aria-hidden><path d={PHONE} /></svg>
+      </button>}
+    </div>
+  );
+}
+
+function FollowUps({ leads, now, noteByLead, push, onReminders, onOpen, onCall }: {
+  leads: Lead[]; now: number; noteByLead: Map<string, FollowUp>; push: PushState; onReminders: () => void;
+  onOpen: (id: string) => void; onCall: (l: Lead) => void;
+}) {
+  const [open, setOpen] = useState<Record<FuGroup, boolean>>({ now: true, done: false, later: false });
+  const groups = useMemo(() => {
+    const g: Record<FuGroup, Lead[]> = { now: [], done: [], later: [] };
+    leads.forEach((l) => { const x = fuGroup(l, now); if (x) g[x].push(l); });
+    const t = (l: Lead) => (l.due_at ? Date.parse(l.due_at) : 0);
+    (Object.keys(g) as FuGroup[]).forEach((k) => g[k].sort((a, b) => t(a) - t(b)));
+    return g;
+  }, [leads, now]);
   return (
     <div className="pad">
       <header className="top"><h1 className="title">Follow Ups</h1></header>
-      <div className="chips">
-        {(["all", "overdue", "today", "upcoming"] as const).map((c) => (
-          <button key={c} className={`tchip ${chip === c ? "on" : ""}`} onClick={() => setChip(c)}>
-            {c[0].toUpperCase() + c.slice(1)} <span className="count">{c === "all" ? follows.length : follows.filter((f) => group(f) === c).length}</span>
-          </button>
-        ))}
-      </div>
-      {groups.map((g) => {
-        const items = follows.filter((f) => group(f) === g);
+      <p className="muted explain">Callbacks you booked. Ring the first group. The others come up on their own, at their time.</p>
+      <Reminders push={push} onTurnOn={onReminders} />
+      {(["now", "done", "later"] as FuGroup[]).map((k) => {
+        const items = groups[k];
+        if (k === "now" && !items.length) {
+          return (
+            <section key={k} className="tcard allclear">
+              <b>All follow-ups done</b>
+              <small>{groups.later.length ? `No call is due right now. ${groups.later.length} are booked for later — they show up here on their own, at their time.`
+                : "No call is due right now. Nothing is booked for later either."}</small>
+            </section>
+          );
+        }
         if (!items.length) return null;
         return (
-          <section key={g}>
-            <h2 className={`sec ${g === "overdue" ? "late" : ""}`}>{g[0].toUpperCase() + g.slice(1)}</h2>
-            <div className="tcard list">
-              {items.map((f) => {
-                const l = f.contact_id ? byId.get(f.contact_id) : undefined;
-                return (
-                  <div key={f.id} className="row">
-                    <button className="row-main tap" onClick={() => l && onOpen(l.id)}>
-                      <b>{f.name || l?.name || f.phone}</b><small>{f.note || "Follow up"} · {fmtTime(f.due_at)}</small>
-                    </button>
-                    {l && <button className="callbtn" onClick={() => onCall(l, f.id)} aria-label="Call">
-                      <svg viewBox="0 0 24 24" aria-hidden><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" /></svg>
-                    </button>}
-                  </div>
-                );
-              })}
-            </div>
+          <section key={k}>
+            <button className={`sec fuhead ${k === "now" ? "late" : ""}`} aria-expanded={open[k]} onClick={() => setOpen({ ...open, [k]: !open[k] })}>
+              <span>{FU_HEAD[k].title} · {items.length}</span><span className="chev">{open[k] ? "Hide" : "Show"}</span>
+            </button>
+            {open[k] && (
+              <>
+                <p className="muted explain">{FU_HEAD[k].explain}</p>
+                <div className="tcard list">
+                  {items.map((l) => <FuRow key={l.id} lead={l} now={now} note={noteByLead.get(l.id)?.note} onOpen={onOpen} onCall={onCall} />)}
+                </div>
+              </>
+            )}
           </section>
         );
       })}
-      {follows.length === 0 && <p className="tempty">You&apos;re all caught up.</p>}
     </div>
   );
 }
@@ -560,7 +726,9 @@ function isStandalone() {
   return window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true;
 }
 
-function ProfileSheet({ profile, demo, onClose, onSignOut }: { profile: Profile | null; demo: boolean; onClose: () => void; onSignOut: () => void }) {
+function ProfileSheet({ profile, demo, push, onReminders, onClose, onSignOut }: {
+  profile: Profile | null; demo: boolean; push: PushState; onReminders: () => void; onClose: () => void; onSignOut: () => void;
+}) {
   const [canInstall, setCanInstall] = useState(false);
   const [ios, setIos] = useState(false);
   useEffect(() => { setCanInstall(!!deferredPrompt && !isStandalone()); setIos(isIOS() && !isStandalone()); }, []);
@@ -571,10 +739,17 @@ function ProfileSheet({ profile, demo, onClose, onSignOut }: { profile: Profile 
         <h2>{profile?.full_name || "You"}</h2>
         <p className="muted">Telecaller{demo ? " · demo" : ""}</p>
         <div className="tcard list">
+          {push !== "unsupported" && (
+            <button className="row" onClick={push === "off" ? onReminders : undefined}>
+              <span className="row-main"><b>Callback reminders</b>
+                <small>{push === "on" ? "On. Your phone rings at the time you booked." : push === "blocked" ? "Blocked in browser settings" : push === "install-first" ? "Add to Home Screen first" : "Off. Tap to turn on."}</small></span>
+              <span className={`row-meta ${push === "on" ? "ok" : ""}`}>{push === "on" ? "On" : "Off"}</span>
+            </button>
+          )}
           {canInstall && <button className="row" onClick={async () => { await deferredPrompt?.prompt(); deferredPrompt = null; setCanInstall(false); }}>
             <span className="row-main"><b>Install app</b><small>Add Call Pro AI to your home screen</small></span></button>}
           {ios && <div className="row"><span className="row-main"><b>Install on iPhone</b><small>Tap Share, then &ldquo;Add to Home Screen&rdquo;</small></span></div>}
-          <button className="row" onClick={onSignOut}><span className="row-main"><b className="danger">Sign out</b></span></button>
+          <button className="row" onClick={onSignOut}><span className="row-main"><b className="danger">Sign out</b><small>This phone stops getting your reminders</small></span></button>
         </div>
       </div>
     </div>
@@ -604,6 +779,8 @@ function InstallHint() {
 
 /* ---------- helpers ---------- */
 
+const PHONE = "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2";
+
 function label(code: string) {
   return OUTCOMES.find((o) => o.code === code)?.label ?? code.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
@@ -613,10 +790,7 @@ function fmtTime(iso: string) {
   if (d.toDateString() === now.toDateString()) return t;
   const tm = new Date(now); tm.setDate(now.getDate() + 1);
   if (d.toDateString() === tm.toDateString()) return `Tomorrow ${t}`;
+  const ys = new Date(now); ys.setDate(now.getDate() - 1);
+  if (d.toDateString() === ys.toDateString()) return `Yesterday ${t}`;
   return `${d.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} ${t}`;
-}
-function defaultWhen() {
-  const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(11, 0, 0, 0);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
