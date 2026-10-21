@@ -6,6 +6,14 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-21 · Grok Bot · site999: adaptive by business type + warm-lead flow
+- `TQ` map in `site999/index.html` (13 types + Other): type step title, 3–5 type questions, services label/examples, brand/one-liner placeholders, CTA text per action (clinic → "Book appointment", restaurant → "Order on WhatsApp", real estate → "Book a site visit"), designer tips, and fallback preview copy (no filler text/grey cards on skipped answers).
+- Saved as `data.type_answers` = [{q, a}] (tq_* keys removed before insert). Shown in site999/admin (own group + CSV column) and super admin enquiries detail.
+- Warm-lead flow: landing says "Thanks for messaging us on WhatsApp…". `?n=&w=&src=&utm_*` prefill name/number (contact fields hidden if both valid), greeting by name, params saved in `data.source`.
+- Core = 3 steps: contact + type → type questions + main goal (`goal1`, required) → call time (`call_day` + `call_slot`, required → `data.call_time`) + consent → send. Steps 3–7 are optional "Tell us more" behind a button.
+- Call time is picked BEFORE send (table is insert-only for anon, so it cannot be added after). Done screen shows it big. Both admins show "📞 Call them: …" and have a personal-link maker (name + number + ad → URL).
+- Tested clinic (with prefill), restaurant (incl. Tell us more), real estate end to end; rows deleted. Admin tsc + lint pass.
+
 ## 2026-10-21 · Grok Bot · site999 preview: badge + 3D sheet (option D)
 - Phones (<900px): steps show only the form. A pulsing "Preview" badge with the AI designer sits above Next; it opens a full-screen tilted 3D sheet of the live preview. Nudge "Your site updated. Tap to see" after brand/type and other key answers (max once per 8s).
 - Preview restyled dark-gold. One primary CTA (from the client's main action) in hero + contact; 2-letter monogram logo; no photo box unless a photo is uploaded.
