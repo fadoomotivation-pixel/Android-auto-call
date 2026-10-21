@@ -5,20 +5,8 @@
 import { createClient } from "@/lib/supabase/client";
 import type { ScanRow } from "./scanParser";
 
-export type Lead = {
-  id: string;
-  name: string | null;
-  phone: string;
-  status: string;
-  temperature: string | null;
-  attempts: number;
-  notes: string | null;
-  company_name: string | null;
-  updated_at: string | null;
-  action_state?: string | null;
-  due_at?: string | null;
-  last_call_at?: string | null;
-};
+import type { Lead } from "./types";
+export type { Lead };
 export type Stage = { code: string; label: string; sort_order: number; is_terminal: boolean; rep_visible: boolean };
 export type FollowUp = { id: string; contact_id: string | null; phone: string | null; name: string | null; due_at: string; note: string | null };
 export type Profile = { id: string; company_id: string | null; full_name: string | null; role: string | null };
@@ -92,12 +80,15 @@ export async function loadLeads(uid: string): Promise<Lead[]> {
   const [{ data: c }, { data: w }] = await Promise.all([
     sb.from("contacts").select("id, name, phone, status, temperature, attempts, notes, company_name, updated_at")
       .eq("salesperson_id", uid).order("updated_at", { ascending: false }).limit(1000),
-    sb.from("v_lead_workstate").select("contact_id, action_state, due_at, last_call_at")
+    sb.from("v_lead_workstate").select("contact_id, action_state, due_at, last_call_at, handled_today, stage")
       .eq("salesperson_id", uid).limit(2000),
   ]);
   const ws = new Map<string, any>((w ?? []).map((r: any) => [r.contact_id, r]));
-  return (c ?? []).map((r: any) => ({ ...r, attempts: r.attempts ?? 0, ...(ws.get(r.id) ? {
-    action_state: ws.get(r.id).action_state, due_at: ws.get(r.id).due_at, last_call_at: ws.get(r.id).last_call_at } : {}) }));
+  return (c ?? []).map((r: any) => {
+    const x = ws.get(r.id);
+    return { ...r, attempts: r.attempts ?? 0, ...(x ? { action_state: x.action_state, due_at: x.due_at,
+      last_call_at: x.last_call_at, handled_today: x.handled_today, stage: x.stage } : {}) };
+  });
 }
 
 export async function loadStages(): Promise<Stage[]> {
@@ -183,6 +174,12 @@ export async function saveOutcome(p: Profile, i: SaveInput) {
   must(await sb.from("lead_activities").insert(acts.map(([type, detail]) => ({ company_id: p.company_id, contact_id: i.lead.id,
     actor_id: p.id, actor_name: p.full_name, type, detail }))));
 
+  // Answering a callback FINISHES that callback, so it closes before the next
+  // one is booked. The other order found the same pending row, moved it to
+  // tomorrow, then marked it done — a "No answer" from Follow Ups lost its retry
+  // and the lead fell out of every list. Android closes first for this reason.
+  if (i.followUpId) must(await sb.from("follow_ups").update({ status: "done", completed_at: new Date().toISOString() }).eq("id", i.followUpId));
+
   if (RETRY.has(i.outcome)) {
     const tries = (i.lead.attempts ?? 0) + 1;
     const bump: Record<string, unknown> = { attempts: tries };
@@ -191,8 +188,105 @@ export async function saveOutcome(p: Profile, i: SaveInput) {
     if (tries < 3) await scheduleFollowUp(p, i.lead, nextAttempt(tries), `Attempt ${tries + 1} — no answer last time`, false);
   } else if (i.outcome === "follow_up" && i.callbackAt) {
     await scheduleFollowUp(p, i.lead, i.callbackAt, i.note || "Call back", true);
+  } else if (i.outcome === "interested" && i.callbackAt) {
+    // Android asks "When will you call again?" after Interested. Without a
+    // time the lead lands in "No step" and goes cold.
+    await scheduleFollowUp(p, i.lead, i.callbackAt, i.note || "Interested — call again", false);
   }
-  if (i.followUpId) must(await sb.from("follow_ups").update({ status: "done", completed_at: new Date().toISOString() }).eq("id", i.followUpId));
+}
+
+/** What happens to the lead after each answer, said before the rep saves. */
+export function afterSave(code: string, lead: Lead, when: Date | null, now = new Date()): string {
+  const t = (d: Date) => fmtWhen(d, now);
+  switch (code) {
+    case "no_answer": case "busy": case "wrong_person": {
+      const tries = (lead.attempts ?? 0) + 1;
+      return tries >= 3 ? "3rd try with no answer. Marked cold. It comes back to Call now tomorrow."
+        : `Back in Call now ${t(nextAttempt(tries, now))}. We'll remind you.`;
+    }
+    case "follow_up": return when ? `We'll remind you ${t(when)}.` : "Pick a time to call back.";
+    case "interested": return when ? `Next call ${t(when)}. We'll remind you.` : "Pick when you'll call again.";
+    case "site_visit": return when ? `Visit booked for ${t(when)}.` : "Pick the visit day.";
+    case "not_interested": return "The lead closes. No more reminders.";
+    case "invalid": return "Number marked wrong. The lead closes.";
+    default: return "";
+  }
+}
+
+export function fmtWhen(d: Date, now = new Date()): string {
+  const time = d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(d) - day(now)) / 86400000);
+  if (diff === 0) return `today ${time}`;
+  if (diff === 1) return `tomorrow ${time}`;
+  return `${d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}, ${time}`;
+}
+
+/* ---------- Scan: who already has these numbers ---------- */
+
+export type Known = "mine" | "team" | "dnc";
+
+/** Company-wide, from scan_known_phones (migration 0229). null = the check
+ *  could not run; the caller falls back to the rep's own leads. */
+export async function knownPhones(phones: string[]): Promise<Map<string, Known> | null> {
+  if (!phones.length) return new Map();
+  const { data, error } = await createClient().rpc("scan_known_phones", { p_phones: phones });
+  if (error) return null;
+  return new Map((data as { phone: string; state: Known }[]).map((r) => [r.phone, r.state]));
+}
+
+/* ---------- Reminders (Web Push) ---------- */
+
+export type PushState = "on" | "off" | "blocked" | "install-first" | "unsupported";
+
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+const standalone = () => window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true;
+
+export async function pushState(): Promise<PushState> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return "unsupported";
+  // iPhone only allows web push for an app added to the Home Screen.
+  if (!("PushManager" in window)) return isIOS() && !standalone() ? "install-first" : "unsupported";
+  if (Notification.permission === "denied") return "blocked";
+  const reg = await navigator.serviceWorker.getRegistration("/app");
+  const sub = await reg?.pushManager.getSubscription();
+  return sub && Notification.permission === "granted" ? "on" : "off";
+}
+
+function keyBytes(b64: string): ArrayBuffer {
+  const s = atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64.length + 3) % 4));
+  const out = new Uint8Array(new ArrayBuffer(s.length));
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out.buffer;
+}
+
+/** Must run from a tap: browsers only show the permission prompt then. */
+export async function enableReminders(): Promise<PushState> {
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return perm === "denied" ? "blocked" : "off";
+  const reg = (await navigator.serviceWorker.getRegistration("/app"))
+    ?? (await navigator.serviceWorker.register("/sw.js", { scope: "/app" }));
+  await navigator.serviceWorker.ready;
+  const sb = createClient();
+  const { data, error } = await sb.functions.invoke("web-push", { body: { action: "key" } });
+  if (error || !data?.publicKey) throw new Error("Reminders aren't ready yet. Try again later.");
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(data.publicKey) });
+  const j = sub.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
+  const { error: e2 } = await sb.rpc("web_push_subscribe", {
+    p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_user_agent: navigator.userAgent });
+  if (e2) throw new Error("Reminders aren't ready yet. Try again later.");
+  return "on";
+}
+
+/** On sign-out: this phone must stop ringing for this rep. */
+export async function disableReminders(): Promise<void> {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration("/app");
+    const sub = await reg?.pushManager.getSubscription();
+    if (!sub) return;
+    await createClient().rpc("web_push_unsubscribe", { p_endpoint: sub.endpoint });
+    await sub.unsubscribe();
+  } catch { /* signing out must never fail because of this */ }
 }
 
 /** Mirrors Android addLead for Scan list rows. Returns how many were really

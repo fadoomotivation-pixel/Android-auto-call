@@ -11,7 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:scan": "rm -rf .tmp-test && tsc --outDir .tmp-test --module commonjs --target es2022 --types node --esModuleInterop --skipLibCheck lib/tele/scanParser.ts lib/tele/scanParser.test.ts && node --test .tmp-test/scanParser.test.js"
+    "test:scan": "rm -rf .tmp-test && tsc --outDir .tmp-test --module commonjs --target es2022 --types node --esModuleInterop --skipLibCheck lib/tele/scanParser.ts lib/tele/scanParser.test.ts lib/tele/types.ts lib/tele/work.ts lib/tele/work.test.ts && node --test .tmp-test/scanParser.test.js .tmp-test/work.test.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

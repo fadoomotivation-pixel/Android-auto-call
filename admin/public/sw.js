@@ -52,3 +52,32 @@ self.addEventListener("fetch", (e) => {
     );
   }
 });
+
+// Follow-up reminders (supabase/functions/web-push). The payload is the whole
+// message, so nothing is fetched — it shows even with no signal left.
+self.addEventListener("push", (e) => {
+  let m = {};
+  try { m = e.data ? e.data.json() : {}; } catch { m = { title: "Call Pro AI", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(m.title || "Callback due", {
+    body: m.body || "",
+    tag: m.tag || "fu",
+    renotify: true,
+    requireInteraction: true,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { url: m.url || "/app?tab=follow" },
+  }));
+});
+
+// Tap → the lead. An app window already open is told which lead to show (no
+// reload, nothing typed is lost); otherwise a new one opens on it.
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || "/app", self.location.origin).href;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+    const w = wins.find((c) => new URL(c.url).pathname.startsWith("/app"));
+    if (!w) return self.clients.openWindow(url);
+    w.postMessage({ type: "cpa-open", url });
+    return w.focus();
+  }));
+});
