@@ -6,6 +6,12 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-22 · Grok Bot · site999: ₹999 offer back, live preview removed
+- Landing: calm "Launch offer" card (₹999, 5 pages, free domain 1st year, basic SEO, AI-made images, mobile-ready, hosting). Free-domain countdown is 3 days from this visitor's first visit (localStorage `o999_offer_t`); set `OFFER_END` (ISO with +05:30) to use one end time for everyone. After it ends: "Domain at actual cost". Fine print: standard .in/.com only, no premium domains, renewal from year 2 paid by the client. No struck-through price (no fake anchor).
+- Final step + done screen: "Your ₹999 offer is locked in…". Saved as `data.offer = {price: 999, domain_included}`; shown in site999/admin (detail + CSV) and super admin detail.
+- Removed the live preview completely (mini-site, Preview badge, sheet, nudges, end reveal, preview CSS/JS). AI designer stays as a small guide with per-step tips. Done screen: gold check animation, "Thank you, {name}", call time, offer lock line. Page ~22 KB gzip (was ~27).
+- Deployed to Vercel `website999-onboarding` right after opening the PR (founder asked).
+
 ## 2026-10-21 · Grok Bot · site999: adaptive by business type + warm-lead flow
 - `TQ` map in `site999/index.html` (13 types + Other): type step title, 3–5 type questions, services label/examples, brand/one-liner placeholders, CTA text per action (clinic → "Book appointment", restaurant → "Order on WhatsApp", real estate → "Book a site visit"), designer tips, and fallback preview copy (no filler text/grey cards on skipped answers).
 - Saved as `data.type_answers` = [{q, a}] (tq_* keys removed before insert). Shown in site999/admin (own group + CSV column) and super admin enquiries detail.

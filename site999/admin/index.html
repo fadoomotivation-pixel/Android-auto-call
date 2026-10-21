@@ -196,9 +196,9 @@ const GROUPS = [["Business", ["oneLiner", "problem", "years", "offers", "about"]
 function csvCell(v) { v = Array.isArray(v) ? v.join("; ") : v ?? ""; v = String(v); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[",\n;]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }
 $("#csv").addEventListener("click", () => {
  const L = filtered();
- const head = ["Received (IST)", "Status", "Score", "Score label", "Follow up (IST)", "Name", "WhatsApp", "Email", "City", "Business", "Type", "Services", "Type answers", ...Object.values(LB), "Files", "Notes (admin)", "Ref"];
+ const head = ["Received (IST)", "Status", "Score", "Score label", "Follow up (IST)", "Name", "WhatsApp", "Email", "City", "Business", "Type", "Services", "Type answers", "Offer", ...Object.values(LB), "Files", "Notes (admin)", "Ref"];
  const lines = [head.map(csvCell).join(",")].concat(L.map(r => { const d = r.data || {}; return [ist(r.created_at), r.status, r._s.s, r._s.label, r.follow_up_at ? ist(r.follow_up_at) : "", r.name, r.whatsapp, r.email || d.email, r.city, r.brand, typeOf(d),
-  [1, 2, 3, 4, 5].map(i => d[`s${i}_name`]).filter(Boolean), (Array.isArray(d.type_answers) ? d.type_answers : []).map(x => `${x.q}: ${x.a}`), ...Object.keys(LB).map(k => d[k]), Object.values(d.files || {}).flat().length, r.notes, String(r.id).slice(0, 8)].map(csvCell).join(","); }));
+  [1, 2, 3, 4, 5].map(i => d[`s${i}_name`]).filter(Boolean), (Array.isArray(d.type_answers) ? d.type_answers : []).map(x => `${x.q}: ${x.a}`), d.offer ? `₹${d.offer.price}${d.offer.domain_included ? " + free domain" : ", domain at cost"}` : "", ...Object.keys(LB).map(k => d[k]), Object.values(d.files || {}).flat().length, r.notes, String(r.id).slice(0, 8)].map(csvCell).join(","); }));
  const blob = new Blob([String.fromCharCode(0xfeff) + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `website-enquiries-${dayKey(Date.now())}${tab !== "all" ? "-" + tab : ""}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 });
@@ -245,7 +245,7 @@ async function open_(id) {
  const svc = [1, 2, 3, 4, 5].filter(i => d[`s${i}_name`]).map(i => `<li><b>${e(d[`s${i}_name`])}</b>${d[`s${i}_desc`] ? ` — ${e(d[`s${i}_desc`])}` : ""}${d[`s${i}_price`] ? ` · ${e(d[`s${i}_price`])}` : ""}</li>`).join("");
  const fuVal = r.follow_up_at ? new Date(Date.parse(r.follow_up_at) + 330 * 60000).toISOString().slice(0, 16) : "";
  det.innerHTML = `<button class="btn b2" id="bk">← Back</button>
- <section class="card">${d.call_time ? `<p style="margin:0 0 8px;font-size:18px;font-weight:800;color:#f6dc84">📞 Call them: ${e(d.call_time)}</p>` : ""}<div class="row sp"><h1 style="margin:0">${e(r.brand || "—")}</h1><span class="row"><span class="sc ${sc.k}">${sc.label} ${sc.s}</span><span class="pill ${e(r.status)}">${e(r.status)}</span></span></div>
+ <section class="card">${d.call_time ? `<p style="margin:0 0 8px;font-size:18px;font-weight:800;color:#f6dc84">📞 Call them: ${e(d.call_time)}</p>` : ""}${d.offer ? `<p style="margin:0 0 8px;font-weight:700">🏷 Offer: ₹${e(d.offer.price)} · ${d.offer.domain_included ? "free domain (1st year)" : "domain at actual cost"}</p>` : ""}<div class="row sp"><h1 style="margin:0">${e(r.brand || "—")}</h1><span class="row"><span class="sc ${sc.k}">${sc.label} ${sc.s}</span><span class="pill ${e(r.status)}">${e(r.status)}</span></span></div>
   <p class="mu">${e(r.name)} · ${e(typeOf(d))} · ${e(r.city)} · received ${ist(r.created_at)} · Ref ${e(String(r.id).slice(0, 8).toUpperCase())}${d.callTime ? ` · best time: <b>${e(d.callTime)}</b>` : ""}</p>
   <div class="row"><a class="btn wa" href="https://wa.me/${ph}" target="_blank" rel="noopener">WhatsApp</a><a class="btn b2" href="tel:+${ph}">Call ${e(r.whatsapp)}</a>${r.email || d.email ? `<a class="btn b2" href="mailto:${e(r.email || d.email)}">Email</a>` : ""}</div>
   <h2 style="margin-top:14px">Why this score</h2><ul class="reasons">${sc.plus.map(x => `<li>${e(x)}</li>`).join("")}${sc.miss.map(x => `<li class="mu">Missing: ${e(x)}</li>`).join("")}</ul></section>

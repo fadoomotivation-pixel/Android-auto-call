@@ -19,7 +19,7 @@ const STATUS_TABS = ["new", "contacted", "won", "lost"];
 const BASE = "/dashboard/platform/enquiries";
 // Bookkeeping the onboarding form adds to `data` (form version, how many service
 // rows were open, which host sent it). Not an answer, so not shown as one.
-const INTERNAL = new Set(["files", "v", "svcN", "sent_from", "_ni", "type_answers", "call_time", "call_day", "call_slot"]);
+const INTERNAL = new Set(["files", "v", "svcN", "sent_from", "_ni", "type_answers", "call_time", "call_day", "call_slot", "offer"]);
 
 function digits(p: string | null) {
   const d = (p ?? "").replace(/\D/g, "");
@@ -142,6 +142,7 @@ export default async function EnquiriesPage({
                 <h3 style={{ margin: 0 }}>{current.brand || current.name || "Unnamed"}</h3>
                 <div style={{ opacity: 0.7, fontSize: "var(--text-footnote)" }}>{when(current.created_at)}</div>
                 {typeof current.data?.call_time === "string" && <div style={{ fontSize: 18, fontWeight: 800, marginTop: 6 }}>📞 Call them: {current.data.call_time}</div>}
+                {(() => { const o = current.data?.offer as { price?: number; domain_included?: boolean } | undefined; return o && typeof o === "object" ? <div style={{ fontWeight: 700, marginTop: 4 }}>🏷 Offer: ₹{o.price ?? 999} · {o.domain_included ? "free domain (1st year)" : "domain at actual cost"}</div> : null; })()}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 {current.whatsapp && <a className="btn" href={`tel:+${digits(current.whatsapp)}`}>Call</a>}
