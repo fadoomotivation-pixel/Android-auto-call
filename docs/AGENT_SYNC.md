@@ -37,6 +37,15 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-21 — Telecaller web app at /app (installable, Chrome + iPhone Safari)
+- New `/app` in admin/: entry (company owner → /signup, telecaller → log in or join with company code; `/app/join?code=XYZ` prefills), 4 tabs Home / Leads / Scan / Follow Ups, profile in a sheet.
+- Writes mirror Android Repository.kt exactly (lib/tele/data.ts): contacts status/notes/site_visit_at, lead_activities, attempts + retry-ladder follow-up, one pending follow_up per lead, completeFollowUp, call_logs row (duration 0, recording "none" — the browser can't read the dialer). Join = RPC join_company_by_code. No migration.
+- Calls go through `tel:`; on return to the page the "What happened?" sheet opens (sessionStorage pending call).
+- Scan list: camera/photo → tesseract.js (lazy, on-device) or paste → lib/tele/scanParser.ts, a TS port of ScanListParser.kt. KEEP THEM IN STEP; tests: `npm run test:scan`.
+- PWA: public/manifest.webmanifest, public/sw.js (shell cache, network-first API, /app/offline.html), public/icons/*. Middleware lets /app, /sw.js, manifest, icons through signed-out.
+- Not in the browser on purpose: auto-dialer, recordings, call-log sync (Android only) — no buttons for them.
+- Demo for screenshots: `/app?demo=1&screen=entry|join|login|leads|lead|outcome|scan|scan-review|follow|profile`.
+
 ## 2026-10-18 — Grok Bot (Leads top bar: option C + visible animated coach)
 
 - **Bug:** on a real phone the coach sparkle and Scan icon overlapped the centred "Leads" title. Four icons on the right were wider than `IosNavBar`'s fixed 72dp title padding.

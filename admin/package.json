@@ -10,7 +10,8 @@
     "prebuild": "npm run ensure-ffmpeg && npm run copy-pdf-worker",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:scan": "rm -rf .tmp-test && tsc --outDir .tmp-test --module commonjs --target es2022 --types node --esModuleInterop --skipLibCheck lib/tele/scanParser.ts lib/tele/scanParser.test.ts && node --test .tmp-test/scanParser.test.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -21,6 +22,7 @@
     "pdfjs-dist": "^4.7.76",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tesseract.js": "^5.1.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

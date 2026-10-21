@@ -18,7 +18,14 @@ export async function updateSession(request: NextRequest) {
     // Public SEO pages: city pages (EN + /hi), free tools, blog and its feed.
     ["/real-estate-crm", "/hi", "/tools", "/blog"].some((p) => path === p || path.startsWith(p + "/")) ||
     path === "/rss.xml" ||
-    path === "/opengraph-image";
+    path === "/opengraph-image" ||
+    // Telecaller PWA: the client handles its own sign-in, so the shell, manifest,
+    // service worker and icons must load signed-out (and offline from cache).
+    path === "/app" ||
+    path.startsWith("/app/") ||
+    path === "/manifest.webmanifest" ||
+    path === "/sw.js" ||
+    path.startsWith("/icons/");
   if (isPublicRoute) return NextResponse.next({ request });
 
   // No Supabase env configured (e.g. a preview without env vars) → don't crash

@@ -1,3 +1,4 @@
 
 # pdf.js worker copied from node_modules by copy-pdf-worker script
 /public/pdf.worker.min.mjs
+.tmp-test
