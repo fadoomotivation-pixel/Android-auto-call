@@ -37,6 +37,19 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-21 — Grok Bot (Check of Claude's 3 pieces + website form hardening)
+- Checked live DB: all public views now security_invoker (0228 holds); followups_super exists. NOT done in prod: 0228's
+  REVOKE/GRANT block (anon still has ALL privileges on every v_* view — RLS stops reads, but revoke it) and all of 0229
+  (no web_push tables, no web-push-due-1min cron), so /app reminders and Scan "team" check are off until applied.
+- site999: repo function == live (v4), verify_jwt=false in config.toml and live; 0230 applied. The two hand-applied
+  migrations (site999_onboarding, site999_notify_admin) were not in the repo, and the second carries the hook secret and
+  admin hash, so it must never be committed as-is.
+- New migration 0231 (NOT applied): restates the site999 schema without secrets; anon may insert only
+  id,name,whatsapp,email,city,brand,data (a forged row could set status/notes/notified_at and skip the email); bucket
+  image/* only; size caps on the row.
+- Super admin Website enquiries: follow-up date (10:00 AM IST on the picked day) + "Follow up due" tab (default when
+  anything is due); WhatsApp text no longer mentions a price.
+
 ## 2026-10-21 — Claude Code (Website onboarding form v4 + its admin, website.callproai.in)
 - Source now lives in `site999/` (`index.html` form, `admin/index.html`). It was only on Vercel before (project
   `website999-onboarding`, deployed without Git). Deploy = upload these two files to that project; production is live.
