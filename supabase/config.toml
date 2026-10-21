@@ -69,6 +69,10 @@ verify_jwt = false
 # bearer to the service-role key itself. Called by cron web-push-due-1min.
 [functions.web-push]
 verify_jwt = false
+# Website onboarding form + its admin (site999/). The DB trigger calls it with a
+# hook secret and the admin page with a password; both checked in the function.
+[functions.site999]
+verify_jwt = false
 
 # ── The rep WhatsApp observer. The caller is a Node worker on a VPS holding a
 #    shared bearer, not a signed-in user, so a JWT is not a thing it can have.

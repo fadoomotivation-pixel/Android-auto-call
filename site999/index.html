@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tell us about your business | Website onboarding</title>
+<meta name="description" content="Share a few details about your business. We will call you and start building your website.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#07070a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307070a'/%3E%3Cpath d='M9 22l7-12 7 12z' fill='%23d4af37'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#07070a;--card:#121218;--line:rgba(255,255,255,.12);--gold:#d4af37;--gold2:#f6dc84;--tx:#f4f4f6;--mu:#b4b4c0;--bad:#ff8a80;--ok:#7fd99e;--r:16px;--sab:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg) radial-gradient(640px 420px at 0 -10%,rgba(212,175,55,.2),transparent 62%) no-repeat;color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh}
+a{color:var(--gold2)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--gold2);outline-offset:2px}
+.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.hide{display:none!important}
+.skip:focus{position:fixed!important;left:12px;top:12px;width:auto;height:auto;clip:auto;z-index:9;padding:10px 14px;border-radius:10px;background:var(--gold2);color:#111}
+.mu{color:var(--mu)}
+.glass{background:linear-gradient(150deg,rgba(255,255,255,.085),rgba(255,255,255,.02));border:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 24px 44px -24px rgba(0,0,0,.9);border-radius:22px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:0 20px;border:0;border-radius:14px;font-weight:700;font-size:17px;background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111;cursor:pointer;text-decoration:none;box-shadow:0 12px 26px -12px rgba(212,175,55,.8);transition:transform .15s}
+.btn:active{transform:scale(.98)}
+.btn[disabled]{opacity:.55;cursor:default}
+.btn2{background:rgba(255,255,255,.07);color:var(--tx);border:1px solid var(--line);box-shadow:none}
+.wrap{max-width:1180px;margin:0 auto;padding:16px 16px calc(96px + var(--sab))}
+/* landing */
+.land{max-width:560px;margin:0 auto;padding:28px 16px 40px}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--gold2);border:1px solid rgba(212,175,55,.5);border-radius:99px;padding:4px 12px}
+.land h1{font-size:clamp(30px,8vw,42px);line-height:1.08;letter-spacing:-.5px;margin:14px 0 10px}
+.gold{color:var(--gold2)}
+.land .lead{font-size:18px;color:var(--mu);margin:0 0 20px}
+.land>.btn{width:100%}
+.steps3{list-style:none;padding:0;margin:22px 0;display:grid;gap:10px}
+.steps3 li{display:flex;gap:12px;align-items:flex-start;padding:14px}
+.steps3 b.n{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(135deg,#c9a227,var(--gold2));color:#111}
+.privacy{font-size:14px;color:var(--mu);display:flex;gap:10px;padding:14px;margin-top:12px}
+.resume{padding:14px;margin-bottom:14px;display:flex;gap:12px;align-items:center}
+/* top: AI designer + preview — pinned on phones, folds while the keyboard is up */
+@media (max-width:899px){.app .top{position:sticky;top:0;z-index:4;background:var(--bg);padding:8px 0 6px;margin:0 -16px;padding-left:16px;padding-right:16px}
+ .app .top .guide{display:none}
+ .typing .pv .vp,.typing .pv .url{display:none}.typing .pv{border-radius:14px}}
+.ai{flex:none;width:48px;height:48px;border-radius:15px;position:relative;background:linear-gradient(145deg,rgba(255,255,255,.18),rgba(255,255,255,.05));border:1px solid rgba(246,220,132,.55);box-shadow:0 10px 22px -8px rgba(212,175,55,.6)}
+.ai:before{content:"";position:absolute;left:9px;right:9px;top:16px;height:12px;border-radius:7px;background:#0b0b0f}
+.ai i{position:absolute;top:19px;width:6px;height:6px;border-radius:50%;background:var(--gold2);box-shadow:0 0 6px var(--gold2);animation:blink 5s infinite}
+.ai i:first-child{left:16px}.ai i:last-child{right:16px}
+@keyframes blink{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.15)}}
+.ai.happy{animation:hop .6s cubic-bezier(.2,1.6,.4,1)}
+@keyframes hop{40%{transform:translateY(-6px) rotate(-4deg)}}
+.guide{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.bub{flex:1;font-size:14px;line-height:1.4;padding:9px 12px;border-radius:14px 14px 14px 4px;border:1px solid rgba(212,175,55,.45);background:rgba(255,255,255,.06);min-height:44px}
+.bub b{color:var(--gold2)}
+/* preview frame */
+.pv{border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.18);box-shadow:0 30px 50px -26px #000,0 0 40px -18px rgba(212,175,55,.55);background:#16161c;position:relative}
+.pv .url{display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;font-size:12px;color:#c9c9d2;background:#16161c}
+.pv .url i{width:7px;height:7px;border-radius:50%;background:#45454f}
+.pv .url span{margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pv .vp{height:min(30vh,250px);min-height:140px;overflow-y:auto;overscroll-behavior:contain;scroll-behavior:smooth;background:#fff}
+.pvrow{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 8px;border-top:1px solid var(--line);background:#101015}
+.ai.sm{width:32px;height:32px;border-radius:10px}.ai.sm:before{left:6px;right:6px;top:10px;height:9px}.ai.sm i{top:12px;width:4px;height:4px}.ai.sm i:first-child{left:10px}.ai.sm i:last-child{right:10px}
+.bub2{flex:1;margin:0;font-size:13px;line-height:1.3;color:var(--tx)}.bub2 b{color:var(--gold2)}
+.pvtg{flex:none;min-height:44px;min-width:56px;padding:0 10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.06);color:var(--gold2);cursor:pointer}
+.pv.min .vp{display:none}
+/* the client's website (preview) */
+.site{--ac:#0e7c86;--ac2:#e3f3f4;--hf:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--rad:12px;color:#1d1d1f;font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.site h3,.site h4{font-family:var(--hf);margin:0}
+.site .nv{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-bottom:1px solid #eee}
+.site .lg{width:26px;height:26px;border-radius:8px;background:var(--ac);color:#fff;font-weight:800;display:grid;place-items:center;overflow:hidden;flex:none}
+.site .lg img{width:100%;height:100%;object-fit:cover}
+.site .nv b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.site .mn{margin-left:auto;display:flex;gap:10px;color:#666;font-size:11px;white-space:nowrap}
+.site .mn .x{display:none}
+.site .hero{padding:16px 12px;background:linear-gradient(165deg,var(--ac2),#fff 72%)}
+.site .eb{color:var(--ac);font-weight:700;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.site .hero h3{font-size:20px;line-height:1.15;margin:4px 0 6px}
+.site .hero p{margin:0 0 10px;color:#4a4a52;font-size:12px}
+.site .ctas{display:flex;gap:6px;flex-wrap:wrap}
+.site .ctas span{border-radius:9px;padding:8px 11px;font-weight:700;font-size:11px}
+.site .c1{background:var(--ac);color:#fff}.site .c2{background:#fff;border:1px solid #ddd}.site .wa{background:#0f7a45;color:#fff}
+.site .ph{height:96px;border-radius:var(--rad);margin-top:12px;background:linear-gradient(120deg,var(--ac2),color-mix(in srgb,var(--ac) 35%,#fff) 55%,var(--ac2));display:grid;place-items:center;color:color-mix(in srgb,var(--ac) 70%,#000);font-size:10px;overflow:hidden}
+.site .ph img{width:100%;height:100%;object-fit:cover}
+.site .sec{padding:14px 12px;border-top:1px solid #f0f0f0}
+.site .sec h4{font-size:14px;margin-bottom:8px}
+.site .cards{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.site .cards div{background:#fafafa;border:1px solid #eee;border-radius:var(--rad);padding:9px;font-size:11px;color:#555;min-height:52px}
+.site .cards b{display:block;font-size:12px;color:#1d1d1f}
+.site .chips{display:flex;flex-wrap:wrap;gap:5px}
+.site .chips span{background:var(--ac2);color:color-mix(in srgb,var(--ac) 80%,#000);border-radius:99px;padding:4px 9px;font-size:10px;font-weight:700}
+.site .q{border:1px solid #eee;border-radius:10px;padding:8px 10px;margin-bottom:6px;font-size:11px}
+.site .q b{display:block;font-size:12px}
+.site .ghost{border:1px dashed #c9c9d1;border-radius:10px;padding:10px;color:#5f5f69;font-size:11px;text-align:center}
+.site .ct{margin:0 12px 12px;padding:12px;border-radius:var(--rad);background:#1d1d1f;color:#fff;font-size:11px}
+.site .ct b{display:block;font-size:13px;margin-bottom:3px}
+.site .ft{padding:10px 12px 14px;color:#62626c;font-size:10px;display:flex;justify-content:space-between}
+.site .sk{height:8px;border-radius:4px;background:#ececf0;margin:6px 0}
+.site.t-Premium{--hf:Georgia,"Times New Roman",serif}
+.site.t-Bold .hero h3{text-transform:uppercase;letter-spacing:.3px;font-weight:900}
+.site.t-Fun,.site.t-Friendly{--rad:18px}
+.site.t-Fun .hero h3{font-weight:900}
+.site .hl{box-shadow:inset 0 0 0 2px var(--gold),0 0 0 3px rgba(212,175,55,.25);border-radius:8px}
+.site .in{animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.97)}}
+/* form */
+.card{padding:18px 16px;margin-top:12px}
+.stepbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.saved{font-size:13px;color:var(--ok);min-height:20px}
+.prog{display:flex;gap:4px;margin-bottom:14px}
+.prog i{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.12)}
+.prog i.d{background:linear-gradient(90deg,#b8860b,var(--gold2))}
+.step h2{font-size:22px;line-height:1.2;margin:0 0 4px;outline:none}
+.step>.mu{margin:0 0 6px;font-size:14px}
+.f{margin-top:18px}
+.f>label,.f legend{display:block;font-weight:650;font-size:16px;margin:0 0 4px;padding:0}
+.f .h{display:block;font-size:13px;color:var(--mu);margin:0 0 8px}
+.f .opt{font-weight:400;color:var(--mu);font-size:13px}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+input[type=text],input[type=tel],input[type=email],input[type=url],input[type=date],select,textarea{width:100%;min-height:50px;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.4);font-size:16px}
+textarea{min-height:88px;resize:vertical}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--gold2) 50%),linear-gradient(135deg,var(--gold2) 50%,transparent 50%);background-position:calc(100% - 20px) 22px,calc(100% - 14px) 22px;background-size:6px 6px;background-repeat:no-repeat;padding-right:36px}
+select option{background:#111}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);outline:none;box-shadow:0 0 0 3px rgba(212,175,55,.3)}
+[aria-invalid=true]{border-color:var(--bad)!important}
+.err{color:var(--bad);font-size:14px;margin:6px 0 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips label{position:relative;display:flex;align-items:center;min-height:44px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.05);cursor:pointer;font-size:15px;user-select:none}
+.chips input{position:absolute;opacity:0;width:1px;height:1px}
+.chips label:has(input:checked){border-color:var(--gold);background:rgba(212,175,55,.16);color:var(--gold2)}
+.chips label:has(input:checked):before{content:"✓";margin-right:6px;font-weight:700}
+.chips label:has(input:focus-visible){outline:3px solid var(--gold2);outline-offset:2px}
+.chips label:has(input:disabled){opacity:.45}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tiles label{min-height:56px}
+.sw{display:flex;flex-wrap:wrap;gap:10px}
+.sw label{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;width:72px;font-size:12px;text-align:center;cursor:pointer;color:var(--mu)}
+.sw input{position:absolute;opacity:0}
+.sw span{width:48px;height:48px;border-radius:14px;border:2px solid var(--line)}
+.sw label:has(input:checked) span{border-color:var(--gold2);box-shadow:0 0 0 3px rgba(212,175,55,.35)}
+.sw label:has(input:checked){color:var(--gold2)}
+.sw label:has(input:focus-visible) span{outline:3px solid var(--gold2);outline-offset:2px}
+.svc{display:grid;gap:8px}
+.svc .r{display:grid;grid-template-columns:1fr;gap:6px;padding:10px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.03)}
+.svc .r input{min-height:46px}
+.add{min-height:44px;padding:0 14px;border-radius:12px;border:1px dashed rgba(212,175,55,.6);background:none;color:var(--gold2);cursor:pointer}
+.file{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.file label.btn{min-height:46px;font-size:15px}
+.file .mu{font-size:13px}
+.more{margin-top:14px}
+.more summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--gold2);font-weight:600}
+.sum{font-size:14px;display:grid;gap:4px}
+.sum b{color:var(--tx)}
+.consent{display:flex;gap:10px;align-items:flex-start;font-size:15px;cursor:pointer}
+.consent input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--gold)}
+.note{font-size:13px;color:var(--mu);border-left:3px solid var(--gold);padding:6px 10px;margin-top:12px}
+.alert{padding:12px 14px;border-radius:12px;margin-top:12px;font-size:15px;border:1px solid}
+.alert.bad{border-color:rgba(255,138,128,.6);background:rgba(255,138,128,.08)}
+.alert.wait{border-color:rgba(212,175,55,.6);background:rgba(212,175,55,.08)}
+/* bottom nav */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:10px 16px calc(10px + var(--sab));background:rgba(7,7,10,.94);border-top:1px solid var(--line)}
+.nav .in{max-width:560px;margin:0 auto;display:flex;gap:10px}
+.nav .btn2{flex:1}.nav #next{flex:2}
+/* thank you */
+.done{max-width:560px;margin:0 auto;padding:28px 16px 60px;text-align:left}
+.done h1{font-size:30px;margin:12px 0 8px}
+/* desktop: side by side */
+@media (min-width:900px){
+ .app{display:grid;grid-template-columns:minmax(0,500px) minmax(0,1fr);gap:32px;align-items:start}
+ .app .top{position:sticky;top:16px;grid-column:2;grid-row:1}
+ .app .formcol{grid-column:1;grid-row:1}
+ .pv .vp{height:calc(100vh - 150px);min-height:420px}
+ .pvrow{display:none}
+ .site{font-size:15px}.site .hero{padding:30px 28px}.site .hero h3{font-size:32px}.site .hero p{font-size:15px}
+ .site .cards{grid-template-columns:repeat(3,1fr)}.site .ph{height:200px}.site .sec{padding:22px 28px}.site .sec h4{font-size:18px}
+ .site .ctas span{font-size:13px;padding:10px 14px}.site .mn{font-size:13px;gap:16px}.site .ct{margin:0 28px 24px;padding:18px}
+ .nav{position:sticky;bottom:0;padding:12px 0 18px;background:var(--bg);border:0}
+ .nav .in{max-width:none}
+}
+@media (max-width:359px){.tiles{grid-template-columns:1fr}.site .mn .p{display:none}.site .mn .x{display:inline}}
+@media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<a href="#main" class="sr skip">Skip to the form</a>
+
+<!-- ===== Landing ===== -->
+<main id="land" class="land">
+ <span class="tag">Website onboarding</span>
+ <h1>Let's build your <span class="gold">business website</span></h1>
+ <p class="lead">Answer a few short questions. It takes about 5 minutes. Then we call you and start building.</p>
+ <div id="resume" class="resume glass hide"><span style="flex:1">You have answers saved on this phone.</span><button class="btn" type="button" data-start>Continue</button></div>
+ <button class="btn" type="button" id="startBtn">Start</button>
+ <ol class="steps3">
+  <li class="glass"><b class="n">1</b><span><b>Tell us about your business.</b><br><span class="mu">Most questions are a tap. Skip anything you are not sure about.</span></span></li>
+  <li class="glass"><b class="n">2</b><span><b>Watch your website take shape.</b><br><span class="mu">Our AI designer builds a live preview from your answers.</span></span></li>
+  <li class="glass"><b class="n">3</b><span><b>We call you.</b><br><span class="mu">We talk about your business and start building your website.</span></span></li>
+ </ol>
+ <p class="privacy glass"><span aria-hidden="true">🔒</span><span>Your answers are used only to plan your website and to contact you. We do not share them. Files you upload are stored privately.</span></p>
+</main>
+
+<!-- ===== Form ===== -->
+<div id="app" class="wrap app hide">
+ <div class="top">
+  <div class="guide"><div class="ai" id="ai" aria-hidden="true"><i></i><i></i></div><p class="bub" id="bub" aria-live="polite"></p></div>
+  <div class="pv" id="pv">
+   <div class="url" aria-hidden="true"><i></i><i></i><i></i><span id="pvUrl">yourbusiness.in</span></div>
+   <div class="vp" id="vp" aria-hidden="true" tabindex="-1"><div class="site" id="site"></div></div>
+   <div class="pvrow"><div class="ai sm" aria-hidden="true"><i></i><i></i></div><p class="bub2" id="bub2" aria-live="polite"></p>
+    <button type="button" class="pvtg" id="pvToggle" aria-controls="vp" aria-expanded="true">Hide<span class="sr"> website preview</span></button></div>
+  </div>
+ </div>
+ <main id="main" class="formcol">
+  <h1 class="sr">Website onboarding form</h1>
+  <form id="f" class="card glass" novalidate>
+   <div class="stepbar"><span class="tag" id="stepLbl">Step 1 of 7</span><span class="saved" id="saved" role="status"></span></div>
+   <div class="prog" id="prog" aria-hidden="true"></div>
+
+   <!-- 1 -->
+   <section class="step" data-step="1" data-pv="hero">
+    <h2 tabindex="-1">About you and your business</h2>
+    <p class="mu">We use this to call you and to name your website.</p>
+    <div class="f"><label for="name">Your name</label><input type="text" id="name" name="name" autocomplete="name" required></div>
+    <div class="f"><label for="whatsapp">WhatsApp number</label><span class="h" id="whatsapp-h">We will call or message you here.</span><input type="tel" id="whatsapp" name="whatsapp" inputmode="tel" autocomplete="tel" placeholder="98765 43210" aria-describedby="whatsapp-h" required></div>
+    <div class="f"><label for="brand">Business name</label><input type="text" id="brand" name="brand" autocomplete="organization" placeholder="e.g. Sharma Dental Care" required></div>
+    <div class="f"><label for="industry">Type of business</label><span class="h" id="industry-h">We use this to skip questions that do not fit you.</span><select id="industry" name="industry" aria-describedby="industry-h" required><option value="">Choose one</option></select>
+     <input type="text" id="industryOther" name="industryOther" class="hide" placeholder="Tell us your type of business" aria-label="Your type of business" style="margin-top:8px"></div>
+    <div class="f"><label for="city">City</label><input type="text" id="city" name="city" autocomplete="address-level2" placeholder="e.g. Indore" required></div>
+   </section>
+
+   <!-- 2 -->
+   <section class="step hide" data-step="2" data-pv="services">
+    <h2 tabindex="-1">What you do</h2>
+    <p class="mu">Short answers are perfect. Your own words are best.</p>
+    <div class="f"><label for="oneLiner">What do you sell, in one line?</label><span class="h" id="oneLiner-h">This often becomes the big headline on your website.</span><input type="text" id="oneLiner" name="oneLiner" maxlength="120" aria-describedby="oneLiner-h"></div>
+    <div class="f"><label for="problem">What problem do you solve for customers? <span class="opt">(optional)</span></label><input type="text" id="problem" name="problem" maxlength="160"></div>
+    <div class="f"><fieldset><legend id="svcLegend">Your main services</legend><span class="h">Add up to 5. A name is enough.</span><div class="svc" id="svc"></div><button type="button" class="add" id="addSvc" style="margin-top:8px">+ Add another</button></fieldset></div>
+    <div class="f"><fieldset><legend>How long have you been in business?</legend><div class="chips" data-name="years" data-type="radio" data-opts="Just starting|Under 3 years|3–10 years|10+ years"></div></fieldset></div>
+    <div class="f"><label for="offers">Any offer right now? <span class="opt">(optional)</span></label><input type="text" id="offers" name="offers" maxlength="120" placeholder="e.g. First check-up free"></div>
+   </section>
+
+   <!-- 3 -->
+   <section class="step hide" data-step="3" data-pv="faq">
+    <h2 tabindex="-1">Your customers</h2>
+    <p class="mu">This helps us choose the right words and pictures.</p>
+    <div class="f"><fieldset><legend>Who is your best customer?</legend><span class="h">Pick all that fit.</span><div class="chips" id="custChips" data-name="customers" data-type="checkbox"></div></fieldset>
+     <input type="text" name="custText" aria-label="Describe your best customer (optional)" placeholder="Or describe them in a few words (optional)" style="margin-top:8px"></div>
+    <div class="f"><fieldset><legend>Where are your customers?</legend><div class="chips" data-name="reach" data-type="radio" data-opts="Nearby (within 5 km)|Across my city|Many cities|All India|Outside India too"></div></fieldset></div>
+    <div class="f" data-if="local"><label for="areas">Which areas do you serve? <span class="opt">(optional)</span></label><input type="text" id="areas" name="areas" placeholder="e.g. Vijay Nagar, Palasia"></div>
+    <div class="f"><label for="questions">What do customers ask before they buy? <span class="opt">(optional)</span></label><span class="h" id="questions-h">One question per line. We answer these on your website.</span><textarea id="questions" name="questions" aria-describedby="questions-h"></textarea></div>
+   </section>
+
+   <!-- 4 -->
+   <section class="step hide" data-step="4" data-pv="why">
+    <h2 tabindex="-1">Why customers pick you</h2>
+    <p class="mu">Honest answers help us show your real strengths.</p>
+    <div class="f"><fieldset><legend>Why do customers choose you?</legend><span class="h" id="usp-h">Pick up to 3.</span><div class="chips tiles" id="uspChips" data-name="uspTags" data-type="checkbox" data-max="3"></div></fieldset>
+     <input type="text" name="usp" aria-label="Something else that makes you different (optional)" placeholder="Something else? (optional)" style="margin-top:8px"></div>
+    <div class="f"><label for="competitors">Who do customers compare you with? <span class="opt">(optional)</span></label><span class="h" id="competitors-h">Names or website links of up to 3 businesses.</span><textarea id="competitors" name="competitors" aria-describedby="competitors-h" style="min-height:70px"></textarea></div>
+    <div class="f"><label for="compBetter">What do they do better than you? <span class="opt">(optional)</span></label><input type="text" id="compBetter" name="compBetter" placeholder="e.g. More reviews online, better photos"></div>
+    <div class="f"><fieldset><legend>What proof can you share?</legend><span class="h">We only show what you give us.</span><div class="chips" data-name="reviews" data-type="checkbox" data-opts="Google reviews|Customer photos|Video reviews|Certificates or awards|Before and after photos|None yet"></div></fieldset></div>
+   </section>
+
+   <!-- 5 -->
+   <section class="step hide" data-step="5" data-pv="hero">
+    <h2 tabindex="-1">Getting customers</h2>
+    <p class="mu">So your website brings the right enquiries.</p>
+    <div class="f"><fieldset><legend>What should a visitor do first?</legend><span class="h">This becomes the main button on your website.</span><div class="chips tiles" id="actChips" data-name="action" data-type="radio" data-opts="Call|WhatsApp|Book a visit|Get a quote|Buy online|Visit us"></div></fieldset></div>
+    <div class="f"><fieldset><legend>Where do enquiries come from today?</legend><div class="chips" data-name="sources" data-type="checkbox" data-opts="Word of mouth|Google|Instagram|Facebook|Walk-ins|Listing sites|Ads|Not many yet"></div></fieldset></div>
+    <div class="f"><fieldset><legend>Enquiries in a normal month</legend><div class="chips" data-name="enqNow" data-type="radio" data-opts="0–10|10–50|50–200|200+|Not sure"></div></fieldset></div>
+    <div class="f"><fieldset><legend>Do you run online ads?</legend><div class="chips" data-name="ads" data-type="radio" data-opts="No|Facebook / Instagram|Google|Both"></div></fieldset></div>
+    <div class="f"><label for="keywords">What would a customer type on Google to find you? <span class="opt">(optional)</span></label><input type="text" id="keywords" name="keywords" placeholder="e.g. dentist near me in Indore"></div>
+    <details class="more"><summary>Add your social links (optional)</summary>
+     <div class="f"><label for="gbp">Google Business Profile</label><input type="url" id="gbp" name="gbp" inputmode="url" placeholder="https://"></div>
+     <div class="f"><label for="ig">Instagram</label><input type="text" id="ig" name="ig" placeholder="@yourbusiness or link"></div>
+     <div class="f"><label for="fb">Facebook</label><input type="text" id="fb" name="fb" placeholder="Page name or link"></div>
+     <div class="f"><label for="yt">YouTube</label><input type="text" id="yt" name="yt" placeholder="Channel link"></div>
+    </details>
+   </section>
+
+   <!-- 6 -->
+   <section class="step hide" data-step="6" data-pv="nav">
+    <h2 tabindex="-1">Look and pages</h2>
+    <p class="mu">Watch the preview change as you choose.</p>
+    <div class="f"><fieldset><legend>Pages you want</legend><span class="h">We picked the usual ones for your business. Change anything.</span><div class="chips" id="pageChips" data-name="pages" data-type="checkbox" data-opts="Home|About|Services|Products|Menu|Gallery|Projects|Reviews|FAQ|Blog|Contact"></div></fieldset></div>
+    <div class="f"><fieldset><legend>Colours</legend><div class="sw" id="sw"></div></fieldset></div>
+    <div class="f"><fieldset><legend>Feel of the website</legend><div class="chips" data-name="tone" data-type="radio" data-opts="Premium|Friendly|Bold|Professional|Fun"></div></fieldset></div>
+    <div class="f"><fieldset><legend>Logo</legend><div class="file"><label class="btn btn2" for="logo">Upload logo</label><input type="file" id="logo" name="logo" accept="image/*" class="sr"><span class="mu" id="logo-s">No file yet</span></div>
+     <label class="consent" style="margin-top:10px"><input type="checkbox" name="makeLogo" value="yes">No logo? Make a simple one for me.</label></fieldset></div>
+    <div class="f"><fieldset><legend>Photos of your work, shop or team <span class="opt">(optional)</span></legend><div class="file"><label class="btn btn2" for="photos">Add photos</label><input type="file" id="photos" name="photos" accept="image/*" multiple class="sr"><span class="mu" id="photos-s">Up to 10 photos</span></div></fieldset></div>
+    <div class="f"><fieldset><legend>Website language</legend><div class="chips" data-name="langs" data-type="checkbox" data-opts="English|Hindi|Hinglish|Regional language"></div></fieldset></div>
+    <div class="f"><fieldset><legend>Do you already have a website or domain?</legend><div class="chips" data-name="hasSite" data-type="radio" data-opts="No|Yes"></div></fieldset></div>
+    <div class="f" data-if="hasSite"><label for="domain">Your website or domain</label><input type="text" id="domain" name="domain" inputmode="url" placeholder="e.g. sharmadental.in"></div>
+    <div class="f"><label for="likes">Websites you like <span class="opt">(optional)</span></label><span class="h" id="likes-h">Any website, any business. Tell us what you like about it.</span><textarea id="likes" name="likes" aria-describedby="likes-h" style="min-height:70px"></textarea></div>
+   </section>
+
+   <!-- 7 -->
+   <section class="step hide" data-step="7" data-pv="contact">
+    <h2 tabindex="-1">Last details</h2>
+    <p class="mu">Almost done.</p>
+    <div class="f"><fieldset><legend>When would you like to go live?</legend><div class="chips" data-name="deadline" data-type="radio" data-opts="As soon as possible|In 2 weeks|In a month|No rush"></div></fieldset></div>
+    <div class="f"><fieldset><legend>Who says yes to the final website?</legend><div class="chips" data-name="decider" data-type="radio" data-opts="Me|Me and a partner|Family member|My manager or team"></div></fieldset></div>
+    <div class="f"><fieldset><legend>Best time to call you</legend><div class="chips" data-name="callTime" data-type="radio" data-opts="Morning|Afternoon|Evening|Any time"></div></fieldset></div>
+    <div class="f" data-if="place"><label for="address">Shop or office address <span class="opt">(optional)</span></label><textarea id="address" name="address" autocomplete="street-address" style="min-height:70px"></textarea></div>
+    <div class="f" data-if="place"><label for="maps">Google Maps link <span class="opt">(optional)</span></label><input type="url" id="maps" name="maps" inputmode="url" placeholder="https://maps.app.goo.gl/…"></div>
+    <div class="f"><label for="email">Email <span class="opt">(optional)</span></label><input type="email" id="email" name="email" autocomplete="email"></div>
+    <div class="f"><label for="notes">Anything else we should know? <span class="opt">(optional)</span></label><textarea id="notes" name="notes" style="min-height:70px"></textarea></div>
+    <div class="f"><h3 style="font-size:16px;margin:0 0 8px">Check your answers</h3><div class="sum mu" id="sum"></div></div>
+    <div class="f"><label class="consent"><input type="checkbox" id="consent" name="consent" value="yes" required><span>These details are correct. You can contact me on WhatsApp or by call.</span></label></div>
+    <p class="note">Your answers are used only to plan your website and to contact you. We do not share them. Files are stored privately.</p>
+    <div id="msg" role="alert"></div>
+   </section>
+  </form>
+  <nav class="nav hide" id="nav" aria-label="Form steps"><div class="in"><button type="button" class="btn btn2" id="back">Back</button><button type="button" class="btn" id="next">Next</button></div></nav>
+ </main>
+</div>
+
+
+<!-- ===== Thank you ===== -->
+<main id="done" class="done hide" tabindex="-1">
+ <div class="guide"><div class="ai happy" aria-hidden="true"><i></i><i></i></div><p class="bub"><b>All done.</b> Thank you!</p></div>
+ <h1>Thank you, <span class="gold" id="doneName"></span></h1>
+ <p id="doneTxt">We have your details. We will call you soon on <b id="donePhone"></b> to talk about your website.</p>
+ <div class="glass card"><b>What happens next</b><ol class="mu" style="margin:8px 0 0;padding-left:20px"><li>We read your answers.</li><li>We call you to understand your business better.</li><li>We start building your website.</li></ol></div>
+ <p class="mu">Reference: <b id="doneRef"></b></p>
+ <a class="btn hide" id="doneWa" href="#" style="margin-top:12px">Message us on WhatsApp</a>
+</main>
+
+<script>
+"use strict";
+// ===== Settings =====
+const SB_URL = "https://rqgkzamuohdvttnkluzn.supabase.co";
+const SB_KEY = "sb_publishable_jbinu2H4JrpqAUp_3Prdpw_8pZzE58N"; // publishable key: the table only allows INSERT
+const SB_JS = ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js",
+  "https://unpkg.com/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"];
+const SB_SRI = "sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok";
+const OUR_WHATSAPP = ""; // optional: your WhatsApp with country code, e.g. 919876543210 — shows a button after submit
+const DRAFT = "o999v4", OUTBOX = "o999v4_outbox";
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ===== Business types: smart defaults and what to skip =====
+// place: has a shop/office customers visit. svc: what their offer is called.
+const TYPES = {
+ "Shop / Retail": { short: "Store", place: 1, svc: "products", act: "Visit us", pages: ["Home", "Products", "About", "Reviews", "Contact"], col: "Maroon + cream", cust: ["Families", "Young people", "Women", "Men", "Shop owners"], usp: ["Good value", "Wide choice", "Quality", "Home delivery", "Trusted for years", "Near you"], line: "Quality products you can trust" },
+ "Restaurant / Café / Food": { short: "Restaurant", place: 1, svc: "dishes", act: "Call", pages: ["Home", "Menu", "Gallery", "Reviews", "Contact"], col: "Warm orange", cust: ["Families", "Students", "Office workers", "Couples", "Party orders"], usp: ["Great taste", "Fresh food", "Fast delivery", "Good value", "Nice place to sit", "Clean kitchen"], line: "Fresh food, made with love" },
+ "Clinic / Doctor / Dental": { short: "Clinic", place: 1, svc: "treatments", act: "Book a visit", pages: ["Home", "Services", "About", "FAQ", "Contact"], col: "Teal + white", cust: ["Families", "Children", "Elderly", "Women", "Working people"], usp: ["Experienced doctor", "Painless care", "Clean and safe", "Good value", "Open on Sunday", "Easy to reach"], line: "Gentle, trusted care for your family" },
+ "Salon / Spa / Gym": { short: "Studio", place: 1, svc: "services", act: "Book a visit", pages: ["Home", "Services", "Gallery", "Reviews", "Contact"], col: "Rose + cream", cust: ["Women", "Men", "Young people", "Brides", "Fitness lovers"], usp: ["Trained staff", "Hygienic", "Good results", "Good value", "Relaxing place", "Flexible timings"], line: "Look good, feel great" },
+ "Coaching / School / Tutor": { short: "Institute", place: 1, svc: "courses", act: "Call", pages: ["Home", "Services", "About", "Reviews", "Contact"], col: "Royal blue + white", cust: ["School students", "College students", "Parents", "Job seekers", "Working people"], usp: ["Good results", "Expert teachers", "Small batches", "Good value", "Doubt support", "Online and offline"], line: "Learn better, score higher" },
+ "Real estate / Builder": { short: "Developer", place: 1, svc: "projects", act: "Book a visit", pages: ["Home", "Projects", "Gallery", "About", "Contact"], col: "Navy + gold", cust: ["First-time buyers", "Investors", "Families", "NRIs", "Businesses"], usp: ["Approved projects", "On-time delivery", "Prime location", "Clear papers", "Good after-sale support", "Trusted for years"], line: "Homes you can trust, in a location you love" },
+ "Manufacturer / Wholesaler": { short: "Manufacturer", place: 0, svc: "products", act: "Get a quote", pages: ["Home", "Products", "About", "Gallery", "Contact"], col: "Steel blue + white", cust: ["Retailers", "Distributors", "Businesses", "Exporters", "Government buyers"], usp: ["Bulk supply", "Direct from factory", "Quality checked", "On-time delivery", "Custom orders", "Pan-India shipping"], line: "Quality products, made for business" },
+ "Service (plumber, electrician, repair…)": { short: "Service", place: 0, svc: "services", act: "Call", pages: ["Home", "Services", "Reviews", "FAQ", "Contact"], col: "Green + white", cust: ["Homes", "Offices", "Shops", "Housing societies", "Builders"], usp: ["Same-day visit", "Trained workers", "Good value", "Work guarantee", "Near you", "Available 7 days"], line: "Fast, reliable service at your doorstep" },
+ "Agency / Consultant / CA / Lawyer": { short: "Firm", place: 0, svc: "services", act: "Get a quote", pages: ["Home", "Services", "About", "FAQ", "Contact"], col: "Navy + gold", cust: ["Small businesses", "Startups", "Individuals", "Companies", "NRIs"], usp: ["Experienced team", "Clear advice", "Fast work", "Good value", "One-on-one attention", "Trusted for years"], line: "Expert help, made simple" },
+ "Hotel / Travel / Events": { short: "Venue", place: 1, svc: "packages", act: "WhatsApp", pages: ["Home", "Services", "Gallery", "Reviews", "Contact"], col: "Warm orange", cust: ["Families", "Couples", "Groups", "Companies", "Tourists"], usp: ["Great location", "Good value", "Friendly staff", "Clean rooms", "Custom packages", "Easy booking"], line: "Memories made easy" },
+ "Freelancer / Creator / Artist": { short: "Studio", place: 0, svc: "services", act: "WhatsApp", pages: ["Home", "Projects", "About", "Reviews", "Contact"], col: "Premium dark + gold", cust: ["Small businesses", "Brands", "Individuals", "Startups", "Agencies"], usp: ["Creative work", "Fast delivery", "Good value", "Easy to work with", "Great reviews", "Custom work"], line: "Creative work that gets noticed" },
+ "NGO / Trust": { short: "Trust", place: 1, svc: "programs", act: "WhatsApp", pages: ["Home", "About", "Projects", "Gallery", "Contact"], col: "Green + white", cust: ["Donors", "Volunteers", "Companies (CSR)", "Families we help", "Local community"], usp: ["Years of work", "Clear accounts", "Real impact", "Local roots", "Registered trust", "Volunteer-led"], line: "Together, we make a difference" },
+ "Other": { short: "Business", place: 1, svc: "services", act: "WhatsApp", pages: ["Home", "Services", "About", "Contact"], col: "You decide", cust: ["Families", "Young people", "Businesses", "Women", "Men"], usp: ["Quality", "Good value", "Experience", "Fast service", "Trusted", "Personal attention"], line: "Your business, online" },
+};
+const COLS = { "You decide": ["#d4af37", "#fbf3dc"], "Premium dark + gold": ["#a07d1c", "#f7efd6"], "Royal blue + white": ["#2457c5", "#e6eeff"], "Teal + white": ["#0e7c86", "#e3f3f4"], "Green + white": ["#1f8a4c", "#e4f5ea"], "Navy + gold": ["#1f2f57", "#f3ecd8"], "Maroon + cream": ["#8f2433", "#f8ece0"], "Warm orange": ["#c95a12", "#fdeedd"], "Rose + cream": ["#b8436b", "#fbe9ef"], "Steel blue + white": ["#3a5f7d", "#e7eef4"] };
+const ACT = { "Call": "Call now", "WhatsApp": "WhatsApp us", "Book a visit": "Book a visit", "Get a quote": "Get a quote", "Buy online": "Shop now", "Visit us": "Visit us" };
+const T = () => TYPES[f.industry.value] || null;
+
+// ===== Build the option controls =====
+function chipGroup(el, opts) {
+ const name = el.dataset.name, type = el.dataset.type;
+ el.innerHTML = opts.map(o => `<label><input type="${type}" name="${name}" value="${esc(o)}">${esc(o)}</label>`).join("");
+}
+$$("[data-opts]").forEach(el => chipGroup(el, el.dataset.opts.split("|")));
+$("#industry").insertAdjacentHTML("beforeend", Object.keys(TYPES).map(k => `<option>${esc(k)}</option>`).join(""));
+$("#sw").innerHTML = Object.entries(COLS).map(([k, [a, b]]) => `<label><input type="radio" name="colour" value="${esc(k)}"><span style="background:linear-gradient(135deg,${a} 50%,${b} 50%)"></span>${esc(k)}</label>`).join("");
+const f = $("#f"), steps = $$(".step"), N = steps.length;
+$("#prog").innerHTML = steps.map(() => "<i></i>").join("");
+
+// Services: up to 5 rows, name + optional detail.
+function svcRow(i) {
+ const lab = (T()?.svc || "services").replace(/s$/, "");
+ const d = document.createElement("div"); d.className = "r";
+ d.innerHTML = `<input type="text" name="s${i}_name" aria-label="${esc(lab)} ${i} name" placeholder="${esc(lab[0].toUpperCase() + lab.slice(1))} ${i}" maxlength="60">` +
+  `<input type="text" name="s${i}_desc" aria-label="${esc(lab)} ${i} short detail (optional)" placeholder="Short detail (optional)" maxlength="100">`;
+ return d;
+}
+let svcN = 0;
+function addSvc(focus) { if (svcN >= 5) return; svcN++; $("#svc").appendChild(svcRow(svcN)); $("#addSvc").classList.toggle("hide", svcN >= 5); if (focus) $(`[name=s${svcN}_name]`).focus(); }
+$("#addSvc").addEventListener("click", () => { addSvc(true); save(); });
+
+// ===== Type-based defaults and skip logic =====
+function applyType(fresh) {
+ const t = T(), other = f.industry.value === "Other";
+ $("#industryOther").classList.toggle("hide", !other);
+ if (!t) return;
+ $("#svcLegend").textContent = "Your main " + t.svc;
+ chipGroup($("#custChips"), t.cust); chipGroup($("#uspChips"), t.usp);
+ $$("#svc .r").forEach((r, i) => { const lab = t.svc.replace(/s$/, ""); r.children[0].placeholder = lab[0].toUpperCase() + lab.slice(1) + " " + (i + 1); });
+ if (fresh) { // only fill what the client has not touched
+  const d = data();
+  if (!d.action) setVal("action", t.act);
+  if (!touched.pages) { $$("[name=pages]").forEach(c => c.checked = t.pages.includes(c.value)); }
+  if (!d.colour) setVal("colour", t.col);
+ }
+ restoreChecks();
+ conditions();
+}
+function setVal(name, v) { $$(`[name="${name}"]`).forEach(c => c.checked = c.value === v); }
+function conditions() {
+ const d = data(), t = T();
+ const place = (t ? t.place : 1) || d.action === "Visit us" || d.action === "Book a visit";
+ const local = !d.reach || /Nearby|city/.test(d.reach);
+ $$("[data-if=place]").forEach(e => e.classList.toggle("hide", !place));
+ $$("[data-if=local]").forEach(e => e.classList.toggle("hide", !local));
+ $$("[data-if=hasSite]").forEach(e => e.classList.toggle("hide", d.hasSite !== "Yes"));
+ // "None yet" and other proof cannot both be picked
+ const none = $("[name=reviews][value='None yet']");
+ if (none) $$("[name=reviews]").forEach(c => { if (c !== none) { if (none.checked) c.checked = false; c.disabled = none.checked; } });
+ // pick up to 3 strengths
+ const u = $$("[name=uspTags]"), n = u.filter(c => c.checked).length;
+ u.forEach(c => c.disabled = !c.checked && n >= 3);
+}
+
+// ===== Read / write answers =====
+const MULTI = new Set(["customers", "uspTags", "reviews", "sources", "pages", "langs"]);
+function data() {
+ const o = {};
+ for (const el of f.elements) {
+  if (!el.name || el.type === "file" || el.disabled && el.type !== "checkbox") continue;
+  if ((el.type === "checkbox" || el.type === "radio") && !el.checked) continue;
+  const v = el.value.trim(); if (!v) continue;
+  if (MULTI.has(el.name)) (o[el.name] = o[el.name] || []).push(v); else o[el.name] = v;
+ }
+ return o;
+}
+let saved = {}, touched = {};
+function restoreChecks() {
+ for (const el of f.elements) {
+  if (!el.name || el.type === "file" || !(el.name in saved)) continue;
+  const v = saved[el.name];
+  if (el.type === "checkbox" || el.type === "radio") el.checked = [].concat(v).includes(el.value);
+  else if (!el.value) el.value = v;
+ }
+}
+let cur = 0, st;
+function saveNow() {
+ clearTimeout(st); st = 0;
+ saved = data();
+ try { localStorage.setItem(DRAFT, JSON.stringify({ d: saved, step: cur, svcN, touched, id: draftId, ts: Date.now() })); $("#saved").textContent = "✓ Saved on this phone"; } catch { $("#saved").textContent = ""; }
+}
+function save() { clearTimeout(st); st = setTimeout(saveNow, 250); }
+// Closing the tab or switching apps must not lose the last 250 ms of typing.
+addEventListener("pagehide", () => { if (st) saveNow(); });
+document.addEventListener("visibilitychange", () => { if (document.hidden && st) saveNow(); });
+
+// Files survive a reload too (IndexedDB).
+const idb = (() => {
+ let p; const open = () => p ||= new Promise((res, rej) => { const r = indexedDB.open("o999", 1); r.onupgradeneeded = () => r.result.createObjectStore("files"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+ const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction("files", mode), s = t.objectStore("files"); const r = fn(s); t.oncomplete = () => res(r?.result); t.onerror = () => rej(t.error); }); };
+ return { get: k => tx("readonly", s => s.get(k)).catch(() => null), set: (k, v) => tx("readwrite", s => s.put(v, k)).catch(() => null), clear: () => tx("readwrite", s => s.clear()).catch(() => null) };
+})();
+const files = { logo: [], photos: [] };
+async function pickFiles(field, list) {
+ const max = field === "logo" ? 1 : 10;
+ files[field] = [...list].filter(x => x.type.startsWith("image/")).slice(0, max);
+ await idb.set(field, files[field]);
+ showFiles(field); preview(); cheer(field === "logo" ? "Nice logo. It is now on your website." : "Photos added to your website.");
+}
+function showFiles(field) {
+ const n = files[field].length;
+ $(`#${field}-s`).textContent = n ? (field === "logo" ? files.logo[0].name : `${n} photo${n > 1 ? "s" : ""} added`) : (field === "logo" ? "No file yet" : "Up to 10 photos");
+}
+$("#logo").addEventListener("change", e => pickFiles("logo", e.target.files));
+$("#photos").addEventListener("change", e => pickFiles("photos", e.target.files));
+
+// ===== Live preview =====
+let urls = {};
+function objUrl(k, file) { if (!file) return ""; if (urls[k]?.f !== file) { if (urls[k]) URL.revokeObjectURL(urls[k].u); urls[k] = { f: file, u: URL.createObjectURL(file) }; } return urls[k].u; }
+const blocks = {};
+function put(id, html) { // update one section only when it changed, so the rest does not flicker
+ const el = blocks[id]; if (!el) return;
+ if (el._h === html) return; const first = el._h === undefined; el._h = html; el.innerHTML = html;
+ if (!first && !RM) { el.classList.remove("in"); void el.offsetWidth; el.classList.add("in"); }
+}
+function preview() {
+ const d = data(), t = T(), site = $("#site");
+ const brand = d.brand || "Your business", city = d.city || "your city";
+ const [ac, ac2] = COLS[d.colour] || COLS[t?.col] || COLS["You decide"];
+ site.style.setProperty("--ac", ac); site.style.setProperty("--ac2", ac2);
+ site.className = "site" + (d.tone ? " t-" + d.tone : "");
+ const dom = (d.hasSite === "Yes" && d.domain) ? d.domain.replace(/^https?:\/\//, "") : (d.brand ? d.brand.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 24) + ".in" : "yourbusiness.in");
+ $("#pvUrl").textContent = dom;
+ const pages = (d.pages || ["Home", "Services", "Contact"]).filter(p => p !== "Home").slice(0, 4);
+ const logo = files.logo[0] ? `<img src="${objUrl("logo", files.logo[0])}" alt="">` : esc((d.brand || "Y").trim()[0].toUpperCase());
+ put("nav", `<span class="lg">${logo}</span><b>${esc(brand)}</b><span class="mn">${pages.map(p => `<span class="p">${esc(p)}</span>`).join("")}<span class="x">☰</span></span>`);
+ const type = d.industry === "Other" ? (d.industryOther || "Business") : (t?.short || "Business");
+ const where = d.reach && !/Nearby|city/.test(d.reach) ? (d.reach === "All India" ? "across India" : d.reach.toLowerCase()) : `in ${(d.areas || "").split(",")[0].trim() || city}`;
+ const head = d.oneLiner || (d.offers && !d.problem ? d.offers : "") || (t ? t.line : "Your business, online");
+ const subParts = [d.years && d.years !== "Just starting" ? d.years + " of experience" : "", (d.uspTags || []).slice(0, 2).join(" · ")].filter(Boolean);
+ const act = ACT[d.action] || "WhatsApp us", second = d.action === "WhatsApp" ? "Call now" : "WhatsApp";
+ const photo = files.photos[0] ? `<img src="${objUrl("ph0", files.photos[0])}" alt="">` : "Your photo here";
+ put("hero", `<span class="eb">${esc(type)} ${esc(where)}</span><h3>${esc(head)}</h3><p>${esc(subParts.join(". ") || "Tell us what makes you special and it shows up here.")}</p>
+  <div class="ctas"><span class="c1">${esc(act)}</span><span class="${second === "WhatsApp" ? "wa" : "c2"}">${second}</span></div>${d.offers && d.oneLiner ? `<p style="margin:10px 0 0;font-weight:700;color:var(--ac)">${esc(d.offers)}</p>` : ""}<div class="ph">${photo}</div>`);
+ const sv = [1, 2, 3, 4, 5].map(i => d[`s${i}_name`] ? `<div><b>${esc(d[`s${i}_name`])}</b>${esc(d[`s${i}_desc`] || "")}</div>` : "").filter(Boolean);
+ const svcName = t ? t.svc[0].toUpperCase() + t.svc.slice(1) : "Services";
+ put("services", `<h4>Our ${esc(svcName.toLowerCase())}</h4>${d.problem ? `<p style="margin:-4px 0 8px;color:#555">We help with: ${esc(d.problem)}</p>` : ""}<div class="cards">${sv.length ? sv.join("") : '<div><div class="sk"></div><div class="sk" style="width:60%"></div></div><div><div class="sk"></div><div class="sk" style="width:70%"></div></div>'}</div>`);
+ const why = [...(d.uspTags || []), d.usp].filter(Boolean);
+ put("why", `<h4>Why customers choose ${esc(d.brand || "us")}</h4>${why.length ? `<div class="chips">${why.map(w => `<span>${esc(w)}</span>`).join("")}</div>` : '<div class="ghost">Your strengths show here.</div>'}`);
+ const rv = (d.reviews || []).filter(r => r !== "None yet");
+ put("proof", rv.length ? `<h4>What customers say</h4><div class="ghost">Your ${esc(rv.join(", ").toLowerCase())} will show here. We only use real ones you share.</div>` : "");
+ blocks.proof.classList.toggle("hide", !rv.length);
+ const qs = (d.questions || "").split(/\n|\?/).map(s => s.trim()).filter(s => s.length > 3).slice(0, 3);
+ put("faq", `<h4>Questions customers ask</h4>${qs.length ? qs.map(q => `<div class="q"><b>${esc(q)}?</b>We answer this clearly on your website.</div>`).join("") : '<div class="ghost">Add the questions customers ask you. We answer them here.</div>'}`);
+ const place = !$("[data-if=place]").classList.contains("hide");
+ put("contact", `<b>Talk to ${esc(brand)}</b>${esc(place && d.address ? d.address.split("\n")[0] : city)}${d.areas ? " · " + esc(d.areas) : ""}<div class="ctas" style="margin-top:8px"><span class="wa">WhatsApp</span><span class="c2" style="color:#1d1d1f">Call</span>${place ? '<span class="c2" style="color:#1d1d1f">Directions</span>' : ""}</div>`);
+ const social = ["ig", "fb", "yt", "gbp"].filter(k => d[k]).length;
+ put("foot", `<span>© ${new Date().getFullYear()} ${esc(brand)}</span><span>${social ? social + " social link" + (social > 1 ? "s" : "") : (d.langs || ["English"]).join(" · ")}</span>`);
+}
+(function buildSite() {
+ const site = $("#site");
+ site.innerHTML = '<div class="nv" data-b="nav"></div><div class="hero" data-b="hero"></div><div class="sec" data-b="services"></div><div class="sec" data-b="why"></div><div class="sec" data-b="proof"></div><div class="sec" data-b="faq"></div><div class="ct" data-b="contact"></div><div class="ft" data-b="foot"></div>';
+ $$("[data-b]", site).forEach(e => blocks[e.dataset.b] = e);
+})();
+function focusPreview(id) {
+ Object.values(blocks).forEach(b => b.classList.remove("hl"));
+ const b = blocks[id]; if (!b) return; b.classList.add("hl");
+ const vp = $("#vp"), y = b.getBoundingClientRect().top - vp.getBoundingClientRect().top + vp.scrollTop - (id === "nav" ? 0 : blocks.nav.offsetHeight + 6);
+ vp.scrollTo({ top: Math.max(0, y), behavior: RM ? "auto" : "smooth" });
+}
+function pvMin(m) { $("#pv").classList.toggle("min", m); const t = $("#pvToggle"); t.firstChild.textContent = m ? "Show" : "Hide"; t.setAttribute("aria-expanded", String(!m)); }
+$("#pvToggle").addEventListener("click", () => { const m = !$("#pv").classList.contains("min"); pvMin(m); try { localStorage.setItem("o999_pv", m ? "min" : ""); } catch {} });
+try { if (localStorage.getItem("o999_pv") === "min") pvMin(true); } catch {}
+
+// ===== AI designer =====
+const TIPS = ["Hi! I am your <b>AI designer</b>. Watch your site take shape.",
+ "Add your services. Each one becomes a <b>card</b>.",
+ "Your customers decide the <b>words</b> we use.",
+ "Your strengths go <b>on the page</b>.",
+ "Pick the <b>main button</b> for your site.",
+ "Pick colours and pages. See them <b>change live</b>.",
+ "Last step. Check and <b>send</b>."];
+// One message, two places: above the preview on desktop, in the strip under it on phones.
+// Only the visible one is a live region that gets read out.
+const wide = matchMedia("(min-width: 900px)");
+function say(h) { $("#bub").innerHTML = h; $("#bub2").innerHTML = h; }
+function liveRegion() { $("#bub").setAttribute("aria-live", wide.matches ? "polite" : "off"); $("#bub2").setAttribute("aria-live", wide.matches ? "off" : "polite"); }
+wide.addEventListener("change", liveRegion); liveRegion();
+let cheerT;
+function cheer(text) {
+ if (!RM) { const a = $("#ai"); a.classList.remove("happy"); void a.offsetWidth; a.classList.add("happy"); }
+ clearTimeout(cheerT); say(esc(text)); cheerT = setTimeout(() => say(TIPS[cur]), 4000);
+}
+
+// ===== Steps =====
+function show(i, focus = true) {
+ cur = i;
+ steps.forEach((s, k) => s.classList.toggle("hide", k !== i));
+ $("#stepLbl").textContent = `Step ${i + 1} of ${N}`;
+ $$("#prog i").forEach((b, k) => b.classList.toggle("d", k <= i));
+  $("#next").textContent = i === N - 1 ? "Send my answers" : "Next";
+ say(TIPS[i]); focusPreview(steps[i].dataset.pv);
+ if (i === N - 1) summary();
+ if (focus) { $("h2", steps[i]).focus({ preventScroll: true }); scrollTo({ top: 0, behavior: RM ? "auto" : "smooth" }); }
+ saveNow();
+}
+function fieldErr(el, text) {
+ const id = (el.id || el.name) + "-err";
+ let e = document.getElementById(id);
+ if (!text) { if (e) e.remove(); el.removeAttribute("aria-invalid"); return; }
+ if (!e) { e = document.createElement("p"); e.className = "err"; e.id = id; (el.closest(".f") || el.parentNode).appendChild(e); }
+ e.textContent = text; el.setAttribute("aria-invalid", "true");
+ el.setAttribute("aria-describedby", [el.getAttribute("aria-describedby"), id].filter(Boolean).filter((v, k, a) => a.indexOf(v) === k).join(" "));
+}
+const phone10 = v => { const d = String(v).replace(/\D/g, ""); return d.length === 12 && d.startsWith("91") ? d.slice(2) : d.length === 11 && d.startsWith("0") ? d.slice(1) : d; };
+function check(i) {
+ let first = null;
+ for (const el of $$("[required]", steps[i])) {
+  let msg = "";
+  if (el.type === "checkbox") msg = el.checked ? "" : "Please tick this box to send.";
+  else if (!el.value.trim()) msg = "Please fill this in.";
+  else if (el.name === "whatsapp" && !/^[6-9]\d{9}$/.test(phone10(el.value)) && !/^\+(?!91)\d{8,15}$/.test(el.value.replace(/[\s()-]/g, ""))) msg = "Please enter a 10-digit mobile number. From outside India? Start with + and your country code.";
+  fieldErr(el, msg); if (msg && !first) first = el;
+ }
+ const em = $("#email", steps[i]);
+ if (em && em.value.trim() && !em.checkValidity()) { fieldErr(em, "This email does not look right."); first ||= em; } else if (em) fieldErr(em, "");
+ if (i === 0 && f.industry.value === "Other" && !f.industryOther.value.trim()) { fieldErr(f.industryOther, "Please tell us your type of business."); first ||= f.industryOther; }
+ if (first) first.focus();
+ return !first;
+}
+$("#next").addEventListener("click", () => {
+ if (!check(cur)) return;
+ if (cur < N - 1) show(cur + 1); else submit();
+});
+$("#back").addEventListener("click", () => { if (cur === 0) { $("#app").classList.add("hide"); $("#nav").classList.add("hide"); $("#land").classList.remove("hide"); return; } show(cur - 1); });
+f.addEventListener("submit", e => { e.preventDefault(); $("#next").click(); });
+
+function summary() {
+ const d = data(), row = (k, v) => v ? `<div>${k}: <b>${esc(Array.isArray(v) ? v.join(", ") : v)}</b></div>` : "";
+ const sv = [1, 2, 3, 4, 5].map(i => d[`s${i}_name`]).filter(Boolean);
+ $("#sum").innerHTML = row("Business", [d.brand, d.industry === "Other" ? d.industryOther : d.industry, d.city].filter(Boolean).join(" · ")) +
+  row("You", [d.name, d.whatsapp].filter(Boolean).join(" · ")) + row("You sell", d.oneLiner) + row(T()?.svc ? "Your " + T().svc : "Services", sv) +
+  row("Main button", d.action) + row("Pages", d.pages) + row("Go live", d.deadline) +
+  row("Files", [files.logo.length ? "logo" : "", files.photos.length ? files.photos.length + " photos" : ""].filter(Boolean).join(", ")) +
+  `<div style="margin-top:4px">Want to change something? Tap <b>Back</b>.</div>`;
+}
+
+// Keyboard up → fold the preview so the field stays in view; back when typing stops.
+let typT;
+f.addEventListener("focusin", e => { if (/^(text|tel|email|url)$|textarea/.test(e.target.type || e.target.tagName.toLowerCase())) { clearTimeout(typT); document.body.classList.add("typing"); } });
+f.addEventListener("focusout", () => { typT = setTimeout(() => { document.body.classList.remove("typing"); focusPreview(steps[cur].dataset.pv); }, 150); });
+f.addEventListener("input", e => { touched[e.target.name] = 1; if (e.target.getAttribute("aria-invalid")) fieldErr(e.target, ""); conditions(); preview(); save(); });
+f.addEventListener("change", e => {
+ const t = e.target; touched[t.name] = 1;
+ if (t.name === "industry") applyType(true);
+ conditions(); preview(); save();
+ if (t.name === "action" && t.checked) cheer(`Your main button now says "${ACT[t.value]}".`);
+ else if (t.name === "colour" && t.checked) cheer("New colours. Looking good!");
+ else if (t.name === "uspTags" && t.checked) cheer(`"${t.value}" is now on your page.`);
+ else if (/^s\d_name$/.test(t.name) && t.value.trim()) cheer(`Added "${t.value.trim()}" to your page.`);
+});
+
+// ===== Start / resume =====
+let draftId = null;
+function start() {
+ $("#land").classList.add("hide"); $("#app").classList.remove("hide"); $("#nav").classList.remove("hide");
+ show(Math.min(cur, N - 1));
+}
+$$("[data-start]").forEach(b => b.addEventListener("click", start));
+let hasDraft = false;
+$("#startBtn").addEventListener("click", () => hasDraft ? resetDraft() : start());
+(async function init() {
+ let s = null;
+ try { s = JSON.parse(localStorage.getItem(DRAFT) || "null"); } catch {}
+ if (!s) { // carry over the basics from the older form, if this phone has them
+  try { const o = JSON.parse(localStorage.getItem("o999v3_data") || "null"); if (o) s = { d: { name: o.name, whatsapp: o.whatsapp, email: o.email, city: o.city, brand: o.brand, industry: o.industry, industryOther: o.industryOther }, step: 0 }; } catch {}
+ }
+ saved = s?.d || {}; touched = s?.touched || {}; draftId = s?.id || null;
+ for (let i = 0; i < Math.max(2, s?.svcN || 0); i++) addSvc(false);
+ restoreChecks(); applyType(false); restoreChecks(); conditions();
+ cur = Math.min(s?.step || 0, N - 1);
+ for (const k of ["logo", "photos"]) { const v = await idb.get(k); if (Array.isArray(v)) { files[k] = v; showFiles(k); } }
+ preview();
+ if (s && Object.keys(saved).length) { hasDraft = true; $("#resume").classList.remove("hide"); $("#startBtn").textContent = "Start again"; $("#startBtn").classList.add("btn2"); }
+ flushOutbox();
+})();
+function resetDraft() { try { localStorage.removeItem(DRAFT); } catch {} idb.clear(); location.reload(); }
+
+// ===== Submit: never lose answers =====
+let sbP;
+function loadSb() {
+ return sbP ||= new Promise((res, rej) => {
+  let k = 0; const tryOne = () => {
+   const s = document.createElement("script"); s.src = SB_JS[k]; s.integrity = SB_SRI; s.crossOrigin = "anonymous";
+   s.onload = () => res(window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false } }));
+   s.onerror = () => { s.remove(); if (++k < SB_JS.length) tryOne(); else { sbP = null; rej(new Error("offline")); } };
+   document.head.appendChild(s);
+  }; tryOne();
+ });
+}
+async function shrinkImg(file) { // big phone photos → about 1600px JPEG, so uploads are fast and under 10 MB
+ try {
+  if (!/^image\/(jpe?g|png|webp|heic|heif)/i.test(file.type) || file.size < 600000) return file;
+  const bmp = await createImageBitmap(file); const s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); bmp.close();
+  const b = await new Promise(r => c.toBlob(r, "image/jpeg", .85)); return b ? new File([b], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : file;
+ } catch { return file; }
+}
+function msg(kind, html) { $("#msg").innerHTML = html ? `<div class="alert ${kind}">${html}</div>` : ""; }
+let sending = false;
+async function submit() {
+ if (sending) return; sending = true;
+ const btn = $("#next"); btn.disabled = true; btn.textContent = "Sending…"; msg("", "");
+ draftId ||= crypto.randomUUID(); save();
+ const d = data(); delete d.consent;
+ const job = { id: draftId, d: { ...d, v: 4, svcN, sent_from: location.hostname }, at: Date.now() };
+ try { localStorage.setItem(OUTBOX, JSON.stringify(job)); } catch {}
+ try {
+  await send(job);
+  finish(job);
+ } catch (e) {
+  const offline = !navigator.onLine || e.message === "offline" || e.name === "TypeError";
+  msg(offline ? "wait" : "bad", offline
+   ? "<b>You seem to be offline.</b> Your answers are saved on this phone. We will send them by ourselves when the internet is back. You can also tap <b>Send my answers</b> again."
+   : `<b>We could not send your answers.</b> They are safe on this phone. Please try again in a minute. <span class="mu">(Code: ${esc(e.code || e.status || "send")})</span>`);
+  btn.disabled = false; btn.textContent = "Send my answers";
+ } finally { sending = false; }
+}
+async function send(job) {
+ if (!navigator.onLine) throw new Error("offline");
+ const sb = await loadSb();
+ const paths = {}; const all = [["logo", files.logo], ["photos", files.photos]];
+ for (const [field, list] of all) for (let i = 0; i < list.length; i++) {
+  const fl = await shrinkImg(list[i]); if (fl.size > 10485760) continue;
+  const p = `${job.id}/${field}-${i + 1}-${fl.name.replace(/[^\w.-]/g, "_").slice(-60)}`;
+  const { error } = await sb.storage.from("site999-uploads").upload(p, fl, { upsert: false, contentType: fl.type });
+  if (error && !/exists|Duplicate|409/i.test(error.message + (error.statusCode || ""))) throw Object.assign(new Error(error.message), { code: "upload" });
+  (paths[field] ||= []).push(p);
+ }
+ const row = { id: job.id, name: job.d.name, whatsapp: job.d.whatsapp, email: job.d.email || null, city: job.d.city, brand: job.d.brand, data: { ...job.d, files: paths } };
+ const { error } = await sb.from("site999_onboarding").insert(row);
+ if (error && error.code !== "23505") throw Object.assign(new Error(error.message), { code: error.code });
+}
+function finish(job) {
+ try { localStorage.removeItem(OUTBOX); localStorage.removeItem(DRAFT); localStorage.removeItem("o999v3_data"); localStorage.removeItem("o999v3_step"); } catch {}
+ idb.clear();
+ $("#app").classList.add("hide"); $("#nav").classList.add("hide"); $("#land").classList.add("hide");
+ $("#doneName").textContent = (job.d.name || "").split(" ")[0] || "friend";
+ $("#donePhone").textContent = job.d.whatsapp || "";
+ $("#doneRef").textContent = job.id.slice(0, 8).toUpperCase();
+ if (OUR_WHATSAPP) { const a = $("#doneWa"); a.href = `https://wa.me/${OUR_WHATSAPP}?text=${encodeURIComponent(`Hi, I just shared details for my website. Business: ${job.d.brand}. Ref: ${job.id.slice(0, 8).toUpperCase()}`)}`; a.classList.remove("hide"); }
+ const done = $("#done"); done.classList.remove("hide"); done.focus(); scrollTo(0, 0);
+}
+async function flushOutbox() {
+ let job; try { job = JSON.parse(localStorage.getItem(OUTBOX) || "null"); } catch {}
+ if (!job || !navigator.onLine || sending) return;
+ sending = true;
+ try { await send(job); finish(job); } catch {} finally { sending = false; }
+}
+addEventListener("online", () => { if (localStorage.getItem(OUTBOX)) { msg("wait", "Back online. Sending your answers…"); flushOutbox(); } });
+setInterval(() => { if (localStorage.getItem(OUTBOX)) flushOutbox(); }, 30000);
+</script>
+</body>
+</html>

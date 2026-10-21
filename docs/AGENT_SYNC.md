@@ -37,6 +37,19 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-21 — Claude Code (Website onboarding form v4 + its admin, website.callproai.in)
+- Source now lives in `site999/` (`index.html` form, `admin/index.html`). It was only on Vercel before (project
+  `website999-onboarding`, deployed without Git). Deploy = upload these two files to that project; production is live.
+- Form: 7 steps, type-based defaults and skip logic, autosave (localStorage + IndexedDB for photos), offline outbox
+  with retry, realistic live preview (Option A "studio split"), no pricing anywhere. Same columns; answers in `data`
+  (`v: 4`). supabase-js is loaded only on submit, pinned 2.117.2 with SRI. Lighthouse mobile 100/100/100 (SEO is noindex
+  on purpose); axe clean on every step.
+- Admin: lead score with reasons, follow-up date (`site999_onboarding.follow_up_at`, migration 0230, applied), CSV,
+  WhatsApp templates, "Before you call" questions.
+- Edge function `site999` is now in the repo (`supabase/functions/site999`) with `verify_jwt = false` in config.toml —
+  it checks its hook secret / admin password itself. Without that entry the main-branch deploy would switch JWT on and
+  break the admin.
+
 ## 2026-10-21 — Grok Bot (Super admin: Website enquiries page)
 - New page `admin/app/dashboard/platform/enquiries/` (Platform section tab "Website enquiries", `who: "super"`).
 - Lists `public.site999_onboarding` (₹999 website form): status tabs new/contacted/won/lost/all with counts, search,

@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#07070a">
+<title>Admin · Website enquiries</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307070a'/%3E%3Cpath d='M9 22l7-12 7 12z' fill='%23d4af37'/%3E%3C/svg%3E">
+<style>
+:root{--gold:#d4af37;--g2:#f6dc84;--line:rgba(255,255,255,.12);--mu:#b4b4c0;--hot:#ff8a65;--warm:#f6dc84;--cold:#8fb3ff;--bad:#ff8a80;--ok:#7fd99e}
+*{box-sizing:border-box}
+body{margin:0;background:#07070a;color:#f4f4f6;font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--g2)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--g2);outline-offset:2px}
+.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.w{max-width:860px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 12px}h1 b{color:var(--g2)}
+h2{font-size:17px;margin:0 0 8px}
+.card{background:linear-gradient(150deg,rgba(255,255,255,.08),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+input,select,textarea{width:100%;min-height:46px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 12px;font-size:16px}
+select option{background:#111}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;border:0;border-radius:12px;padding:0 14px;font-weight:700;background:linear-gradient(135deg,#c9a227,var(--g2));color:#111;text-decoration:none;cursor:pointer;font-size:14px}
+.b2{background:rgba(255,255,255,.08);color:#fff;border:1px solid var(--line)}.wa{background:#0f7a45;color:#fff}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.sp{justify-content:space-between}
+.mu{color:var(--mu);font-size:13px}
+.tabs{display:flex;gap:6px;margin:10px 0;overflow-x:auto;padding-bottom:2px}
+.tabs button{flex:none;min-height:40px;background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:99px;padding:0 14px;cursor:pointer}
+.tabs button[aria-pressed=true]{border-color:var(--gold);color:var(--g2)}
+.it{display:block;width:100%;text-align:left;cursor:pointer;color:inherit}
+.it:hover{border-color:var(--gold)}
+.pill{font-size:12px;border-radius:99px;padding:2px 9px;border:1px solid;white-space:nowrap}
+.new{color:var(--g2);border-color:var(--gold)}.contacted{color:#9cc9ff;border-color:#3a7bd5}.won{color:var(--ok);border-color:#22a35a}.lost{color:#aaa;border-color:#555}
+.sc{font-weight:800;border-radius:10px;padding:2px 8px;font-size:12px;border:1px solid}
+.sc.hot{color:var(--hot);border-color:var(--hot)}.sc.warm{color:var(--warm);border-color:var(--warm)}.sc.cold{color:var(--cold);border-color:var(--cold)}
+.due{font-size:12px;border-radius:8px;padding:2px 8px;background:rgba(255,138,128,.14);color:var(--bad)}.due.t{background:rgba(212,175,55,.14);color:var(--g2)}.due.l{background:rgba(255,255,255,.07);color:var(--mu)}
+table{width:100%;border-collapse:collapse}
+td,th{padding:7px 4px;border-bottom:1px solid rgba(255,255,255,.07);vertical-align:top;text-align:left}
+th{color:var(--mu);font-weight:500;width:38%}
+.grp{color:var(--g2);font-size:13px;font-weight:700;padding-top:14px}
+.files a{display:inline-block}.files img{width:92px;height:92px;object-fit:cover;border-radius:8px;margin:4px}
+.tpl{display:grid;gap:8px}.tpl .card{margin:0}
+.tpl p{margin:6px 0 8px;white-space:pre-wrap;font-size:14px}
+.reasons{margin:6px 0 0;padding-left:18px;font-size:14px}
+.ask li{margin:4px 0}
+.alert{padding:10px 12px;border-radius:10px;border:1px solid rgba(212,175,55,.6);background:rgba(212,175,55,.08);font-size:14px}
+.hide{display:none!important}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:520px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="w">
+ <main id="login" class="card" style="max-width:380px;margin:60px auto">
+  <h1>Website <b>Admin</b></h1>
+  <form id="lf"><label for="pw" class="sr">Password</label><input id="pw" type="password" placeholder="Password" autocomplete="current-password" required>
+  <button class="btn" style="width:100%;margin-top:10px">Log in</button></form>
+  <p class="mu" id="err" role="alert"></p>
+ </main>
+
+ <main id="app" class="hide">
+  <div class="row sp"><h1>Enquiries <b id="cnt"></b></h1>
+   <div class="row"><button class="btn b2" id="csv">Export CSV</button><button class="btn b2" id="reload">Refresh</button><button class="btn b2" id="out">Log out</button></div></div>
+  <p id="cfgw" class="alert hide">Email alerts are off. Add a Resend API key and your email to switch them on. Until then, new enquiries only show here.</p>
+  <div class="tabs" id="tabs" role="group" aria-label="Filter by status"></div>
+  <div class="grid2"><div><label for="q" class="sr">Search</label><input id="q" type="search" placeholder="Search name, business, city, phone…"></div>
+   <div><label for="sort" class="sr">Sort</label><select id="sort"><option value="new">Newest first</option><option value="score">Best leads first</option><option value="fu">Follow-up date</option></select></div></div>
+  <div id="list" aria-live="polite"></div>
+ </main>
+
+ <main id="det" class="hide" tabindex="-1"></main>
+</div>
+<script>
+"use strict";
+const FN = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/site999";
+let PW = sessionStorage.getItem("a999") || "", rows = [], tab = "all";
+const $ = s => document.querySelector(s);
+const e = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+async function api(b) {
+ const r = await fetch(FN, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...b, password: PW }) });
+ const j = await r.json().catch(() => ({}));
+ if (r.status === 401) { logout(); throw new Error(j.error || "Wrong password"); }
+ if (!r.ok) throw new Error(j.error || "Something went wrong");
+ return j;
+}
+$("#lf").addEventListener("submit", async ev => {
+ ev.preventDefault(); PW = $("#pw").value; $("#err").textContent = "Checking…";
+ try { await load(); sessionStorage.setItem("a999", PW); showApp(); $("#err").textContent = ""; } catch (x) { $("#err").textContent = x.message; }
+});
+function showApp() { $("#login").classList.add("hide"); $("#det").classList.add("hide"); $("#app").classList.remove("hide"); }
+function logout() { sessionStorage.removeItem("a999"); PW = ""; $("#app").classList.add("hide"); $("#det").classList.add("hide"); $("#login").classList.remove("hide"); }
+$("#out").addEventListener("click", logout);
+$("#reload").addEventListener("click", () => load().catch(x => alert(x.message)));
+
+const digits = n => String(n || "").replace(/\D/g, "");
+const waNum = n => { const d = digits(n); return d.length === 10 ? "91" + d : d.length === 11 && d[0] === "0" ? "91" + d.slice(1) : d; };
+const ist = t => new Date(t).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+const istDay = t => new Date(t).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short" });
+const dayKey = t => new Date(t).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+const arr = v => Array.isArray(v) ? v : v ? [v] : [];
+const typeOf = d => d.industry === "Other" ? d.industryOther || "Other" : d.industry || "";
+
+// ===== Lead score: every point has a reason you can read =====
+function score(r) {
+ const d = r.data || {}, plus = [], miss = [];
+ let s = 0;
+ const add = (n, why) => { s += n; plus.push(why); };
+ const dl = d.deadline || "";
+ if (/soon|ASAP/i.test(dl)) add(25, "Wants to go live soon"); else if (/2 weeks|1 week/i.test(dl)) add(18, "Wants it in 2 weeks"); else if (/month/i.test(dl)) add(10, "Wants it within a month"); else if (dl) add(3, "No rush"); else miss.push("Did not say when to go live");
+ const dc = d.decider || "";
+ if (/^Me$/.test(dc)) add(15, "Decides alone"); else if (/partner/i.test(dc)) add(10, "Decides with a partner"); else if (dc) add(5, "Someone else decides"); else miss.push("Did not say who decides");
+ let depth = 0;
+ if (d.oneLiner || d.about) depth += 6; if (d.problem || d.usp) depth += 4;
+ if ([1, 2, 3, 4, 5].some(i => d[`s${i}_name`])) depth += 6; if (arr(d.uspTags).length) depth += 4;
+ if (d.competitors || d.comp1) depth += 4; if (d.questions) depth += 3;
+ depth = Math.min(depth, 25); if (depth >= 15) add(depth, "Gave clear, detailed answers"); else { s += depth; miss.push("Short answers"); }
+ const nfiles = Object.values(d.files || {}).flat().length;
+ if (nfiles) add(8, `Shared ${nfiles} file${nfiles > 1 ? "s" : ""}`);
+ if (arr(d.reviews).some(x => !/none/i.test(x))) add(5, "Has reviews or proof");
+ let mk = 0; const ads = d.ads || "";
+ if (ads && !/^No$/.test(ads)) mk += 8;
+ if (/50|200|500|\+/.test(d.enqNow || "") && !/^0–10$/.test(d.enqNow || "")) mk += 4;
+ if (arr(d.sources).some(x => /Google|Ads/.test(x))) mk += 3;
+ if (mk) add(Math.min(mk, 15), ads && !/^No$/.test(ads) ? "Already runs ads" : "Already gets enquiries online");
+ if (r.email || d.email) add(3, "Gave an email");
+ if (waNum(r.whatsapp).length >= 12) add(2, "Valid WhatsApp number");
+ s = Math.min(100, Math.round(s));
+ return { s, k: s >= 65 ? "hot" : s >= 40 ? "warm" : "cold", label: s >= 65 ? "Hot" : s >= 40 ? "Warm" : "Cold", plus, miss };
+}
+
+function fuBadge(t) {
+ if (!t) return "";
+ const today = dayKey(Date.now()), d = dayKey(t);
+ if (d < today) return `<span class="due">Follow up overdue · ${istDay(t)}</span>`;
+ if (d === today) return `<span class="due t">Follow up today</span>`;
+ return `<span class="due l">Follow up ${istDay(t)}</span>`;
+}
+
+async function load() {
+ const j = await api({ action: "list" });
+ rows = j.rows.map(r => ({ ...r, _s: score(r) }));
+ $("#cfgw").classList.toggle("hide", !!j.emailConfigured);
+ render();
+}
+const TABS = [["all", "All"], ["due", "Follow up due"], ["new", "New"], ["contacted", "Contacted"], ["won", "Won"], ["lost", "Lost"]];
+const isDue = r => r.follow_up_at && dayKey(r.follow_up_at) <= dayKey(Date.now()) && r.status !== "won" && r.status !== "lost";
+function filtered() {
+ const qq = $("#q").value.trim().toLowerCase();
+ let L = rows.filter(r => (tab === "all" || (tab === "due" ? isDue(r) : r.status === tab)) && (!qq || JSON.stringify([r.name, r.brand, r.city, r.whatsapp, r.email, typeOf(r.data || {})]).toLowerCase().includes(qq)));
+ const srt = $("#sort").value;
+ if (srt === "score") L.sort((a, b) => b._s.s - a._s.s);
+ else if (srt === "fu") L.sort((a, b) => (a.follow_up_at ? Date.parse(a.follow_up_at) : Infinity) - (b.follow_up_at ? Date.parse(b.follow_up_at) : Infinity));
+ return L;
+}
+function render() {
+ const c = { all: rows.length, due: rows.filter(isDue).length };
+ rows.forEach(r => c[r.status] = (c[r.status] || 0) + 1);
+ $("#tabs").innerHTML = TABS.map(([k, l]) => `<button type="button" data-t="${k}" aria-pressed="${k === tab}">${l} ${c[k] || 0}</button>`).join("");
+ const L = filtered(); $("#cnt").textContent = L.length;
+ $("#list").innerHTML = L.map(r => `<button type="button" class="card it" data-id="${e(r.id)}">
+  <span class="row sp"><b>${e(r.brand || "—")}</b><span class="row"><span class="sc ${r._s.k}" title="Lead score">${r._s.label} ${r._s.s}</span><span class="pill ${e(r.status)}">${e(r.status)}</span></span></span>
+  <span class="mu" style="display:block">${e(r.name)} · ${e(r.city)} · ${e(typeOf(r.data || {}))}</span>
+  <span class="row" style="margin-top:4px"><span class="mu">${ist(r.created_at)}${r.notified_at ? " · emailed" : ""}</span>${fuBadge(r.follow_up_at)}</span></button>`).join("") || '<p class="mu">Nothing here yet.</p>';
+}
+$("#tabs").addEventListener("click", ev => { const b = ev.target.closest("[data-t]"); if (b) { tab = b.dataset.t; render(); } });
+$("#q").addEventListener("input", render); $("#sort").addEventListener("change", render);
+$("#list").addEventListener("click", ev => { const b = ev.target.closest("[data-id]"); if (b) open_(b.dataset.id); });
+
+// ===== CSV =====
+const LB = {
+ // v4
+ oneLiner: "Sells (one line)", problem: "Problem solved", years: "Years", offers: "Offer", customers: "Best customers", custText: "Customer notes", reach: "Customers are", areas: "Areas served", questions: "Customer questions",
+ uspTags: "Why customers choose them", usp: "Other strength", competitors: "Compared with", compBetter: "Competitors do better", reviews: "Proof they have",
+ action: "Main button", sources: "Enquiries come from", enqNow: "Enquiries a month", ads: "Runs ads", keywords: "Google search words", gbp: "Google Business", ig: "Instagram", fb: "Facebook", yt: "YouTube",
+ pages: "Pages", colour: "Colours", tone: "Feel", makeLogo: "Make a logo", langs: "Languages", hasSite: "Has website/domain", domain: "Domain", likes: "Websites they like",
+ deadline: "Go live", decider: "Who decides", callTime: "Best time to call", address: "Address", maps: "Maps", notes: "Other notes",
+ // v3 (older form)
+ industryOther: "Type (other)", priceRange: "Price range", goal: "Goals", enqTarget: "Target enquiries", custAge: "Customer age", custIncome: "Customer income", custLoc: "Customer location",
+ comp1: "Competitor 1", comp2: "Competitor 2", comp3: "Competitor 3", adBudget: "Ad budget", hasDomain: "Has domain", dom1: "Domain idea 1", dom2: "Domain idea 2", dom3: "Domain idea 3",
+ about: "About", writeAbout: "Write about", extra: "Also interested in",
+};
+const GROUPS = [["Business", ["oneLiner", "problem", "years", "offers", "about"]], ["Customers", ["customers", "custText", "reach", "areas", "custLoc", "custAge", "custIncome", "questions"]],
+ ["Why them", ["uspTags", "usp", "competitors", "compBetter", "comp1", "comp2", "comp3", "reviews"]], ["Getting customers", ["action", "goal", "sources", "enqNow", "enqTarget", "ads", "adBudget", "keywords", "gbp", "ig", "fb", "yt"]],
+ ["Look and pages", ["pages", "colour", "tone", "makeLogo", "langs", "hasSite", "hasDomain", "domain", "dom1", "dom2", "dom3", "likes"]], ["Timing and contact", ["deadline", "decider", "callTime", "address", "maps", "notes", "extra", "priceRange", "writeAbout"]]];
+function csvCell(v) { v = Array.isArray(v) ? v.join("; ") : v ?? ""; v = String(v); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[",\n;]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; }
+$("#csv").addEventListener("click", () => {
+ const L = filtered();
+ const head = ["Received (IST)", "Status", "Score", "Score label", "Follow up (IST)", "Name", "WhatsApp", "Email", "City", "Business", "Type", "Services", ...Object.values(LB), "Files", "Notes (admin)", "Ref"];
+ const lines = [head.map(csvCell).join(",")].concat(L.map(r => { const d = r.data || {}; return [ist(r.created_at), r.status, r._s.s, r._s.label, r.follow_up_at ? ist(r.follow_up_at) : "", r.name, r.whatsapp, r.email || d.email, r.city, r.brand, typeOf(d),
+  [1, 2, 3, 4, 5].map(i => d[`s${i}_name`]).filter(Boolean), ...Object.keys(LB).map(k => d[k]), Object.values(d.files || {}).flat().length, r.notes, String(r.id).slice(0, 8)].map(csvCell).join(","); }));
+ const blob = new Blob([String.fromCharCode(0xfeff) + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+ const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `website-enquiries-${dayKey(Date.now())}${tab !== "all" ? "-" + tab : ""}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+// ===== Templates and call prep =====
+const ME = () => localStorage.getItem("a999_me") || "";
+function templates(r) {
+ const d = r.data || {}, first = (r.name || "").trim().split(/\s+/)[0] || "there", brand = r.brand || "your business", me = ME() ? ` ${ME()}` : "";
+ const when = r.follow_up_at ? ist(r.follow_up_at) : "[day and time]";
+ return [
+  ["First hello", `Hi ${first}, this is${me || " the website team"} about the website for ${brand}. Thank you for sharing your details. Is now a good time for a 10-minute call?`],
+  ["Could not reach you", `Hi ${first}, I tried calling you about the website for ${brand}. When is a good time to talk${d.callTime && d.callTime !== "Any time" ? `, ${d.callTime.toLowerCase()} again` : ""}?`],
+  ["Ask for logo and photos", `Hi ${first}, to make the ${brand} website look its best, please send your logo and 5–10 photos of your work${/Shop|Restaurant|Clinic|Salon|Hotel/.test(d.industry || "") ? ", place" : ""} and team here on WhatsApp.`],
+  ["Call booked", `Hi ${first}, our call about the ${brand} website is booked for ${when}. Talk soon!`],
+  ["First draft ready", `Hi ${first}, the first draft of the ${brand} website is ready. Can we go through it on a quick call today?`],
+ ];
+}
+function callPrep(r) {
+ const d = r.data || {}, q = [];
+ if (!d.oneLiner && !d.about) q.push("What do you sell, in one line?");
+ if (!d.compBetter && !d.competitors && !d.comp1) q.push("Who do customers compare you with, and what do they do better?");
+ else if (d.compBetter) q.push(`They said competitors are better at: "${d.compBetter}". How can the website fix that?`);
+ if (!arr(d.uspTags).length) q.push("Why do your best customers pick you?");
+ if (!d.action) q.push("What should a visitor do first: call, WhatsApp or book?");
+ if (!Object.values(d.files || {}).flat().length) q.push("Can you send your logo and some photos?");
+ if (arr(d.reviews).includes("Google reviews") && !d.gbp) q.push("Please share your Google Business Profile link.");
+ if (!d.deadline) q.push("When would you like to go live?");
+ if (!d.decider || !/^Me$/.test(d.decider)) q.push(`Who else should be on the call to say yes${d.decider ? ` (${d.decider.toLowerCase()})` : ""}?`);
+ if (d.questions) q.push("Go through the customer questions they listed: we answer these on the site.");
+ return q.slice(0, 6);
+}
+
+// ===== Detail =====
+let curRow = null, drawTpl = () => {};
+async function open_(id) {
+ $("#app").classList.add("hide"); const det = $("#det"); det.classList.remove("hide"); det.innerHTML = '<p class="mu">Loading…</p>';
+ let r, files;
+ try { ({ row: r, files } = await api({ action: "get", id })); } catch (x) { det.innerHTML = `<p class="alert">${e(x.message)}</p><button class="btn b2" id="bk">Back</button>`; $("#bk").onclick = back; return; }
+ curRow = r; const d = r.data || {}, sc = score(r), ph = waNum(r.whatsapp);
+ const link = v => /^https?:\/\//.test(v) ? `<a href="${e(v)}" target="_blank" rel="noopener noreferrer">${e(v)}</a>` : e(v).replace(/\n/g, "<br>");
+ const tr = GROUPS.map(([g, ks]) => { const rs = ks.filter(k => d[k] && String(d[k]).trim()).map(k => `<tr><th scope="row">${LB[k]}</th><td>${link(Array.isArray(d[k]) ? d[k].join(", ") : d[k])}</td></tr>`).join(""); return rs ? `<tr><td colspan="2" class="grp">${g}</td></tr>${rs}` : ""; }).join("");
+ const svc = [1, 2, 3, 4, 5].filter(i => d[`s${i}_name`]).map(i => `<li><b>${e(d[`s${i}_name`])}</b>${d[`s${i}_desc`] ? ` — ${e(d[`s${i}_desc`])}` : ""}${d[`s${i}_price`] ? ` · ${e(d[`s${i}_price`])}` : ""}</li>`).join("");
+ const fuVal = r.follow_up_at ? new Date(Date.parse(r.follow_up_at) + 330 * 60000).toISOString().slice(0, 16) : "";
+ det.innerHTML = `<button class="btn b2" id="bk">← Back</button>
+ <section class="card"><div class="row sp"><h1 style="margin:0">${e(r.brand || "—")}</h1><span class="row"><span class="sc ${sc.k}">${sc.label} ${sc.s}</span><span class="pill ${e(r.status)}">${e(r.status)}</span></span></div>
+  <p class="mu">${e(r.name)} · ${e(typeOf(d))} · ${e(r.city)} · received ${ist(r.created_at)} · Ref ${e(String(r.id).slice(0, 8).toUpperCase())}${d.callTime ? ` · best time: <b>${e(d.callTime)}</b>` : ""}</p>
+  <div class="row"><a class="btn wa" href="https://wa.me/${ph}" target="_blank" rel="noopener">WhatsApp</a><a class="btn b2" href="tel:+${ph}">Call ${e(r.whatsapp)}</a>${r.email || d.email ? `<a class="btn b2" href="mailto:${e(r.email || d.email)}">Email</a>` : ""}</div>
+  <h2 style="margin-top:14px">Why this score</h2><ul class="reasons">${sc.plus.map(x => `<li>${e(x)}</li>`).join("")}${sc.miss.map(x => `<li class="mu">Missing: ${e(x)}</li>`).join("")}</ul></section>
+ <section class="card"><h2>Follow-up</h2>
+  <div class="grid2"><div><label for="sts" class="mu">Status</label><select id="sts">${["new", "contacted", "won", "lost"].map(s => `<option ${s === r.status ? "selected" : ""}>${s}</option>`).join("")}</select></div>
+  <div><label for="fu" class="mu">Follow up on</label><input id="fu" type="datetime-local" value="${fuVal}"></div></div>
+  <div class="row" style="margin-top:8px"><span class="mu">Quick:</span>${[["Tomorrow", 1], ["In 3 days", 3], ["Next week", 7]].map(([l, n]) => `<button type="button" class="btn b2" data-fu="${n}">${l}</button>`).join("")}<button type="button" class="btn b2" data-fu="0">Clear</button></div>
+  <label for="nts" class="mu" style="display:block;margin-top:10px">Notes</label><textarea id="nts" rows="3">${e(r.notes || "")}</textarea>
+  <p class="row"><button class="btn" id="save">Save</button><span class="mu" id="sv" role="status"></span></p>
+  ${r.notify_error ? `<p class="mu">Email alert: ${e(r.notify_error)}</p>` : ""}</section>
+ <section class="card"><h2>Before you call</h2><ol class="ask">${callPrep(r).map(x => `<li>${e(x)}</li>`).join("") || "<li>They answered everything. Confirm the details and agree on next steps.</li>"}</ol></section>
+ <section class="card"><div class="row sp"><h2 style="margin:0">WhatsApp messages</h2><span class="row"><label for="me" class="mu">Your name</label><input id="me" style="width:160px;min-height:40px" value="${e(ME())}" placeholder="e.g. Ankit"></span></div>
+  <div class="tpl" id="tpl" style="margin-top:10px"></div></section>
+ ${svc ? `<section class="card"><h2>${e(d.v >= 4 ? "Their main offers" : "Services / products")}</h2><ul>${svc}</ul></section>` : ""}
+ <section class="card"><h2>All answers</h2><table>${tr || '<tr><td class="mu">No extra answers.</td></tr>'}</table></section>
+ <section class="card files"><h2>Files (${files.length})</h2>${files.map(x => `<a href="${e(x.url)}" target="_blank" rel="noopener" title="${e(x.field)}">${/\.(png|jpe?g|webp|gif)$/i.test(x.path) ? `<img src="${e(x.url)}" alt="${e(x.field)} file">` : e(x.path.split("/").pop())}</a>`).join("") || '<span class="mu">None</span>'}<p class="mu">Links work for 1 hour.</p></section>`;
+ drawTpl = () => { $("#tpl").innerHTML = templates(curRow).map(([t, m], i) => `<div class="card"><b>${e(t)}</b><p id="m${i}">${e(m)}</p><div class="row"><a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/${ph}?text=${encodeURIComponent(m)}">Send on WhatsApp</a><button type="button" class="btn b2" data-copy="${i}">Copy</button></div></div>`).join(""); };
+ drawTpl();
+ $("#bk").onclick = back;
+ $("#me").addEventListener("input", ev => { localStorage.setItem("a999_me", ev.target.value.trim()); drawTpl(); });
+ $("#tpl").addEventListener("click", async ev => { const b = ev.target.closest("[data-copy]"); if (!b) return; try { await navigator.clipboard.writeText($("#m" + b.dataset.copy).textContent); b.textContent = "Copied ✓"; } catch { b.textContent = "Copy failed"; } });
+ det.querySelectorAll("[data-fu]").forEach(b => b.addEventListener("click", () => {
+  const n = +b.dataset.fu; if (!n) { $("#fu").value = ""; return; }
+  const t = new Date(Date.now() + 330 * 60000); t.setUTCDate(t.getUTCDate() + n); t.setUTCHours(11, 0, 0, 0); $("#fu").value = t.toISOString().slice(0, 16);
+ }));
+ $("#save").addEventListener("click", save);
+ det.focus(); scrollTo(0, 0);
+}
+async function save() {
+ const v = $("#fu").value; // the picker shows IST wall time
+ const fu = v ? new Date(Date.parse(v + ":00Z") - 330 * 60000).toISOString() : null;
+ $("#sv").textContent = "Saving…";
+ try {
+  await api({ action: "update", id: curRow.id, status: $("#sts").value, notes: $("#nts").value, follow_up_at: fu });
+  Object.assign(curRow, { status: $("#sts").value, notes: $("#nts").value, follow_up_at: fu });
+  const i = rows.findIndex(x => x.id === curRow.id); if (i >= 0) rows[i] = { ...rows[i], status: curRow.status, notes: curRow.notes, follow_up_at: fu };
+  $("#sv").textContent = "Saved ✓"; drawTpl();
+ } catch (x) { $("#sv").textContent = "Not saved: " + x.message; }
+}
+function back() { $("#det").classList.add("hide"); $("#app").classList.remove("hide"); render(); }
+if (PW) load().then(showApp).catch(() => {});
+</script>
+</body>
+</html>
