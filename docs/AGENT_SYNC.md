@@ -6,6 +6,19 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-22 — Claude Code (Android Scan list: a teammate's numbers no longer vanish silently)
+- What happened: Sakshi (Capital Brix) scanned a list that Sagar had added the day before. 129 inserts all returned 201,
+  zero rows. `trg_dedup_contact_by_phone` skips a number the company already has by returning NULL. `addLead` then
+  called `decodeSingle`, which threw "List is empty". ScanListScreen never showed `state.error`, so the button just went
+  back to "Add 43" and she tried three times.
+- `Repository.addScannedLeads` now saves the whole list in ONE insert. Rows that come back are added; the rest are
+  "already in your company". It also fires one "N new leads" push instead of N pushes of "1 new lead".
+- `addLead` returns `Contact?` (null = duplicate). The Add lead sheet now shows the error too.
+- Review runs `scan_known_phones` (migration 0229) and flags each number "Already your lead", "With a teammate" or
+  "Do not call". Until 0229 is applied, the RPC call fails and Review checks only the rep's own leads, as before.
+  If a save still adds nothing, the Scan screen says why and flags those rows.
+- Tests: `ScanItemTest`.
+
 ## 2026-10-22 · Grok Bot · site999 landing: one bottom bar + polish
 - Fix: with a saved draft, "Start again" and the "answers saved / Continue" bar were both fixed and overlapped text. Now one fixed bar (`#cta`, inside env(safe-area-inset-bottom)): primary "Continue where you left off" (or "Start"), a quiet "Start again" link with confirm() before clearing, and a small "Your answers are saved on this phone." note. Landing has bottom padding so nothing hides behind it.
 - Polish: 8pt spacing, one large title, warm-lead line moved above the offer, offer card with even 2-column checklist (short labels, no wraps), countdown in tabular numbers (`2d 23:59:58`).

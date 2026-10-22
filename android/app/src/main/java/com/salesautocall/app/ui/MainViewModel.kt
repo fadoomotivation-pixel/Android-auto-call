@@ -25,6 +25,7 @@ import com.salesautocall.app.data.ParseResult
 import com.salesautocall.app.data.Profile
 import com.salesautocall.app.data.ProjectSite
 import com.salesautocall.app.data.Repository
+import com.salesautocall.app.data.ScanListParser
 import com.salesautocall.app.data.WhatsAppMessage
 import com.salesautocall.app.notify.FollowUpReminder
 import com.salesautocall.app.update.AppUpdater
@@ -177,6 +178,8 @@ data class AppState(
     val showAddLead: Boolean = false,
     /** Scan list wizard (free): photo / paste → leads in Call now. */
     val showScanList: Boolean = false,
+    /** Why the last Scan add added nothing, shown on the Scan screen itself. */
+    val scanResult: String? = null,
     val addingLead: Boolean = false,
     /** Settings is a full-screen overlay (like lead detail), not a nav route, so
      *  it never lingers behind another screen. */
@@ -2678,40 +2681,53 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Applies any subset of lead edits (stage/temperature/budget/note) at once. */
     // ---------- quick add lead ----------
-    fun openAddLead() = set { it.copy(showAddLead = true) }
+    fun openAddLead() = set { it.copy(showAddLead = true, error = null) }
     fun closeAddLead() = set { it.copy(showAddLead = false) }
-    fun openScanList() = set { it.copy(showScanList = true) }
-    fun closeScanList() = set { it.copy(showScanList = false) }
+    fun openScanList() = set { it.copy(showScanList = true, scanResult = null) }
+    fun closeScanList() = set { it.copy(showScanList = false, scanResult = null) }
+
+    /** Company-wide check for the Scan review screen; null = only the rep's own leads could be checked. */
+    suspend fun scanKnownPhones(keys: List<String>): Map<String, String>? = Repository.scanKnownPhones(keys)
 
     /**
-     * Scan list → leads, through the SAME Repository.addLead as the Add lead
-     * sheet (company + owner rules unchanged). The dedup trigger silently
-     * skips a phone the company already has, which makes that insert return
-     * no row — counted as "already in CRM", never shown as an error.
+     * Scan list → leads, with the same company and owner rules as the Add lead
+     * sheet. A number the company already has is skipped by the dedup trigger
+     * without an error; that is reported in plain words, never as a failure.
+     * When nothing new was added, the screen stays open and says why
+     * ([AppState.scanResult]); [onSkipped] gets the numbers that weren't added,
+     * so the review list can mark them.
      */
-    fun addScannedLeads(rows: List<Pair<String, String>>, source: String, project: String?) {
+    fun addScannedLeads(rows: List<Pair<String, String>>, source: String, project: String?, onSkipped: (Set<String>) -> Unit = {}) {
         if (rows.isEmpty() || _state.value.addingLead) return
         viewModelScope.launch {
-            set { it.copy(addingLead = true) }
-            val added = ArrayList<Contact>()
-            var skipped = 0
-            var lastError: String? = null
-            for ((name, phone) in rows) {
-                runCatching { Repository.addLead(name, phone, project, null, null, leadSource = source) }
-                    .onSuccess { added += it }
-                    .onFailure { e -> skipped++; lastError = e.message }
-            }
-            set { st ->
-                st.copy(
-                    leads = added + st.leads,
-                    addingLead = false,
-                    showScanList = added.isEmpty() && st.showScanList,
-                    pendingTab = if (added.isNotEmpty()) "leads" else st.pendingTab,
-                    message = if (added.isNotEmpty()) "Added ${added.size} to Call now" + (if (skipped > 0) " · $skipped already in CRM" else "") else null,
-                    error = if (added.isEmpty()) (lastError ?: "Nothing was added.") else null,
-                )
-            }
-            if (added.isNotEmpty()) loadLeads(force = true)
+            set { it.copy(addingLead = true, scanResult = null) }
+            runCatching { Repository.addScannedLeads(rows, project, source) }
+                .onSuccess { r ->
+                    val added = r.added
+                    val there = r.alreadyInCompany
+                    set { st ->
+                        st.copy(
+                            leads = added + st.leads,
+                            addingLead = false,
+                            showScanList = added.isEmpty() && st.showScanList,
+                            pendingTab = if (added.isNotEmpty()) "leads" else st.pendingTab,
+                            message = if (added.isNotEmpty()) "Added ${added.size} to Call now" +
+                                (if (there > 0) " · $there were already in your company" else "") else st.message,
+                            scanResult = if (added.isEmpty()) {
+                                if (there == 1) "This number is already in your company's leads, so nothing new was added. A teammate may have it. Ask your admin if it should be yours."
+                                else "All $there numbers are already in your company's leads, so nothing new was added. A teammate may have them. Ask your admin if they should be yours."
+                            } else null,
+                        )
+                    }
+                    if (added.isEmpty()) {
+                        onSkipped(rows.mapNotNull { ScanListParser.key(it.second) }.toSet())
+                    } else {
+                        loadLeads(force = true)
+                    }
+                }
+                .onFailure { e ->
+                    set { it.copy(addingLead = false, scanResult = "Couldn't add the leads. Check your internet and tap Add again. (${e.message ?: "error"})") }
+                }
         }
     }
 
@@ -2793,7 +2809,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             set { it.copy(addingLead = true) }
             runCatching { Repository.addLead(name, cleanPhone, project, budget, note) }
                 .onSuccess { c ->
-                    set { st -> st.copy(leads = listOf(c) + st.leads, addingLead = false, showAddLead = false, message = "Lead added ✓") }
+                    if (c == null) set { it.copy(addingLead = false, error = "This number is already in your company's leads. A teammate may have it. Ask your admin if it should be yours.") }
+                    else set { st -> st.copy(leads = listOf(c) + st.leads, addingLead = false, showAddLead = false, message = "Lead added ✓") }
                 }
                 .onFailure { e -> set { it.copy(addingLead = false, error = e.message ?: "Couldn't add the lead.") } }
         }
