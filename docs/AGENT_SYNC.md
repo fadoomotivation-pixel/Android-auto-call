@@ -15,8 +15,13 @@ entry before you start, and add an entry after every change.**
   "already in your company". It also fires one "N new leads" push instead of N pushes of "1 new lead".
 - `addLead` returns `Contact?` (null = duplicate). The Add lead sheet now shows the error too.
 - Review runs `scan_known_phones` (migration 0229) and flags each number "Already your lead", "With a teammate" or
-  "Do not call". Until 0229 is applied, the RPC call fails and Review checks only the rep's own leads, as before.
-  If a save still adds nothing, the Scan screen says why and flags those rows.
+  "Do not call". If the RPC call fails, Review falls back to the rep's own leads. If a save still adds nothing, the
+  Scan screen says why and flags those rows.
+- **0229 IS APPLIED in production** (version 20261021173420). This replaces the note below that says it isn't.
+  Tested as Sakshi: Sagar's numbers come back `team`; another company's numbers return nothing; anon cannot execute
+  it. `web-push-due-1min` runs every minute with no failures; `web-push` "key" answers 200, and the VAPID key is in
+  Vault. 0228's REVOKE/GRANT block is also in effect: anon has no SELECT or INSERT on any of its 12 views or on
+  `cb_attendance_code11_backup`.
 - Tests: `ScanItemTest`.
 
 ## 2026-10-22 · Grok Bot · site999 landing: one bottom bar + polish

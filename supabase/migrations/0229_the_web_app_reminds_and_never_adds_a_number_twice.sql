@@ -35,12 +35,16 @@
 -- Same rule as the Android alarm: one reminder, at the time the rep booked. A
 -- lead that has moved to another rep, or a follow-up already done, is skipped.
 --
--- NOT YET APPLIED TO PRODUCTION (2026-10-21): applying it needs a human's
--- approval. Until it is applied the web app still works — Scan falls back to
--- the rep's own leads (the dedup trigger still blocks team duplicates), and
--- "Turn on reminders" says they aren't ready yet. scan_known_phones was tried
--- in a rolled-back transaction as a Fanbe rep: 2 own numbers → mine, 2 of a
--- teammate's → team, 2 from another company → nothing returned.
+-- APPLIED TO PRODUCTION 2026-10-21 (version 20261021173420), with the
+-- founder's approval. Checked 2026-10-22:
+--   - scan_known_phones, called as a Capital Brix rep: a teammate's numbers →
+--     team; another company's numbers → nothing returned.
+--   - anon cannot execute it.
+--   - web-push-due-1min ran 60 times in an hour with no failures.
+--   - web-push "key" answered 200 and the VAPID key is in Vault.
+-- Before it was applied, scan_known_phones was also tried in a rolled-back
+-- transaction as a Fanbe rep: 2 own numbers → mine, 2 of a teammate's → team,
+-- 2 from another company → nothing returned.
 --
 -- Every function here is safe without its REVOKE: the service-only ones check
 -- auth.role() in the body, scan_known_phones returns nothing without a

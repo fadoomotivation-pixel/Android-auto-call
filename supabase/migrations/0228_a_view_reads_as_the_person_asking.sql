@@ -59,7 +59,9 @@
 -- That alone closes the leak: re-measured as anon, ten views now raise
 -- "permission denied for function current_company_id" and two return 0 rows;
 -- the attendance backup returns 0 rows. The REVOKE/GRANT block is defence in
--- depth and was held for a human to approve; run it as written.
+-- depth and was held for a human to approve. It is in effect: checked on
+-- 2026-10-22, anon has neither SELECT nor INSERT on any of the twelve views or
+-- on the attendance backup.
 
 create or replace view public.v_lead_workstate with (security_invoker = true) as
  SELECT c.id AS contact_id,
