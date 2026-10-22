@@ -45,18 +45,31 @@ async function workerFor(
   return new BaileysProvider(String(b.base_url), String(secret));
 }
 
-/** Cache what the worker said, so the WhatsApp list can show state without a round trip per row. */
+/**
+ * Cache what the worker said, so the WhatsApp list can show state without a
+ * round trip per row.
+ *
+ * Written to EVERY company on the same worker, not just the one that asked. A
+ * worker holds ONE founder login (/status, /send, /qr have no company in the
+ * path), so every company pointing at it sends from that one number. Caching
+ * per company left Fanbe and Manas showing "Connected · +91 99997 50049, seen
+ * August" for two months after the worker was re-linked to +91 70489 17300 —
+ * while their reports were going out from 70489 17300 every evening.
+ */
 async function cacheStatus(
   admin: ReturnType<typeof createClient>, companyId: string,
   s: { status: string; number: string | null; last_seen: string | null; error: string | null },
 ) {
-  await admin.from("whatsapp_baileys").update({
+  const { data: b } = await admin.from("whatsapp_baileys")
+    .select("base_url").eq("company_id", companyId).maybeSingle();
+  const update = admin.from("whatsapp_baileys").update({
     status: s.status,
     wa_number: s.number,
     last_seen_at: s.last_seen,
     last_error: s.error,
     updated_at: new Date().toISOString(),
-  }).eq("company_id", companyId);
+  });
+  await (b?.base_url ? update.eq("base_url", b.base_url) : update.eq("company_id", companyId));
 }
 
 Deno.serve(async (req) => {

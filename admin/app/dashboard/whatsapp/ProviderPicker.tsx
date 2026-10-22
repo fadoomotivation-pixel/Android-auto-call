@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { prettyNumber } from "./SendingNumbers";
 
 /**
  * Which pipe carries this company's FOUNDER notifications — and only those.
@@ -84,6 +85,16 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
     }
   }, [call]);
 
+  // The saved row can be weeks old: Fanbe's said "Connected · 919999750049,
+  // seen 26 Aug" two months after the worker was re-linked to 917048917300.
+  // So ask the worker once when the card opens, rather than showing the cache.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (asked.current || provider !== "baileys" || !cfg?.base_url) return;
+    asked.current = true;
+    void refresh();
+  }, [provider, cfg?.base_url, refresh]);
+
   // Poll only while the QR is on screen or we are mid-connect. A connected
   // session does not need a request every three seconds for the rest of the day.
   useEffect(() => {
@@ -161,7 +172,7 @@ export function ProviderPicker({ companyId, companyName }: { companyId: string; 
 
           <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
             <span style={{ fontSize: "var(--text-footnote)", color: look.color, fontWeight: "var(--weight-semibold)" }}>● {look.label}</span>
-            {waNumber && <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>+{waNumber}</span>}
+            {waNumber && <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>Sends from {prettyNumber(waNumber)}</span>}
             {lastSeen && (
               <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
                 Last seen {new Date(lastSeen).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}

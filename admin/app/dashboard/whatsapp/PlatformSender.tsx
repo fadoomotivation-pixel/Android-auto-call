@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { prettyNumber } from "./SendingNumbers";
 
 /**
  * One number that can send for every company.
@@ -22,20 +23,31 @@ export function PlatformSender({ companies }: { companies: { id: string; name: s
   const supabase = createClient();
   const [current, setCurrent] = useState<string | null>(null);
   const [connected, setConnected] = useState<Set<string>>(new Set());
+  // The number each company actually sends reports from. The picker lists
+  // company NAMES, and "ankit" told the founder nothing about which phone the
+  // reports come from.
+  const [sendsFrom, setSendsFrom] = useState<Map<string, string>>(new Map());
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [{ data: pw }, { data: integs }] = await Promise.all([
+    const [{ data: pw }, { data: integs }, { data: baileys }] = await Promise.all([
       supabase.from("platform_whatsapp").select("company_id").maybeSingle(),
       // A company can only be the sender if it actually has a token stored —
       // offering one that can't send just moves the failure to 7pm.
-      supabase.from("whatsapp_integrations").select("company_id, active, access_token_secret_id"),
+      supabase.from("whatsapp_integrations").select("company_id, active, access_token_secret_id, provider, display_number"),
+      supabase.from("whatsapp_baileys").select("company_id, wa_number"),
     ]);
     setCurrent(pw?.company_id ?? null);
     setConnected(new Set(
       (integs ?? []).filter((i) => i.active && i.access_token_secret_id).map((i) => i.company_id as string),
     ));
+    const linked = new Map((baileys ?? []).map((b) => [b.company_id as string, b.wa_number as string | null]));
+    setSendsFrom(new Map((integs ?? []).flatMap((i) => {
+      const n = i.provider === "baileys" ? linked.get(i.company_id as string) : i.display_number;
+      const p = prettyNumber(n as string | null);
+      return p ? [[i.company_id as string, p] as [string, string]] : [];
+    })));
   }, [supabase]);
 
   useEffect(() => { void load(); }, [load]);
@@ -71,8 +83,17 @@ export function PlatformSender({ companies }: { companies: { id: string; name: s
           style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "var(--panel)", color: "var(--text)", fontSize: "var(--text-footnote)" }}
         >
           <option value="">— none —</option>
-          {usable.map((c) => <option key={c.id} value={c.id}>{c.name ?? c.id}</option>)}
+          {usable.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name ?? c.id}{sendsFrom.get(c.id) ? ` · ${sendsFrom.get(c.id)}` : ""}
+            </option>
+          ))}
         </select>
+        {current && sendsFrom.get(current) && (
+          <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
+            Reports for companies without their own number go from {sendsFrom.get(current)}.
+          </span>
+        )}
         {msg && <span style={{ fontSize: "var(--text-caption1)", color: msg.startsWith("Saved") || msg === "Cleared." ? "var(--good)" : "var(--bad)" }}>{msg}</span>}
       </div>
 

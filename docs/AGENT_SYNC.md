@@ -6,6 +6,22 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-22 — Claude Code (WhatsApp page: which number sends what)
+- Founder's report: "the number at the top is one number; messages come from another". Both were true. ankit's Cloud API
+  shows +1 555 648 3378, which is Meta's TEST number; it has never sent a customer message (all 7 untagged rows were
+  August Daily Pulses). Every report and alert today goes from the Baileys worker, logged in as +91 70489 17300, for
+  every company: Fanbe and Manas point at the same worker, and the rest borrow it through platform_whatsapp = ankit.
+- New `SendingNumbers` card at the top of /dashboard/whatsapp: "Reports to the founder → number (live, via
+  notify-provider route)" and "Messages to customers → Cloud API number", with a Meta test-number warning. The super
+  admin also gets an all-companies view. The subtitle no longer claims "one company number".
+- `notify-provider.cacheStatus` now writes to every whatsapp_baileys row with the same base_url. One worker holds one
+  founder login, so Fanbe and Manas had shown "Connected · 99997 50049, seen Aug" for two months. Those two rows were
+  corrected by hand today.
+- Team inbox: a thread of reports to the founder is marked, and replying to it is blocked. A reply would have gone out
+  through Meta from the test number, not the number the report came from. The 7 old pulses were backfilled to
+  `kind='pulse'`.
+- ProviderPicker asks the worker live on open. The PlatformSender picker shows each company's number, not just its name.
+
 ## 2026-10-22 — Claude Code (Android Scan list: a teammate's numbers no longer vanish silently)
 - What happened: Sakshi (Capital Brix) scanned a list that Sagar had added the day before. 129 inserts all returned 201,
   zero rows. `trg_dedup_contact_by_phone` skips a number the company already has by returning NULL. `addLead` then

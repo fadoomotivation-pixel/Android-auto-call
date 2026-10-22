@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isMetaTestNumber } from "./SendingNumbers";
 
 type Integration = {
   phone_number_id: string;
@@ -121,7 +122,12 @@ export function WhatsAppSetup({
         <label style={field}><span style={lbl}>Phone number ID</span>
           <input style={input} value={form.phone_number_id} onChange={(e) => set("phone_number_id", e.target.value)} placeholder="from Meta → WhatsApp → API setup" /></label>
         <label style={field}><span style={lbl}>Display number (+91…)</span>
-          <input style={input} value={form.display_number} onChange={(e) => set("display_number", e.target.value)} placeholder="+91 98xxxxxxx" /></label>
+          <input style={input} value={form.display_number} onChange={(e) => set("display_number", e.target.value)} placeholder="+91 98xxxxxxx" />
+          {isMetaTestNumber(form.display_number) && (
+            <span style={{ color: "var(--warn)", fontSize: "var(--text-caption1)", lineHeight: 1.45 }}>
+              This is Meta&apos;s test number. Real customers can&apos;t get messages from it. Add your own number in Meta and use its Phone number ID.
+            </span>
+          )}</label>
         <label style={{ ...field, gridColumn: "1 / -1" }}><span style={lbl}>Permanent access token {tokenSaved && <span style={{ color: "#25D366" }}>· saved 🔒</span>}</span>
           <input style={input} type="password" autoComplete="off" value={form.access_token} onChange={(e) => set("access_token", e.target.value)}
             placeholder={tokenSaved ? "Stored securely — leave blank to keep current" : "System-user token from Meta"} /></label>

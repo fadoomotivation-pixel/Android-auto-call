@@ -12,7 +12,18 @@ type Msg = {
   body: string | null;
   status: string | null;
   created_at: string;
+  /** "pulse" / "alert" = a report to the founder, sent from the reports number. */
+  kind?: string | null;
 };
+
+/**
+ * A thread made only of reports to the founder. Those left through the
+ * reports number (a linked phone), but the reply box sends through Meta from
+ * the customer number. So a reply here would reach the founder from a number
+ * they have never seen. The thread is shown, marked, and not answerable here.
+ */
+const isReport = (m: Msg) => m.direction === "out" && (m.kind === "pulse" || m.kind === "alert");
+const reportThread = (msgs: Msg[]) => msgs.length > 0 && msgs.every(isReport);
 
 export function WhatsAppInbox({
   initialMessages,
@@ -133,7 +144,9 @@ export function WhatsAppInbox({
                 >
                   <div className="chat-item-name">{getChatName(counterparty, msgs)}</div>
                   <div className="chat-item-preview">
-                    {lastMsg.direction === "out" && <span style={{ color: "var(--accent)" }}>You: </span>}
+                    {reportThread(msgs)
+                      ? <span style={{ color: "var(--warn)" }}>Founder report: </span>
+                      : lastMsg.direction === "out" && <span style={{ color: "var(--accent)" }}>You: </span>}
                     {lastMsg.body || "Media message"}
                   </div>
                 </div>
@@ -164,6 +177,12 @@ export function WhatsAppInbox({
               ))}
               <div ref={messagesEndRef} />
             </div>
+            {reportThread(activeMessages) ? (
+              <div className="chat-input-area" style={{ color: "var(--muted)", fontSize: "var(--text-footnote)", lineHeight: 1.5 }}>
+                These are reports to the founder. They were sent from the reports number shown at the top of this page.
+                A reply typed here would go from the customer number instead, so reply from the phone.
+              </div>
+            ) : (
             <div className="chat-input-area">
               <textarea
                 className="chat-input"
@@ -183,6 +202,7 @@ export function WhatsAppInbox({
                 </svg>
               </button>
             </div>
+            )}
           </>
         ) : (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>

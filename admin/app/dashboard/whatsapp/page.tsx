@@ -6,6 +6,7 @@ import { WhatsAppInbox } from "./WhatsAppInbox";
 import { PlatformSender } from "./PlatformSender";
 import { ProviderPicker } from "./ProviderPicker";
 import { TelecallerWhatsApp } from "./TelecallerWhatsApp";
+import { SendingNumbers } from "./SendingNumbers";
 
 const WEBHOOK_URL = "https://rqgkzamuohdvttnkluzn.supabase.co/functions/v1/whatsapp-webhook";
 
@@ -45,6 +46,7 @@ type Msg = {
   body: string | null;
   status: string | null;
   created_at: string;
+  kind: string | null;
 };
 
 export default async function WhatsAppPage({ searchParams }: { searchParams: Promise<{ company?: string }> }) {
@@ -64,7 +66,7 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
       ? supabase.from("whatsapp_integrations").select("*").eq("company_id", companyId).maybeSingle<Integration>()
       : Promise.resolve({ data: null }),
     companyId
-      ? supabase.from("whatsapp_messages").select("id, contact_id, salesperson_id, direction, counterparty, body, status, created_at")
+      ? supabase.from("whatsapp_messages").select("id, contact_id, salesperson_id, direction, counterparty, body, status, created_at, kind")
           .eq("company_id", companyId).order("created_at", { ascending: false }).limit(200).returns<Msg[]>()
       : Promise.resolve({ data: [] }),
     supabase.from("contacts").select("id, name").returns<{ id: string; name: string | null }[]>(),
@@ -80,12 +82,24 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <h2>WhatsApp</h2>
+      {/* This line used to say "All WhatsApp goes through one company number".
+          Two numbers send: one for reports to the founder, one for customers.
+          The card below names both. */}
       <p className="subtitle">
-        All WhatsApp goes through one company number, so you see every conversation your team has with customers.
-        Each telecaller sees only their own leads&apos; chats; you see everyone&apos;s.
+        Two kinds of WhatsApp leave this CRM: reports to the founder, and messages to customers.
+        The card below shows which number sends each.
       </p>
 
       {isSuper && <CompanyPicker companies={companies} selected={companyId} />}
+
+      {companyId && (
+        <SendingNumbers
+          companyId={companyId}
+          companyName={companies.find((c) => c.id === companyId)?.name ?? null}
+          isSuper={isSuper}
+          companies={companies}
+        />
+      )}
 
       {/* ── Daily half: what this page is actually opened for ── */}
 
@@ -108,7 +122,7 @@ export default async function WhatsAppPage({ searchParams }: { searchParams: Pro
         </div>
       )}
 
-      <Section label="Team inbox" hint="Every conversation on the company's own WhatsApp number." />
+      <Section label="Team inbox" hint="Chats with customers, plus the reports sent to the founder. Reports are marked." />
       {rows.length === 0 ? (
         <div className="empty">No WhatsApp messages yet. Connect the number below, then messages appear here.</div>
       ) : (
