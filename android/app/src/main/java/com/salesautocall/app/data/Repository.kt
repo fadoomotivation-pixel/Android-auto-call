@@ -2156,21 +2156,68 @@ object Repository {
     }
 
     /** Creates one lead, owned by the current rep's company. Returns the new row. */
-    suspend fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?, leadSource: String? = null): Contact {
+    /**
+     * Null when the company already has this number. trg_dedup_contact_by_phone
+     * skips a duplicate by returning NULL, so the insert succeeds and comes back
+     * empty; decodeSingle used to turn that into "List is empty", which neither
+     * screen showed, and the rep was left pressing Add again.
+     */
+    suspend fun addLead(name: String, phone: String, project: String?, budget: String?, note: String?, leadSource: String? = null): Contact? {
         val profile = myProfile() ?: error("No profile yet. Ask your admin to add you to a company.")
         val companyId = profile.companyId ?: error("You are not linked to a company yet.")
-        val contact = Contact(
-            companyId = companyId,
-            salespersonId = profile.id,
-            name = name.trim().ifBlank { null },
-            phone = phone.trim(),
-            companyName = project?.trim()?.ifBlank { null },
-            budget = budget?.trim()?.ifBlank { null },
-            notes = note?.trim()?.ifBlank { null },
-            status = "new",
-            leadSource = leadSource?.trim()?.ifBlank { null },
-        )
-        return client.from("contacts").insert(contact) { select() }.decodeSingle<Contact>()
+        val contact = newLead(companyId, profile.id, name, phone, project, budget, note, leadSource)
+        return client.from("contacts").insert(contact) { select() }.decodeSingleOrNull<Contact>()
+    }
+
+    /** What a scanned list did: the leads created, and how many numbers were skipped because the company already had them. */
+    data class ScanAdd(val added: List<Contact>, val alreadyInCompany: Int)
+
+    /**
+     * Scan list → leads in ONE insert, with the same company and owner rules as
+     * [addLead]. The dedup trigger drops every number the company already has,
+     * so fewer rows come back than went in, and the difference is "already in
+     * your company". Sakshi's 43-number list was entirely Sagar's from the day
+     * before: 43 inserts, 43 silent skips, and a screen that said nothing.
+     */
+    suspend fun addScannedLeads(rows: List<Pair<String, String>>, project: String?, leadSource: String?): ScanAdd {
+        if (rows.isEmpty()) return ScanAdd(emptyList(), 0)
+        val profile = myProfile() ?: error("No profile yet. Ask your admin to add you to a company.")
+        val companyId = profile.companyId ?: error("You are not linked to a company yet.")
+        val leads = rows.map { (name, phone) -> newLead(companyId, profile.id, name, phone, project, null, null, leadSource) }
+        val added = client.from("contacts").insert(leads) { select() }.decodeList<Contact>()
+        return ScanAdd(added, rows.size - added.size)
+    }
+
+    private fun newLead(
+        companyId: String, salespersonId: String, name: String, phone: String,
+        project: String?, budget: String?, note: String?, leadSource: String?,
+    ) = Contact(
+        companyId = companyId,
+        salespersonId = salespersonId,
+        name = name.trim().ifBlank { null },
+        phone = phone.trim(),
+        companyName = project?.trim()?.ifBlank { null },
+        budget = budget?.trim()?.ifBlank { null },
+        notes = note?.trim()?.ifBlank { null },
+        status = "new",
+        leadSource = leadSource?.trim()?.ifBlank { null },
+    )
+
+    /**
+     * Which of these numbers (last 10 digits) the rep's company already has:
+     * "mine", "team" or "dnc", from scan_known_phones (migration 0229). It never
+     * says which teammate, and never looks outside the company. Null when the
+     * function isn't there or the call fails — the review screen then checks
+     * only the rep's own leads, and the save still reports what it skipped.
+     */
+    suspend fun scanKnownPhones(keys: List<String>): Map<String, String>? {
+        if (keys.isEmpty()) return emptyMap()
+        return runCatching {
+            client.postgrest.rpc(
+                "scan_known_phones",
+                buildJsonObject { put("p_phones", buildJsonArray { keys.take(500).forEach { add(JsonPrimitive(it)) } }) },
+            ).decodeList<KnownPhone>().associate { it.phone to it.state }
+        }.getOrNull()
     }
 
     // ---------- push notifications ----------
@@ -2483,6 +2530,9 @@ object Repository {
         ).decodeAs<Int>()
     }
 }
+
+@Serializable
+private data class KnownPhone(val phone: String, val state: String)
 
 @Serializable
 private data class WaRepSessionProbe(

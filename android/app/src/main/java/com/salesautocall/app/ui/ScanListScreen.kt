@@ -98,28 +98,42 @@ import java.util.Locale
  *
  * Replaces "copy the list with Google Lens, paste it somewhere, dial one by
  * one": Source → Read → Review, then the numbers are leads in Call now and the
- * existing Start calling dials them. Leads are created through the same
- * Repository.addLead as the Add lead sheet, so company, owner and the dedup
- * trigger behave exactly as they always have. No popup after calls, no new
- * scheduler — this screen only feeds the queue that already exists.
+ * existing Start calling dials them. Leads are created with the same company
+ * and owner rules as the Add lead sheet, in one insert, and the dedup trigger
+ * behaves exactly as it always has. No popup after calls, no new scheduler —
+ * this screen only feeds the queue that already exists.
+ *
+ * The trigger skips a number the company already has WITHOUT an error. So
+ * Review checks the whole company first (scan_known_phones), and if a save
+ * still adds nothing, this screen says why. Neither used to happen: a list a
+ * teammate had scanned the day before looked all-new, "Add 43" added none,
+ * and nothing on screen changed.
  */
 
 enum class ScanSource { Camera, Photo, Paste }
 
-/** One reviewed number. [inCrm] comes from the leads the app already holds. */
+/**
+ * One reviewed number. [known] says who already has it in this company:
+ * "mine" (the rep's own lead), "team" (a teammate's), "dnc" (asked not to be
+ * called), or "company" (the save skipped it, owner unknown). The database
+ * never takes a number twice in one company, so none of these can be added.
+ */
 data class ScanItem(
     val id: Int,
     val name: String,
     val phone: String,
     val valid: Boolean,
     val duplicate: Boolean,
-    val inCrm: Boolean,
+    val known: String? = null,
 ) {
-    val addable get() = valid && !duplicate && !inCrm
+    val addable get() = valid && !duplicate && known == null
     val flag: String? get() = when {
         !valid -> "Invalid number"
         duplicate -> "Duplicate in list"
-        inCrm -> "Already in CRM"
+        known == "dnc" -> "Do not call"
+        known == "mine" -> "Already your lead"
+        known == "team" -> "With a teammate"
+        known != null -> "Already in company"
         else -> null
     }
 }
@@ -132,8 +146,15 @@ fun toScanItems(rows: List<ScanListParser.Row>, crmKeys: Set<String>): List<Scan
     rows.mapIndexed { i, r ->
         ScanItem(
             id = i, name = r.name.orEmpty(), phone = r.phone, valid = r.valid, duplicate = r.duplicate,
-            inCrm = r.valid && ScanListParser.key(r.phone) in crmKeys,
+            known = if (r.valid && ScanListParser.key(r.phone) in crmKeys) "mine" else null,
         )
+    }
+
+/** Marks items with what the company check found (key → mine/team/dnc). */
+fun withKnown(items: List<ScanItem>, known: Map<String, String>): List<ScanItem> =
+    items.map { item ->
+        val state = if (item.valid) ScanListParser.key(item.phone)?.let { known[it] } else null
+        if (state != null) item.copy(known = state) else item
     }
 
 @Composable
@@ -161,9 +182,28 @@ fun ScanListScreen(vm: MainViewModel) {
             .map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.sorted()
     }
 
+    // null = checking; true = checked against the whole company; false = only
+    // against the rep's own leads (the company check isn't available).
+    var companyChecked by remember { mutableStateOf<Boolean?>(null) }
+    var checkRun by remember { mutableStateOf(0) }
+
     fun applyRows(rows: List<ScanListParser.Row>) {
         items.clear(); items += toScanItems(rows, crmKeys)
         found = rows.size
+        // The rep's own leads are all the app holds. A teammate's number used to
+        // look new here, then be skipped on save without a word.
+        val keys = items.filter { it.valid }.mapNotNull { ScanListParser.key(it.phone) }.distinct()
+        companyChecked = null
+        val run = ++checkRun
+        scope.launch {
+            val known = vm.scanKnownPhones(keys)
+            if (run != checkRun) return@launch // a newer photo replaced this list
+            if (known != null) {
+                val marked = withKnown(items.toList(), known)
+                items.clear(); items += marked
+            }
+            companyChecked = known != null
+        }
     }
 
     fun showPhoto(bmp: android.graphics.Bitmap) { photo = bmp.asImageBitmap() }
@@ -254,6 +294,7 @@ fun ScanListScreen(vm: MainViewModel) {
                     photo = photo, boxes = boxes, reading = reading, error = readError,
                     pasteText = pasteText, onPasteChange = { pasteText = it },
                     found = found,
+                    companyChecked = companyChecked,
                     onReadPaste = { applyRows(ScanListParser.parse(pasteText)) },
                     onNext = { step = 3 },
                     onRetry = { readError = null; start() },
@@ -270,8 +311,14 @@ fun ScanListScreen(vm: MainViewModel) {
                     tag = tag, onTag = { tag = it },
                     project = project, projects = projects, onProject = { project = it },
                     adding = app.addingLead,
+                    result = app.scanResult,
                     onAdd = {
-                        vm.addScannedLeads(items.filter { it.addable }.map { it.name to it.phone }, tag, project)
+                        vm.addScannedLeads(items.filter { it.addable }.map { it.name to it.phone }, tag, project) { skipped ->
+                            // Nothing was added: mark what the company already had so
+                            // the button can't offer the same numbers again.
+                            val marked = items.map { if (it.addable && ScanListParser.key(it.phone) in skipped) it.copy(known = "company") else it }
+                            items.clear(); items += marked
+                        }
                     },
                 )
             }
@@ -354,6 +401,7 @@ fun ScanStepRead(
     pasteText: String,
     onPasteChange: (String) -> Unit,
     found: Int?,
+    companyChecked: Boolean?,
     onReadPaste: () -> Unit,
     onNext: () -> Unit,
     onRetry: () -> Unit = {},
@@ -399,7 +447,15 @@ fun ScanStepRead(
                 CheckLine(if (reading) "Reading text…" else "Text read", !reading && error == null && photo != null)
             }
             CheckLine(found?.let { "$it numbers found" } ?: "Finding numbers", found != null)
-            CheckLine("Checked against your leads", found != null)
+            CheckLine(
+                when {
+                    found == null -> "Checking your company's leads"
+                    companyChecked == null -> "Checking your company's leads…"
+                    companyChecked == true -> "Checked against your company's leads"
+                    else -> "Checked against your leads"
+                },
+                found != null && companyChecked != null,
+            )
         }
         if (error != null) {
             Spacer(Modifier.height(Space.s))
@@ -442,6 +498,7 @@ fun ScanStepReview(
     projects: List<String>,
     onProject: (String?) -> Unit,
     adding: Boolean,
+    result: String?,
     onAdd: () -> Unit,
 ) {
     val ready = items.count { it.addable }
@@ -455,6 +512,12 @@ fun ScanStepReview(
                     "$ready ready to add" + if (flagged > 0) " · $flagged flagged, won't be added" else "",
                     style = AppType.footnote, color = AppColors.TextSecondary,
                 )
+                if (items.any { it.known == "team" || it.known == "company" }) {
+                    Text(
+                        "In your company, a number stays with whoever added it first.",
+                        style = AppType.footnote, color = AppColors.TextSecondary,
+                    )
+                }
                 Spacer(Modifier.height(Space.m))
             }
             itemsIndexed(items, key = { _, it -> it.id }) { i, it ->
@@ -489,6 +552,10 @@ fun ScanStepReview(
             }
         }
         Column(Modifier.fillMaxWidth().background(AppColors.Canvas).padding(horizontal = Space.l, vertical = Space.m)) {
+            result?.let {
+                Text(it, style = AppType.footnote, color = IosColors.Red, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(Space.s))
+            }
             PrimaryButton(
                 if (adding) "Adding…" else "Add $ready to Call now", Modifier.fillMaxWidth(),
                 icon = Icons.Default.Call, enabled = ready > 0 && !adding, onClick = onAdd,
@@ -531,7 +598,7 @@ private fun ScanRow(item: ScanItem, onName: (String) -> Unit, onRemove: () -> Un
                     style = AppType.footnote, color = AppColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 item.flag?.let { f ->
                     Spacer(Modifier.width(Space.s))
-                    IosTag(f, when (f) { "Invalid number" -> AppColors.Danger; "Duplicate in list" -> AppColors.Violet; else -> AppColors.Warning })
+                    IosTag(f, when (f) { "Invalid number", "Do not call" -> AppColors.Danger; "Duplicate in list" -> AppColors.Violet; else -> AppColors.Warning })
                 }
             }
         }

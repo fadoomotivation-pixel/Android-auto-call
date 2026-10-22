@@ -354,6 +354,12 @@ private fun AddLeadSheet(vm: MainViewModel) {
                 OutlinedTextField(budget, { budget = it }, label = { Text("Budget (e.g. 45 lakh)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(note, { note = it }, label = { Text("Note") }, modifier = Modifier.fillMaxWidth())
+                // A refused add used to be invisible here: the button went back
+                // to "Add lead" and nothing said why.
+                app.error?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Text(it, style = AppType.footnote, color = AppColors.Danger)
+                }
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { vm.closeAddLead() }) { Text("Cancel") }
