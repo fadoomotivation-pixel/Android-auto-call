@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.10.23-28";
+const WORKER_VERSION = "2026.10.23-29";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -433,6 +433,9 @@ function newSession(id, salespersonId, authDirOverride) {
         ? repAuthDir(salespersonId, readGen(salespersonId))
         : AUTH_DIR),
     sock: null,
+    // What this session has sent, so WhatsApp's "send it again" can be answered.
+    // Loaded from disk on first use; see rememberSent.
+    sentCache: null,
     // Set once a session has been replaced. A dead session must never
     // reconnect: it is the orphan that resurrects deleted credentials.
     dead: false,
@@ -885,6 +888,10 @@ async function start(s) {
     // attempt asks as a plain browser instead. Thinner sync, but a working
     // link, and the dashboard says which one it settled on.
     browser: identityFor(s),
+    // Answers WhatsApp's retry requests with the message we actually sent
+    // (see rememberSent). Watch-only sessions never send, so they have nothing
+    // to answer with.
+    getMessage: async (key) => (s.observeOnly ? undefined : sentCacheOf(s).get(key?.id) ?? undefined),
   });
   s.state.identity = identityFor(s).join(" · ");
 
@@ -2013,6 +2020,48 @@ const SENDER_NAME = /^[a-z][a-z0-9-]{1,30}$/;
 const senderId = (name) => `sender:${name}`;
 const senderAuthDir = (name) => path.join(AUTH_DIR, `sender-${name}`);
 
+// ── WHAT WE SENT, KEPT FOR WHATSAPP'S "SEND IT AGAIN" ────────────────────────
+//
+// 23 Oct, 6:50 PM: the first Daily Pulse from the newly linked Call Pro AI
+// number showed as "Waiting for this message. This may take a while." When a
+// phone cannot decrypt a message (routine for a device that has only just been
+// linked), it asks the sender to re-send it, and Baileys answers by calling
+// getMessage(key) for the original. We never gave Baileys a getMessage, so it
+// logged "message not available" and the bubble waited forever, on the
+// recipient's phone or on our own.
+//
+// So every sending session keeps the last few hundred messages it sent, on disk
+// next to its login, so the copy is still there if WhatsApp asks again after a
+// restart.
+const SENT_KEEP = 300;
+const sentCacheFile = (s) => path.join(s.authDir, "sent-cache.json");
+
+function sentCacheOf(s) {
+  if (!s.sentCache) {
+    try {
+      s.sentCache = new Map(JSON.parse(fsSync.readFileSync(sentCacheFile(s), "utf8")));
+    } catch {
+      s.sentCache = new Map();
+    }
+  }
+  return s.sentCache;
+}
+
+function rememberSent(s, id, message) {
+  if (!id || !message) return;
+  const cache = sentCacheOf(s);
+  cache.set(id, message);
+  while (cache.size > SENT_KEEP) cache.delete(cache.keys().next().value);
+  try {
+    fsSync.mkdirSync(s.authDir, { recursive: true });
+    fsSync.writeFileSync(sentCacheFile(s), JSON.stringify([...cache]));
+  } catch (e) {
+    // Losing the disk copy only matters after a restart; the in-memory copy
+    // still answers retries for this process.
+    log.warn({ id: s.id, err: String(e?.message || e) }, "could not save the sent-message cache");
+  }
+}
+
 /** POST /send for any session that may send. Same rules as the founder's always had. */
 async function sendFromSession(s, req, res) {
   const body = await readBody(req);
@@ -2026,6 +2075,7 @@ async function sendFromSession(s, req, res) {
   }
   try {
     const r = await s.sock.sendMessage(toJid(to), { text: String(text) });
+    rememberSent(s, r?.key?.id, r?.message);
     s.state.lastSeen = new Date().toISOString();
     return send(res, 200, { ok: true, id: r?.key?.id ?? null });
   } catch (e) {
