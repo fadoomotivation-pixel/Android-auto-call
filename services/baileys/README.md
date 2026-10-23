@@ -206,25 +206,30 @@ Two Hostinger-specific things to watch:
 - **Outbound is over wss:443**, the same port a browser uses, so the usual
   shared-hosting port restrictions do not apply.
 
-## A second sending number = a second web app, with its OWN `AUTH_DIR`
+## A second sending number: same worker, scan a QR
 
-One worker sends from one number (its founder session). The live worker,
-`pink-worm-375262.hostingersite.com`, is logged in as **+91 70489 17300, Capital
-Brix's attendance number**, and `attendance-whatsapp` sends through it. Call Pro
-AI's own platform number (the one every company's Daily Pulse and alerts borrow
-through `platform_whatsapp`) needs a second web app from this same directory.
+One worker can hold more than one SENDING number. The main login (`/status`,
+`/send`, …) is untouched. On the live worker it is **+91 70489 17300, Capital
+Brix's attendance phone**, and `attendance-whatsapp` sends through it. Each extra
+number is a path, `/p/<name>/status|qr|reconnect|send|logout`, with its own saved
+login in `$AUTH_DIR/sender-<name>`. It can never open the main login's files, and
+it starts again with the process.
 
-**Set `AUTH_DIR` on the second app before its first start**, e.g.
-`/home/<user>/.callpro-wa-auth-callproai`. Unset, it defaults to
-`~/.callpro-wa-auth`, and every web app under one Hostinger account shares one
-home directory. The new worker would then open Capital Brix's saved login, and the
-two processes would keep replacing each other's connection until both are logged
-out. That would take the attendance messages down with it.
+**Call Pro AI's own number is `/p/platform`.** To link it you never touch
+Hostinger settings. Go to the CRM: **WhatsApp → Platform-wide → Call Pro AI number
+→ Link with QR**, and scan it from the Call Pro AI phone. When the phone connects,
+`notify-provider` points the platform sender at it
+(`whatsapp_baileys.sender_session = 'platform'`). From then on, every company
+that borrows the platform number gets its Daily Pulse and alerts from Call Pro
+AI's number. Nothing switches before the scan, so no report waits on an unlinked
+phone.
 
-Then, in the CRM: **WhatsApp → company "ankit" → Founder notifications →
-Baileys**, paste the new app's URL and its own `BAILEYS_SECRET`, Save, and scan
-the QR from the Call Pro AI phone. "ankit" is the platform sender, so every
-company without a number of its own follows it.
+A worker older than `2026.10.23-28` has no `/p/` routes. The CRM says so instead
+of showing a QR that will never come; redeploy this folder once.
+
+Do not run a second web app for a second number. Every app under one Hostinger
+account shares the home directory, and with `AUTH_DIR` unset a second worker opens
+the first one's saved login. The two then knock each other off WhatsApp.
 
 ## Deploy anywhere else
 

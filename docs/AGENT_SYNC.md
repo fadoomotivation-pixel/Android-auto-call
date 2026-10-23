@@ -6,6 +6,22 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-23 — Claude Code (Call Pro AI number on the SAME worker: scan a QR and done)
+- The founder did not want a second Hostinger app. The worker (`services/baileys`, now `2026.10.23-28`) now holds
+  extra SENDING numbers at `/p/<name>/status|qr|reconnect|send|logout`, each with its own folder
+  `$AUTH_DIR/sender-<name>`, restarted at boot.
+  - The main login (Capital Brix attendance, +91 70489 17300) and its legacy routes are untouched.
+  - `/s/<rep>` is still watch-only.
+- Migration 0232 (applied): `whatsapp_baileys.sender_session`. null = the worker's main login; 'platform' = Call Pro AI.
+- `BaileysProvider(base, secret, session)` sends founder-style routes through `/p/<session>` when a session is set.
+- `notify-provider` gains three super-admin actions: `platform_number`, `platform_qr`, `platform_unlink`.
+  - `platform_number` switches the platform sender's row to 'platform' only once that phone is CONNECTED.
+  - `cacheStatus` writes per (base_url, sender_session).
+- UI: WhatsApp → Platform-wide → "Call Pro AI number" → Link with QR (`PlatformNumber.tsx`).
+- Live worker checked over pg_net `/health`: `2026.09.18-27`, one session, connected. It must be redeployed once with
+  this folder. Until then the card says "worker_outdated" (the worker answers 404 on `/p/`).
+- Telecaller "Edit" is now a bordered "✎ Edit name / email" button. The founder missed the bare link.
+
 ## 2026-10-23 — Claude Code (Call Pro AI gets its own sending number; 70489 17300 is Capital Brix attendance only)
 - Founder's call: +91 70489 17300 is Capital Brix's attendance number. It was carrying every company's Daily
   Pulse and alerts, because it is the founder session on the only worker. Call Pro AI needs its own number.
