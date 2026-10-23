@@ -112,6 +112,12 @@ migrations in `supabase/migrations/`).
   including dismissals, working hours only, never over a call/dialler/sheet. If
   you add a prompt, add it to that engine — a second scheduler is how this turns
   into spam and gets swiped away unread.
+- **The weekly report card** (`_shared/weekreview.ts`, `rep-week-review`, sent by
+  pulse-broadcast Monday 10 AM): numbers + feedback from the rep's own recorded
+  calls. Patterns are counted in code; ONE AI call per rep per week writes the
+  did-well / to-fix points, and a point citing a call it wasn't given is
+  dropped. Built early Monday into `rep_week_reviews` so preview = what the rep
+  gets. Under 3 recorded calls it is numbers only — never fake feedback.
 - **After a SIM call the popup does NOT open** (`AppPrefs.getPostCallPopup`,
   default off). It cannot open on time — the phone's in-call screen owns the
   foreground — so the lead's Update button shakes (`Modifier.nudgeShake`) and a

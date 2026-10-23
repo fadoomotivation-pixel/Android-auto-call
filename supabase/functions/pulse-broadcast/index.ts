@@ -18,9 +18,12 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   buildCompany, forReps, istDate, istHour, PULSE_FOOTER, pulseText, repText,
-  repReviewText, repWeeklyText, type RepScore, type RepWeek,
+  repReviewText, type RepScore,
 } from "../_shared/pulse.ts";
 import { notifyFounder } from "../_shared/notify.ts";
+import {
+  buildWeekReview, defaultWeekTo, markWeekReviewSent, storedWeekReview,
+} from "../_shared/weekreview.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -156,8 +159,9 @@ async function record(
 function verdictOf(r: Awaited<ReturnType<typeof deliver>>): { status: string; error: string | null } {
   if (!r.ok) return { status: "failed", error: r.error ?? "unknown" };
   if (r.queued) return { status: "queued", error: r.error ?? "Waiting for WhatsApp to come back." };
-  // Baileys sends from a real logged-in account, so a send that returned really
-  // did go. Meta only "accepted" it — the verdict arrives later by webhook.
+  // A Baileys send that returned reached WhatsApp's server: "sent", one tick.
+  // Meta only "accepted" it. Either way delivered/read arrives later — from
+  // Meta's webhook, or from the worker's receipts via whatsapp-observe.
   return { status: r.via === "baileys" ? "sent" : "accepted", error: null };
 }
 
@@ -182,18 +186,20 @@ async function sendRepReviews(admin: SupabaseClient, hour: number, date: string)
   const weekly = isMonday && hour === 10 && gate?.rep_weekly_on === true;
   if (!gate?.rep_review_on && !weekly) return { skipped: "switched off" };
 
+  // Not `enrolled`: that column folds in the DAILY switch, so with the daily
+  // review off the weekly one could never reach anybody either.
   const { data: recips } = await admin.from("v_rep_review_recipients")
     .select("salesperson_id, company_id, full_name, phone, company_name, rep_review_hour_ist, " +
             "enrolled, device_state, device_trustworthy")
-    .eq("enrolled", true);
+    .eq("has_phone", true).eq("company_on", true);
 
   let sent = 0, failed = 0, quiet = 0, untrusted = 0;
   for (const r of (recips ?? []) as Array<{
     salesperson_id: string; company_id: string; full_name: string | null;
     phone: string; company_name: string | null; rep_review_hour_ist: number;
-    device_state: string; device_trustworthy: boolean;
+    enrolled: boolean; device_state: string; device_trustworthy: boolean;
   }>) {
-    const daily = gate?.rep_review_on === true && hour === r.rep_review_hour_ist;
+    const daily = r.enrolled && gate?.rep_review_on === true && hour === r.rep_review_hour_ist;
     if (!daily && !weekly) continue;
 
     // The phone has to be feeding the CRM before we grade the person.
@@ -204,7 +210,12 @@ async function sendRepReviews(admin: SupabaseClient, hour: number, date: string)
     // happened — fifteen calls made, one recorded, and an honest score of 1/100
     // waiting to go out at 7pm. Silence is the right answer, and the gap is
     // Phone Health's problem rather than the rep's.
-    if (!r.device_trustworthy) { untrusted++; continue; }
+    //
+    // Daily only. "Reporting in the last three hours" is a fact about right
+    // now, and at 10 AM on a Monday most phones have been off since Saturday.
+    // The weekly card carries no score, and it says so itself when the phone
+    // stopped reporting before the week ended.
+    if (!weekly && !r.device_trustworthy) { untrusted++; continue; }
 
     try {
       const body = weekly
@@ -216,6 +227,7 @@ async function sendRepReviews(admin: SupabaseClient, hour: number, date: string)
         kind: weekly ? "rep_weekly" : "rep_review",
       });
       if (res.ok) sent++; else failed++;
+      if (res.ok && weekly) await markWeekReviewSent(admin, r.salesperson_id, defaultWeekTo());
     } catch (_) {
       // One rep's broken number must never stop the rest of the floor's.
       failed++;
@@ -237,28 +249,26 @@ async function dailyBody(
   return repReviewText(s, r.full_name ?? "there", r.company_name);
 }
 
+/**
+ * The Monday report card: the one rep-week-review built early this morning,
+ * feedback from their recorded calls included. A card that was not built in
+ * time still goes out with the numbers — the AI is never what makes the
+ * message late, and it is never called from inside this loop.
+ *
+ * @param coach  true from the Automation Center's Preview / Send: one rep, so
+ *   building the full card on the spot is fine, and it is kept, so the rep
+ *   later receives exactly what was previewed.
+ */
 async function weeklyBody(
   admin: SupabaseClient,
-  r: { salesperson_id: string; full_name: string | null; company_name: string | null },
+  r: { salesperson_id: string; company_id: string; full_name: string | null; company_name: string | null },
+  coach = false,
 ): Promise<string | null> {
-  const { data } = await admin.rpc("rep_week_summary", { p_salesperson: r.salesperson_id });
-  const w = data as Record<string, unknown> | null;
-  if (!w) return null;
-  // A week with nothing in it is not a review, it is a reminder that the rep
-  // was away. Say nothing rather than send a page of zeroes.
-  if ((w.calls as number) === 0 && (w.followups_completed as number) === 0) return null;
-  const week: RepWeek = {
-    from: String(w.from), to: String(w.to),
-    calls: Number(w.calls ?? 0), connected: Number(w.connected ?? 0),
-    talkSeconds: Number(w.talk_seconds ?? 0),
-    bookings: Number(w.bookings ?? 0), siteVisits: Number(w.site_visits ?? 0),
-    followupsScheduled: Number(w.followups_scheduled ?? 0),
-    followupsCompleted: Number(w.followups_completed ?? 0),
-    best: (w.best as RepWeek["best"]) ?? null,
-    worst: (w.worst as RepWeek["worst"]) ?? null,
-    avgScore: w.avg_score === null || w.avg_score === undefined ? null : Number(w.avg_score),
-  };
-  return repWeeklyText(week, r.full_name ?? "there", r.company_name);
+  const weekTo = defaultWeekTo();
+  const kept = await storedWeekReview(admin, r.salesperson_id, weekTo);
+  if (kept) return kept.text;
+  const b = await buildWeekReview(admin, r, { coach, store: coach, weekTo });
+  return b.text;
 }
 
 Deno.serve(async (req) => {
@@ -324,7 +334,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "Not your company." }, 403);
     }
     const text = body.rep_review.weekly
-      ? await weeklyBody(admin, rec as never)
+      ? await weeklyBody(admin, rec as never, true)
       : await dailyBody(admin, rec as never, date);
     if (!text) {
       return json({ ok: true, preview: null, note: "Nothing to review for this rep on this day." });
@@ -341,6 +351,7 @@ Deno.serve(async (req) => {
       companyId: rec.company_id as string, to: rec.phone as string, body: text,
       kind: body.rep_review.weekly ? "rep_weekly" : "rep_review",
     });
+    if (res.ok && body.rep_review.weekly) await markWeekReviewSent(admin, rec.salesperson_id as string, defaultWeekTo());
     return json(res);
   }
 

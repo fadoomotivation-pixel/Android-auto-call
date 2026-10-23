@@ -6,6 +6,62 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-23 — Claude Code (Weekly report card: telecallers hear about their own recorded calls every Monday)
+- Founder asked for a weekly analysis sent to each telecaller: what they did, what went right and wrong, from the
+  recordings. The weekly review already existed (Monday 10 AM, `rep_weekly_on`, numbers only, OFF). Its own comment
+  said the recording part was "buildable, not built". This builds it into the SAME send. There is no second scheduler.
+- `_shared/weekreview.ts` `buildWeekReview()`:
+  - Numbers from `rep_week_summary()`: this week, last week, and month-so-far.
+  - Feedback from the week's recorded calls (>=30s with a summary). Up to 30 calls are picked: the ones that went
+    somewhere, the coach-rated ones, then the longest.
+  - Patterns are COUNTED in code, e.g. "17 of 19 interested buyers ended with no day fixed" (promise_at null), plus
+    top objections.
+  - ONE Groq call writes 2 did-well and 2 to-fix points (with a "Say:" line), one goal and the best call. Every point
+    must cite a call id it was given, or it is dropped. Playbook facts come from `match_knowledge` (the one brain).
+  - Under 3 recorded calls it is numbers only, plus a line asking for recording.
+  - If the phone hasn't reported since 2 days before week end, the card says some calls may be missing.
+- Migration 0234 (NOT yet applied: approval timed out):
+  - `rep_week_reviews`, one per rep per week, RLS: the rep, their admin, or the super admin.
+  - `v_rep_review_recipients.phone` falls back to the rep's own Daily Pulse row number (15 of 20 had no profile
+    phone).
+  - Cron `rep-week-review-build`, Mon 05:30–09:20 IST, 3 reps per run, no-op while the switch is off.
+- `rep-week-review` fn: list / preview (builds once, keeps it) / send / switch (super) / build (cron).
+- pulse-broadcast:
+  - Weekly uses the stored card, falling back to numbers only. It never calls the AI in the send loop.
+  - Weekly no longer needs the DAILY switch (`enrolled` folded it in) or 3-hour device trust.
+  - It marks `sent_at`.
+  - `repWeeklyText`/`RepWeek` were deleted from pulse.ts.
+- Admin: AI Coach → "📋 Weekly report card".
+  - Every rep, with recorded-call count, WhatsApp tail, Preview, Send now (confirm), and Rebuild.
+  - The super admin gets a company filter and the Monday on/off switch. The Automations registry entry was updated.
+- Tested by running the builder in Deno on Nidhi's 140 real recorded calls, with a stubbed AI reply: a fake call ref
+  was dropped; the numbers-only, stale-phone and no-recordings variants all read right.
+- Reality: only Fanbe (Nidhi, Ankita) and Tani have recordings. Capital Brix, Mayur Dholera and Manas reps have 0, so
+  they get numbers only until recording is on.
+
+## 2026-10-23 — Claude Code (worker 2026.10.23-30: Baileys sends now say delivered / read / failed)
+- Report: Fanbe's pulse to Nidhi showed fine on the Call Pro AI phone. Capital Brix's pulse to Manpreet showed
+  "Waiting for this message" at 18:50, 19:00 and 19:07. Note that the 19:07 one went out after the v29 fix.
+  - All six were sent and logged with wa_message_ids. The outbox is empty, and `/p/platform/status` shows connected
+    with no errors.
+  - The bubbles are on the SENDING phone (99997 50049), which is its own copy. Whether Manpreet got it was unknowable.
+  - The CRM wrote Baileys sends as "sent" and never moved them. The worker threw away every delivery receipt.
+- Fix:
+  - Worker: sending sessions only, and only for messages sent via /send (`sentCache` has the id).
+    - `watchDelivery()` reads `messages.update` (fromMe: 3 delivered, 4/5 read, 0 error-ack failed) and the raw
+      `CB:receipt` retry requests.
+    - It posts `{ delivery: [{id, status, at, error?}] }` to INGEST_URL with no salesperson_id. A verdict only moves
+      forward.
+    - `/status` shows `recent_sends`: the last 10, with status and retries by "recipient" or "own phone".
+  - whatsapp-observe: new `delivery` branch (`applyDelivery`). It updates `whatsapp_messages.status` and
+    `pulse_subscribers.last_status` by wa_message_id, and only forward (`MAY_REPLACE`).
+  - AutoSend: "sent" is no longer green.
+    - Under 10 min: "✓ Sent" in grey.
+    - After that: "✓ Sent · not delivered" in amber, with one line telling the founder what to do.
+- Tested the receipt logic on a harness: delivered → read, a late delivered can't regress, failed → delivered upgrades,
+  unknown ids and non-fromMe are ignored, the POST carries the bearer. A local boot shows recent_sends on /p/platform.
+- Needs the worker zip uploaded to Hostinger again, plus the PR merged (for whatsapp-observe + admin).
+
 ## 2026-10-23 — Claude Code (worker 2026.10.23-29: "Waiting for this message" fixed)
 - At 18:50 IST, capital brix's founder pulse went out from the new Call Pro AI number (/p/platform), and the sender's
   phone showed "Waiting for this message". Cause: the worker never gave Baileys a `getMessage`. When a device cannot

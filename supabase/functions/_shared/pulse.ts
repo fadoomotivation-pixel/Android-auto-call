@@ -2045,44 +2045,5 @@ export function repReviewText(s: RepScore, name: string, companyName?: string | 
   return L.join("\n");
 }
 
-/**
- * Monday morning, about the week just finished.
- *
- * Strengths and weaknesses here are MEASURED, not guessed: the best and worst
- * component of the week's own score. The brief asked for "Best skill: handling
- * objections" — that reading needs the call transcripts put through the
- * coaching brain, and it will say so once it can. Naming a skill we have not
- * measured would be the same mistake as scoring notes nobody writes.
- */
-export type RepWeek = {
-  from: string; to: string;
-  calls: number; connected: number; talkSeconds: number;
-  bookings: number; siteVisits: number;
-  followupsScheduled: number; followupsCompleted: number;
-  best: { label: string; detail: string } | null;
-  worst: { label: string; detail: string } | null;
-  avgScore: number | null;
-};
-
-export function repWeeklyText(w: RepWeek, name: string, companyName?: string | null): string {
-  const L: string[] = ["📅 Weekly Review",
-    `${name}${companyName ? ` · ${companyName}` : ""}`,
-    `${w.from} – ${w.to}`];
-
-  if (w.avgScore !== null) L.push("", `Average score: ${w.avgScore}/100`);
-
-  L.push("", "🟢 The week",
-    `📞 Calls: ${w.calls} · ${w.connected} connected · ${mins(w.talkSeconds)} talk`,
-    `🔁 Follow-ups: ${w.followupsCompleted} of ${w.followupsScheduled} kept`,
-    `📍 Site visits: ${w.siteVisits}`,
-    `🎉 Bookings: ${w.bookings}`);
-
-  if (w.best) L.push("", "💪 Strongest this week", `${w.best.label} — ${w.best.detail}`);
-  if (w.worst) L.push("", "📈 Needs improvement", `${w.worst.label} — ${w.worst.detail}`);
-
-  L.push("", w.bookings > 0
-    ? "You closed business this week. Do more of whatever that was."
-    : "No bookings yet this week. The site visits are where they come from.",
-    "", PULSE_FOOTER);
-  return L.join("\n");
-}
+// The Monday card lives in weekreview.ts: numbers plus feedback from the
+// rep's own recorded calls.

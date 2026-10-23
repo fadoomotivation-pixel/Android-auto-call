@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.10.23-29";
+const WORKER_VERSION = "2026.10.23-30";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -436,6 +436,11 @@ function newSession(id, salespersonId, authDirOverride) {
     // What this session has sent, so WhatsApp's "send it again" can be answered.
     // Loaded from disk on first use; see rememberSent.
     sentCache: null,
+    // What happened to those messages after they left: delivered, read,
+    // refused, and how often a phone asked for one again. See watchDelivery.
+    sentTrace: new Map(),
+    pendingDelivery: [],
+    deliveryTimer: null,
     // Set once a session has been replaced. A dead session must never
     // reconnect: it is the orphan that resurrects deleted credentials.
     dead: false,
@@ -896,6 +901,9 @@ async function start(s) {
   s.state.identity = identityFor(s).join(" · ");
 
   s.sock.ev.on("creds.update", saveCreds);
+
+  // A sending session reports what became of what it sent.
+  if (!s.observeOnly) watchDelivery(s);
 
   // WATCH-ONLY SESSIONS REPORT WHAT THEY SAW. The founder's session does not:
   // it exists to send one message a day and has no business recording anything.
@@ -2076,11 +2084,117 @@ async function sendFromSession(s, req, res) {
   try {
     const r = await s.sock.sendMessage(toJid(to), { text: String(text) });
     rememberSent(s, r?.key?.id, r?.message);
+    traceOf(s, r?.key?.id, String(to));
     s.state.lastSeen = new Date().toISOString();
     return send(res, 200, { ok: true, id: r?.key?.id ?? null });
   } catch (e) {
     log.error(e, "send failed");
     return send(res, 502, { ok: false, error: String(e?.message || e) });
+  }
+}
+
+// ── DID IT REACH THEIR PHONE? ───────────────────────────────────────────────
+//
+// A send that returns has reached WhatsApp's server and nothing more. The CRM
+// wrote that down as "sent" and stopped, so a Daily Pulse that never opened on
+// the founder's phone read exactly like one that did. The only clue was the
+// "Waiting for this message" bubble on the SENDING phone, which is that
+// phone's own copy and says nothing about the recipient's.
+//
+// The recipient's phone answers with receipts — delivered, then read — and
+// WhatsApp's server answers a message it could not hand over with an error ack.
+// All of that already arrived here and was thrown away. Now it goes back to the
+// CRM (flushDelivery), which moves the message and the pulse subscriber forward
+// to what really happened, as Meta's status webhook does for the other provider.
+//
+// Only for messages sent through /send. The founder chatting on their own phone
+// is not this worker's business, and has no row in the CRM to update anyway.
+const TRACE_KEEP = 300;
+// A verdict only ever moves forward. A late "delivered" from someone's second
+// phone must not turn "read" back into "delivered".
+const DELIVERY_RANK = { sent: 0, failed: 1, delivered: 2, read: 3 };
+
+function traceOf(s, id, to = null) {
+  if (!id) return null;
+  let t = s.sentTrace.get(id);
+  if (!t) {
+    t = { id, to, at: new Date().toISOString(), status: "sent", retries: [] };
+    s.sentTrace.set(id, t);
+    while (s.sentTrace.size > TRACE_KEEP) s.sentTrace.delete(s.sentTrace.keys().next().value);
+  }
+  return t;
+}
+
+function watchDelivery(s) {
+  s.sock.ev.on("messages.update", (updates) => {
+    for (const u of updates ?? []) {
+      const id = u?.key?.id;
+      // sentCache, not sentTrace: it survives a restart, and a phone that was
+      // off all night delivers in the morning.
+      if (!id || !u?.key?.fromMe || !sentCacheOf(s).has(id)) continue;
+      const st = u?.update?.status;
+      // Baileys reports status as a number or a name depending on version.
+      const status = st === 0 || st === "ERROR" ? "failed"
+        : st === 3 || st === "DELIVERY_ACK" ? "delivered"
+        : st === 4 || st === 5 || st === "READ" || st === "PLAYED" ? "read"
+        : null;
+      if (!status) continue;
+      const code = status === "failed" ? u?.update?.messageStubParameters?.[0] : null;
+      noteDelivery(s, id, status, code ? String(code) : null);
+    }
+  });
+
+  // A phone that could not open a message asks for it again. Baileys answers
+  // (see getMessage) but emits nothing, so the asking is read off the wire. It
+  // is the one fact that separates "their phone is off" from "their phone got
+  // it and cannot read it", and /status shows it per message. Guarded: a
+  // diagnostic must never be what stops a sending number from starting.
+  s.sock.ws?.on?.("CB:receipt", (node) => {
+    const a = node?.attrs ?? {};
+    if (a.type !== "retry" || !sentCacheOf(s).has(a.id)) return;
+    const t = traceOf(s, a.id);
+    const retry = Array.isArray(node.content) ? node.content.find((c) => c?.tag === "retry") : null;
+    // A receipt from one of our own devices names the chat in `recipient`; one
+    // from the other side does not.
+    t.retries.push({ by: a.recipient ? "own phone" : "recipient", count: Number(retry?.attrs?.count ?? 0), at: new Date().toISOString() });
+    if (t.retries.length > 10) t.retries.shift();
+  });
+}
+
+function noteDelivery(s, id, status, code) {
+  const t = traceOf(s, id);
+  if (DELIVERY_RANK[status] <= DELIVERY_RANK[t.status]) return;
+  const at = new Date().toISOString();
+  t.status = status;
+  t[`${status}_at`] = at;
+  if (code) t.error = code;
+  s.pendingDelivery.push({ id, status, at, ...(code ? { error: code } : {}) });
+  if (s.pendingDelivery.length > 500) s.pendingDelivery.splice(0, s.pendingDelivery.length - 500);
+  if (!s.deliveryTimer) s.deliveryTimer = setTimeout(() => flushDelivery(s), 2000);
+}
+
+async function flushDelivery(s) {
+  s.deliveryTimer = null;
+  if (s.pendingDelivery.length === 0) return;
+  if (!INGEST_URL || !INGEST_SECRET) {
+    log.warn({ id: s.id, queued: s.pendingDelivery.length }, "no INGEST_URL/BAILEYS_INGEST_SECRET — cannot report delivery");
+    return;
+  }
+  const batch = s.pendingDelivery.splice(0, MAX_BATCH);
+  try {
+    const r = await fetch(INGEST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${INGEST_SECRET}` },
+      body: JSON.stringify({ delivery: batch, wa_number: s.state.number, worker_version: WORKER_VERSION }),
+    });
+    if (!r.ok) throw new Error(`ingest ${r.status}`);
+    if (s.pendingDelivery.length > 0) s.deliveryTimer = setTimeout(() => flushDelivery(s), 500);
+  } catch (e) {
+    // Kept and tried again. A CRM that has not learned this yet answers 400,
+    // and catches up the moment it is deployed.
+    s.pendingDelivery.unshift(...batch);
+    log.warn({ id: s.id, err: String(e?.message || e), queued: s.pendingDelivery.length }, "delivery report failed, will retry");
+    if (!s.deliveryTimer) s.deliveryTimer = setTimeout(() => flushDelivery(s), 60_000);
   }
 }
 
@@ -2322,6 +2436,15 @@ function statusOf(s) {
     // numbers say which, and until now neither existed.
     undecryptable: [...s.undecryptable.values()].reduce((a, b) => a + b, 0),
     undecryptable_chats: s.undecryptable.size,
+    // The last few things this number sent and what became of each: still
+    // "sent" an hour later, with the recipient asking again, is a phone that
+    // got it and cannot open it.
+    ...(s.observeOnly ? {} : {
+      recent_sends: [...s.sentTrace.values()].slice(-10).map((t) => ({
+        ...t, to: t.to ? `…${String(t.to).replace(/\D/g, "").slice(-4)}` : null,
+      })),
+      queued_delivery: s.pendingDelivery.length,
+    }),
     worker_version: WORKER_VERSION,
     error: s.state.lastError,
   };

@@ -6,6 +6,7 @@ import { RouteSkeleton } from "../skeletons";
 import { CoachPanel } from "./CoachPanel";
 import { KnowledgeBase } from "./KnowledgeBase";
 import { BestCalls, type Row as BestRow } from "./BestCalls";
+import { WeeklyCards } from "./WeeklyCards";
 
 type Digest = {
   id: string;
@@ -46,6 +47,9 @@ export default async function CoachPage({
       )}
 
       <CoachPanel companyId={isSuper ? scope.companyId : null} />
+
+      {/* What each telecaller hears about their own calls every Monday. */}
+      <WeeklyCards isSuper={isSuper} initialCompanyId={isSuper ? scope.companyId : null} />
 
       {/* Best calls and the digest list are independent reads. Each streams
           as soon as it returns instead of the page waiting on both. */}

@@ -227,6 +227,22 @@ phone.
 A worker older than `2026.10.23-28` has no `/p/` routes. The CRM says so instead
 of showing a QR that will never come; redeploy this folder once.
 
+### Did it reach their phone?
+
+The sending phone's own chat is not proof. A **"Waiting for this message"**
+bubble on the Call Pro AI phone is that phone's copy of what its linked device
+sent. It says nothing about the recipient's phone. From `2026.10.23-30` every
+sending session (the main login and each `/p/<name>`) forwards the recipient's
+receipts (delivered, read, or refused by WhatsApp) to `whatsapp-observe` as
+`{ delivery: [...] }`. The CRM moves the message and the Daily Pulse subscriber
+forward, the same as Meta's status webhook. A report that sits at "✓ Sent" for
+over ten minutes turns amber on the Pulse page.
+
+`/status` (and `/p/<name>/status`) lists `recent_sends`: the last ten messages
+with their status and any `retries`. A retry `by: "recipient"` means their phone
+got the message but could not open it. A retry `by: "own phone"` is the sending
+phone asking for its own copy.
+
 Do not run a second web app for a second number. Every app under one Hostinger
 account shares the home directory, and with `AUTH_DIR` unset a second worker opens
 the first one's saved login. The two then knock each other off WhatsApp.
