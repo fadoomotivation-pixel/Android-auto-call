@@ -257,6 +257,33 @@ export function aiUpdateLines(r: RepPulse): string[] {
   return out;
 }
 
+/** The company totals are a plain sum over its reps, so they are rebuilt the same way whenever the rep list changes. */
+export function sumTotals(reps: RepPulse[]): CompanyPulse["totals"] {
+  return reps.reduce((t, p) => ({
+    calls: t.calls + p.calls, connected: t.connected + p.connected,
+    notes: t.notes + realNotes(p).length, visits: t.visits + p.siteVisits.length,
+    talkSeconds: t.talkSeconds + p.talkSeconds,
+    visitsFixed: t.visitsFixed + p.visitsFixed, bookings: t.bookings + p.bookings,
+    revenue: t.revenue + p.revenue, hotLeads: t.hotLeads + p.hotLeads,
+  }), {
+    calls: 0, connected: 0, notes: 0, visits: 0, talkSeconds: 0,
+    visitsFixed: 0, bookings: 0, revenue: 0, hotLeads: 0,
+  });
+}
+
+/**
+ * The same day, narrowed to the telecallers one founder chose
+ * (pulse_subscribers.include_reps). The totals are re-added from those people
+ * only. A founder who picked three reps and read "Calls 140" would be reading
+ * the whole company's number under a heading about their own team.
+ * Company-wide sections (objections, promises, angles) are left as they are.
+ */
+export function forReps(p: CompanyPulse, ids: string[]): CompanyPulse {
+  const keep = new Set(ids);
+  const reps = p.reps.filter((r) => keep.has(r.id));
+  return { ...p, reps, totals: sumTotals(reps) };
+}
+
 export async function buildCompany(
   admin: SupabaseClient,
   companyId: string,
@@ -877,16 +904,7 @@ export async function buildCompany(
     }
   }));
 
-  const totals = pulses.reduce((t, p) => ({
-    calls: t.calls + p.calls, connected: t.connected + p.connected,
-    notes: t.notes + realNotes(p).length, visits: t.visits + p.siteVisits.length,
-    talkSeconds: t.talkSeconds + p.talkSeconds,
-    visitsFixed: t.visitsFixed + p.visitsFixed, bookings: t.bookings + p.bookings,
-    revenue: t.revenue + p.revenue, hotLeads: t.hotLeads + p.hotLeads,
-  }), {
-    calls: 0, connected: 0, notes: 0, visits: 0, talkSeconds: 0,
-    visitsFixed: 0, bookings: 0, revenue: 0, hotLeads: 0,
-  });
+  const totals = sumTotals(pulses);
 
   // Biggest first, and only the ones that actually cost deals — an objection
   // raised once and closed anyway is noise in a report a founder reads on a
