@@ -53,14 +53,26 @@ function normalise(raw: string): string {
  * showing it as one is the difference between a founder who knows to go and
  * fix something and a founder who trusts a tick and never gets the report.
  */
-function verdict(status: string | null): { label: string; color: string; hint: string } {
+/** How long a phone that is on takes to say "delivered". Past this, a bare
+ *  "sent" means their phone has not got it — or got it and cannot open it. */
+const DELIVERY_GRACE_MS = 10 * 60_000;
+
+function notDelivered(status: string | null, sentAt: string | null): boolean {
+  return status === "sent" && !!sentAt && Date.now() - new Date(sentAt).getTime() > DELIVERY_GRACE_MS;
+}
+
+function verdict(status: string | null, sentAt: string | null): { label: string; color: string; hint: string } {
   switch (status) {
     case "read":
       return { label: "✓✓ Read", color: "var(--good)", hint: "They opened it." };
     case "delivered":
       return { label: "✓✓ Delivered", color: "var(--good)", hint: "It reached their phone." };
+    // One tick, as on a phone. It used to be green and say "Sent by WhatsApp",
+    // and a report that never opened on the founder's phone read as a success.
     case "sent":
-      return { label: "✓ Sent by WhatsApp", color: "var(--good)", hint: "WhatsApp has sent it on; delivery not confirmed yet." };
+      return notDelivered(status, sentAt)
+        ? { label: "✓ Sent · not delivered", color: "var(--warn)", hint: "WhatsApp has it, but their phone has not confirmed it." }
+        : { label: "✓ Sent", color: "var(--muted)", hint: "Waiting for their phone to confirm." };
     case "accepted":
       return { label: "· Handed to WhatsApp", color: "var(--warn)", hint: "Meta accepted it. Delivery is not confirmed." };
     // Not a failure, and shown as its own thing so nobody chases a report that
@@ -327,7 +339,7 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
             </div>
           )}
           {s.last_sent_at && (() => {
-            const v = verdict(s.last_status);
+            const v = verdict(s.last_status, s.last_sent_at);
             return (
               <span style={{ fontSize: "var(--text-caption1)", color: v.color }} title={v.hint}>
                 {v.label}{" "}
@@ -351,6 +363,14 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
               is a specific thing the owner has to go and do. Printing it here,
               next to the number it happened to, is the difference between a
               feature they fix and one they quietly give up on. */}
+          {/* The bubble on the SENDING phone is that phone's own copy. Whether
+              the founder got it is this line, from their phone's receipt. */}
+          {notDelivered(s.last_status, s.last_sent_at) && (
+            <div style={{ flexBasis: "100%", fontSize: "var(--text-caption1)", color: "var(--warn)", lineHeight: 1.5 }}>
+              Their phone hasn&apos;t confirmed this report yet. It may be switched off or offline. Ask them
+              if it came. If not, press Send now. This changes to ✓✓ Delivered the moment their phone says so.
+            </div>
+          )}
           {s.last_status === "queued" && (
             <div style={{ flexBasis: "100%", fontSize: "var(--text-caption1)", color: "var(--accent)", lineHeight: 1.5 }}>
               WhatsApp wasn&apos;t reachable, so this report is being held and retried every few minutes.

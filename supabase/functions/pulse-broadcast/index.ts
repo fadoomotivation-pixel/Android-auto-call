@@ -156,8 +156,9 @@ async function record(
 function verdictOf(r: Awaited<ReturnType<typeof deliver>>): { status: string; error: string | null } {
   if (!r.ok) return { status: "failed", error: r.error ?? "unknown" };
   if (r.queued) return { status: "queued", error: r.error ?? "Waiting for WhatsApp to come back." };
-  // Baileys sends from a real logged-in account, so a send that returned really
-  // did go. Meta only "accepted" it — the verdict arrives later by webhook.
+  // A Baileys send that returned reached WhatsApp's server: "sent", one tick.
+  // Meta only "accepted" it. Either way delivered/read arrives later — from
+  // Meta's webhook, or from the worker's receipts via whatsapp-observe.
   return { status: r.via === "baileys" ? "sent" : "accepted", error: null };
 }
 

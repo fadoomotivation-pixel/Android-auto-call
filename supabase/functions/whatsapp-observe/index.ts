@@ -41,7 +41,7 @@
 // this and a public "write into any company's CRM" endpoint, so it is compared
 // in constant time and the function refuses to start without it.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -118,6 +118,46 @@ function extensionFor(mime: string, kind: MediaKind): string {
   return byKind[kind] ?? ".bin";
 }
 
+// ── DELIVERED, READ, OR REFUSED — FROM A BAILEYS NUMBER ──────────────────────
+//
+// Meta tells us what happened to a message through a status webhook. A Baileys
+// number never did, so its sends sat at "sent" forever — and a Daily Pulse that
+// never opened on the founder's phone looked exactly like one that did. The
+// worker now forwards the recipient's receipts here and this moves the message
+// and the pulse subscriber on, the same way whatsapp-webhook does for Meta.
+//
+// Keyed only by WhatsApp's message id, which the CRM stored when it sent. An id
+// we never sent matches nothing, so a receipt cannot touch another company.
+//
+// What each verdict may replace. Never backwards: a late "delivered" from the
+// recipient's second phone must not turn "read" back into "delivered".
+const MAY_REPLACE: Record<string, string[]> = {
+  failed: ["sent", "accepted"],
+  delivered: ["sent", "accepted", "failed"],
+  read: ["sent", "accepted", "failed", "delivered"],
+};
+
+async function applyDelivery(admin: SupabaseClient, items: unknown[]): Promise<number> {
+  let updated = 0;
+  for (const raw of items) {
+    const d = raw as Record<string, unknown>;
+    const id = String(d?.id ?? "");
+    const status = String(d?.status ?? "");
+    if (!id || !MAY_REPLACE[status]) continue;
+    const error = status === "failed"
+      ? `WhatsApp could not hand this over to their phone${d.error ? ` (code ${String(d.error).slice(0, 20)})` : ""}.`
+      : null;
+    const { count } = await admin.from("whatsapp_messages")
+      .update({ status, error }, { count: "exact" })
+      .eq("wa_message_id", id).in("status", MAY_REPLACE[status]);
+    updated += count ?? 0;
+    await admin.from("pulse_subscribers")
+      .update({ last_status: status, last_error: error })
+      .eq("last_wa_message_id", id).in("last_status", MAY_REPLACE[status]);
+  }
+  return updated;
+}
+
 function isDetails(text: string, kind: MediaKind | null): boolean {
   if (kind === "document" || kind === "image" || kind === "video") return true;
   return /https?:\/\/\S+/i.test(text ?? "");
@@ -133,6 +173,16 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => null);
   const salespersonId: string | undefined = body?.salesperson_id;
   const messages: unknown[] = Array.isArray(body?.messages) ? body.messages : [];
+
+  // A SENDING number reporting what became of what it sent. No rep, nothing
+  // observed — just WhatsApp's own receipts, keyed by the message id the CRM
+  // stored when it sent. See applyDelivery.
+  if (!salespersonId && Array.isArray(body?.delivery)) {
+    if (body.delivery.length > 200) return json({ error: "batch too large (max 200)" }, 413);
+    const updated = await applyDelivery(createClient(SUPABASE_URL, SERVICE), body.delivery);
+    return json({ ok: true, delivery: body.delivery.length, updated });
+  }
+
   if (!salespersonId) return json({ error: "salesperson_id required" }, 400);
   // A batch is a batch. An unbounded one is a memory bug waiting for a rep who
   // reconnects after a week offline.

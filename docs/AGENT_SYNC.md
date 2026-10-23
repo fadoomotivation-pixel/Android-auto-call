@@ -6,6 +6,29 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-23 — Claude Code (worker 2026.10.23-30: Baileys sends now say delivered / read / failed)
+- Report: Fanbe's pulse to Nidhi showed fine on the Call Pro AI phone. Capital Brix's pulse to Manpreet showed
+  "Waiting for this message" at 18:50, 19:00 and 19:07. Note that the 19:07 one went out after the v29 fix.
+  - All six were sent and logged with wa_message_ids. The outbox is empty, and `/p/platform/status` shows connected
+    with no errors.
+  - The bubbles are on the SENDING phone (99997 50049), which is its own copy. Whether Manpreet got it was unknowable.
+  - The CRM wrote Baileys sends as "sent" and never moved them. The worker threw away every delivery receipt.
+- Fix:
+  - Worker: sending sessions only, and only for messages sent via /send (`sentCache` has the id).
+    - `watchDelivery()` reads `messages.update` (fromMe: 3 delivered, 4/5 read, 0 error-ack failed) and the raw
+      `CB:receipt` retry requests.
+    - It posts `{ delivery: [{id, status, at, error?}] }` to INGEST_URL with no salesperson_id. A verdict only moves
+      forward.
+    - `/status` shows `recent_sends`: the last 10, with status and retries by "recipient" or "own phone".
+  - whatsapp-observe: new `delivery` branch (`applyDelivery`). It updates `whatsapp_messages.status` and
+    `pulse_subscribers.last_status` by wa_message_id, and only forward (`MAY_REPLACE`).
+  - AutoSend: "sent" is no longer green.
+    - Under 10 min: "✓ Sent" in grey.
+    - After that: "✓ Sent · not delivered" in amber, with one line telling the founder what to do.
+- Tested the receipt logic on a harness: delivered → read, a late delivered can't regress, failed → delivered upgrades,
+  unknown ids and non-fromMe are ignored, the POST carries the bearer. A local boot shows recent_sends on /p/platform.
+- Needs the worker zip uploaded to Hostinger again, plus the PR merged (for whatsapp-observe + admin).
+
 ## 2026-10-23 — Claude Code (worker 2026.10.23-29: "Waiting for this message" fixed)
 - At 18:50 IST, capital brix's founder pulse went out from the new Call Pro AI number (/p/platform), and the sender's
   phone showed "Waiting for this message". Cause: the worker never gave Baileys a `getMessage`. When a device cannot
