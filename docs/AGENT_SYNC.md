@@ -6,6 +6,18 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-23 — Claude Code (Call Pro AI gets its own sending number; 70489 17300 is Capital Brix attendance only)
+- Founder's call: +91 70489 17300 is Capital Brix's attendance number. It was carrying every company's Daily
+  Pulse and alerts, because it is the founder session on the only worker. Call Pro AI needs its own number.
+- Done (production data): Fanbe and Manas switched `whatsapp_integrations.provider` 'baileys' → 'meta'. Neither has
+  Meta credentials, so `resolveRoute` falls through to the platform sender (ankit). Their `whatsapp_baileys` rows were
+  left alone, because the telecaller watchers (`/s/<rep>`) read the worker address from there and not from
+  `provider`. For now this changes nothing: ankit is still on the same worker.
+- Waiting on the founder: a new SIM with WhatsApp for "Call Pro AI", plus a SECOND Hostinger web app from
+  `services/baileys` with its own `BAILEYS_SECRET` and its own `AUTH_DIR`. Without its own `AUTH_DIR` it shares
+  `~/.callpro-wa-auth` and takes over Capital Brix's login (README section added). Then point ankit's Founder
+  notifications at the new URL and scan the QR. Do NOT re-point ankit before the new app is up and linked.
+
 ## 2026-10-23 — Claude Code (Edit a telecaller's name + login email; deploys no longer need Docker)
 - Edge-function deploys for #550 and #556 failed. Its re-run failed the same way. The CLI pulls
   `public.ecr.aws/supabase/edge-runtime`, and the registry answered "toomanyrequests: Data limit exceeded". The workflow
