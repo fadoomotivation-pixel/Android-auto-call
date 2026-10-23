@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { prettyNumber } from "./SendingNumbers";
+import { PlatformNumber } from "./PlatformNumber";
 
 /**
  * One number that can send for every company.
@@ -96,6 +97,8 @@ export function PlatformSender({ companies }: { companies: { id: string; name: s
         )}
         {msg && <span style={{ fontSize: "var(--text-caption1)", color: msg.startsWith("Saved") || msg === "Cleared." ? "var(--good)" : "var(--bad)" }}>{msg}</span>}
       </div>
+
+      <PlatformNumber />
 
       {usable.length === 0 && (
         <div style={{ marginTop: 10, fontSize: "var(--text-caption1)", color: "var(--warn)", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }}>

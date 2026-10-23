@@ -251,7 +251,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.09.18-27";
+const WORKER_VERSION = "2026.10.23-28";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -412,7 +412,7 @@ function destroySession(s) {
   }
 }
 
-function newSession(id, salespersonId) {
+function newSession(id, salespersonId, authDirOverride) {
   return {
     id,
     // null for the founder. Present for a telecaller, and it is what the CRM
@@ -426,9 +426,12 @@ function newSession(id, salespersonId) {
     gen: salespersonId ? readGen(salespersonId) : 1,
     // Each login gets its own directory. Sharing one would have two accounts
     // overwriting each other's keys, which presents as both being logged out.
-    authDir: salespersonId
-      ? repAuthDir(salespersonId, readGen(salespersonId))
-      : AUTH_DIR,
+    // An extra sending number (/p/<name>) gets a folder of its own, given by
+    // the caller. Sharing the founder's would hand it the founder's login.
+    authDir: authDirOverride
+      ?? (salespersonId
+        ? repAuthDir(salespersonId, readGen(salespersonId))
+        : AUTH_DIR),
     sock: null,
     // Set once a session has been replaced. A dead session must never
     // reconnect: it is the orphan that resurrects deleted credentials.
@@ -534,10 +537,10 @@ function newSession(id, salespersonId) {
   };
 }
 
-function getSession(id, salespersonId) {
+function getSession(id, salespersonId, authDirOverride) {
   let s = sessions.get(id);
   if (!s) {
-    s = newSession(id, salespersonId);
+    s = newSession(id, salespersonId, authDirOverride);
     sessions.set(id, s);
     start(s).catch((e) => {
       s.state.lastError = String(e?.message || e);
@@ -1994,6 +1997,43 @@ async function flushObserved(s) {
 }
 
 /** WhatsApp wants 91xxxxxxxxxx@s.whatsapp.net; the CRM stores 91xxxxxxxxxx. */
+// ── EXTRA SENDING NUMBERS ───────────────────────────────────────────────────
+//
+// One worker used to send from exactly one number, its founder session. That
+// number here is +91 70489 17300, Capital Brix's attendance phone, and it ended
+// up carrying every company's Daily Pulse because it was the only sender there
+// was. Call Pro AI needs its own number, and asking for a second Hostinger app
+// to get one is a second thing to deploy, pay for and keep logged in.
+//
+// So a sender is a PATH, the same way a telecaller is: /p/<name>/status|qr|
+// reconnect|send|logout. Each one has its own folder under AUTH_DIR, so it can
+// never open the founder's login, and it sends like the founder does. The
+// legacy routes and the founder's login are untouched.
+const SENDER_NAME = /^[a-z][a-z0-9-]{1,30}$/;
+const senderId = (name) => `sender:${name}`;
+const senderAuthDir = (name) => path.join(AUTH_DIR, `sender-${name}`);
+
+/** POST /send for any session that may send. Same rules as the founder's always had. */
+async function sendFromSession(s, req, res) {
+  const body = await readBody(req);
+  const to = body?.to;
+  const text = body?.text;
+  if (!to || !text) return send(res, 400, { ok: false, error: "to and text required" });
+  // Told plainly rather than swallowed, so the CRM can queue it and retry
+  // instead of recording a success nobody can vouch for.
+  if (s.state.status !== "connected") {
+    return send(res, 503, { ok: false, error: s.state.lastError || "WhatsApp is not connected. Scan the QR on the WhatsApp page." });
+  }
+  try {
+    const r = await s.sock.sendMessage(toJid(to), { text: String(text) });
+    s.state.lastSeen = new Date().toISOString();
+    return send(res, 200, { ok: true, id: r?.key?.id ?? null });
+  } catch (e) {
+    log.error(e, "send failed");
+    return send(res, 502, { ok: false, error: String(e?.message || e) });
+  }
+}
+
 function toJid(phone) {
   const digits = String(phone || "").replace(/\D/g, "");
   return `${digits}@s.whatsapp.net`;
@@ -2464,6 +2504,50 @@ const server = http.createServer(async (req, res) => {
     return send(res, 404, { ok: false, error: "not found" });
   }
 
+  // /p/<name>/<action> — an extra SENDING number on this worker.
+  const snd = url.pathname.match(/^\/p\/([a-z0-9-]+)(\/[a-z]+)?$/);
+  if (snd) {
+    const name = snd[1];
+    if (!SENDER_NAME.test(name)) return send(res, 400, { ok: false, error: "bad sender name" });
+    const action = (snd[2] || "/status").slice(1);
+
+    // Log the number out and forget it, so the next QR links a different phone.
+    // Before getSession, for the same reason a rep reset is: building the
+    // session only to tear it down races its own reconnect.
+    if (action === "logout" && req.method === "POST") {
+      const existing = sessions.get(senderId(name));
+      if (existing) {
+        if (existing.state.status === "connected") {
+          try { await existing.sock?.logout?.(); } catch { /* not connected; nothing to unlink */ }
+        }
+        destroySession(existing);
+        sessions.delete(senderId(name));
+      }
+      await fs.rm(senderAuthDir(name), { recursive: true, force: true }).catch(() => {});
+      const fresh = getSession(senderId(name), null, senderAuthDir(name));
+      return send(res, 200, { ok: true, status: fresh.state.status });
+    }
+
+    const s = getSession(senderId(name), null, senderAuthDir(name));
+    if (action === "status") return send(res, 200, statusOf(s));
+    if (action === "qr") {
+      s.lastQrRequestAt = Date.now();
+      if (!s.sock && !s.starting) {
+        void start(s).catch((e) => log.error({ id: s.id, err: String(e?.message || e) }, "restart for QR failed"));
+      }
+      return send(res, 200, {
+        ok: true, status: s.state.status, qr: s.state.qrDataUrl, number: s.state.number,
+        error: s.state.lastError, worker_version: WORKER_VERSION,
+      });
+    }
+    if (action === "reconnect" && req.method === "POST") {
+      start(s).catch((e) => log.error(e));
+      return send(res, 200, { ok: true, status: "connecting" });
+    }
+    if (action === "send" && req.method === "POST") return sendFromSession(s, req, res);
+    return send(res, 404, { ok: false, error: "not found" });
+  }
+
   // Every session at a glance, for the dashboard and for debugging.
   if (url.pathname === "/sessions") {
     return send(res, 200, { ok: true, sessions: [...sessions.values()].map(statusOf) });
@@ -2485,25 +2569,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, status: "connecting" });
   }
 
-  if (url.pathname === "/send" && req.method === "POST") {
-    const body = await readBody(req);
-    const to = body?.to;
-    const text = body?.text;
-    if (!to || !text) return send(res, 400, { ok: false, error: "to and text required" });
-    // Told plainly rather than swallowed, so the CRM can queue it and retry
-    // instead of recording a success nobody can vouch for.
-    if (f.state.status !== "connected") {
-      return send(res, 503, { ok: false, error: f.state.lastError || "WhatsApp is not connected. Scan the QR on the WhatsApp page." });
-    }
-    try {
-      const r = await f.sock.sendMessage(toJid(to), { text: String(text) });
-      f.state.lastSeen = new Date().toISOString();
-      return send(res, 200, { ok: true, id: r?.key?.id ?? null });
-    } catch (e) {
-      log.error(e, "send failed");
-      return send(res, 502, { ok: false, error: String(e?.message || e) });
-    }
-  }
+  if (url.pathname === "/send" && req.method === "POST") return sendFromSession(f, req, res);
 
   send(res, 404, { ok: false, error: "not found" });
 });
@@ -2514,3 +2580,14 @@ server.listen(PORT, () => log.info({ port: PORT }, "baileys worker listening"));
 // sessions start the first time their route is touched, so adding a telecaller
 // in the dashboard and opening their QR link is the whole setup.
 getSession(FOUNDER, null);
+
+// Extra sending numbers come back with the process too. A report due at 7 PM
+// must not wait for somebody to open the dashboard and wake its session up.
+try {
+  for (const d of fsSync.readdirSync(AUTH_DIR)) {
+    const m = d.match(/^sender-(.+)$/);
+    if (m && SENDER_NAME.test(m[1])) getSession(senderId(m[1]), null, senderAuthDir(m[1]));
+  }
+} catch {
+  // No auth folder yet, so no extra senders yet.
+}

@@ -34,8 +34,17 @@ export function EditTelecaller({ userId, name, email }: { userId: string; name: 
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
           <span>{name || "—"}</span>
-          <button className="link" type="button" onClick={() => setOpen(true)} style={{ fontSize: "var(--text-caption1)" }}>
-            Edit
+          {/* A bordered button, not a bare link: the founder looked for this on
+              the live page and did not see a tiny "Edit" next to the name. */}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            style={{
+              fontSize: "var(--text-caption1)", padding: "2px 10px", borderRadius: 999, cursor: "pointer",
+              border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent",
+            }}
+          >
+            ✎ Edit name / email
           </button>
         </div>
         {email && <div style={{ color: "var(--muted)", fontSize: "var(--text-caption1)" }}>{email}</div>}

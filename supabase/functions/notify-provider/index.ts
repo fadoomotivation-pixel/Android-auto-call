@@ -15,6 +15,8 @@
 //   qr        — the current QR, while WhatsApp is offering one
 //   reconnect — force a fresh connection attempt
 //   route     — which pipe this company's notifications would leave by, probed
+//   platform_number / platform_qr / platform_unlink
+//             — super admin: link Call Pro AI's own number on the worker by QR
 //   drain     — cron only: retry everything the outbox is holding
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -38,12 +40,15 @@ async function workerFor(
   admin: ReturnType<typeof createClient>, companyId: string,
 ): Promise<BaileysProvider | { error: string }> {
   const { data: b } = await admin.from("whatsapp_baileys")
-    .select("base_url").eq("company_id", companyId).maybeSingle();
+    .select("base_url, sender_session").eq("company_id", companyId).maybeSingle();
   if (!b?.base_url) return { error: "No Baileys worker is set up for this company yet." };
   const { data: secret } = await admin.rpc("get_baileys_secret", { p_company: companyId });
   if (!secret) return { error: "The worker's secret is missing. Re-enter it and save." };
-  return new BaileysProvider(String(b.base_url), String(secret));
+  return new BaileysProvider(String(b.base_url), String(secret), (b.sender_session as string | null) ?? null);
 }
+
+/** Call Pro AI's own number lives on the worker as this extra sender. */
+const PLATFORM_SENDER = "platform";
 
 /**
  * Cache what the worker said, so the WhatsApp list can show state without a
@@ -61,7 +66,7 @@ async function cacheStatus(
   s: { status: string; number: string | null; last_seen: string | null; error: string | null },
 ) {
   const { data: b } = await admin.from("whatsapp_baileys")
-    .select("base_url").eq("company_id", companyId).maybeSingle();
+    .select("base_url, sender_session").eq("company_id", companyId).maybeSingle();
   const update = admin.from("whatsapp_baileys").update({
     status: s.status,
     wa_number: s.number,
@@ -69,7 +74,11 @@ async function cacheStatus(
     last_error: s.error,
     updated_at: new Date().toISOString(),
   });
-  await (b?.base_url ? update.eq("base_url", b.base_url) : update.eq("company_id", companyId));
+  if (!b?.base_url) { await update.eq("company_id", companyId); return; }
+  // Same worker AND the same sending login: a company on the platform number
+  // must not be stamped with the main login's status, or the reverse.
+  const sameUrl = update.eq("base_url", b.base_url);
+  await (b.sender_session ? sameUrl.eq("sender_session", b.sender_session) : sameUrl.is("sender_session", null));
 }
 
 Deno.serve(async (req) => {
@@ -100,6 +109,70 @@ Deno.serve(async (req) => {
   ]);
   const isSuper = !!pa;
   if (me?.role !== "admin" && !isSuper) return json({ ok: false, error: "Admins only" }, 403);
+
+  // ---- Call Pro AI's own sending number: scan a QR, and it is in use ----
+  //
+  // The platform sender company's worker (pink-worm) was logged in as Capital
+  // Brix's attendance phone, and every company borrowing the platform number
+  // got its reports from it. These actions link a SECOND number on that same
+  // worker (/p/platform) and, the moment it is connected, point the platform
+  // sender at it. No second host, no settings to type: scan and done.
+  //
+  // Nothing switches before the phone is actually connected. Switching first
+  // would send that evening's reports to an unlinked login, where they would
+  // wait in the outbox until somebody scanned.
+  if (action === "platform_number" || action === "platform_qr" || action === "platform_unlink") {
+    if (!isSuper) return json({ ok: false, error: "Super admin only." }, 403);
+    const { data: pw } = await admin.from("platform_whatsapp").select("company_id").maybeSingle();
+    const lender = pw?.company_id ? String(pw.company_id) : "";
+    if (!lender) return json({ ok: true, state: "no_platform", note: "Pick a platform sending company first." });
+    const { data: b } = await admin.from("whatsapp_baileys")
+      .select("base_url, sender_session").eq("company_id", lender).maybeSingle();
+    const { data: secret } = await admin.rpc("get_baileys_secret", { p_company: lender });
+    if (!b?.base_url || !secret) {
+      return json({ ok: true, state: "no_worker", note: "The platform sending company has no WhatsApp worker set up." });
+    }
+    const w = new BaileysProvider(String(b.base_url), String(secret), PLATFORM_SENDER);
+    const inUse = b.sender_session === PLATFORM_SENDER;
+
+    if (action === "platform_unlink") {
+      const r = await w.logoutSender();
+      return json(r.ok ? { ok: true } : { ok: false, error: r.error }, r.ok ? 200 : 502);
+    }
+
+    if (action === "platform_qr") {
+      const q = await w.qr().catch(() => ({ status: "disconnected", qr: null }));
+      return json({ ok: true, ...q });
+    }
+
+    const s = await w.status().catch(() => ({
+      status: "disconnected", number: null, last_seen: null,
+      error: "Could not reach the WhatsApp worker.",
+    }));
+    // An old worker has no /p/ routes and answers 404. Say what to do about it
+    // rather than showing a QR that will never come.
+    if (s.error && /\b404\b/.test(s.error)) {
+      return json({
+        ok: true, state: "worker_outdated",
+        note: "The WhatsApp worker on Hostinger is an older version that can only hold one number. Update it once (upload the new services/baileys folder to that Hostinger app, or redeploy it from GitHub), then come back here and scan. Capital Brix's attendance login stays as it is.",
+      });
+    }
+    let switched = false;
+    if (s.status === "connected" && !inUse) {
+      const { error } = await admin.from("whatsapp_baileys")
+        .update({ sender_session: PLATFORM_SENDER, status: s.status, wa_number: s.number, last_seen_at: s.last_seen, last_error: null, updated_at: new Date().toISOString() })
+        .eq("company_id", lender);
+      if (error) return json({ ok: false, error: error.message }, 500);
+      switched = true;
+    }
+    const { data: lc } = await admin.from("companies").select("name").eq("id", lender).maybeSingle();
+    return json({
+      ok: true,
+      state: s.status === "connected" ? "connected" : (s.status === "qr" ? "qr" : "not_linked"),
+      number: s.number, last_seen: s.last_seen, error: s.status === "connected" ? null : s.error,
+      in_use: inUse || switched, switched, lender_name: (lc?.name as string | null) ?? null,
+    });
+  }
 
   // A company admin acts on their own company and nothing else. The super admin
   // names the company, because the super admin is the platform's owner and every

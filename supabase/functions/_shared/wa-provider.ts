@@ -118,10 +118,21 @@ export class MetaProvider implements WhatsAppProvider {
  */
 export class BaileysProvider implements WhatsAppProvider {
   readonly name = "baileys" as const;
-  constructor(private baseUrl: string, private secret: string) {}
+  /**
+   * session: which SENDING login on the worker. null is the worker's main one
+   * (/status, /send …). A name is an extra sender at /p/<name>/… — that is how
+   * Call Pro AI's own number lives on the same worker as Capital Brix's
+   * attendance phone without ever sending from it.
+   */
+  constructor(private baseUrl: string, private secret: string, private session: string | null = null) {}
 
   private url(path: string): string {
     return `${this.baseUrl.replace(/\/+$/, "")}${path}`;
+  }
+
+  /** A founder-style route, on whichever sending login this provider was built for. */
+  private sendUrl(path: string): string {
+    return this.url(this.session ? `/p/${encodeURIComponent(this.session)}${path}` : path);
   }
 
   private headers(): Record<string, string> {
@@ -129,7 +140,7 @@ export class BaileysProvider implements WhatsAppProvider {
   }
 
   async connect(): Promise<void> {
-    await fetch(this.url("/reconnect"), { method: "POST", headers: this.headers() }).catch(() => {});
+    await fetch(this.sendUrl("/reconnect"), { method: "POST", headers: this.headers() }).catch(() => {});
   }
 
   // ── one telecaller's watch-only session on the same worker ────────────────
@@ -288,7 +299,7 @@ export class BaileysProvider implements WhatsAppProvider {
 
   async isConnected(): Promise<boolean> {
     try {
-      const r = await fetch(this.url("/status"), { headers: this.headers() });
+      const r = await fetch(this.sendUrl("/status"), { headers: this.headers() });
       if (!r.ok) return false;
       const d = await r.json();
       return d?.status === "connected";
@@ -299,7 +310,7 @@ export class BaileysProvider implements WhatsAppProvider {
 
   /** The full status, for the admin page. */
   async status(): Promise<{ status: string; number: string | null; last_seen: string | null; error: string | null }> {
-    const r = await fetch(this.url("/status"), { headers: this.headers() });
+    const r = await fetch(this.sendUrl("/status"), { headers: this.headers() });
     if (!r.ok) {
       return {
         status: "disconnected",
@@ -314,8 +325,19 @@ export class BaileysProvider implements WhatsAppProvider {
     return { status: d?.status ?? "disconnected", number: d?.number ?? null, last_seen: d?.last_seen ?? null, error: d?.error ?? null };
   }
 
+  /** Unlink an extra sender's phone so the next QR can link another. Main login: not supported here. */
+  async logoutSender(): Promise<{ ok: boolean; error: string | null }> {
+    if (!this.session) return { ok: false, error: "Only an extra sending number can be unlinked here." };
+    try {
+      const r = await fetch(this.sendUrl("/logout"), { method: "POST", headers: this.headers() });
+      return r.ok ? { ok: true, error: null } : { ok: false, error: `Worker answered ${r.status}.` };
+    } catch {
+      return { ok: false, error: "Could not reach the WhatsApp worker." };
+    }
+  }
+
   async qr(): Promise<{ status: string; qr: string | null }> {
-    const r = await fetch(this.url("/qr"), { headers: this.headers() });
+    const r = await fetch(this.sendUrl("/qr"), { headers: this.headers() });
     if (!r.ok) return { status: "disconnected", qr: null };
     const d = await r.json();
     return { status: d?.status ?? "disconnected", qr: d?.qr ?? null };
@@ -324,7 +346,7 @@ export class BaileysProvider implements WhatsAppProvider {
   async sendText(to: string, message: string): Promise<SendResult> {
     let r: Response;
     try {
-      r = await fetch(this.url("/send"), {
+      r = await fetch(this.sendUrl("/send"), {
         method: "POST",
         headers: this.headers(),
         body: JSON.stringify({ to, text: message }),
@@ -386,9 +408,11 @@ export async function resolveRoute(
       .select("provider").eq("company_id", cid).maybeSingle();
     if (i?.provider !== "baileys") return null;
     const { data: b } = await admin.from("whatsapp_baileys")
-      .select("base_url").eq("company_id", cid).maybeSingle();
+      .select("base_url, sender_session").eq("company_id", cid).maybeSingle();
     const { data: secret } = await admin.rpc("get_baileys_secret", { p_company: cid });
-    return b?.base_url && secret ? new BaileysProvider(String(b.base_url), String(secret)) : null;
+    return b?.base_url && secret
+      ? new BaileysProvider(String(b.base_url), String(secret), (b.sender_session as string | null) ?? null)
+      : null;
   };
 
   const meta = async (cid: string, borrowed: boolean) => {
