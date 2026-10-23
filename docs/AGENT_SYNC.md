@@ -6,6 +6,16 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-23 — Claude Code (worker 2026.10.23-29: "Waiting for this message" fixed)
+- At 18:50 IST, capital brix's founder pulse went out from the new Call Pro AI number (/p/platform), and the sender's
+  phone showed "Waiting for this message". Cause: the worker never gave Baileys a `getMessage`. When a device cannot
+  decrypt (routine right after a fresh link) it sends a retry receipt; Baileys calls getMessage for the original, got
+  undefined, logged "message not available", and the bubble stayed waiting.
+- Fix: every sending session (founder + `/p/<name>`) remembers what it sent, the last 300 messages, kept in memory and
+  in `<authDir>/sent-cache.json`. The socket's `getMessage` answers from that. Watch-only sessions return undefined.
+- Needs the worker zip uploaded to Hostinger again. Messages sent before the update cannot be retried. Press
+  "Send now" on the Daily Pulse page afterwards to resend today's report.
+
 ## 2026-10-23 — Claude Code (Daily Pulse: sending number shown + pickable, founders pick their telecallers, 2+ founders)
 - LIVE STATE: the worker is `2026.10.23-28` with 2 sessions, both connected. ankit's `whatsapp_baileys.sender_session` is
   'platform' (+91 99997 50049, scanned 17:11 IST), so every company that borrows the platform number now sends from it.
