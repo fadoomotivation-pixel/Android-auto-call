@@ -134,11 +134,19 @@ jobs:
         with:
           version: 2.111.0
 
+      # --use-api: Supabase bundles the functions on its own servers. NO DOCKER.
+      #
+      # Without it the CLI pulls public.ecr.aws/supabase/edge-runtime on every
+      # run, and Amazon's public registry started answering "toomanyrequests:
+      # Data limit exceeded". The #550 and #556 deploys both died on that pull,
+      # before a single function was bundled, and so did a re-run of #556 the
+      # next morning. Retrying cannot fix a quota on someone else's registry.
+      # Removing the pull does.
       - name: Deploy
         id: deploy
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase functions deploy --project-ref rqgkzamuohdvttnkluzn
+        run: supabase functions deploy --use-api --project-ref rqgkzamuohdvttnkluzn
 
       # A green deploy is not a working deploy. Three of these deployed
       # "successfully" while failing to boot, and nothing noticed until a

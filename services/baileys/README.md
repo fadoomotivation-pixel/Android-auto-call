@@ -206,6 +206,26 @@ Two Hostinger-specific things to watch:
 - **Outbound is over wss:443**, the same port a browser uses, so the usual
   shared-hosting port restrictions do not apply.
 
+## A second sending number = a second web app, with its OWN `AUTH_DIR`
+
+One worker sends from one number (its founder session). The live worker,
+`pink-worm-375262.hostingersite.com`, is logged in as **+91 70489 17300, Capital
+Brix's attendance number**, and `attendance-whatsapp` sends through it. Call Pro
+AI's own platform number (the one every company's Daily Pulse and alerts borrow
+through `platform_whatsapp`) needs a second web app from this same directory.
+
+**Set `AUTH_DIR` on the second app before its first start**, e.g.
+`/home/<user>/.callpro-wa-auth-callproai`. Unset, it defaults to
+`~/.callpro-wa-auth`, and every web app under one Hostinger account shares one
+home directory. The new worker would then open Capital Brix's saved login, and the
+two processes would keep replacing each other's connection until both are logged
+out. That would take the attendance messages down with it.
+
+Then, in the CRM: **WhatsApp → company "ankit" → Founder notifications →
+Baileys**, paste the new app's URL and its own `BAILEYS_SECRET`, Save, and scan
+the QR from the Call Pro AI phone. "ankit" is the platform sender, so every
+company without a number of its own follows it.
+
 ## Deploy anywhere else
 
 1. Point your host at this directory (it has a Dockerfile).

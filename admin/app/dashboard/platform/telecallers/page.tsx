@@ -4,6 +4,8 @@ import Link from "next/link";
 import { AssignCompany } from "./AssignCompany";
 import TelecallerRowActions from "./TelecallerRowActions";
 import { SpeaksAsPicker } from "../../salespeople/SpeaksAsPicker";
+import { EditTelecaller } from "../../salespeople/EditTelecaller";
+import { loginEmails } from "@/lib/dashboard/loginEmails";
 
 export default async function PlatformTelecallersPage() {
   const supabase = await createClient();
@@ -33,6 +35,7 @@ export default async function PlatformTelecallersPage() {
   const rows = data ?? [];
   const companyList = companies ?? [];
   const speaksById = new Map((voices ?? []).map((v) => [v.id, v.speaks_as]));
+  const emailById = await loginEmails(rows.map((t) => t.salesperson_id));
 
   return (
     <>
@@ -70,7 +73,9 @@ export default async function PlatformTelecallersPage() {
           <tbody>
             {rows.map((t) => (
               <tr key={t.salesperson_id}>
-                <td>{t.full_name || "—"}</td>
+                <td>
+                  <EditTelecaller userId={t.salesperson_id} name={t.full_name} email={emailById.get(t.salesperson_id) ?? null} />
+                </td>
                 <td>
                   <AssignCompany
                     userId={t.salesperson_id}

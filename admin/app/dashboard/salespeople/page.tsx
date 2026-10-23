@@ -4,6 +4,8 @@ import { CompanyPicker } from "../whatsapp/CompanyPicker";
 import { InviteCard } from "./InviteCard";
 import { MemberToggle } from "./MemberToggle";
 import { SpeaksAsPicker } from "./SpeaksAsPicker";
+import { EditTelecaller } from "./EditTelecaller";
+import { loginEmails } from "@/lib/dashboard/loginEmails";
 
 type Member = Pick<Profile, "id" | "full_name" | "is_active"> & { speaks_as: string | null };
 
@@ -28,7 +30,7 @@ export default async function SalespeoplePage({
   // `companies … limit(1)`, which showed the super admin ONE arbitrary company's
   // join code and all companies' reps mixed together — the bug this fixes.
   const [{ data: prof }, { data: pa }] = await Promise.all([
-    supabase.from("profiles").select("company_id").eq("id", user.id).maybeSingle<{ company_id: string | null }>(),
+    supabase.from("profiles").select("company_id, role").eq("id", user.id).maybeSingle<{ company_id: string | null; role: string | null }>(),
     supabase.from("platform_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
   ]);
   const isSuper = !!pa;
@@ -66,6 +68,10 @@ export default async function SalespeoplePage({
   const memberList = members ?? [];
   const activeById = new Map(memberList.map((m) => [m.id, m.is_active]));
   const speaksById = new Map(memberList.map((m) => [m.id, m.speaks_as]));
+  // Only an admin sees the team's login emails and can edit them. The ids are
+  // this company's telecallers only (memberList is filtered by companyId).
+  const canEdit = isSuper || prof?.role === "admin";
+  const emailById = canEdit ? await loginEmails(memberList.map((m) => m.id)) : new Map<string, string>();
 
   return (
     <>
@@ -101,7 +107,11 @@ export default async function SalespeoplePage({
               const active = activeById.get(r.salesperson_id) ?? true;
               return (
                 <tr key={r.salesperson_id}>
-                  <td>{r.full_name || "—"}</td>
+                  <td>
+                    {canEdit
+                      ? <EditTelecaller userId={r.salesperson_id} name={r.full_name} email={emailById.get(r.salesperson_id) ?? null} />
+                      : (r.full_name || "—")}
+                  </td>
                   <td>{r.total_contacts}</td>
                   <td>{r.total_calls}</td>
                   <td>{r.connected_calls}</td>
