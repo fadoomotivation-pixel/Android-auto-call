@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ist } from "@/lib/dashboard/format";
+import { prettyNumber } from "../whatsapp/SendingNumbers";
 
 /**
  * "Put the founder's number in and the report goes out at 7 every evening."
@@ -27,6 +28,8 @@ type Sub = {
   /** Null = the founder, who gets the whole team's roll-up. Set = one
    *  telecaller, who gets their own day and nobody else's numbers. */
   salesperson_id: string | null;
+  /** Founder rows only: just these telecallers. Null = the whole team. */
+  include_reps: string[] | null;
   active: boolean;
   template_name: string | null;
   last_sent_at: string | null;
@@ -91,6 +94,12 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  // Which number these reports actually leave from, asked live (the same
+  // route the sender takes), so nobody has to go to the WhatsApp page to find out.
+  const [from, setFrom] = useState<{ number: string | null; how: string; ok: boolean } | null>(null);
+  // The founder row whose telecaller list is open for editing.
+  const [picking, setPicking] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const [{ data, error }, { data: rs, error: rsErr }] = await Promise.all([
@@ -109,6 +118,42 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
   }, [supabase, companyId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    void (async () => {
+      const { data, error } = await supabase.functions.invoke<{
+        ok: boolean; reason?: string;
+        route?: { provider: string; via: string; lender: string | null; connected: boolean; number: string | null } | null;
+      }>("notify-provider", { body: { action: "route", company_id: companyId } });
+      const r = data?.route;
+      if (error || !r) { setFrom({ number: null, how: data?.reason ?? "No WhatsApp number can send this yet.", ok: false }); return; }
+      setFrom({
+        number: prettyNumber(r.number),
+        how: r.via.startsWith("platform") ? `shared platform number${r.lender ? ` (set on ${r.lender})` : ""}` : "this company's own number",
+        ok: r.connected,
+      });
+    })();
+  }, [supabase, companyId]);
+
+  /** Open the add form already set for a founder (the next one is "Founder 2", …) or a telecaller. */
+  function startAdd(kind: "founder" | "rep") {
+    const founders = subs.filter((s) => !s.salesperson_id).length;
+    setWho(kind === "rep" ? (reps[0]?.id ?? "") : "");
+    setLabel(founders === 0 ? "Founder" : `Founder ${founders + 1}`);
+    setPhone(""); setMsg(null); setOpen(true);
+  }
+
+  function openPicker(s: Sub) {
+    setPicking(s.id);
+    setPicked(new Set(s.include_reps ?? reps.map((r) => r.id)));
+  }
+
+  async function savePicker(s: Sub) {
+    if (picked.size === 0) { setMsg("Pick at least one telecaller, or tick All."); return; }
+    const all = reps.every((r) => picked.has(r.id));
+    await patch(s.id, { include_reps: all ? null : [...picked] });
+    setPicking(null);
+  }
 
   async function add() {
     const p = normalise(phone);
@@ -173,10 +218,25 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
             ? "Add a number — the founder gets the whole team, a telecaller gets only their own day. Goes out on its own, every evening."
             : `${subs.filter((s) => s.active).length} number${subs.filter((s) => s.active).length === 1 ? "" : "s"} getting ${companyName ? `${companyName}'s` : "this"} report daily.`}
         </span>
-        <button className="link" onClick={() => setOpen((o) => !o)} style={{ marginLeft: "auto" }}>
-          {open ? "Cancel" : "Add number"}
-        </button>
+        <span style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
+          {open
+            ? <button className="link" onClick={() => setOpen(false)}>Cancel</button>
+            : <>
+                <button className="link" onClick={() => startAdd("founder")}>+ Founder</button>
+                {reps.length > 0 && <button className="link" onClick={() => startAdd("rep")}>+ Telecaller&apos;s own report</button>}
+              </>}
+        </span>
       </div>
+
+      {/* Which number this goes out from, in the place the report is set up. */}
+      {from && (
+        <div style={{ marginTop: 6, fontSize: "var(--text-caption1)", color: from.ok ? "var(--muted)" : "var(--bad)" }}>
+          {from.number
+            ? <>Sends from <strong style={{ color: "var(--text)" }}>{from.number}</strong> · {from.how}{from.ok ? "" : " · not connected"}</>
+            : from.how}
+          {" "}<a href="/dashboard/whatsapp" style={{ color: "var(--accent)" }}>Change</a>
+        </div>
+      )}
 
       {open && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
@@ -201,7 +261,10 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
           <button className="primary" onClick={add} disabled={busy} style={{ background: "#25D366", color: "#032b17" }}>
             {busy ? "Saving…" : "Save"}
           </button>
-          <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>Indian numbers: 10 digits is enough, 91 is added for you.</span>
+          <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
+            Indian numbers: 10 digits is enough, 91 is added for you.
+            {!who && " Add as many founders or partners as you like. Each gets it on their own WhatsApp, and can pick their own telecallers after saving."}
+          </span>
         </div>
       )}
 
@@ -210,9 +273,19 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
           <span style={{ fontSize: "var(--text-footnote)", color: "var(--text)" }}>
             <strong>{s.label}</strong> · {s.phone}
             <span style={{ color: "var(--muted)", fontSize: "var(--text-caption1)" }}>
-              {" "}· {s.salesperson_id ? "own report" : "whole team"}
+              {" "}· {s.salesperson_id
+                ? "own report"
+                : s.include_reps?.length
+                  ? `${s.include_reps.length} telecaller${s.include_reps.length === 1 ? "" : "s"}: ${
+                      s.include_reps.map((id) => reps.find((r) => r.id === id)?.full_name ?? "removed").join(", ")}`
+                  : "whole team"}
             </span>
           </span>
+          {!s.salesperson_id && reps.length > 0 && picking !== s.id && (
+            <button className="link" onClick={() => openPicker(s)} style={{ fontSize: "var(--text-caption1)" }}>
+              Choose telecallers
+            </button>
+          )}
           <select value={s.send_hour_ist} onChange={(e) => patch(s.id, { send_hour_ist: Number(e.target.value) })} style={box}>
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
           </select>
@@ -228,6 +301,31 @@ export function AutoSend({ companyId, companyName }: { companyId: string; compan
             style={{ fontSize: "var(--text-caption1)", padding: "5px 10px", borderRadius: 8, border: "1px solid var(--border-strong)", background: "transparent", color: "var(--muted)", cursor: "pointer" }}>
             Remove
           </button>
+          {picking === s.id && (
+            <div style={{ flexBasis: "100%", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", padding: "8px 0" }}>
+              <span style={{ fontSize: "var(--text-caption1)", color: "var(--muted)" }}>Whose day goes in {s.label}&apos;s report:</span>
+              <label style={{ fontSize: "var(--text-footnote)", display: "flex", gap: 5, alignItems: "center" }}>
+                <input type="checkbox" checked={reps.every((r) => picked.has(r.id))}
+                  onChange={(e) => setPicked(new Set(e.target.checked ? reps.map((r) => r.id) : []))} />
+                All
+              </label>
+              {reps.map((r) => (
+                <label key={r.id} style={{ fontSize: "var(--text-footnote)", display: "flex", gap: 5, alignItems: "center" }}>
+                  <input type="checkbox" checked={picked.has(r.id)} onChange={(e) => {
+                    const next = new Set(picked);
+                    if (e.target.checked) next.add(r.id); else next.delete(r.id);
+                    setPicked(next);
+                  }} />
+                  {r.full_name || "Telecaller"}
+                </label>
+              ))}
+              <button className="primary" onClick={() => void savePicker(s)}>Save</button>
+              <button className="link" onClick={() => setPicking(null)}>Cancel</button>
+              <span style={{ flexBasis: "100%", fontSize: "var(--text-caption1)", color: "var(--muted)" }}>
+                Totals in the report add up only these people. Company-wide parts (what is stopping deals, promises) stay for the whole company.
+              </span>
+            </div>
+          )}
           {s.last_sent_at && (() => {
             const v = verdict(s.last_status);
             return (

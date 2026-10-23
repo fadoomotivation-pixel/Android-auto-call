@@ -17,7 +17,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
-  buildCompany, istDate, istHour, PULSE_FOOTER, pulseText, repText,
+  buildCompany, forReps, istDate, istHour, PULSE_FOOTER, pulseText, repText,
   repReviewText, repWeeklyText, type RepScore, type RepWeek,
 } from "../_shared/pulse.ts";
 import { notifyFounder } from "../_shared/notify.ts";
@@ -41,6 +41,8 @@ type Sub = {
   /** Null = the founder, who gets the whole team. Set = one telecaller, who
    *  gets their own day and nobody else's numbers. */
   salesperson_id: string | null;
+  /** Founder rows only: just these telecallers. Null = the whole team. */
+  include_reps: string[] | null;
 };
 
 /**
@@ -57,7 +59,10 @@ async function buildText(
   const { data: company } = await admin.from("companies").select("name").eq("id", sub.company_id).maybeSingle();
   const companyName = company?.name ?? null;
 
-  const pulse = await buildCompany(admin, sub.company_id, date);
+  const whole = await buildCompany(admin, sub.company_id, date);
+  // A founder who chose their own people gets those people, with totals that
+  // add up to them (forReps). A telecaller row is narrowed below regardless.
+  const pulse = !sub.salesperson_id && sub.include_reps?.length ? forReps(whole, sub.include_reps) : whole;
 
   // NOTHING THAT LEAVES HERE CARRIES OFF-CRM, EVER.
   //
@@ -270,7 +275,7 @@ Deno.serve(async (req) => {
     const hour = typeof body?.hour === "number" ? body.hour : istHour();
     const date = typeof body?.date === "string" ? body.date : istDate(0);
     const { data: subs } = await admin.from("pulse_subscribers")
-      .select("id, company_id, label, phone, send_hour_ist, template_name, salesperson_id")
+      .select("id, company_id, label, phone, send_hour_ist, template_name, salesperson_id, include_reps")
       .eq("active", true).eq("send_hour_ist", hour);
 
     let sent = 0, failed = 0, queued = 0;
@@ -340,7 +345,7 @@ Deno.serve(async (req) => {
   }
 
   const { data: sub } = await admin.from("pulse_subscribers")
-    .select("id, company_id, label, phone, send_hour_ist, template_name, salesperson_id")
+    .select("id, company_id, label, phone, send_hour_ist, template_name, salesperson_id, include_reps")
     .eq("id", body?.subscriber_id ?? "").maybeSingle();
   if (!sub) return json({ ok: false, error: "No such recipient." }, 404);
   // A company admin can only test their own company's recipient. Without this,

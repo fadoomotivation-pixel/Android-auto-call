@@ -3,6 +3,7 @@ import { resolveScope } from "@/lib/dashboard/scope";
 import { ModuleLinks } from "../ModuleLinks";
 import { RouteSkeleton } from "../skeletons";
 import { PulseClient, type Company } from "./PulseClient";
+import { PlatformSender } from "../whatsapp/PlatformSender";
 
 function istToday(): string {
   return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
@@ -11,7 +12,8 @@ function istToday(): string {
 export default async function PulsePage({
   searchParams,
 }: { searchParams: Promise<{ company?: string }> }) {
-  const scope = await resolveScope(await searchParams, { require: "any" });
+  // withCompanies: the platform sending number picker below lists companies.
+  const scope = await resolveScope(await searchParams, { require: "any", withCompanies: true });
   const isSuper = scope.isSuper;
   const isAdmin = scope.role === "admin" || isSuper;
 
@@ -41,6 +43,9 @@ export default async function PulsePage({
           One company, from the link. <a href="/dashboard/pulse">Show every company</a>
         </p>
       )}
+      {/* The founder asked to see and pick the sending number where the reports
+          are set up, not two pages away. Same card as the WhatsApp page. */}
+      {isSuper && <PlatformSender companies={scope.companies} />}
       <Suspense fallback={<RouteSkeleton title="Daily Pulse" bare />}>
         <PulseData isSuper={isSuper} companyId={scope.companyId} />
       </Suspense>

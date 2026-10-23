@@ -6,6 +6,24 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-23 — Claude Code (Daily Pulse: sending number shown + pickable, founders pick their telecallers, 2+ founders)
+- LIVE STATE: the worker is `2026.10.23-28` with 2 sessions, both connected. ankit's `whatsapp_baileys.sender_session` is
+  'platform' (+91 99997 50049, scanned 17:11 IST), so every company that borrows the platform number now sends from it.
+  The main login is still Capital Brix attendance (+91 70489 17300).
+  - Note: ankit's own founder subscriber is the same 99997 50049. It is currently inactive; if switched on, it
+    messages itself.
+- Migration 0233 (applied): `pulse_subscribers.include_reps uuid[]`, founder rows only; null = whole team.
+  - pulse-broadcast narrows the pulse with `forReps()`. New in `_shared/pulse.ts`, next to `sumTotals()`, which
+    `buildCompany` now uses too.
+  - Totals are re-added from the chosen reps; company-wide sections stay. Tested on a transpiled build:
+    picked reps a+c → 15 calls / 3 bookings, whole team → 35.
+- AutoSend card:
+  - "Sends from <number> · shared platform number / own number", read live from notify-provider `route`.
+  - "+ Founder" (labels the next one Founder 2, …) and "+ Telecaller's own report".
+  - A per-founder "Choose telecallers" checklist.
+- Daily Pulse page: the super admin gets the PlatformSender card (picker + Call Pro AI number QR) at the top.
+  resolveScope now runs with `withCompanies: true` there.
+
 ## 2026-10-23 — Claude Code (Call Pro AI number on the SAME worker: scan a QR and done)
 - The founder did not want a second Hostinger app. The worker (`services/baileys`, now `2026.10.23-28`) now holds
   extra SENDING numbers at `/p/<name>/status|qr|reconnect|send|logout`, each with its own folder
