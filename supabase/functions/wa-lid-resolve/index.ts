@@ -34,7 +34,10 @@ const json = (o: unknown, s = 200) =>
 const MAX_PHONES = 300;
 const LOOKBACK_DAYS = 60;
 
-type Session = { salesperson_id: string; company_id: string; lid_resolved_at: string | null };
+type Session = {
+  salesperson_id: string; company_id: string; lid_resolved_at: string | null;
+  lid_resolved: { next_offset?: number | null } | null;
+};
 
 function waNumber(raw: string | null): string {
   const d = String(raw ?? "").replace(/\D/g, "");
@@ -54,14 +57,22 @@ async function matchedRows(admin: SupabaseClient, rep: string): Promise<number> 
 }
 
 async function resolveRep(admin: SupabaseClient, s: Session, full: boolean): Promise<Record<string, unknown>> {
-  // Only what is new since the last run, unless asked for the whole window.
-  const since = !full && s.lid_resolved_at
+  // A busy rep has called more leads than one run may ask about (Nidhi: 372
+  // against 300). The last run left a bookmark; carry on from it over the
+  // whole window, or the oldest leads would never be asked about at all.
+  const carry = Number(s.lid_resolved?.next_offset ?? 0) || 0;
+  // Otherwise only what is new since the last run, unless asked for the whole window.
+  const since = !full && !carry && s.lid_resolved_at
     ? new Date(new Date(s.lid_resolved_at).getTime() - 86400_000).toISOString()
     : new Date(Date.now() - LOOKBACK_DAYS * 86400_000).toISOString();
   const { data: calls } = await admin.from("call_logs").select("contact_id")
     .eq("salesperson_id", s.salesperson_id).not("contact_id", "is", null)
-    .gte("started_at", since).order("started_at", { ascending: false }).limit(1000);
-  const ids = [...new Set(((calls ?? []) as { contact_id: string }[]).map((c) => c.contact_id))].slice(0, MAX_PHONES);
+    .gte("started_at", since).order("started_at", { ascending: false }).limit(5000);
+  const all = [...new Set(((calls ?? []) as { contact_id: string }[]).map((c) => c.contact_id))];
+  const offset = carry < all.length ? carry : 0;
+  const ids = all.slice(offset, offset + MAX_PHONES);
+  // Where the next run starts. Null once every called lead has been asked about.
+  const nextOffset = offset + MAX_PHONES < all.length ? offset + MAX_PHONES : null;
 
   const lidBefore = await lidRows(admin, s.salesperson_id);
   const stamp = async (result: Record<string, unknown>) => {
@@ -97,6 +108,8 @@ async function resolveRep(admin: SupabaseClient, s: Session, full: boolean): Pro
   // so the chats are already re-filed by now.
   return stamp({
     ...r,
+    next_offset: nextOffset,
+    called_leads: all.length,
     lid_rows_before: lidBefore,
     lid_rows_after: await lidRows(admin, s.salesperson_id),
     matched_rows: await matchedRows(admin, s.salesperson_id),
@@ -113,11 +126,13 @@ Deno.serve(async (req) => {
     if (body.mode !== "sweep") return json({ ok: false, error: "unknown service mode" }, 400);
     const cutoff = new Date(Date.now() - 20 * 3600_000).toISOString();
     const { data: sessions } = await admin.from("wa_rep_sessions")
-      .select("salesperson_id, company_id, lid_resolved_at").eq("status", "connected")
-      .or(`lid_resolved_at.is.null,lid_resolved_at.lt.${cutoff}`);
+      .select("salesperson_id, company_id, lid_resolved_at, lid_resolved").eq("status", "connected");
     const done: Record<string, unknown>[] = [];
     for (const s of (sessions ?? []) as Session[]) {
       if (done.length >= 2) break;
+      // Due once a day — or next hour, when the last run stopped at the cap.
+      const due = !s.lid_resolved_at || new Date(s.lid_resolved_at) < new Date(cutoff) || s.lid_resolved?.next_offset != null;
+      if (!due) continue;
       // Nothing hidden, nothing to find.
       if (await lidRows(admin, s.salesperson_id) === 0) continue;
       done.push({ rep: s.salesperson_id, ...(await resolveRep(admin, s, false)) });
@@ -136,7 +151,7 @@ Deno.serve(async (req) => {
   if (body.mode !== "rep") return json({ ok: false, error: "unknown mode" }, 400);
 
   const { data: s } = await admin.from("wa_rep_sessions")
-    .select("salesperson_id, company_id, lid_resolved_at, status")
+    .select("salesperson_id, company_id, lid_resolved_at, lid_resolved, status")
     .eq("salesperson_id", String(body.salesperson_id ?? "")).maybeSingle();
   if (!s) return json({ ok: false, error: "This telecaller has not linked WhatsApp." }, 404);
   if (!pa && s.company_id !== me?.company_id) return json({ ok: false, error: "Not your company." }, 403);
