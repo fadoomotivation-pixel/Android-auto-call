@@ -82,8 +82,7 @@ export async function loadLeads(uid: string): Promise<Lead[]> {
       .eq("salesperson_id", uid).order("updated_at", { ascending: false }).limit(1000),
     // The same columns Android reads (Repository.fetchWorkStates), so Call now
     // is ordered by the same rule on both — see callQueue in work.ts.
-    sb.from("v_lead_workstate").select("contact_id, action_state, due_at, last_call_at, handled_today, stage, " +
-      "created_at, calls_total, best_call_seconds, waiting_since, promise_due_since, promise_text")
+    sb.from("v_lead_workstate").select("contact_id, action_state, due_at, last_call_at, handled_today, stage, created_at, calls_total, best_call_seconds, waiting_since, promise_due_since, promise_text")
       .eq("salesperson_id", uid).limit(2000),
   ]);
   const ws = new Map<string, any>((w ?? []).map((r: any) => [r.contact_id, r]));
