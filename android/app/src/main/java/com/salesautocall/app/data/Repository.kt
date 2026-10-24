@@ -1283,6 +1283,25 @@ object Repository {
         )
     }
 
+    /**
+     * Her plan for the day — `rep_plan()`, the function her evening WhatsApp
+     * and the web app read too. Null when it cannot be read (not signed in,
+     * or the function is not on the server yet): Home then just leaves the
+     * plan's lists out, it never shows a 0 it does not know.
+     */
+    suspend fun dayPlan(): DayPlan? {
+        val uid = currentUserId() ?: return null
+        return runCatching {
+            client.postgrest.rpc(
+                "rep_plan",
+                buildJsonObject {
+                    put("p_rep", JsonPrimitive(uid))
+                    put("p_limit", JsonPrimitive(200))
+                },
+            ).decodeAs<DayPlan>()
+        }.getOrNull()
+    }
+
     /** One message the end of a call wrote, waiting for her Approve. */
     data class ReadyDraft(
         val draftId: String,

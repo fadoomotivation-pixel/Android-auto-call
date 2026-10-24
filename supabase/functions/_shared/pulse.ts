@@ -288,6 +288,9 @@ export async function buildCompany(
   admin: SupabaseClient,
   companyId: string,
   date: string,
+  /** briefs: false skips the founder's AI win/risk lines — a telecaller's own
+   *  plan only needs her numbers, and the AI quota is shared. */
+  opts: { briefs?: boolean } = {},
 ): Promise<CompanyPulse> {
   const { start, end } = dayBounds(date);
 
@@ -405,7 +408,7 @@ export async function buildCompany(
     // indistinguishable from a rep who sent nothing — and the report would
     // print the second story. Exactly the mistake callsTrusted exists to stop
     // the call numbers making.
-    admin.from("wa_rep_sessions").select("salesperson_id, last_seen_at")
+    admin.from("wa_rep_sessions").select("salesperson_id, last_seen_at, link_ok_at")
       .eq("company_id", companyId),
     // WHAT THE BUYER ACTUALLY SAID. Migration 0175: every incoming WhatsApp
     // message is read, once, for plain keyword signals the moment it lands —
@@ -529,10 +532,16 @@ export async function buildCompany(
   // Two hours, the same threshold v_rep_whatsapp_health uses and the admin
   // dashboard shows. Set BEFORE the counts, so a rep with a session but no
   // messages still gets "stale" rather than silence.
+  //
+  // "Listening" is the worker's heartbeat (link_ok_at, every few minutes),
+  // not the last message to arrive (last_seen_at). On 24 Oct Nidhi was told
+  // "WhatsApp watcher not reporting" at 8 PM: 883 of her messages had arrived
+  // that day and the link was up, she had simply not messaged anyone since 6.
   for (const sn of (waSessions.data ?? []) as Record<string, unknown>[]) {
     const r = rep(String(sn.salesperson_id ?? ""));
     if (!r) continue;
-    const seen = sn.last_seen_at ? new Date(String(sn.last_seen_at)).getTime() : 0;
+    const at = (v: unknown) => (v ? new Date(String(v)).getTime() || 0 : 0);
+    const seen = Math.max(at(sn.last_seen_at), at(sn.link_ok_at));
     r.waWatch = seen && Date.now() - seen < 2 * 3600_000 ? "ok" : "stale";
   }
 
@@ -733,9 +742,16 @@ export async function buildCompany(
   }
   for (const f of fups.data ?? []) { const r = rep(f.salesperson_id); if (r) r.followUps++; }
   for (const h of hot.data ?? []) { const r = rep(h.salesperson_id); if (r) r.hotLeads++; }
+  // NEXT MEANS NOT YET. This listed the oldest pending callbacks from the
+  // start of the day, so at 8 PM Nidhi's "Priority next" was four callbacks
+  // missed that morning ("Amit — 11:00 am") and one booked for 3:00 AM. And
+  // the "is it today" test cut the date out of a UTC timestamp, so a 3 AM IST
+  // time read as yesterday and grew a date while 11 AM did not.
+  const nowMs = Date.now();
   for (const s of steps.data ?? []) {
     const r = rep(s.salesperson_id); if (!r || r.nextSteps.length >= 5 || !s.due_at) continue;
-    const today = String(s.due_at).slice(0, 10) === date;
+    if (new Date(s.due_at).getTime() < nowMs) continue;
+    const today = new Date(new Date(s.due_at).getTime() + IST_MS).toISOString().slice(0, 10) === date;
     r.nextSteps.push({
       lead: s.name || s.phone || "lead",
       when: today ? istTime(s.due_at) : `${istDay(s.due_at)} ${istTime(s.due_at)}`,
@@ -794,6 +810,7 @@ export async function buildCompany(
   await Promise.all(pulses.map(async (p) => {
     const active = p.calls || p.voiceNotes.length || p.moves.length || p.siteVisits.length;
     if (!active) { p.narrative = "No activity today — check in with them."; return; }
+    if (opts.briefs === false) return;
 
     const fp = fingerprint(p);
     const hit = cached.get(p.id);

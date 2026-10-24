@@ -40,16 +40,55 @@ export function inChip(l: Lead, chip: Chip, now = Date.now()): boolean {
   return a === chip;
 }
 
-/** Who to ring first: late callbacks oldest first, then callbacks now due,
- *  then everyone else in Call now (new leads, missed calls) latest first. */
+/**
+ * Who to ring first — the SAME order as the Android app (CallNowQueue.kt
+ * callNowTier) and the database (v_lead_workstate.call_tier, 0236). This list
+ * used to sort by due time alone, so the web and the phone showed the same
+ * people in a different order:
+ *
+ *   0  the buyer wrote, nobody answered
+ *   1  a promise from a recorded call was not kept
+ *   2  someone has really spoken to them (30s+) — latest talk first
+ *   3  rung under 4 times, never answered
+ *   4  rung 4+ times, never answered
+ *
+ * Outside tier 2: oldest due time, then when the lead arrived.
+ */
+export function callTier(l: Lead): number {
+  if (l.waiting_since) return 0;
+  if (l.promise_due_since) return 1;
+  if ((l.best_call_seconds ?? 0) >= 30) return 2;
+  if ((l.calls_total ?? 0) < 4) return 3;
+  return 4;
+}
+
+function tieKey(l: Lead): number {
+  if (callTier(l) === 2) return -(l.last_call_at ? Date.parse(l.last_call_at) : 0);
+  const k = l.due_at ?? l.created_at;
+  return k ? Date.parse(k) : Number.MAX_SAFE_INTEGER;
+}
+
 export function callQueue(leads: Lead[], now = Date.now()): Lead[] {
-  const due = (l: Lead) => (l.due_at ? Date.parse(l.due_at) : Infinity);
-  const upd = (l: Lead) => (l.updated_at ? Date.parse(l.updated_at) : 0);
-  return leads.filter((l) => inChip(l, "call_now", now)).sort((a, b) => {
-    const da = due(a), db = due(b);
-    if (da !== db) return da - db;
-    return upd(b) - upd(a);
-  });
+  return leads.filter((l) => inChip(l, "call_now", now))
+    .sort((a, b) => callTier(a) - callTier(b) || tieKey(a) - tieKey(b));
+}
+
+/** "just now" · "40m ago" · "3h ago" · "2d ago" — Android's agoLabel. */
+export function agoLabel(iso: string, now = Date.now()): string {
+  const min = Math.floor((now - Date.parse(iso)) / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  if (min < 1440) return `${Math.floor(min / 60)}h ago`;
+  return `${Math.floor(min / 1440)}d ago`;
+}
+
+/** Why a Call now row is due, in the words Android uses (dueSignal). */
+export function dueSignal(l: Lead, now = Date.now()): string | null {
+  if (l.waiting_since) return `They wrote ${agoLabel(l.waiting_since, now)} — no reply yet`;
+  if (l.promise_due_since && l.promise_text) return `You said: ${l.promise_text} · ${agoLabel(l.promise_due_since, now)}`;
+  const calls = l.calls_total ?? 0;
+  if ((l.best_call_seconds ?? 1) === 0 && calls >= 4) return `Rung ${calls} times — never picked up`;
+  return null;
 }
 
 // ── Follow Ups: three groups, one clock (CLAUDE.md) ─────────────────────────
