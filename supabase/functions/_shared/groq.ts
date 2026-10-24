@@ -56,7 +56,14 @@ async function askOnce(
       // A 404 means THIS model is gone, so try the next. A 429 or a 500 means
       // Groq is busy, and walking the chain would hammer them with the same
       // request under four different names.
-      const gone = r.status === 404 || /does not exist|decommissioned|not found/i.test(e);
+      //
+      // EXCEPT a daily cap. "Rate limit reached … tokens per day" is not Groq
+      // being busy, it is THIS model's allowance spent until tomorrow — and
+      // every other model in the chain has an allowance of its own. On 24 Oct
+      // the first after-call WhatsApp died on exactly that, with three untouched
+      // models one step down the list.
+      const spentForToday = r.status === 429 && /per day|\b(TPD|RPD)\b/i.test(e);
+      const gone = r.status === 404 || /does not exist|decommissioned|not found/i.test(e) || spentForToday;
       return { text: null, error: `groq ${r.status} on ${model}: ${e.slice(0, 140)}`, gone };
     }
     const raw = (j as { choices?: { message?: { content?: string } }[] })

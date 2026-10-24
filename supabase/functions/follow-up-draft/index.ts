@@ -65,7 +65,7 @@
 //   { mode:"dry_run", contact_id }  service key  → see a draft, write nothing
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { groqJson } from "../_shared/groq.ts";
+import { askJson } from "../_shared/chat.ts";
 import { BaileysProvider } from "../_shared/wa-provider.ts";
 
 declare const Supabase: {
@@ -308,7 +308,7 @@ async function compose(db: SupabaseClient, c: Lead, repId: string, call: CallRow
     evidence ? `WHAT GETS REPLIES IN THIS COMPANY: ${evidence}` : "",
   ].filter(Boolean).join("\n\n");
 
-  const out = await groqJson<{ angle?: string; body?: string; reason?: string }>(SYSTEM, userMsg, 0.5);
+  const out = await askJson<{ angle?: string; body?: string; reason?: string }>(SYSTEM, userMsg, 0.5);
   if (out.error || !out.data) {
     // Said out loud, not swallowed. A null here used to mean the rep saw
     // "Couldn't draft the message. Please try again." forever while the real

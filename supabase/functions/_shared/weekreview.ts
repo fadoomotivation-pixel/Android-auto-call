@@ -17,7 +17,7 @@
 // a call we did not send is dropped, so the rep is never told about a buyer
 // they never spoke to.
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { groqJson } from "./groq.ts";
+import { askJson } from "./chat.ts";
 import { PULSE_FOOTER } from "./pulse.ts";
 
 export type WeekRep = {
@@ -290,7 +290,7 @@ export async function buildWeekReview(
       topObjections.length ? `What buyers said most: ${topObjections.map(([o, n]) => `${o} (${n})`).join("; ")}.` : "",
     ].filter(Boolean).join("\n");
 
-    const out = await groqJson<{
+    const out = await askJson<{
       did_well?: { text?: string; call?: string }[];
       fix?: { text?: string; say?: string; call?: string }[];
       focus?: string; best_call?: string;

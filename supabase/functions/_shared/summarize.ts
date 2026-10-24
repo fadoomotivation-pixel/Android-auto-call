@@ -4,6 +4,7 @@
 // Free tier: console.groq.com → GROQ_API_KEY secret.
 import { type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { DISPOSITIONS } from "./stage.ts";
+import { chatJson } from "./chat.ts";
 
 const GROQ = Deno.env.get("GROQ_API_KEY") ?? "";
 export const hasGroq = () => !!GROQ;
@@ -116,35 +117,39 @@ export async function summarizeAndStore(
       ? [hintExt, MIME[hintExt] ?? "audio/mpeg"]
       : (FMT[source] ?? ["wav", "audio/wav"]);
 
-    const form = new FormData();
-    form.append("model", "whisper-large-v3");
-    form.append("file", new Blob([bytes], { type: mime }), `rec.${ext}`);
-    const tr = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
-      method: "POST", headers: { Authorization: `Bearer ${GROQ}` }, body: form,
-    });
-    const trj = await tr.json();
-    const transcript: string = trj.text ?? "";
+    // Each Whisper model has its own daily audio allowance. When the first one
+    // says "per day", the turbo model still has its own — a call that would
+    // have been marked "AI summary failed" for the rest of the day gets heard.
+    let trj: Record<string, unknown> = {};
+    for (const model of ["whisper-large-v3", "whisper-large-v3-turbo"]) {
+      const form = new FormData();
+      form.append("model", model);
+      form.append("file", new Blob([bytes], { type: mime }), `rec.${ext}`);
+      const tr = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "POST", headers: { Authorization: `Bearer ${GROQ}` }, body: form,
+      });
+      trj = await tr.json().catch(() => ({}));
+      if (tr.status !== 429) break;
+    }
+    const transcript: string = String(trj.text ?? "");
     if (!transcript.trim()) throw new Error(`transcription empty: ${JSON.stringify(trj).slice(0, 200)}`);
 
-    const ch = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST", headers: { Authorization: `Bearer ${GROQ}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: (Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b"), temperature: 0.3,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `The call took place at: ${callTimeIst} (IST, India). ` +
-              `Today's weekday and date should be derived from that timestamp.\n\n` +
-              `Call transcript:\n\n${transcript.slice(0, 12000)}`,
-          },
-        ],
-      }),
-    });
-    const chj = await ch.json();
-    const raw: string = chj.choices?.[0]?.message?.content ?? "";
-    if (!raw.trim()) throw new Error(`summary empty: ${JSON.stringify(chj).slice(0, 200)}`);
+    // THE SUMMARY USED TO SPEND GROQ'S WHOLE DAY.
+    //
+    // A 12,000-character transcript is several thousand tokens, and Groq's free
+    // tier is 100k tokens a DAY shared by every AI feature. Around fifty calls
+    // a day used it up by afternoon, and every call after that came back
+    // "failed" — no transcript, no coaching, no after-call WhatsApp. The shared
+    // chain asks Mistral first and falls back to Groq, so a busy day no longer
+    // switches the AI off.
+    const { text: raw } = await chatJson(
+      SYSTEM_PROMPT,
+      `The call took place at: ${callTimeIst} (IST, India). ` +
+        `Today's weekday and date should be derived from that timestamp.\n\n` +
+        `Call transcript:\n\n${transcript.slice(0, 12000)}`,
+      { temperature: 0.3 },
+    );
+    if (!raw.trim()) throw new Error("summary empty");
 
     // Parse the JSON reply; fall back to treating the whole reply as the summary.
     let summary = raw.trim();
