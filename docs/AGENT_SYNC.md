@@ -6,6 +6,21 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-24 — Claude Code (AI keeps working when Groq's daily quota is spent)
+- **Found:**
+  - The first after-call draft (Nidhi, 17:06 IST) was skipped with `groq 429 … tokens per day` on
+    openai/gpt-oss-120b.
+  - 5 recordings failed summary today, after 0 all week.
+  - `chat-shim-check` probe: Mistral answers **403 tier_not_allowed** for mistral-large-latest. The "Mistral
+    first" chain has silently been running on Groq alone.
+- **Fix:**
+  - chat.ts `withModels()`: Mistral tries large → medium → small on a tier 403. Groq tries gpt-oss-120b →
+    gpt-oss-20b → qwen3.8-27b on a 404 or a *per-day* 429 (per-minute 429s still don't walk).
+  - groq.ts treats a per-day 429 as "this model is spent".
+  - Summaries, the weekly card, the persona and the after-call draft use the shared chain through `askJson`.
+  - Whisper falls back to whisper-large-v3-turbo on a 429.
+- New callers should use `askJson` (chat.ts), not `groqJson`, for anything token-heavy.
+
 ## 2026-10-24 — Claude Code (LID lookup: first live run, and it no longer stops at 300)
 - 0235 was applied by hand. Worker 2026.10.24-31 is live, and PR #562 is merged (APK green, Vercel green).
 - First run for Nidhi:
