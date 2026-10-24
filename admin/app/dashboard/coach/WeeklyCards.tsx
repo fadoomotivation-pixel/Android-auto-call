@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ist } from "@/lib/dashboard/format";
+import { RepPersona } from "./RepPersona";
 
 type Rep = {
   salesperson_id: string;
@@ -228,6 +229,7 @@ export function WeeklyCards({ isSuper, initialCompanyId = null }: { isSuper: boo
                 </button>
               </div>
             )}
+            {feedback && <RepPersona salespersonId={r.salesperson_id} name={r.full_name?.trim() || "this telecaller"} />}
           </div>
         );
       })}

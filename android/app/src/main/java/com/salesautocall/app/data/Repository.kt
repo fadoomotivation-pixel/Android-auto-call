@@ -1233,6 +1233,8 @@ object Repository {
         /** One line: why THIS message. She is allowed to disagree with it. */
         val reason: String? = null,
         val sent14d: Int = 0,
+        /** "after_call" when the end of her last call wrote it; "button" when she asked. */
+        val source: String? = null,
     )
 
     suspend fun smartDraft(contactId: String): SmartDraft? {
@@ -1250,7 +1252,99 @@ object Repository {
             body = o["body"]?.jsonPrimitive?.contentOrNull,
             reason = o["reason"]?.jsonPrimitive?.contentOrNull,
             sent14d = o["sent_14d"]?.jsonPrimitive?.intOrNull ?: 0,
+            source = o["source"]?.jsonPrimitive?.contentOrNull,
         )
+    }
+
+    /**
+     * The message the end of her last call already wrote for this lead, if it
+     * is still waiting. Read straight from the table (RLS: her own drafts), so
+     * opening a lead never spends an AI call.
+     */
+    suspend fun pendingDraft(contactId: String): SmartDraft? {
+        val since = java.time.Instant.now().minus(java.time.Duration.ofHours(12)).toString()
+        val row = runCatching {
+            client.from("followup_drafts").select(
+                columns = io.github.jan.supabase.postgrest.query.Columns.raw("id, angle, body, reason, source, created_at"),
+            ) {
+                filter {
+                    eq("contact_id", contactId)
+                    isIn("status", listOf("suggested", "opened"))
+                    gte("created_at", since)
+                }
+                order("created_at", Order.DESCENDING)
+                limit(1L)
+            }.decodeList<DraftRow>().firstOrNull()
+        }.getOrNull() ?: return null
+        val body = row.body?.takeIf { it.isNotBlank() } ?: return null
+        return SmartDraft(
+            verdict = "draft", draftId = row.id, angle = row.angle, body = body,
+            reason = row.reason, source = row.source,
+        )
+    }
+
+    /** One message the end of a call wrote, waiting for her Approve. */
+    data class ReadyDraft(
+        val draftId: String,
+        val contactId: String,
+        val name: String?,
+        val phone: String,
+        val body: String,
+    )
+
+    /** Every after-call message from the last day that she has not dealt with. */
+    suspend fun readyDrafts(): List<ReadyDraft> {
+        val uid = currentUserId() ?: return emptyList()
+        val since = java.time.Instant.now().minus(java.time.Duration.ofHours(24)).toString()
+        return runCatching {
+            client.from("followup_drafts").select(
+                columns = io.github.jan.supabase.postgrest.query.Columns.raw(
+                    "id, body, created_at, contact_id, contacts(name, phone)",
+                ),
+            ) {
+                filter {
+                    eq("salesperson_id", uid)
+                    eq("status", "suggested")
+                    eq("source", "after_call")
+                    gte("created_at", since)
+                }
+                order("created_at", Order.DESCENDING)
+                limit(20L)
+            }.decodeList<DraftRow>().mapNotNull { r ->
+                val cid = r.contactId ?: return@mapNotNull null
+                val body = r.body?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val phone = r.contacts?.phone ?: return@mapNotNull null
+                ReadyDraft(r.id, cid, r.contacts?.name, phone, body)
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    /** What happened when she tapped Approve & send. */
+    sealed class DraftSend {
+        data object Sent : DraftSend()
+        /** Her linked WhatsApp could not send it. Open WhatsApp with the text instead. */
+        data class OpenWhatsApp(val why: String) : DraftSend()
+        data class Failed(val why: String) : DraftSend()
+    }
+
+    /**
+     * Send the message she approved — with her edits — from her own WhatsApp,
+     * through the session she linked. The server checks it is her draft, to
+     * her own lead.
+     */
+    suspend fun sendDraft(draftId: String, body: String): DraftSend {
+        val resp = runCatching {
+            client.functions.invoke(
+                "follow-up-draft",
+                buildJsonObject { put("draft_id", draftId); put("action", "send"); put("body", body) },
+            )
+        }.getOrElse { return DraftSend.Failed("Couldn't reach the server. Check your internet.") }
+        val o = runCatching { resp.body<JsonObject>() }.getOrNull()
+            ?: return DraftSend.Failed("No answer from the server.")
+        if (o["ok"]?.jsonPrimitive?.booleanOrNull == true) return DraftSend.Sent
+        val why = o["error"]?.jsonPrimitive?.contentOrNull ?: "Couldn't send it."
+        return if (o["fallback"]?.jsonPrimitive?.booleanOrNull == true) DraftSend.OpenWhatsApp(why)
+        else DraftSend.Failed(why)
     }
 
     /**
@@ -2544,5 +2638,23 @@ private data class WaRepSessionProbe(
 @Serializable
 private data class WaSentProbe(
     @SerialName("sent_at") val sentAt: String? = null,
+)
+
+@Serializable
+private data class DraftRow(
+    val id: String,
+    val angle: String? = null,
+    val body: String? = null,
+    val reason: String? = null,
+    val source: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("contact_id") val contactId: String? = null,
+    val contacts: DraftContact? = null,
+)
+
+@Serializable
+private data class DraftContact(
+    val name: String? = null,
+    val phone: String? = null,
 )
 

@@ -150,10 +150,50 @@ export class BaileysProvider implements WhatsAppProvider {
   // the secret stays in the vault and never reaches the admin's browser, the
   // same way the founder's QR already works.
   //
-  // There is deliberately no repSend(). The worker answers 403 on that route
-  // and nothing here should imply otherwise.
   private repUrl(salespersonId: string, path: string): string {
     return this.url(`/s/${encodeURIComponent(salespersonId)}${path}`);
+  }
+
+  /**
+   * Send a message the rep APPROVED, from her own linked WhatsApp.
+   *
+   * Only follow-up-draft calls this, after checking the draft is hers, to her
+   * own lead, with the words she approved. Anything else that wants to message
+   * a customer from a rep's number is the thing this must never become.
+   */
+  async repSend(salespersonId: string, to: string, text: string): Promise<SendResult> {
+    try {
+      const r = await fetch(this.repUrl(salespersonId, "/send"), {
+        method: "POST", headers: this.headers(), body: JSON.stringify({ to, text }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d?.ok) {
+        return {
+          ok: false,
+          error: d?.error ?? `Worker answered ${r.status}.`,
+          // Not connected, or throttled: try again later or open WhatsApp.
+          retryable: r.status === 503 || r.status === 429,
+        };
+      }
+      return { ok: true, id: d.id ?? null };
+    } catch {
+      return { ok: false, error: "Could not reach the worker.", retryable: true };
+    }
+  }
+
+  /** Ask WhatsApp, through her session, which LID each of these numbers is. */
+  async repResolve(salespersonId: string, phones: string[]): Promise<Record<string, unknown> | { error: string }> {
+    try {
+      const r = await fetch(this.repUrl(salespersonId, "/resolve"), {
+        method: "POST", headers: this.headers(), body: JSON.stringify({ phones }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 404) return { error: "worker_outdated" };
+      if (!r.ok || !d?.ok) return { error: d?.error ?? `Worker answered ${r.status}.` };
+      return d as Record<string, unknown>;
+    } catch {
+      return { error: "Could not reach the worker." };
+    }
   }
 
   async repConnect(salespersonId: string): Promise<void> {

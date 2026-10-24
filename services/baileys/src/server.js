@@ -22,7 +22,7 @@
 // So sessions are addressed by path instead of by host:
 //
 //   /status /qr /reconnect /send        the FOUNDER's session, exactly as before
-//   /s/<salesperson_id>/status|qr|…     one telecaller, watch-only
+//   /s/<salesperson_id>/status|qr|…     one telecaller: watches, sends what she approved
 //
 // The legacy routes are untouched on purpose: notify-provider, wa-provider.ts
 // and the admin ProviderPicker all call them and must keep working.
@@ -36,10 +36,13 @@
 // FOUNDER: sends the daily pulse to the founder's own phone. One internal
 // number, one recipient, one message a day. Never a customer.
 //
-// TELECALLER: watch-only. /send returns 403. The rep goes on messaging buyers by
-// hand from their own phone; this only writes down what happened. The CRM drops
-// any message whose other party is not a lead in that rep's own company, so
-// personal chats never reach the database — that filter lives server-side
+// TELECALLER: watches, and sends ONLY what the rep approved. The rep goes on
+// messaging buyers from their own phone; this writes down what happened. Since
+// 2026.10.24 /s/<id>/send also sends the after-call message the rep approved in
+// the app — the CRM's follow-up-draft is the only caller, it checks the draft is
+// hers and to her own lead, and the worker throttles it per number. The CRM
+// drops any message whose other party is not a lead in that rep's own company,
+// so personal chats never reach the database — that filter lives server-side
 // precisely so no worker configuration can skip it.
 //
 // SECURITY
@@ -192,6 +195,14 @@ const MAX_MEDIA_IN_FLIGHT = Number(process.env.MAX_MEDIA_IN_FLIGHT || 3);
 // non-lead ones are dropped by the CRM, not here, so this holds the raw feed.
 const MAX_PENDING = Number(process.env.MAX_PENDING || 20_000);
 
+// A rep's own number sends only what she approved, and never fast.
+const REP_SEND_GAP_MS = Number(process.env.REP_SEND_GAP_MS || 4_000);
+const REP_SENDS_PER_HOUR = Number(process.env.REP_SENDS_PER_HOUR || 30);
+// LID lookups: a few hundred numbers at most, in small batches, with a pause.
+const RESOLVE_MAX = Number(process.env.RESOLVE_MAX || 300);
+const RESOLVE_BATCH = 25;
+const RESOLVE_PAUSE_MS = 2_000;
+
 // ── What this worker is allowed to capture ───────────────────────────────────
 //
 // EVERY ONE OF THESE IS A SWITCH, AND THAT IS DELIBERATE.
@@ -251,7 +262,7 @@ const WATCH_PRESENCE = flag("WATCH_PRESENCE", false);
  * and every ingest batch now carry it, so the answer is one request away
  * instead of a guess from behaviour.
  */
-const WORKER_VERSION = "2026.10.23-30";
+const WORKER_VERSION = "2026.10.24-31";
 
 if (!SECRET) {
   console.error("BAILEYS_SECRET is not set. Refusing to start — an open send endpoint gets the number banned.");
@@ -761,6 +772,8 @@ async function start(s) {
   }
   s.starting = true;
   clearTimeout(s.reconnectTimer);
+  // Every number WhatsApp revealed before the last restart.
+  loadLidMap(s);
   // THE HEARTBEAT STARTS WITH THE SESSION, NOT WITH THE CONNECTION.
   //
   // It used to be armed only inside `connection === "open"`. So a session that
@@ -896,7 +909,9 @@ async function start(s) {
     // Answers WhatsApp's retry requests with the message we actually sent
     // (see rememberSent). Watch-only sessions never send, so they have nothing
     // to answer with.
-    getMessage: async (key) => (s.observeOnly ? undefined : sentCacheOf(s).get(key?.id) ?? undefined),
+    // A rep's session now sends too (only what she approved), and its sends are
+    // in the same cache, so this answers for every session.
+    getMessage: async (key) => sentCacheOf(s).get(key?.id) ?? undefined,
   });
   s.state.identity = identityFor(s).join(" · ");
 
@@ -2273,6 +2288,40 @@ function noteLid(s, lidJid, pnJid) {
   // buyer would sit in the dashboard as two separate conversations: the one
   // captured before the number was known, and the one after.
   s.pendingLidMap.push({ lid, phone });
+  saveLidMapSoon(s);
+}
+
+// ── THE LID MAP SURVIVES A RESTART ──────────────────────────────────────────
+//
+// It lived only in memory, so every redeploy or crash forgot every number
+// WhatsApp had ever revealed, and the next message from a known buyer arrived
+// as an anonymous LID again. Kept on disk per session — keyed by the session's
+// id, not its credential folder, so a rep's re-scan does not forget it either.
+// Per session and never pooled: a number one rep's WhatsApp could see is not
+// handed to another rep's, least of all in another company.
+const lidMapFile = (s) => path.join(AUTH_DIR, "lid-maps", `${encodeURIComponent(s.id)}.json`);
+
+function loadLidMap(s) {
+  if (s.lidLoaded) return;
+  s.lidLoaded = true;
+  try {
+    for (const [lid, phone] of JSON.parse(fsSync.readFileSync(lidMapFile(s), "utf8"))) {
+      if (!s.lidPn.has(lid)) s.lidPn.set(lid, phone);
+    }
+  } catch { /* first run for this session: nothing saved yet */ }
+}
+
+function saveLidMapSoon(s) {
+  if (s.lidSaveTimer) return;
+  s.lidSaveTimer = setTimeout(() => {
+    s.lidSaveTimer = null;
+    try {
+      fsSync.mkdirSync(path.dirname(lidMapFile(s)), { recursive: true });
+      fsSync.writeFileSync(lidMapFile(s), JSON.stringify([...s.lidPn]));
+    } catch (e) {
+      log.warn({ id: s.id, err: String(e?.message || e) }, "could not save the LID map");
+    }
+  }, 5_000);
 }
 
 /**
@@ -2666,13 +2715,79 @@ const server = http.createServer(async (req, res) => {
       start(s).catch((e) => log.error(e));
       return send(res, 200, { ok: true, status: "connecting" });
     }
-    if (action === "send") {
-      // The whole safety property of a telecaller session, refused at the door
-      // rather than left to whoever wires up the CRM next.
-      return send(res, 403, {
-        ok: false,
-        error: "This session is watch-only. A telecaller's number sends by hand, from their own WhatsApp.",
-      });
+    // A MESSAGE THE REP APPROVED IN THE APP, FROM HER OWN NUMBER.
+    //
+    // This used to be a flat 403: a telecaller's session only watched. The
+    // founder asked for the after-call message to go out from the rep's own
+    // WhatsApp the moment she taps Approve, and the CRM now calls this ONLY
+    // from follow-up-draft's send action — which checks it is her own draft,
+    // to her own lead, with the words she approved. Nothing else holds the
+    // bearer that reaches here.
+    //
+    // Throttled per session as the last line of defence for her number: a
+    // person tapping Approve does not send twenty messages a minute, and a
+    // number that suddenly does is the number WhatsApp bans.
+    if (action === "send" && req.method === "POST") {
+      // Not counted against her limit: nothing could have gone.
+      if (s.state.status !== "connected") {
+        return send(res, 503, { ok: false, error: s.state.lastError || "Her WhatsApp is not connected." });
+      }
+      const now = Date.now();
+      s.repSends = (s.repSends ?? []).filter((t) => now - t < 3600_000);
+      if (s.repSends.length && now - s.repSends[s.repSends.length - 1] < REP_SEND_GAP_MS) {
+        return send(res, 429, { ok: false, error: "Sent one a moment ago. Wait a few seconds and try again." });
+      }
+      if (s.repSends.length >= REP_SENDS_PER_HOUR) {
+        return send(res, 429, { ok: false, error: `${REP_SENDS_PER_HOUR} messages sent from this number in the last hour. Open WhatsApp to send more.` });
+      }
+      s.repSends.push(now);
+      return sendFromSession(s, req, res);
+    }
+
+    // WHICH CHAT IS WHICH LEAD.
+    //
+    // WhatsApp now addresses most one-to-one chats by LID, a private id with
+    // no phone number in it, so a rep's 54 chats can arrive with 52 of them
+    // impossible to match to a lead. WhatsApp will, however, tell us the LID
+    // of a number we already know. The CRM sends the numbers of the leads she
+    // has called; every LID that comes back is remembered and reported, and the
+    // CRM re-files those chats under the right lead.
+    //
+    // Small batches with a pause between them, and a cap per request: this is
+    // a contact lookup, the same thing her phone does when it syncs her
+    // address book, and it should look like one.
+    if (action === "resolve" && req.method === "POST") {
+      if (s.state.status !== "connected") {
+        return send(res, 503, { ok: false, error: s.state.lastError || "WhatsApp is not connected." });
+      }
+      const body = await readBody(req);
+      const phones = [...new Set((Array.isArray(body?.phones) ? body.phones : [])
+        .map((p) => String(p ?? "").replace(/\D/g, ""))
+        .filter((p) => p.length >= 10 && p.length <= 15))].slice(0, RESOLVE_MAX);
+      let onWhatsApp = 0, found = 0, learned = 0;
+      for (let i = 0; i < phones.length; i += RESOLVE_BATCH) {
+        if (s.dead || s.state.status !== "connected") break;
+        const batch = phones.slice(i, i + RESOLVE_BATCH);
+        try {
+          const rows = await s.sock.onWhatsApp(...batch.map((p) => `${p}@s.whatsapp.net`));
+          for (const r of rows ?? []) {
+            if (!r?.exists) continue;
+            onWhatsApp++;
+            if (!r.lid) continue;
+            found++;
+            const before = s.lidPn.size;
+            noteLid(s, String(r.lid).includes("@") ? r.lid : `${r.lid}@lid`, r.jid);
+            if (s.lidPn.size > before) learned++;
+          }
+        } catch (e) {
+          log.warn({ id: s.id, err: String(e?.message || e) }, "LID lookup batch failed");
+        }
+        if (i + RESOLVE_BATCH < phones.length) await new Promise((r) => setTimeout(r, RESOLVE_PAUSE_MS));
+      }
+      // Report the new mappings now rather than at the next idle flush, so the
+      // CRM's chats are re-filed before this request has even returned.
+      if (s.pendingLidMap.length) await flushObserved(s).catch((e) => log.error(e));
+      return send(res, 200, { ok: true, asked: phones.length, on_whatsapp: onWhatsApp, lids_found: found, learned, lids_known: s.lidPn.size });
     }
     return send(res, 404, { ok: false, error: "not found" });
   }
