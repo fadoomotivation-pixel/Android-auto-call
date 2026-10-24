@@ -6,6 +6,16 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-24 — Claude Code (LID lookup: first live run, and it no longer stops at 300)
+- 0235 was applied by hand. Worker 2026.10.24-31 is live, and PR #562 is merged (APK green, Vercel green).
+- First run for Nidhi:
+  - asked 300, found 274, learned 274;
+  - LID message rows went from 626 to 256;
+  - 370 messages are now matched, across 27 leads.
+- She has called 372 leads, and the incremental runs would never reach the oldest 72. `wa-lid-resolve` now stores
+  `lid_resolved.next_offset` and resumes from it the next hour.
+- Nidhi's row was seeded with next_offset 300 by hand.
+
 ## 2026-10-24 — Claude Code (After-call WhatsApp the rep approves; Nidhi's hidden-number chats; take back a lead list)
 - **Founder asks:**
   1. Sagar: "remove all my numbers, new leads keep mixing with old".
