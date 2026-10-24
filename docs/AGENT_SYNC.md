@@ -6,6 +6,24 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-24 — Claude Code (free AI providers: a deadline per attempt, OpenRouter as a fifth)
+- **Found:** a `chat-shim-check` probe with `only:"gemini"` got no answer and ran 150 s until the runtime
+  killed it (546 WORKER_RESOURCE_LIMIT). The key is configured (keys: groq 1, cerebras 1, mistral 1,
+  gemini 1). Gemini is third in the chain, so whenever Mistral and Groq both failed, the caller died there.
+  It never got an error back, and Cerebras was never tried.
+- **Fix (chat.ts):**
+  - Every attempt has a deadline: `CHAT_TIMEOUT_MS`, default 45 s.
+  - Cerebras walks gpt-oss-120b → zai-glm-4.7 → gemma-4-31b on a 404.
+  - **OpenRouter** is the fifth provider, last in the default order. It stays dormant until
+    `OPENROUTER_API_KEY` is set. Its free (`:free`) models are read from OpenRouter's public model list at
+    cold start, with gpt-oss / llama-3.3-70b / deepseek / qwen3 preferred and 32k context minimum.
+    `OPENROUTER_MODEL` pins them instead.
+- The founder asked for free alternatives to Groq. The plan is to add fresh free keys as Supabase secrets:
+  a new AI Studio key for `GEMINI_API_KEY`, a new free Cerebras key, and optionally OpenRouter. No deploy
+  is needed for keys. Probe each one with `chat-shim-check {"probe":true,"only":"<name>"}`.
+- About 18 functions still call Groq directly (rep-coach, lead-brief, focus-five, …), so new keys do not
+  help them until they move to `askJson`.
+
 ## 2026-10-24 — Claude Code (AI keeps working when Groq's daily quota is spent)
 - **Found:**
   - The first after-call draft (Nidhi, 17:06 IST) was skipped with `groq 429 … tokens per day` on
