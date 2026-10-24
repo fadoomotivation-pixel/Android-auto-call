@@ -6,6 +6,12 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-24 — Claude Code (handoff for Cursor)
+- The founder is bringing in **Cursor** as a third AI. `docs/CURSOR_HANDOFF.md` is its first prompt. It covers
+  the product, the rules, how shipping works, everything from 23–24 Oct with files, the live state, the
+  free-AI plan and the next task (moving ~17 Groq-direct functions onto `_shared/chat.ts`).
+- Cursor works on its own `cursor/<topic>` branch and adds entries here like everyone else.
+
 ## 2026-10-24 — Claude Code (free AI providers: a deadline per attempt, OpenRouter as a fifth)
 - **Found:** a `chat-shim-check` probe with `only:"gemini"` got no answer and ran 150 s until the runtime
   killed it (546 WORKER_RESOURCE_LIMIT). The key is configured (keys: groq 1, cerebras 1, mistral 1,
