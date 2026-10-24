@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Lead } from "./types";
-import { act, callQueue, callbackPicks, fuGroup, inChip, lateBy, visitPicks } from "./work";
+import { act, callQueue, callbackPicks, dueSignal, fuGroup, inChip, lateBy, visitPicks } from "./work";
 
 const NOW = new Date(2026, 9, 21, 15, 0, 0).getTime(); // 21 Oct 2026, 3:00 PM local
 const at = (h: number) => new Date(NOW + h * 3600000).toISOString();
@@ -40,15 +40,31 @@ test("Follow Ups: three groups, due beats done", () => {
   assert.equal(fuGroup(L({ due_at: at(-1), action_state: "none" }), NOW), null);
 });
 
-test("call queue: late callbacks oldest first, then the rest latest first", () => {
+test("call queue: Android's five tiers — waiting buyer, promise, spoke, few rings, many rings", () => {
   const q = callQueue([
-    L({ id: "new-old", action_state: "call_now", status: "new", updated_at: at(-5) }),
+    L({ id: "never-x5", action_state: "call_now", calls_total: 5, best_call_seconds: 0, created_at: at(-200) }),
+    L({ id: "new-old", action_state: "call_now", status: "new", created_at: at(-5) }),
+    L({ id: "spoke-early", action_state: "call_now", calls_total: 2, best_call_seconds: 120, last_call_at: at(-30) }),
     L({ id: "late-2h", action_state: "due_today", due_at: at(-2) }),
     L({ id: "later", action_state: "scheduled", due_at: at(30) }),
+    L({ id: "promise", action_state: "call_now", promise_due_since: at(-48), promise_text: "Send location" }),
     L({ id: "late-1d", action_state: "overdue", due_at: at(-26) }),
-    L({ id: "new-recent", action_state: "call_now", status: "new", updated_at: at(-1) }),
+    L({ id: "spoke-late", action_state: "call_now", calls_total: 3, best_call_seconds: 45, last_call_at: at(-2) }),
+    L({ id: "wrote", action_state: "call_now", waiting_since: at(-3) }),
+    L({ id: "new-recent", action_state: "call_now", status: "new", created_at: at(-1) }),
   ], NOW);
-  assert.deepEqual(q.map((l) => l.id), ["late-1d", "late-2h", "new-recent", "new-old"]);
+  // Inside a tier: the due time, or when the lead arrived when there is none —
+  // a lead that came in 5h ago is older than a callback that fell due 2h ago.
+  assert.deepEqual(q.map((l) => l.id), [
+    "wrote", "promise", "spoke-late", "spoke-early", "late-1d", "new-old", "late-2h", "new-recent", "never-x5",
+  ]);
+});
+
+test("why a row is due, in Android's words", () => {
+  assert.equal(dueSignal(L({ waiting_since: at(-3) }), NOW), "They wrote 3h ago — no reply yet");
+  assert.equal(dueSignal(L({ promise_due_since: at(-48), promise_text: "Send location" }), NOW), "You said: Send location · 2d ago");
+  assert.equal(dueSignal(L({ calls_total: 5, best_call_seconds: 0 }), NOW), "Rung 5 times — never picked up");
+  assert.equal(dueSignal(L({ calls_total: 5, best_call_seconds: 60 }), NOW), null);
 });
 
 test("late labels", () => {

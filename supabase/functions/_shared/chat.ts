@@ -1,4 +1,4 @@
-// One place to ask a model for JSON, with four providers behind each other
+// One place to ask a model for JSON, with five providers behind each other
 // and support for several keys per provider.
 //
 // Seventeen edge functions share a SINGLE free Groq quota — 100,000 tokens a
@@ -21,9 +21,18 @@
 //                  overrides this without a deploy; set it the day this one
 //                  goes too.
 //   3. Gemini    — a different model family
-//   4. Cerebras  — LAST, because it currently answers 402 on every model, and
+//   4. Cerebras  — late, because it currently answers 402 on every model, and
 //                  a dead provider high in the chain costs a wasted round-trip
 //                  on every single call that reaches it
+//   5. OpenRouter — LAST, the spare: its free models (ids ending ":free") are
+//                  capped per day, and which ones exist changes week to week,
+//                  so the list is read from OpenRouter itself, not hard-coded
+//
+// Every attempt has a deadline (CHAT_TIMEOUT_MS, 45s). On 24 Oct a Gemini
+// probe got no answer at all and sat there for 150 seconds until the edge
+// runtime killed the whole function — so the error never reached the caller,
+// and Cerebras, one step further down, was never asked. A provider that does
+// not answer is now a provider that failed, and the chain moves on.
 //
 // Mistral leads for a quota reason, not a quality one. Groq's 100k tokens/day
 // is shared by SEVENTEEN functions and is the thing that actually runs out;
@@ -84,11 +93,17 @@ const GROQ_KEYS = keys("GROQ_API_KEY");
 const CEREBRAS_KEYS = keys("CEREBRAS_API_KEY", "cerebras", "CEREBRAS");
 const MISTRAL_KEYS = keys("MISTRAL_API_KEY", "mistral", "MISTRAL");
 const GEMINI_KEYS = keys("GEMINI_API_KEY");
+const OPENROUTER_KEYS = keys("OPENROUTER_API_KEY");
 
 const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
 const CEREBRAS_MODEL = Deno.env.get("CEREBRAS_MODEL") ?? "gpt-oss-120b";
 const MISTRAL_MODEL = Deno.env.get("MISTRAL_MODEL") ?? "mistral-large-latest";
 const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") ?? "gemini-flash-latest";
+const OPENROUTER_MODELS = (Deno.env.get("OPENROUTER_MODEL") ?? "")
+  .split(",").map((m) => m.trim()).filter(Boolean);
+
+/** How long one attempt may take before it counts as failed. */
+const TIMEOUT_MS = Number(Deno.env.get("CHAT_TIMEOUT_MS")) || 45_000;
 
 export const hasGemini = () => GEMINI_KEYS.length > 0;
 export const keyCounts = () => ({
@@ -96,6 +111,7 @@ export const keyCounts = () => ({
   cerebras: CEREBRAS_KEYS.length,
   mistral: MISTRAL_KEYS.length,
   gemini: GEMINI_KEYS.length,
+  openrouter: OPENROUTER_KEYS.length,
 });
 
 /** True for the failures worth trying another key or provider on. */
@@ -107,12 +123,14 @@ function worthFailingOver(status: number, body: string): boolean {
 }
 
 interface Attempt { ok: boolean; status: number; text: string; raw: string }
+type Ask = (key: string, system: string, user: string, temperature: number) => Promise<Attempt>;
 
-/** Groq, Cerebras and Mistral all speak the OpenAI chat-completions dialect. */
+/** Groq, Cerebras, Mistral and OpenRouter all speak the OpenAI chat-completions dialect. */
 function openAiCompatible(url: string, model: string) {
   return async (key: string, system: string, user: string, temperature: number): Promise<Attempt> => {
     const r = await fetch(url, {
       method: "POST",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model,
@@ -142,7 +160,7 @@ function openAiCompatible(url: string, model: string) {
  * answers is remembered, so the refusals cost one round-trip per cold start,
  * not one per call.
  */
-function withModels(url: string, models: string[], nextModel: (status: number, raw: string) => boolean) {
+function withModels(url: string, models: string[], nextModel: (status: number, raw: string) => boolean): Ask {
   const list = [...new Set(models.filter(Boolean))];
   let live: string | null = null;
   return async (key: string, system: string, user: string, temperature: number): Promise<Attempt> => {
@@ -165,18 +183,65 @@ const askGroq = withModels(
   (status, raw) => status === 404 || /decommissioned|does not exist/i.test(raw) ||
     (status === 429 && /per day|\b(TPD|RPD)\b/i.test(raw)),
 );
-const askCerebras = openAiCompatible("https://api.cerebras.ai/v1/chat/completions", CEREBRAS_MODEL);
+const askCerebras = withModels(
+  "https://api.cerebras.ai/v1/chat/completions",
+  [CEREBRAS_MODEL, "gpt-oss-120b", "zai-glm-4.7", "gemma-4-31b"],
+  // Only "no such model". A 402 is the whole account, not one model.
+  (status) => status === 404,
+);
 const askMistral = withModels(
   "https://api.mistral.ai/v1/chat/completions",
   [MISTRAL_MODEL, "mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
   (status, raw) => status === 404 || (status === 403 && /tier|not available/i.test(raw)),
 );
 
+/** Families that read Hinglish and keep to a JSON shape, best first. Anything
+ *  else free comes after them. */
+const OPENROUTER_PREFER = [/gpt-oss-120b/, /llama-3\.3-70b/, /deepseek/, /qwen3/, /gemma/, /gpt-oss/];
+
+/** OpenRouter's free models, asked of OpenRouter itself (a public list, no
+ *  key needed) — OPENROUTER_MODEL pins them instead. */
+async function openRouterModels(): Promise<string[]> {
+  if (OPENROUTER_MODELS.length) return OPENROUTER_MODELS;
+  try {
+    const r = await fetch("https://openrouter.ai/api/v1/models", { signal: AbortSignal.timeout(10_000) });
+    const j = await r.json() as { data?: { id?: string; context_length?: number }[] };
+    const rank = (id: string) => {
+      const i = OPENROUTER_PREFER.findIndex((re) => re.test(id));
+      return i < 0 ? OPENROUTER_PREFER.length : i;
+    };
+    return (j.data ?? [])
+      .filter((m) => String(m.id ?? "").endsWith(":free") && (m.context_length ?? 0) >= 32_000)
+      .map((m) => String(m.id))
+      .sort((a, b) => rank(a) - rank(b))
+      .slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
+let openRouterAsk: Ask | null = null;
+async function askOpenRouter(key: string, system: string, user: string, temperature: number): Promise<Attempt> {
+  if (!openRouterAsk) {
+    const models = await openRouterModels();
+    if (!models.length) return { ok: false, status: 0, text: "", raw: "OpenRouter listed no free model" };
+    openRouterAsk = withModels(
+      "https://openrouter.ai/api/v1/chat/completions",
+      models,
+      // This model is gone or cannot do JSON. The per-day cap on free models
+      // is the whole account, so a 429 is not a reason to try the next one.
+      (status, raw) => status === 404 || (status === 400 && /model|endpoint/i.test(raw)),
+    );
+  }
+  return openRouterAsk(key, system, user, temperature);
+}
+
 async function askGemini(key: string, system: string, user: string, temperature: number): Promise<Attempt> {
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
   const r = await fetch(url, {
     method: "POST",
+    signal: AbortSignal.timeout(TIMEOUT_MS),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
@@ -204,7 +269,7 @@ async function askGemini(key: string, system: string, user: string, temperature:
  */
 async function tryKeys(
   ks: string[],
-  ask: (k: string, s: string, u: string, t: number) => Promise<Attempt>,
+  ask: Ask,
   label: string,
   system: string,
   user: string,
@@ -227,13 +292,13 @@ async function tryKeys(
   return { errors };
 }
 
-export type Provider = "groq" | "cerebras" | "mistral" | "gemini";
+export type Provider = "groq" | "cerebras" | "mistral" | "gemini" | "openrouter";
 
 /** Overridable without a deploy: CHAT_ORDER="groq,gemini" etc. */
 const DEFAULT_ORDER: Provider[] = ((Deno.env.get("CHAT_ORDER") ?? "")
   .split(/[,\s]+/).map((s) => s.trim()).filter(Boolean) as Provider[])
-  .filter((p) => ["groq", "cerebras", "mistral", "gemini"].includes(p));
-if (DEFAULT_ORDER.length === 0) DEFAULT_ORDER.push("mistral", "groq", "gemini", "cerebras");
+  .filter((p) => ["groq", "cerebras", "mistral", "gemini", "openrouter"].includes(p));
+if (DEFAULT_ORDER.length === 0) DEFAULT_ORDER.push("mistral", "groq", "gemini", "cerebras", "openrouter");
 
 /**
  * Ask for a JSON reply. Returns the raw JSON string the model produced.
@@ -254,16 +319,17 @@ export async function chatJson(
   opts: { temperature?: number; only?: Provider; prefer?: Provider[] } = {},
 ): Promise<{ text: string; provider: Provider }> {
   const temperature = opts.temperature ?? 0.2;
-  const byName: Record<Provider, [string[], typeof askGemini]> = {
+  const byName: Record<Provider, [string[], Ask]> = {
     mistral: [MISTRAL_KEYS, askMistral],
     groq: [GROQ_KEYS, askGroq],
     gemini: [GEMINI_KEYS, askGemini],
     cerebras: [CEREBRAS_KEYS, askCerebras],
+    openrouter: [OPENROUTER_KEYS, askOpenRouter],
   };
   const order = opts.prefer?.length ? opts.prefer : DEFAULT_ORDER;
   const chain = order
     .filter((n) => byName[n])
-    .map((n) => [n, ...byName[n]] as [Provider, string[], typeof askGemini]);
+    .map((n) => [n, ...byName[n]] as [Provider, string[], Ask]);
   const use = opts.only ? chain.filter(([name]) => name === opts.only) : chain;
 
   if (use.every(([, ks]) => ks.length === 0)) {

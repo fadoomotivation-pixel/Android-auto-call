@@ -982,6 +982,7 @@ private fun AiInsightCard(onOpenLeads: () -> Unit, hotUncontacted: Int) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -> Unit, onNavigate: (String) -> Unit) {
     val app by vm.state.collectAsState()
@@ -1076,6 +1077,40 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         )
     }
 
+    // THE SAME LISTS AS HER WHATSAPP. rep_plan() writes her evening Daily
+    // Pulse, and Home draws the same two lists from the same call, under the
+    // same names — so "21 people in You said you would" there is 21 here, and
+    // "See all" shows every one. Null until it loads: the lists stay hidden,
+    // never a 0 we do not know.
+    val dayPlan = app.dayPlan
+    val waitingRows = remember(dayPlan) {
+        dayPlan?.waiting.orEmpty().map { w ->
+            PlanRow(
+                name = prettyName(w.name) ?: w.phone.orEmpty(),
+                whenLabel = waitedLabel(w.minutes),
+                detail = w.text?.trim()?.takeIf { it.isNotEmpty() }?.let { "\"$it\"" }
+                    ?: w.media?.let { "Sent a $it" } ?: "Wrote to you",
+                phone = w.phone.orEmpty(),
+                overdue = true,
+                contactId = w.contactId,
+            )
+        }
+    }
+    val promiseRows = remember(dayPlan) {
+        dayPlan?.promises.orEmpty().map { p ->
+            PlanRow(
+                name = prettyName(p.name) ?: p.phone.orEmpty(),
+                whenLabel = if (p.oldestDays <= 0) "Today" else "${p.oldestDays}d",
+                detail = p.items.mapNotNull { it.promise?.trim()?.takeIf { s -> s.isNotEmpty() } }
+                    .distinct().joinToString(" + "),
+                phone = p.phone.orEmpty(),
+                overdue = p.late,
+                contactId = p.contactId,
+            )
+        }
+    }
+    var planSheet by remember { mutableStateOf<String?>(null) }
+
     // Home ring 3. A visit counts only when something SAYS it happened today:
     // the rep's geofenced "Arrived on site" stamp. A visit date that falls
     // today is a plan, not a visit. Until the leads have loaded we do not
@@ -1122,7 +1157,8 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // happened (and now needs closing). Names first, statuses never.
         if (dueContacts.isNotEmpty() || visitsPlanned.isNotEmpty() || visitsDoneShown.isNotEmpty() ||
             (showLocalUnconfirmed && visitsUnconfirmed.isNotEmpty()) ||
-            showServerVisits || visitBoard.error != null || app.readyDrafts.isNotEmpty()
+            showServerVisits || visitBoard.error != null || app.readyDrafts.isNotEmpty() ||
+            waitingRows.isNotEmpty() || promiseRows.isNotEmpty()
         ) {
             item {
                 Column(
@@ -1135,6 +1171,15 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                         SectionHeader(
                             if (dueContacts.isNotEmpty()) "Today's Plan · ${dueContacts.size} due now" else "Today's Plan",
                             "All follow-ups", onOpenFollowUps,
+                        )
+                        // A buyer wrote and nobody answered. They acted first,
+                        // so they are first — here and in her WhatsApp.
+                        PlanBucket(
+                            icon = Icons.Default.AccessTime, title = PLAN_WAITING, color = Red,
+                            rows = waitingRows.take(3),
+                            more = (dayPlan?.counts?.waiting ?: waitingRows.size) - minOf(3, waitingRows.size),
+                            onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
+                            onMore = { planSheet = "waiting" },
                         )
                         PlanBucket(
                             icon = Icons.Outlined.Refresh, title = "Call now", color = Indigo,
@@ -1162,6 +1207,17 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                 )
                             },
                             more = dueContacts.size - 3, onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
+                            // Leads opens on Call now, in this same order.
+                            onMore = onOpenLeads,
+                        )
+                        // What she said on a recorded call she would do — every
+                        // one, not "+18 more" with nowhere to see them.
+                        PlanBucket(
+                            icon = Icons.Default.Checklist, title = PLAN_PROMISES, color = Amber,
+                            rows = promiseRows.take(3),
+                            more = (dayPlan?.counts?.promisePeople ?: promiseRows.size) - minOf(3, promiseRows.size),
+                            onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
+                            onMore = { planSheet = "promises" },
                         )
                         // The message the end of each call already wrote. Tap
                         // the name: the lead opens with the message on screen,
@@ -1454,6 +1510,48 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         app.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
     }
     }
+
+    // "See all" from a Today's Plan list. Her WhatsApp says "+13 more in You
+    // said you would" — this is where the thirteen are.
+    planSheet?.let { which ->
+        val (title, rows, icon, color) = when (which) {
+            "waiting" -> PlanSheet(PLAN_WAITING, waitingRows, Icons.Default.AccessTime, Red)
+            else -> PlanSheet(PLAN_PROMISES, promiseRows, Icons.Default.Checklist, Amber)
+        }
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { planSheet = null }) {
+            LazyColumn(
+                Modifier.fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            ) {
+                item {
+                    Text(planExplain(which), style = AppType.meta, color = AppColors.TextSecondary)
+                    PlanBucket(
+                        icon = icon, title = "$title · ${rows.size}", color = color, rows = rows, more = 0,
+                        onCall = { vm.dialManual(it) },
+                        onOpen = { id -> planSheet = null; vm.openLeadDetail(id) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The two lists Home shares with her Daily Pulse WhatsApp, by the same names. */
+private const val PLAN_WAITING = "Waiting for your reply"
+private const val PLAN_PROMISES = "You said you would"
+
+private data class PlanSheet(val title: String, val rows: List<PlanRow>, val icon: ImageVector, val color: Color)
+
+private fun planExplain(which: String): String = when (which) {
+    "waiting" -> "They wrote to you on WhatsApp and nobody has answered yet. Reply first."
+    else -> "Things you said on a recorded call that you would do. Do them, and they leave this list on their own."
+}
+
+/** "3h" — how long a buyer has been waiting. */
+private fun waitedLabel(minutes: Int): String = when {
+    minutes < 60 -> "${maxOf(1, minutes)}m"
+    minutes < 1440 -> "${minutes / 60}h"
+    else -> "${minutes / 1440}d"
 }
 
 /** Parse an optional "#RRGGBB" brand colour into a Compose Color (null if unset/invalid). */
@@ -1628,6 +1726,9 @@ private fun PlanBucket(
     onCall: (String) -> Unit,
     /** Opens the lead page. Null keeps rows non-tappable (only Call works). */
     onOpen: ((String) -> Unit)? = null,
+    /** Where the rest are. Set, "+N more" becomes "See all N" and opens them —
+     *  a count with nowhere to look is what the founder asked us to stop. */
+    onMore: (() -> Unit)? = null,
 ) {
     if (rows.isEmpty()) return
     Spacer(Modifier.height(Space.l))
@@ -1725,8 +1826,18 @@ private fun PlanBucket(
     }
     if (more > 0) {
         Box(Modifier.fillMaxWidth().padding(start = Space.xs).height(0.5.dp).background(AppColors.Border))
-        Text("+$more more", style = AppType.meta, color = AppColors.TextSecondary,
-            modifier = Modifier.padding(start = Space.xs, top = Space.s))
+        if (onMore != null) {
+            Box(
+                Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(8.dp)).clickable { onMore() }
+                    .padding(start = Space.xs, end = Space.s),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text("See all ${rows.size + more}", style = AppType.metaStrong, color = AppColors.Indigo)
+            }
+        } else {
+            Text("+$more more", style = AppType.meta, color = AppColors.TextSecondary,
+                modifier = Modifier.padding(start = Space.xs, top = Space.s))
+        }
     }
 }
 

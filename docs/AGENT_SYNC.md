@@ -6,6 +6,67 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-24 — Claude Code (one Today's Plan: app, web app and her Daily Pulse WhatsApp read rep_plan())
+- **Founder:** Nidhi's pulse said "19 things you said on a call are still not done … (+18 more)". "What will +18 tell her?"
+  Also "android me kuch or aaye, waha kuch or", i.e. the app and the other screens must never disagree. Build a Daily Pulse
+  that really helps her sell, using the recordings, WhatsApp, RAG and persona.
+- **Found:**
+  - The telecaller's pulse was `repText`, the FOUNDER's report about her, with an AI win/risk written for a manager.
+  - "WhatsApp watcher not reporting": it checked `last_seen_at` (the last message), not the heartbeat (`link_ok_at`).
+    883 of her messages had arrived that day.
+  - "Priority next" listed this morning's missed callbacks, and its "is it today" test cut a UTC date.
+  - Android ordered Call now with 5 tiers (CallNowQueue.kt), the web app by due time, and the pulse from follow_ups:
+    three lists of the same leads.
+- **Migration 0236 (APPLIED via MCP this time):**
+  - `v_lead_workstate` gains `call_tier`/`call_key`, the Android rule, written once.
+  - `rep_plan(p_rep, p_limit)` is security invoker; another rep's plan comes back null. It returns `plan_day` (today until
+    noon, tomorrow after), counts, call_now (app order + lead_memory), promises (open+missed, 21d, grouped by person,
+    promises naming the plan's weekday first), waiting (waiting_since + last text), visits (rest of today + tomorrow),
+    visits_pending, and drafts (same filter as Repository.readyDrafts).
+  - Verified on Nidhi: Call now 173 equals the chip count; Ankita asking for Nidhi's plan gets null.
+- **Pulse (pulse-broadcast → `repPlanFor`, `_shared/repplan.ts` → `repPlanText`):**
+  - Sections: her plan, numbers, waiting, visits to confirm, "You said you would" grouped send/visit/answer, drafts, then
+    Call now minus those already named, visits with no outcome, and one tip.
+  - Every name carries a tappable phone number. "+N more" names the list in the app.
+  - The tip (`planTip`) comes from her coach notes, persona watch_out, her buyers' objections and the match_knowledge
+    playbook. Numbers over 12 must come from the input. It is stored as coach_briefs slot 'tip' for the plan day, so the
+    app's coach shows the same tip.
+  - If rep_plan fails, she falls back to the old repText.
+  - `buildCompany(…, {briefs:false})` skips the founder AI lines for her numbers.
+  - The founder pulse is unchanged apart from the two bug fixes (heartbeat, next steps).
+- **Android:** Home → Today's Plan adds "Waiting for your reply" (above Call now) and "You said you would" (below it), from
+  `Repository.dayPlan()`. "+N more" is now "See all N" and opens a sheet, or Leads for Call now. They stay hidden until
+  the plan loads.
+- **Web /app:**
+  - Call now uses the same 5 tiers (`callTier`, tested) and the same "why" line (`dueSignal`).
+  - Home has the same Today's Plan sections from `loadPlan()`, including WhatsApp ready with Approve & send through
+    follow-up-draft. It falls back to wa.me.
+- **Still different on web:** no Yes/No for "did they come?" yet; it points to the phone app.
+
+## 2026-10-24 — Claude Code (handoff for Cursor)
+- The founder is bringing in **Cursor** as a third AI. `docs/CURSOR_HANDOFF.md` is its first prompt. It covers
+  the product, the rules, how shipping works, everything from 23–24 Oct with files, the live state, the
+  free-AI plan and the next task (moving ~17 Groq-direct functions onto `_shared/chat.ts`).
+- Cursor works on its own `cursor/<topic>` branch and adds entries here like everyone else.
+
+## 2026-10-24 — Claude Code (free AI providers: a deadline per attempt, OpenRouter as a fifth)
+- **Found:** a `chat-shim-check` probe with `only:"gemini"` got no answer and ran 150 s until the runtime
+  killed it (546 WORKER_RESOURCE_LIMIT). The key is configured (keys: groq 1, cerebras 1, mistral 1,
+  gemini 1). Gemini is third in the chain, so whenever Mistral and Groq both failed, the caller died there.
+  It never got an error back, and Cerebras was never tried.
+- **Fix (chat.ts):**
+  - Every attempt has a deadline: `CHAT_TIMEOUT_MS`, default 45 s.
+  - Cerebras walks gpt-oss-120b → zai-glm-4.7 → gemma-4-31b on a 404.
+  - **OpenRouter** is the fifth provider, last in the default order. It stays dormant until
+    `OPENROUTER_API_KEY` is set. Its free (`:free`) models are read from OpenRouter's public model list at
+    cold start, with gpt-oss / llama-3.3-70b / deepseek / qwen3 preferred and 32k context minimum.
+    `OPENROUTER_MODEL` pins them instead.
+- The founder asked for free alternatives to Groq. The plan is to add fresh free keys as Supabase secrets:
+  a new AI Studio key for `GEMINI_API_KEY`, a new free Cerebras key, and optionally OpenRouter. No deploy
+  is needed for keys. Probe each one with `chat-shim-check {"probe":true,"only":"<name>"}`.
+- About 18 functions still call Groq directly (rep-coach, lead-brief, focus-five, …), so new keys do not
+  help them until they move to `askJson`.
+
 ## 2026-10-24 — Claude Code (AI keeps working when Groq's daily quota is spent)
 - **Found:**
   - The first after-call draft (Nidhi, 17:06 IST) was skipped with `groq 429 … tokens per day` on

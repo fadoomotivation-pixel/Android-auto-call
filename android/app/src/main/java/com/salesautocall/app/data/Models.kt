@@ -611,3 +611,58 @@ data class LeadProjectInterest(
     val notes: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
 )
+
+/**
+ * Her day, from `rep_plan()` (migration 0236) — the SAME function her evening
+ * WhatsApp and the web app read. So when the WhatsApp says "21 people in You
+ * said you would", Home says 21 under the same title, and "See all" shows
+ * every one of them. Only the parts Home draws are mapped; Call now still
+ * comes from v_lead_workstate, whose order this function shares.
+ */
+@Serializable
+data class DayPlan(
+    @SerialName("plan_day") val planDay: String? = null,
+    val counts: DayPlanCounts = DayPlanCounts(),
+    val waiting: List<PlanWaiting> = emptyList(),
+    val promises: List<PlanPromise> = emptyList(),
+)
+
+@Serializable
+data class DayPlanCounts(
+    @SerialName("call_now") val callNow: Int = 0,
+    @SerialName("promise_people") val promisePeople: Int = 0,
+    val waiting: Int = 0,
+    val visits: Int = 0,
+    @SerialName("visits_pending") val visitsPending: Int = 0,
+    val drafts: Int = 0,
+)
+
+/** A buyer who wrote on WhatsApp and has had no reply. */
+@Serializable
+data class PlanWaiting(
+    @SerialName("contact_id") val contactId: String,
+    val name: String? = null,
+    val phone: String? = null,
+    val minutes: Int = 0,
+    val text: String? = null,
+    val media: String? = null,
+)
+
+/** One person she promised something to on a recorded call. */
+@Serializable
+data class PlanPromise(
+    @SerialName("contact_id") val contactId: String,
+    val name: String? = null,
+    val phone: String? = null,
+    val late: Boolean = false,
+    @SerialName("oldest_days") val oldestDays: Int = 0,
+    val items: List<PlanPromiseItem> = emptyList(),
+)
+
+@Serializable
+data class PlanPromiseItem(
+    val kind: String? = null,
+    val promise: String? = null,
+    val days: Int = 0,
+    val late: Boolean = false,
+)

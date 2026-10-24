@@ -20,6 +20,7 @@ import {
   buildCompany, forReps, istDate, istHour, PULSE_FOOTER, pulseText, repText,
   repReviewText, type RepScore,
 } from "../_shared/pulse.ts";
+import { loadRepPlan, planTip, repPlanText } from "../_shared/repplan.ts";
 import { notifyFounder } from "../_shared/notify.ts";
 import {
   buildWeekReview, defaultWeekTo, markWeekReviewSent, storedWeekReview,
@@ -62,6 +63,9 @@ async function buildText(
   const { data: company } = await admin.from("companies").select("name").eq("id", sub.company_id).maybeSingle();
   const companyName = company?.name ?? null;
 
+  // A telecaller gets HER plan, not the founder's report about her.
+  if (sub.salesperson_id) return await repPlanFor(admin, sub, companyName, date);
+
   const whole = await buildCompany(admin, sub.company_id, date);
   // A founder who chose their own people gets those people, with totals that
   // add up to them (forReps). A telecaller row is narrowed below regardless.
@@ -69,25 +73,12 @@ async function buildText(
 
   // NOTHING THAT LEAVES HERE CARRIES OFF-CRM, EVER.
   //
-  // Both writers below omit the showOffCrm flag on purpose, and that is the
+  // The writer below omits the showOffCrm flag on purpose, and that is the
   // whole policy: a WhatsApp cannot check who is holding the phone it lands on,
-  // and forwarding it is one tap. This message goes to company owners and — via
-  // pulse_subscribers.salesperson_id — to TELECALLERS about their own day, which
-  // is how "📵 33 calls to numbers not in the CRM" was arriving on the handset of
-  // the person it was written about. Off-CRM is the platform owner's signal for
+  // and forwarding it is one tap. Off-CRM is the platform owner's signal for
   // telling a dead phone from a private list. It belongs on the super admin's
-  // web page and nowhere else. Do not pass true here.
-  //
-  // A telecaller recipient gets repText for their own row — the same wording
-  // the Pulse page's per-rep WhatsApp button sends, so a rep who has been
-  // forwarded their day by the manager and a rep who subscribed to it get the
-  // identical message. A rep whose row is missing (newly added, or not a
-  // salesperson) is not silently sent the whole team's numbers.
-  if (sub.salesperson_id) {
-    const mine = pulse.reps.find((r) => r.id === sub.salesperson_id);
-    if (!mine) return { error: "No report for this telecaller today." };
-    return { text: repText(mine, pulse.date, companyName) };
-  }
+  // web page and nowhere else. Do not pass true here. (The telecaller's own
+  // plan, above, never had the line at all.)
 
   // THIS SHORTCUT SKIPPED EVERY GUARD IN pulseText().
   //
@@ -117,6 +108,68 @@ async function buildText(
     text: !anythingHappened && allPhonesReporting
       ? `📊 ${companyName ? `${companyName} · ` : ""}Daily Pulse\n${date}\n\nNo calls logged today.\n\n${PULSE_FOOTER}`
       : pulseText(pulse, companyName),
+  };
+}
+
+/**
+ * A telecaller's own Daily Pulse: her plan, from rep_plan() — the same lists
+ * the app's Today's Plan and the web app show — with her numbers on top and
+ * one tip from her own calls.
+ *
+ * Before noon it is the plan for today with yesterday's numbers; after, the
+ * plan for tomorrow with today's. Whatever hour the founder picks reads right.
+ */
+async function repPlanFor(
+  admin: SupabaseClient, sub: Sub, companyName: string | null, date: string,
+): Promise<{ text: string } | { error: string }> {
+  const { data: rep } = await admin.from("profiles").select("id, company_id, full_name")
+    .eq("id", sub.salesperson_id!).maybeSingle();
+  // Her own company only. A row pointing across companies is not sent at all.
+  if (!rep || rep.company_id !== sub.company_id) return { error: "This telecaller is not in this company." };
+
+  const shift = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
+  const morning = istHour() < 12;
+  const numbersDate = morning ? shift(date, -1) : date;
+
+  const [pulse, plan, { data: link }] = await Promise.all([
+    buildCompany(admin, sub.company_id, numbersDate, { briefs: false }),
+    loadRepPlan(admin, rep.id),
+    admin.from("wa_rep_sessions").select("status, link_ok_at, last_seen_at")
+      .eq("salesperson_id", rep.id).maybeSingle(),
+  ]);
+  if (!plan) {
+    // rep_plan() not there yet (0236 is applied by hand) or it failed. She
+    // still gets a report tonight — the old one — rather than nothing.
+    const whole = await buildCompany(admin, sub.company_id, date);
+    const mine = whole.reps.find((r) => r.id === rep.id);
+    return mine ? { text: repText(mine, whole.date, companyName) } : { error: "No report for this telecaller today." };
+  }
+  // The plan says which day it is for; the words follow it.
+  const planDate = plan.plan_day ?? (morning ? date : shift(date, 1));
+
+  // Linked and answering = the worker's heartbeat (every few minutes) or a
+  // message, inside two hours.
+  const at = (v: unknown) => (v ? Date.parse(String(v)) || 0 : 0);
+  const heard = link ? Math.max(at(link.link_ok_at), at(link.last_seen_at)) : 0;
+  const waLink: "ok" | "down" | "none" = !link ? "none"
+    : link.status === "connected" && Date.now() - heard < 2 * 3600_000 ? "ok" : "down";
+
+  // The tip is a nice-to-have. The plan goes out without it.
+  const tip = await planTip(admin, rep as { id: string; company_id: string; full_name: string | null }, planDate)
+    .catch(() => null);
+
+  return {
+    text: repPlanText({
+      name: rep.full_name ?? sub.label,
+      companyName,
+      planDate,
+      forTomorrow: planDate !== istDate(0),
+      day: pulse.reps.find((r) => r.id === rep.id) ?? null,
+      dayLabel: morning ? "Yesterday" : "Today",
+      plan,
+      tip,
+      waLink,
+    }),
   };
 }
 

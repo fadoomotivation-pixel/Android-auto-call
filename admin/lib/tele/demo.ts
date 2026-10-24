@@ -1,5 +1,5 @@
 // Mock data for /app?demo=1 (screenshots and walkthroughs). Never touches Supabase.
-import type { FollowUp, Lead, Profile, Stage, Today } from "./data";
+import type { DayPlan, FollowUp, Lead, Profile, Stage, Today } from "./data";
 
 const h = (hrs: number) => new Date(Date.now() + hrs * 3600000).toISOString();
 
@@ -17,8 +17,9 @@ const L = (id: string, name: string, phone: string, status: string, action_state
   action_state, due_at: null, last_call_at: null, ...extra,
 });
 export const demoLeads: Lead[] = [
-  L("1", "Rahul Verma", "9876543210", "interested", "overdue", { notes: "Wants 2BHK near metro. Budget 75L.", last_call_at: h(-26), due_at: h(-3), company_name: "Green Valley" }),
-  L("2", "Anita Desai", "9812345678", "new", "call_now", { company_name: "Green Valley" }),
+  L("1", "Rahul Verma", "9876543210", "interested", "overdue", { notes: "Wants 2BHK near metro. Budget 75L.", last_call_at: h(-26), due_at: h(-3), company_name: "Green Valley",
+    promise_due_since: h(-48), promise_text: "Send floor plan", calls_total: 3, best_call_seconds: 240 }),
+  L("2", "Anita Desai", "9812345678", "new", "call_now", { company_name: "Green Valley", waiting_since: h(-3.2) }),
   L("3", "Vikram Singh", "9988776655", "follow_up", "call_now", { attempts: 1, due_at: h(-0.25) }),
   L("4", "Sneha Kapoor", "9900112233", "site_visit", "awaiting_visit", { due_at: h(5) }),
   L("5", "Arjun Mehta", "9811122233", "follow_up", "due_today", { due_at: h(2) }),
@@ -40,3 +41,23 @@ export const demoScanText = `Rahul Verma 98765 43210
 Neha +91 99887 76655
 Rahul V 9876543210
 Ramesh 12345`;
+
+/** Today's Plan for the demo: the shape rep_plan() returns. */
+export const demoPlan: DayPlan = {
+  plan_day: new Date().toISOString().slice(0, 10),
+  counts: { call_now: 4, promise_people: 4, waiting: 1, visits: 1, visits_pending: 2, drafts: 1 },
+  waiting: [{ contact_id: "2", name: "Anita Desai", phone: "9812345678", minutes: 190, text: "Price list bhej dijiye", media: null }],
+  promises: [
+    { contact_id: "1", name: "Rahul Verma", phone: "9876543210", late: true, oldest_days: 2,
+      items: [{ kind: "send", promise: "Send floor plan", days: 2, late: true }, { kind: "visit", promise: "Fix Sunday site visit", days: 2, late: true }] },
+    { contact_id: "8", name: "Meera Iyer", phone: "9844455566", late: true, oldest_days: 3,
+      items: [{ kind: "price_check", promise: "Check the loan offer and call back", days: 3, late: true }] },
+    { contact_id: "6", name: "Pooja Nair", phone: "9822233344", late: false, oldest_days: 0,
+      items: [{ kind: "send", promise: "Send location", days: 0, late: false }] },
+    { contact_id: "9", name: "Deepak Rao", phone: "9855566677", late: false, oldest_days: 0,
+      items: [{ kind: "send", promise: "Send brochure", days: 0, late: false }] },
+  ],
+  visits: [{ contact_id: "4", name: "Sneha Kapoor", phone: "9900112233", at: h(18), project: "Green Valley" }],
+  drafts: [{ id: "d1", contact_id: "3", name: "Vikram Singh", phone: "9988776655", created_at: h(-1),
+    body: "Hello sir, Priya this side from Green Valley. As we spoke today, sending the location and video now. Is tomorrow 11 AM good for a call?" }],
+};

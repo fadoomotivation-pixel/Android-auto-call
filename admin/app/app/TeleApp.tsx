@@ -11,14 +11,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  type FollowUp, type Lead, type Profile, type PushState, type Stage, type Today,
+  type DayPlan, type FollowUp, type Lead, type Profile, type PushState, type Stage, type Today,
   OUTCOMES, afterSave, disableReminders, enableReminders, fmtWhen, getProfile, loadFollowUps, loadLeads,
-  loadStages, loadToday, pushState, saveOutcome, updateNotes,
+  loadPlan, loadStages, loadToday, pushState, saveOutcome, sendDraft, updateNotes,
 } from "@/lib/tele/data";
 import {
-  type Chip, type FuGroup, CHIPS, act, callQueue, callbackPicks, fuGroup, inChip, lateBy, visitPicks,
+  type Chip, type FuGroup, CHIPS, callQueue, callbackPicks, dueSignal, fuGroup, inChip, lateBy, visitPicks,
 } from "@/lib/tele/work";
-import { demoFollowUps, demoLeads, demoProfile, demoStages, demoToday } from "@/lib/tele/demo";
+import { demoFollowUps, demoLeads, demoPlan, demoProfile, demoStages, demoToday } from "@/lib/tele/demo";
 import { ScanTab } from "./ScanTab";
 
 type View = "loading" | "entry" | "login" | "join" | "app";
@@ -47,6 +47,7 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
   const [stages, setStages] = useState<Stage[]>([]);
   const [follows, setFollows] = useState<FollowUp[]>([]);
   const [today, setToday] = useState<Today>({ calls: 0, connected: 0, visits: 0 });
+  const [plan, setPlan] = useState<DayPlan | null>(null);
   const [openLead, setOpenLead] = useState<string | null>(null);
   const [outcomeFor, setOutcomeFor] = useState<Pending | null>(null);
   const [showProfile, setShowProfile] = useState(false);
@@ -60,8 +61,9 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(null), 3200); };
 
   const refresh = useCallback(async (p: Profile) => {
-    const [l, s, f, t] = await Promise.all([loadLeads(p.id), loadStages(), loadFollowUps(p.id), loadToday(p.id)]);
+    const [l, s, f, t, pl] = await Promise.all([loadLeads(p.id), loadStages(), loadFollowUps(p.id), loadToday(p.id), loadPlan(p.id)]);
     setLeads(l); setStages(s); setFollows(f); setToday(t);
+    if (pl) setPlan(pl);
   }, []);
 
   const enter = useCallback(async () => {
@@ -93,7 +95,7 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
     const q = new URLSearchParams(window.location.search);
     if (q.get("demo") === "1") {
       setDemo(true); setProfile(demoProfile); setLeads(demoLeads); setStages(demoStages);
-      setFollows(demoFollowUps); setToday(demoToday); setPush("off");
+      setFollows(demoFollowUps); setToday(demoToday); setPlan(demoPlan); setPush("off");
       const sc = q.get("screen") ?? (start === "join" ? "join" : "home");
       if (sc === "entry" || sc === "login" || sc === "join") { setView(sc); return; }
       setView("app");
@@ -173,6 +175,28 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
     window.location.href = `tel:${lead.phone}`;
   }
 
+  /** A plan row: her own lead when it is in the list (so the outcome sheet
+   *  follows the call), the bare number otherwise. */
+  function callById(id: string, phone: string | null) {
+    const l = byId.get(id);
+    if (l) call(l);
+    else if (phone) window.location.href = `tel:${phone}`;
+  }
+
+  async function approveDraft(id: string, body: string, phone: string | null) {
+    if (demo) { flash("Sent from your WhatsApp"); return; }
+    const r = await sendDraft(id, body);
+    if (r.ok) {
+      flash("Sent from your WhatsApp");
+      setPlan((p) => p && { ...p, drafts: p.drafts.filter((d) => d.id !== id), counts: { ...p.counts, drafts: Math.max(0, p.counts.drafts - 1) } });
+      return;
+    }
+    // Her WhatsApp is not linked: open WhatsApp with the message ready instead.
+    flash(r.error ?? "Opening WhatsApp");
+    const d = (phone ?? "").replace(/\D/g, "");
+    if (d) window.open(`https://wa.me/${d.length === 10 ? `91${d}` : d}?text=${encodeURIComponent(body)}`, "_blank");
+  }
+
   async function turnOnReminders() {
     if (demo) { setPush("on"); flash("Reminders on"); return; }
     try { const s = await enableReminders(); setPush(s); flash(s === "on" ? "Reminders on. Your phone will ring for callbacks." : "Reminders are off."); }
@@ -202,9 +226,10 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
         {needsCode ? (
           <JoinCode code={code ?? ""} onJoined={() => enter()} />
         ) : tab === "home" ? (
-          <Home profile={profile} today={today} queue={queue} leads={leads} now={now} noteByLead={noteByLead} push={push}
-            onStart={() => queue[0] && setOpenLead(queue[0].id)} onOpen={setOpenLead} onReminders={turnOnReminders}
-            onProfile={() => setShowProfile(true)} onScan={() => setTab("scan")} onFollow={() => setTab("follow")} />
+          <Home profile={profile} today={today} queue={queue} plan={plan} now={now} push={push}
+            onStart={() => queue[0] && setOpenLead(queue[0].id)} onOpen={(id) => byId.has(id) && setOpenLead(id)}
+            onCall={callById} onApprove={approveDraft} onReminders={turnOnReminders}
+            onProfile={() => setShowProfile(true)} onScan={() => setTab("scan")} onLeads={() => setTab("leads")} />
         ) : tab === "leads" ? (
           <Leads leads={leads} now={now} onOpen={setOpenLead} onCall={call} onProfile={() => setShowProfile(true)} />
         ) : tab === "scan" ? (
@@ -397,19 +422,14 @@ function Ring({ value, goal, label, cls }: { value: number; goal: number; label:
   );
 }
 
-function Home({ profile, today, queue, leads, now, noteByLead, push, onStart, onOpen, onReminders, onProfile, onScan, onFollow }: {
-  profile: Profile | null; today: Today; queue: Lead[]; leads: Lead[]; now: number; noteByLead: Map<string, FollowUp>; push: PushState;
-  onStart: () => void; onOpen: (id: string) => void; onReminders: () => void; onProfile: () => void; onScan: () => void; onFollow: () => void;
+function Home({ profile, today, queue, plan, now, push, onStart, onOpen, onCall, onApprove, onReminders, onProfile, onScan, onLeads }: {
+  profile: Profile | null; today: Today; queue: Lead[]; plan: DayPlan | null; now: number; push: PushState;
+  onStart: () => void; onOpen: (id: string) => void; onCall: (id: string, phone: string | null) => void;
+  onApprove: (id: string, body: string, phone: string | null) => Promise<void>;
+  onReminders: () => void; onProfile: () => void; onScan: () => void; onLeads: () => void;
 }) {
   const first = (profile?.full_name ?? "").split(" ")[0];
   const hr = new Date(now).getHours();
-  const eod = new Date(now); eod.setHours(23, 59, 59, 999);
-  // Today's callbacks: the ones due now first, then the rest of today.
-  const plan = leads
-    .filter((l) => { const g = fuGroup(l, now); return g === "now" || (g !== null && l.due_at && Date.parse(l.due_at) <= eod.getTime()); })
-    .sort((a, b) => (a.due_at ? Date.parse(a.due_at) : 0) - (b.due_at ? Date.parse(b.due_at) : 0));
-  const nextLater = leads.filter((l) => l.due_at && Date.parse(l.due_at) > now && act(l, now) !== "none")
-    .sort((a, b) => Date.parse(a.due_at!) - Date.parse(b.due_at!))[0];
   return (
     <div className="pad">
       <header className="top">
@@ -420,8 +440,7 @@ function Home({ profile, today, queue, leads, now, noteByLead, push, onStart, on
       <section className="tcard hero">
         <div className="hero-top">
           <div><small className="muted">Call now</small><b className="hero-num">{queue.length}</b></div>
-          <p className="muted">{queue.length ? "Late callbacks, new leads and missed calls. Oldest first." : nextLater?.due_at
-            ? `Nobody to call right now. Next callback ${fmtWhen(new Date(nextLater.due_at), new Date(now))}.` : "Nobody to call right now."}</p>
+          <p className="muted">{queue.length ? "Buyers who wrote first, then what you promised, then the rest. Same order as your phone app." : "Nobody to call right now."}</p>
         </div>
         <button className="tbtn primary big" onClick={onStart} disabled={!queue.length}>
           {queue.length ? `Start calling · ${queue[0].name?.split(" ")[0] || queue[0].phone} first` : "All done for now"}
@@ -436,17 +455,130 @@ function Home({ profile, today, queue, leads, now, noteByLead, push, onStart, on
         <Ring value={today.visits} goal={GOALS.visits} label="Site visits" cls="c3" />
       </section>
 
-      <h2 className="sec">Today&apos;s callbacks</h2>
-      <div className="tcard list">
-        {plan.length === 0 && <p className="tempty">No callbacks booked for today.</p>}
-        {plan.slice(0, 5).map((l) => <FuRow key={l.id} lead={l} now={now} note={noteByLead.get(l.id)?.note} onOpen={onOpen} />)}
-        {plan.length > 5 && <button className="row more" onClick={onFollow}>See all {plan.length} in Follow Ups</button>}
-      </div>
+      <h2 className="sec">Today&apos;s Plan</h2>
+      <p className="muted explain">The same lists as your phone app and your evening WhatsApp.</p>
+
+      {/* A buyer wrote and nobody answered. They acted first, so they are first. */}
+      {plan && plan.waiting.length > 0 && (
+        <PlanList title={PLAN.waiting} explain="They wrote to you on WhatsApp. Nobody has answered yet." count={plan.counts.waiting}
+          rows={plan.waiting.map((w) => ({ id: w.contact_id, name: w.name, phone: w.phone, late: true,
+            meta: waitedLabel(w.minutes), detail: w.text ? `"${w.text}"` : w.media ? `Sent a ${w.media}` : "Wrote to you" }))}
+          onOpen={onOpen} onCall={onCall} />
+      )}
+
+      <PlanList title="Call now" explain="Who to ring, in the same order as your phone app." count={queue.length}
+        rows={queue.map((l) => ({ id: l.id, name: l.name, phone: l.phone, late: !!(l.due_at && Date.parse(l.due_at) <= now),
+          meta: l.due_at ? fmtTime(l.due_at) : "Due now", detail: dueSignal(l, now) ?? label(l.status) }))}
+        onOpen={onOpen} onCall={onCall} onAll={onLeads} empty="Nobody to call right now. Booked callbacks come here on their own." />
+
+      {plan && plan.promises.length > 0 && (
+        <PlanList title={PLAN.promises} explain="Things you said on a recorded call that you would do. Do them, and they leave this list on their own."
+          count={plan.counts.promise_people}
+          rows={plan.promises.map((p) => ({ id: p.contact_id, name: p.name, phone: p.phone, late: p.late,
+            meta: p.oldest_days <= 0 ? "Today" : `${p.oldest_days}d`,
+            detail: [...new Set(p.items.map((i) => i.promise))].join(" + ") }))}
+          onOpen={onOpen} onCall={onCall} />
+      )}
+
+      {plan && plan.drafts.length > 0 && <Drafts drafts={plan.drafts} onApprove={onApprove} />}
+
+      {plan && plan.visits.length > 0 && (
+        <PlanList title={PLAN.visits} explain="Site visits for the rest of today and tomorrow. Call in the morning to confirm." count={plan.counts.visits}
+          rows={plan.visits.map((v) => ({ id: v.contact_id, name: v.name, phone: v.phone, late: false,
+            meta: fmtTime(v.at), detail: v.project ?? "Confirm the time" }))}
+          onOpen={onOpen} onCall={onCall} />
+      )}
+
+      {plan && plan.counts.visits_pending > 0 && (
+        <p className="muted explain">{plan.counts.visits_pending} site visit{plan.counts.visits_pending === 1 ? " has" : "s have"} no outcome yet.
+          Answer &ldquo;Did they come?&rdquo; on Home in your phone app.</p>
+      )}
 
       <button className="tcard scan-cta" onClick={onScan}>
         <b>Scan a lead list</b><small>Photo of a register, a screenshot or pasted WhatsApp text → leads in seconds</small>
       </button>
     </div>
+  );
+}
+
+/** The names her WhatsApp and the phone app use for the same lists. */
+const PLAN = { waiting: "Waiting for your reply", promises: "You said you would", visits: "Site visit fixed", drafts: "WhatsApp ready" };
+
+type PlanRowData = { id: string; name: string | null; phone: string | null; late: boolean; meta: string; detail: string };
+
+/** "3h" — how long a buyer has waited. Same as the phone app. */
+function waitedLabel(m: number) {
+  return m < 60 ? `${Math.max(1, m)}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`;
+}
+
+/** One Today's Plan list: three rows, then "See all N" — never a bare "+N more". */
+function PlanList({ title, explain, count, rows, onOpen, onCall, onAll, empty }: {
+  title: string; explain: string; count: number; rows: PlanRowData[];
+  onOpen: (id: string) => void; onCall: (id: string, phone: string | null) => void; onAll?: () => void; empty?: string;
+}) {
+  const [all, setAll] = useState(false);
+  if (!rows.length && !empty) return null;
+  const shown = all ? rows : rows.slice(0, 3);
+  return (
+    <section>
+      <h3 className="sec">{title} · {count}</h3>
+      <p className="muted explain">{explain}</p>
+      <div className="tcard list">
+        {!rows.length && <p className="tempty">{empty}</p>}
+        {shown.map((r) => (
+          <div key={r.id} className="row">
+            <button className="row-main tap" onClick={() => onOpen(r.id)}>
+              <b>{r.name || r.phone}</b>
+              <small>{r.detail}</small>
+            </button>
+            <span className={`row-meta ${r.late ? "late" : ""}`}>{r.meta}</span>
+            {r.phone && (
+              <button className="callbtn" onClick={() => onCall(r.id, r.phone)} aria-label={`Call ${r.name ?? r.phone}`}>
+                <svg viewBox="0 0 24 24" aria-hidden><path d={PHONE} /></svg>
+              </button>
+            )}
+          </div>
+        ))}
+        {count > 3 && !all && (
+          <button className="row more" onClick={() => (onAll ? onAll() : setAll(true))}>See all {count}</button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** The WhatsApps the end of a call already wrote. Check, change, Approve & send
+ *  — from her own linked WhatsApp, the same as the phone app. */
+function Drafts({ drafts, onApprove }: {
+  drafts: DayPlan["drafts"]; onApprove: (id: string, body: string, phone: string | null) => Promise<void>;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <section>
+      <h3 className="sec">{PLAN.drafts} · {drafts.length}</h3>
+      <p className="muted explain">Your last calls already wrote these. Check the words, change them if you like, then send.</p>
+      <div className="tcard list">
+        {drafts.map((d) => (
+          <div key={d.id}>
+            <button className="row tap" onClick={() => { setOpen(open === d.id ? null : d.id); setText(d.body); }} aria-expanded={open === d.id}>
+              <span className="row-main"><b>{d.name || d.phone}</b><small>{d.body}</small></span>
+              <span className="row-meta">{open === d.id ? "Close" : "Check"}</span>
+            </button>
+            {open === d.id && (
+              <div className="pad">
+                <textarea rows={6} value={text} onChange={(e) => setText(e.target.value)} aria-label={`Message to ${d.name ?? d.phone}`} />
+                <button className="tbtn wa big" disabled={busy || !text.trim()}
+                  onClick={async () => { setBusy(true); await onApprove(d.id, text.trim(), d.phone); setBusy(false); setOpen(null); }}>
+                  {busy ? "Sending…" : "Approve & send"}
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

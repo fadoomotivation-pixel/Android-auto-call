@@ -112,6 +112,14 @@ migrations in `supabase/migrations/`).
   including dismissals, working hours only, never over a call/dialler/sheet. If
   you add a prompt, add it to that engine — a second scheduler is how this turns
   into spam and gets swiped away unread.
+- **One Today's Plan, three windows** (`rep_plan()`, migration 0236): the
+  Android Home, the /app web app and the telecaller's own Daily Pulse WhatsApp
+  (`_shared/repplan.ts`) all read it: Call now (order = `v_lead_workstate.call_tier`,
+  the Android 5-tier rule), "You said you would" (promises from recorded
+  calls), "Waiting for your reply", visits, drafts. Same names, same counts.
+  Never build a list for one window only, and never print "+N more" without
+  the place where the N are. A telecaller gets HER plan, not the founder's
+  report about her (`repText` is the founder's).
 - **The weekly report card** (`_shared/weekreview.ts`, `rep-week-review`, sent by
   pulse-broadcast Monday 10 AM): numbers + feedback from the rep's own recorded
   calls. Patterns are counted in code; ONE AI call per rep per week writes the

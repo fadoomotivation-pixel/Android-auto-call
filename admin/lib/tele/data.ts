@@ -5,8 +5,8 @@
 import { createClient } from "@/lib/supabase/client";
 import type { ScanRow } from "./scanParser";
 
-import type { Lead } from "./types";
-export type { Lead };
+import type { DayPlan, Lead } from "./types";
+export type { DayPlan, Lead };
 export type Stage = { code: string; label: string; sort_order: number; is_terminal: boolean; rep_visible: boolean };
 export type FollowUp = { id: string; contact_id: string | null; phone: string | null; name: string | null; due_at: string; note: string | null };
 export type Profile = { id: string; company_id: string | null; full_name: string | null; role: string | null };
@@ -80,15 +80,39 @@ export async function loadLeads(uid: string): Promise<Lead[]> {
   const [{ data: c }, { data: w }] = await Promise.all([
     sb.from("contacts").select("id, name, phone, status, temperature, attempts, notes, company_name, updated_at")
       .eq("salesperson_id", uid).order("updated_at", { ascending: false }).limit(1000),
-    sb.from("v_lead_workstate").select("contact_id, action_state, due_at, last_call_at, handled_today, stage")
+    // The same columns Android reads (Repository.fetchWorkStates), so Call now
+    // is ordered by the same rule on both — see callQueue in work.ts.
+    sb.from("v_lead_workstate").select("contact_id, action_state, due_at, last_call_at, handled_today, stage, created_at, calls_total, best_call_seconds, waiting_since, promise_due_since, promise_text")
       .eq("salesperson_id", uid).limit(2000),
   ]);
   const ws = new Map<string, any>((w ?? []).map((r: any) => [r.contact_id, r]));
   return (c ?? []).map((r: any) => {
     const x = ws.get(r.id);
     return { ...r, attempts: r.attempts ?? 0, ...(x ? { action_state: x.action_state, due_at: x.due_at,
-      last_call_at: x.last_call_at, handled_today: x.handled_today, stage: x.stage } : {}) };
+      last_call_at: x.last_call_at, handled_today: x.handled_today, stage: x.stage, created_at: x.created_at,
+      calls_total: x.calls_total, best_call_seconds: x.best_call_seconds, waiting_since: x.waiting_since,
+      promise_due_since: x.promise_due_since, promise_text: x.promise_text } : {}) };
   });
+}
+
+/** Her plan for the day: rep_plan(), the function her evening WhatsApp and the
+ *  Android app read. Null when it cannot be read — the lists are left out, not
+ *  shown as zero. */
+export async function loadPlan(uid: string): Promise<DayPlan | null> {
+  const { data, error } = await createClient().rpc("rep_plan", { p_rep: uid, p_limit: 200 });
+  if (error || !data) return null;
+  return data as DayPlan;
+}
+
+/** Approve & send: the message a call wrote, with her edits, from her own
+ *  linked WhatsApp. The server checks it is her draft, to her own lead.
+ *  fallback = her WhatsApp is not linked; open WhatsApp with the text instead. */
+export async function sendDraft(draftId: string, body: string): Promise<{ ok: boolean; fallback?: boolean; error?: string }> {
+  const { data, error } = await createClient().functions.invoke("follow-up-draft", {
+    body: { draft_id: draftId, action: "send", body },
+  });
+  if (error) return { ok: false, fallback: true, error: error.message };
+  return (data ?? { ok: false, fallback: true }) as { ok: boolean; fallback?: boolean; error?: string };
 }
 
 export async function loadStages(): Promise<Stage[]> {

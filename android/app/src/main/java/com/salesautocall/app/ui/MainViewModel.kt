@@ -318,6 +318,8 @@ data class AppState(
     val messageSending: Boolean = false,
     /** Messages the end of a call wrote in the last day, waiting for her Approve. */
     val readyDrafts: List<Repository.ReadyDraft> = emptyList(),
+    /** rep_plan(): the same lists her Daily Pulse WhatsApp prints. Null = not loaded. */
+    val dayPlan: com.salesautocall.app.data.DayPlan? = null,
     /** One-line failure notice for the AI Coach card (never mixed into results,
      *  so an error can never be copied or WhatsApp'd to a customer). */
     val coachError: String? = null,
@@ -1776,6 +1778,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Loads everything the Home tab needs in one go. */
     fun loadHome(force: Boolean = false) {
         loadReadyDrafts()
+        loadDayPlan()
         loadCoachFeed(force)
         decideMorningGreeting()
         loadCapture(force)
@@ -4822,6 +4825,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val list = runCatching { Repository.readyDrafts() }.getOrDefault(emptyList())
             set { it.copy(readyDrafts = list) }
+        }
+    }
+
+    /** Today's Plan lists shared with her WhatsApp: buyers waiting, promises. */
+    fun loadDayPlan() {
+        viewModelScope.launch {
+            val plan = Repository.dayPlan() ?: return@launch
+            set { it.copy(dayPlan = plan) }
         }
     }
 
