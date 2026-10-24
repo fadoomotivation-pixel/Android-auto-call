@@ -7,6 +7,7 @@ import { ImportLeads } from "./ImportLeads";
 import { loadStages, repStages, ACTION_STATES, type Stage } from "@/lib/dashboard/stage";
 import { LeadHistory } from "./LeadHistory";
 import { LeadList } from "./LeadList";
+import { TakeBackLists } from "./TakeBackLists";
 import { buildLeadViews, norm10, TEMPS, type Lead } from "./leadView";
 
 type Sp = { id: string; full_name: string | null; territory: string | null; company_id?: string | null; company_name?: string | null };
@@ -669,6 +670,14 @@ export function LeadManager({
             <Chip key={sp.id} active={agentFilter === sp.id} onClick={() => setAgentFilter(sp.id)} label={labelOf(sp)} count={agentCounts[sp.id] ?? "—"} />
           ))}
         </div>
+      )}
+      {tab === "assigned" && agentFilter && (
+        <TakeBackLists
+          key={agentFilter}
+          salespersonId={agentFilter}
+          name={nameOf(agentFilter)}
+          onDone={async () => { await load(true); await refreshStats(); }}
+        />
       )}
 
       {/* ── What to do now — the ACTION axis, derived from the clock ──

@@ -118,6 +118,17 @@ migrations in `supabase/migrations/`).
   did-well / to-fix points, and a point citing a call it wasn't given is
   dropped. Built early Monday into `rep_week_reviews` so preview = what the rep
   gets. Under 3 recorded calls it is numbers only — never fake feedback.
+- **After a real call the WhatsApp is already written** (0235 trigger →
+  `follow-up-draft` `mode:'after_call'`, one per call). The rep sees it on the
+  lead (and in Today's Plan), edits it, taps **Approve & send**, and it goes
+  from HER linked WhatsApp via worker `/s/<id>/send` — the only caller, after
+  checking her draft/her lead; throttled per number. Not linked → the app opens
+  WhatsApp instead. Never let anything else send from a rep's number.
+  Drafts write in her voice: `rep_personas` (nightly, from her recordings and
+  her own messages; phrases kept only if she really wrote them).
+- **WhatsApp hides most numbers (LIDs).** `wa-lid-resolve` asks WhatsApp,
+  through the rep's session, for the LIDs of leads SHE called (≤300, batched),
+  and the worker keeps the map on disk. Never pool LID maps across sessions.
 - **After a SIM call the popup does NOT open** (`AppPrefs.getPostCallPopup`,
   default off). It cannot open on time — the phone's in-call screen owns the
   foreground — so the lead's Update button shakes (`Modifier.nudgeShake`) and a

@@ -40,12 +40,33 @@
 // instead. Every messaging tool ever built answers silence with another
 // message. A good telecaller picks up the phone.
 //
+// AFTER THE CALL — the founder's words: "call katne k baad recording ka
+// analysis ho ... uske no se jo whatsapp jana chahiye vo bhej do. Approve krne
+// ka button app pr aa jae".
+//
+// followup_drafts held ONE row in its life, because the brain waited for a rep
+// to open a lead and press a button. Now the end of a real call asks for the
+// message itself: when the call's summary lands, a trigger (0235) posts
+// mode:"after_call" here. The draft is written from the call she just had, in
+// her voice (rep_personas + her own messages), and her phone gets a push. She
+// opens the lead, edits it if she wants, taps Approve — and it goes from HER
+// WhatsApp, through her linked session. No WhatsApp app, no copy-paste.
+//
+// Sent from her number means sent BY her: only the rep the draft was written
+// for can approve it, only to her own lead, only the words she approved. When
+// her WhatsApp is not linked the app falls back to opening WhatsApp with the
+// text, as before.
+//
 // Body:
-//   { contact_id }                      → a draft (or the call_instead verdict)
-//   { draft_id, action:"opened"|"skipped" } → what she did with it
+//   { contact_id }                               → a draft (or the call_instead verdict)
+//   { draft_id, action:"opened"|"skipped" }      → what she did with it
+//   { draft_id, action:"send", body }            → send it from her own WhatsApp
+//   { mode:"after_call", call_id }  service key  → the draft the end of a call writes
+//   { mode:"dry_run", contact_id }  service key  → see a draft, write nothing
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import { groqJson } from "../_shared/groq.ts";
+import { BaileysProvider } from "../_shared/wa-provider.ts";
 
 declare const Supabase: {
   ai: { Session: new (m: string) => { run(input: string, opts: { mean_pool: boolean; normalize: boolean }): Promise<number[]> } };
@@ -112,65 +133,46 @@ const SYSTEM =
 
 type Ctx = Record<string, unknown>;
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+const CONTACT_COLS = "id, company_id, salesperson_id, name, phone, stage, status, budget, territory, site_visit_project";
+type Lead = {
+  id: string; company_id: string; salesperson_id: string | null; name: string | null; phone: string | null;
+  stage: string | null; status: string | null; budget: string | null; territory: string | null;
+  site_visit_project: string | null;
+};
+type CallRow = {
+  id: string; company_id: string; salesperson_id: string | null; contact_id: string | null;
+  started_at: string | null; duration_seconds: number | null; summary: string | null;
+  ai_actions: Record<string, unknown> | null; suggested_disposition: string | null;
+};
 
-  const auth = req.headers.get("Authorization") ?? "";
-  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
-  const admin = createClient(SUPABASE_URL, SERVICE);
-  const body = await req.json().catch(() => ({} as Ctx));
+type Composed =
+  | { kind: "call_instead"; sent14d: number; reason: string }
+  | { kind: "nothing"; error: string }
+  | { kind: "error"; error: string }
+  | {
+    kind: "draft"; angle: string; body: string; reason: string | null; model: string | null;
+    based_on: Record<string, unknown>; read: Record<string, unknown>;
+  };
 
-  // DRY RUN — service key only, writes nothing.
-  //
-  // There is no way to read a draft's quality from a schema. This lets a human
-  // point the drafter at any lead and see exactly what it would say, without
-  // creating a row, without touching the learning data and without a message
-  // going anywhere near a customer. It is the same reason promise-watch has
-  // mode:"models": a brain you cannot inspect is a brain you cannot trust.
-  const dryRun = body?.mode === "dry_run";
-  if (dryRun && bearer !== SERVICE) return json({ ok: false, error: "service key required" }, 401);
+const istTime = (iso: string) => new Date(iso).toLocaleString("en-IN", {
+  timeZone: "Asia/Kolkata", weekday: "short", hour: "numeric", minute: "2-digit", hour12: true,
+});
 
-  // The rep's own client. In a dry run there is no rep, so the service client
-  // stands in for reads only — nothing is written either way.
-  const u = dryRun
-    ? admin
-    : createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
-  const ud = dryRun ? { user: null } : (await u.auth.getUser()).data;
-  if (!dryRun && !ud?.user) return json({ ok: false, error: "Sign in first" }, 401);
+/** A number WhatsApp can address: digits, with India's code on a bare ten. */
+function waNumber(raw: string | null): string {
+  const d = String(raw ?? "").replace(/\D/g, "");
+  return d.length === 10 ? `91${d}` : d;
+}
 
-  // ── what she did with a draft ──────────────────────────────────────────
-  //
-  // 'opened' means the WhatsApp chat opened with this text in it. It does NOT
-  // mean sent — settle_followups() decides that from the observer, because an
-  // app that marks its own homework learns nothing.
-  const draftId = String(body?.draft_id ?? "");
-  if (draftId) {
-    const action = String(body?.action ?? "");
-    if (action !== "opened" && action !== "skipped") {
-      return json({ ok: false, error: "action must be opened or skipped" }, 400);
-    }
-    const patch = action === "opened"
-      ? { status: "opened", opened_at: new Date().toISOString() }
-      : { status: "skipped", settled_at: new Date().toISOString() };
-    // Through the USER's client on purpose: the RLS policy is what stops one
-    // rep closing another rep's draft, and it also refuses to let anyone write
-    // 'sent' by hand.
-    const { error } = await u.from("followup_drafts").update(patch).eq("id", draftId);
-    if (error) return json({ ok: false, error: error.message }, 400);
-    return json({ ok: true });
-  }
-
-  // ── a draft for one lead ───────────────────────────────────────────────
-  const contactId = String(body?.contact_id ?? "");
-  if (!contactId) return json({ ok: false, error: "contact_id required" }, 400);
-
-  const { data: c } = await u.from("contacts")
-    .select("id, company_id, salesperson_id, name, phone, stage, status, budget, territory, site_visit_project")
-    .eq("id", contactId).maybeSingle();
-  if (!c) return json({ ok: false, error: "not your lead" }, 403);
-
+/**
+ * The brain: read everything known about this buyer and this rep, ask once,
+ * return the message. `db` is the rep's own client when she asked (so RLS
+ * decides what it may read) and the service client after a call or in a dry
+ * run. `call` is the conversation that just ended, when there is one.
+ */
+async function compose(db: SupabaseClient, c: Lead, repId: string, call: CallRow | null): Promise<Composed> {
   // ── THE BRAKE, before anything is spent ────────────────────────────────
-  const { data: planRows } = await u.rpc("followup_plan", { p_contact: contactId });
+  const { data: planRows } = await db.rpc("followup_plan", { p_contact: c.id });
   const plan = (Array.isArray(planRows) ? planRows[0] : planRows) as {
     verdict?: string; allowed?: string[]; banned?: string[]; sent_14d?: number; replies_14d?: number;
   } | null;
@@ -179,50 +181,37 @@ Deno.serve(async (req) => {
     // No model call, no row, no message. This is the honest answer and it is
     // the whole point of the loop: four messages have gone to this person in a
     // fortnight and not one came back. A fifth is not a plan.
-    return json({
-      ok: true,
-      verdict: "call_instead",
-      sent_14d: plan.sent_14d ?? 0,
+    return {
+      kind: "call_instead",
+      sent14d: plan.sent_14d ?? 0,
       reason: `${plan.sent_14d ?? 0} messages in two weeks, no reply. Don't message. Call.`,
-    });
+    };
   }
 
   const allowed = (plan?.allowed ?? []).filter((a) => a in ANGLE_MEANING);
-  if (!allowed.length) return json({ ok: false, error: "nothing left to say — call them" }, 200);
-
-  // A live draft she has not dealt with yet. Handing her a second one is how
-  // two near-identical messages end up going to the same buyer. A dry run
-  // skips this: the whole point of a dry run is to see what the drafter says
-  // TODAY, not to be handed yesterday's answer.
-  if (!dryRun) {
-    const { data: live } = await u.from("followup_drafts")
-      .select("id, angle, body, reason, created_at")
-      .eq("contact_id", contactId).in("status", ["suggested", "opened"])
-      .order("created_at", { ascending: false }).limit(1).maybeSingle();
-    if (live && Date.now() - new Date(live.created_at).getTime() < FRESH_HOURS * 3600_000) {
-      return json({ ok: true, verdict: "draft", reused: true, draft_id: live.id, angle: live.angle, body: live.body, reason: live.reason });
-    }
-  }
+  if (!allowed.length) return { kind: "nothing", error: "nothing left to say — call them" };
 
   // ── the material ───────────────────────────────────────────────────────
-  const [{ data: mem }, { data: promises }, { data: thread }, { data: mine }, { data: hints }] =
+  const [{ data: mem }, { data: promises }, { data: thread }, { data: mine }, { data: hints }, { data: persona }] =
     await Promise.all([
-      u.from("lead_memory")
-        .select("where_we_left_it, buyer_wants, objection").eq("contact_id", contactId).maybeSingle(),
-      u.from("v_open_promises")
-        .select("id, kind, promise, days_open").eq("contact_id", contactId).eq("status", "missed")
+      db.from("lead_memory")
+        .select("where_we_left_it, buyer_wants, objection").eq("contact_id", c.id).maybeSingle(),
+      db.from("v_open_promises")
+        .select("id, kind, promise, days_open").eq("contact_id", c.id).eq("status", "missed")
         .order("days_open", { ascending: false }).limit(3),
-      u.from("wa_observed_messages")
-        .select("direction, body, media_kind, sent_at").eq("contact_id", contactId)
+      db.from("wa_observed_messages")
+        .select("direction, body, media_kind, sent_at").eq("contact_id", c.id)
         .is("archived_at", null).order("sent_at", { ascending: false }).limit(12),
       // HOW SHE WRITES. Her own real messages, from her other leads too — this
       // is the difference between a draft she sends and a draft she rewrites.
       // 25 characters filters out "ji", "ok" and "👍".
-      u.from("wa_observed_messages")
-        .select("body").eq("salesperson_id", c.salesperson_id ?? ud?.user?.id ?? "")
+      db.from("wa_observed_messages")
+        .select("body").eq("salesperson_id", repId)
         .eq("direction", "out").is("archived_at", null)
         .not("body", "is", null).order("sent_at", { ascending: false }).limit(60),
-      u.rpc("followup_angle_hints", { p_company: c.company_id }),
+      db.rpc("followup_angle_hints", { p_company: c.company_id }),
+      // WHO SHE IS — built nightly from her recorded calls and her own chats.
+      db.from("rep_personas").select("persona").eq("salesperson_id", repId).maybeSingle(),
     ]);
 
   // Company facts, so it can name a real project or price and never invent one.
@@ -230,10 +219,10 @@ Deno.serve(async (req) => {
   try {
     const model = new Supabase.ai.Session("gte-small");
     const embedding = await model.run(
-      `${c.site_visit_project ?? ""} project price offer location site visit USP`,
+      `${c.site_visit_project ?? ""} ${call?.summary ?? ""} project price offer location site visit USP`.slice(0, 1200),
       { mean_pool: true, normalize: true },
     );
-    const { data } = await u.rpc("match_knowledge", {
+    const { data } = await db.rpc("match_knowledge", {
       p_company: c.company_id, p_embedding: embedding, p_match_count: 4, p_min_similarity: 0.25,
     });
     if (Array.isArray(data)) {
@@ -258,8 +247,8 @@ Deno.serve(async (req) => {
   }).join("\n");
 
   // What the app has already said to this person, so it cannot say it again.
-  const { data: past } = await u.from("followup_drafts")
-    .select("angle, body, sent_at, replied_at").eq("contact_id", contactId).eq("status", "sent")
+  const { data: past } = await db.from("followup_drafts")
+    .select("angle, body, sent_at, replied_at").eq("contact_id", c.id).eq("status", "sent")
     .order("sent_at", { ascending: false }).limit(4);
   const alreadySent = (past ?? []).map((p) =>
     `- ${p.angle} on ${String(p.sent_at ?? "").slice(0, 10)}${p.replied_at ? " (they replied)" : " (NO REPLY)"}: ${
@@ -270,11 +259,36 @@ Deno.serve(async (req) => {
     .map((h: { angle: string; sent: number; reply_rate: number }) =>
       `${h.angle}: ${h.reply_rate}% replied (${h.sent} sent)`).join(", ");
 
+  const p = (persona?.persona ?? null) as Record<string, unknown> | null;
+  const personaText = p
+    ? [
+      p.summary ? `${p.summary}` : "",
+      p.how_she_sounds ? `How she sounds: ${p.how_she_sounds}` : "",
+      Array.isArray(p.her_phrases) && p.her_phrases.length ? `Words she uses: ${(p.her_phrases as string[]).slice(0, 6).join(" | ")}` : "",
+    ].filter(Boolean).join("\n").slice(0, 700)
+    : "";
+
+  // THE CALL THAT JUST ENDED. It really happened minutes ago, so unlike the
+  // rest of the material she may refer to it ("abhi baat hui").
+  const a = (call?.ai_actions ?? {}) as Record<string, unknown>;
+  const callText = call?.summary
+    ? [
+      `THE CALL THAT JUST ENDED (${Math.max(1, Math.round((call.duration_seconds ?? 0) / 60))} min, ${
+        call.started_at ? istTime(call.started_at) : "just now"}): ${String(call.summary).slice(0, 900)}`,
+      a.promise_note ? `Agreed on that call: ${a.promise_note}${a.promise_at ? ` (${istTime(String(a.promise_at))})` : ""}` : "",
+      Array.isArray(a.objections) && a.objections.length ? `They said: ${(a.objections as string[]).join(", ")}` : "",
+      a.preferences ? `They want: ${a.preferences}` : "",
+      "Write the message she sends RIGHT AFTER this call: their name, the one thing agreed or still open, and " +
+        "the next step. The call is real and just happened, so you MAY say you just spoke.",
+    ].filter(Boolean).join("\n")
+    : "";
+
   const userMsg = [
     `BUYER: ${c.name ?? "unnamed"}. Stage: ${c.stage}.` +
       (c.budget ? ` Budget on file: ${c.budget}.` : "") +
       (c.site_visit_project ? ` Project: ${c.site_visit_project}.` : "") +
       (c.territory ? ` Area: ${c.territory}.` : ""),
+    callText,
     mem?.where_we_left_it ? `WHERE IT WAS LEFT: ${mem.where_we_left_it}` : "",
     mem?.buyer_wants ? `THEY WANT: ${mem.buyer_wants}` : "",
     mem?.objection ? `WHAT STOPPED THEM (their words): ${mem.objection}` : "",
@@ -284,6 +298,7 @@ Deno.serve(async (req) => {
     buyerLast ? "THE BUYER WROTE LAST AND IS WAITING FOR AN ANSWER." : "",
     threadText ? `THE THREAD (oldest first):\n${threadText}` : "THE THREAD: nothing on WhatsApp yet.",
     alreadySent ? `RECENT MESSAGES ALREADY SENT BY THIS APP — do not repeat them:\n${alreadySent}` : "",
+    personaText ? `WHO SHE IS (from her own calls and chats) — write as this person:\n${personaText}` : "",
     style.length ? `WRITING SAMPLES — copy this voice:\n${style.map((s) => `- ${s}`).join("\n")}` : "",
     facts.length ? `COMPANY FACTS (the only numbers you may use):\n${facts.map((f, i) => `${i + 1}. ${f}`).join("\n")}` : "",
     `ALLOWED ANGLES (pick exactly one):\n${allowed.map((a) => `- ${a}: ${ANGLE_MEANING[a]}`).join("\n")}`,
@@ -298,24 +313,270 @@ Deno.serve(async (req) => {
     // Said out loud, not swallowed. A null here used to mean the rep saw
     // "Couldn't draft the message. Please try again." forever while the real
     // answer was that the model had been retired a fortnight earlier.
-    return json({ ok: false, error: out.error ?? "no draft" }, 200);
+    return { kind: "error", error: out.error ?? "no draft" };
   }
 
   const text = String(out.data.body ?? "").trim().slice(0, 900);
-  if (!text) return json({ ok: false, error: "the model returned an empty message" }, 200);
+  if (!text) return { kind: "error", error: "the model returned an empty message" };
   let angle = String(out.data.angle ?? "").trim();
   // A model that picks a banned angle does not get to overrule the brake.
   if (!allowed.includes(angle)) angle = allowed[0];
 
+  return {
+    kind: "draft", angle, body: text,
+    reason: String(out.data.reason ?? "").trim().slice(0, 160) || null,
+    model: out.model,
+    based_on: {
+      used_memory: !!mem?.where_we_left_it,
+      promise_ids: (promises ?? []).map((p) => p.id),
+      thread_messages: ordered.length,
+      style_samples: style.length,
+      persona: !!personaText,
+      after_call: !!callText,
+      facts: facts.length,
+      banned: plan?.banned ?? [],
+      model: out.model,
+    },
+    read: {
+      memory: !!mem?.where_we_left_it, promises: (promises ?? []).length,
+      thread: ordered.length, style_samples: style.length, persona: !!personaText,
+      call: !!callText, facts: facts.length, allowed, banned: plan?.banned ?? [],
+    },
+  };
+}
+
+/** The worker a company's WhatsApp sessions live on. The secret never leaves the server. */
+async function workerFor(admin: SupabaseClient, companyId: string): Promise<BaileysProvider | null> {
+  const { data: b } = await admin.from("whatsapp_baileys").select("base_url").eq("company_id", companyId).maybeSingle();
+  if (!b?.base_url) return null;
+  const { data: secret } = await admin.rpc("get_baileys_secret", { p_company: companyId });
+  if (!secret) return null;
+  return new BaileysProvider(String(b.base_url), String(secret));
+}
+
+/**
+ * The end of a real call writes the message. Called by the 0235 trigger when a
+ * call's summary lands; never by a person.
+ */
+async function afterCall(admin: SupabaseClient, callId: string): Promise<Record<string, unknown>> {
+  if (!callId) return { ok: false, error: "call_id required" };
+  const { data: call } = await admin.from("call_logs")
+    .select("id, company_id, salesperson_id, contact_id, started_at, duration_seconds, summary, ai_actions, suggested_disposition")
+    .eq("id", callId).maybeSingle();
+  const cr = call as CallRow | null;
+  if (!cr?.contact_id || !cr.salesperson_id) return { ok: true, skipped: "not a call with a lead" };
+
+  // One message per call. The trigger can fire twice; the buyer must not get two.
+  const { data: had } = await admin.from("followup_drafts").select("id").eq("call_id", callId).maybeSingle();
+  if (had) return { ok: true, skipped: "already written", draft_id: had.id };
+
+  const { data: lead } = await admin.from("contacts").select(CONTACT_COLS).eq("id", cr.contact_id).maybeSingle();
+  const c = lead as Lead | null;
+  if (!c) return { ok: true, skipped: "lead gone" };
+  // The lead moved to someone else since the call. Her number must not write
+  // to a buyer who is now another rep's conversation.
+  if (c.salesperson_id && c.salesperson_id !== cr.salesperson_id) return { ok: true, skipped: "lead is now someone else's" };
+
+  // A message written after a LATER conversation is the one that matters; an
+  // older one still waiting is about a conversation that has moved on.
+  const { data: live } = await admin.from("followup_drafts")
+    .select("id, created_at").eq("contact_id", c.id).in("status", ["suggested", "opened"])
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (live && cr.started_at && new Date(live.created_at) > new Date(cr.started_at)) {
+    return { ok: true, skipped: "a newer message is already waiting", draft_id: live.id };
+  }
+
+  const r = await compose(admin, c, cr.salesperson_id, cr);
+  if (r.kind !== "draft") return { ok: true, skipped: r.kind, reason: "error" in r ? r.error : r.reason };
+
+  if (live) {
+    await admin.from("followup_drafts").update({ status: "stale", settled_at: new Date().toISOString() }).eq("id", live.id);
+  }
+  const { data: row, error } = await admin.from("followup_drafts").insert({
+    company_id: c.company_id,
+    contact_id: c.id,
+    salesperson_id: cr.salesperson_id,
+    angle: r.angle,
+    body: r.body,
+    reason: r.reason,
+    based_on: r.based_on,
+    source: "after_call",
+    call_id: cr.id,
+  }).select("id").single();
+  // The unique index on call_id: a second trigger lost the race. Not an error.
+  if (error) return { ok: true, skipped: error.code === "23505" ? "already written" : error.message };
+
+  // Her phone buzzes. Tapping it opens this lead with the message on screen.
+  try {
+    await fetch(`${SUPABASE_URL}/functions/v1/notify-rep`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${SERVICE}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_ids: [cr.salesperson_id],
+        contact_id: c.id,
+        channel: "followups",
+        title: `WhatsApp for ${c.name ?? "your lead"} is ready`,
+        body: `${r.body.replace(/\s+/g, " ").slice(0, 90)}… Tap to check and send.`,
+      }),
+    });
+  } catch (_e) { /* the draft is on the lead either way */ }
+
+  return { ok: true, draft_id: row.id };
+}
+
+/**
+ * She approved it — send it from her own WhatsApp.
+ *
+ * Every check here is about one thing: a message from her number is a message
+ * FROM HER. Her draft, her lead, the words she approved, her linked session.
+ * When the session cannot send, the app is told to open WhatsApp instead
+ * (fallback: true) — the message never just disappears.
+ */
+async function sendApproved(
+  admin: SupabaseClient, u: SupabaseClient, uid: string, draftId: string, edited: unknown,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const { data: d } = await u.from("followup_drafts")
+    .select("id, company_id, contact_id, salesperson_id, body, status").eq("id", draftId).maybeSingle();
+  if (!d) return { status: 404, body: { ok: false, error: "That message is not yours." } };
+  if (d.salesperson_id !== uid) {
+    return { status: 403, body: { ok: false, error: "Only the telecaller it was written for can send it from her number." } };
+  }
+  if (!["suggested", "opened"].includes(String(d.status))) {
+    return { status: 409, body: { ok: false, error: "This message was already sent or dismissed." } };
+  }
+  const text = String(typeof edited === "string" && edited.trim() ? edited : d.body ?? "").trim();
+  if (!text) return { status: 400, body: { ok: false, error: "The message is empty." } };
+  if (text.length > 1500) return { status: 400, body: { ok: false, error: "That is too long for one WhatsApp message." } };
+
+  const { data: c } = await admin.from("contacts").select("phone, salesperson_id, name").eq("id", d.contact_id).maybeSingle();
+  if (!c?.phone) return { status: 400, body: { ok: false, error: "This lead has no phone number." } };
+  if (c.salesperson_id !== uid) return { status: 403, body: { ok: false, error: "This lead is no longer yours." } };
+
+  const { data: sess } = await admin.from("wa_rep_sessions").select("status").eq("salesperson_id", uid).maybeSingle();
+  if (sess?.status !== "connected") {
+    return {
+      status: 200,
+      body: { ok: false, fallback: true, error: "Your WhatsApp is not linked to Call Pro AI, so it opens WhatsApp instead." },
+    };
+  }
+  const w = await workerFor(admin, d.company_id);
+  if (!w) return { status: 200, body: { ok: false, fallback: true, error: "WhatsApp sending is not set up for this company." } };
+
+  const res = await w.repSend(uid, waNumber(c.phone), text);
+  if (!res.ok) return { status: 200, body: { ok: false, fallback: true, error: res.error } };
+
+  const now = new Date().toISOString();
+  const { error: upErr } = await admin.from("followup_drafts").update({
+    status: "sent", sent_at: now, settled_at: now, sent_body: text, sent_via: "linked_whatsapp",
+    wa_message_id: res.id, edited: text !== String(d.body ?? "").trim(),
+  }).eq("id", d.id);
+  // It HAS gone. Whatever else fails, the row must say sent, or the card stays
+  // up and the buyer gets it twice.
+  if (upErr) {
+    await admin.from("followup_drafts").update({ status: "sent", sent_at: now, settled_at: now, sent_body: text }).eq("id", d.id);
+  }
+  await admin.from("lead_activities").insert({
+    company_id: d.company_id, contact_id: d.contact_id, actor_id: uid, actor_name: "WhatsApp",
+    type: "whatsapp", detail: `Sent from your WhatsApp: ${text.slice(0, 160)}`,
+  });
+  return { status: 200, body: { ok: true, sent: true, via: "linked_whatsapp" } };
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+
+  const auth = req.headers.get("Authorization") ?? "";
+  const bearer = auth.replace(/^Bearer\s+/i, "").trim();
+  const admin = createClient(SUPABASE_URL, SERVICE);
+  const body = await req.json().catch(() => ({} as Ctx));
+
+  // ── after a call — service key only ─────────────────────────────────────
+  if (body?.mode === "after_call") {
+    if (bearer !== SERVICE) return json({ ok: false, error: "service key required" }, 401);
+    return json(await afterCall(admin, String(body.call_id ?? "")));
+  }
+
+  // DRY RUN — service key only, writes nothing.
+  //
+  // There is no way to read a draft's quality from a schema. This lets a human
+  // point the drafter at any lead and see exactly what it would say, without
+  // creating a row, without touching the learning data and without a message
+  // going anywhere near a customer. It is the same reason promise-watch has
+  // mode:"models": a brain you cannot inspect is a brain you cannot trust.
+  const dryRun = body?.mode === "dry_run";
+  if (dryRun && bearer !== SERVICE) return json({ ok: false, error: "service key required" }, 401);
+
+  // The rep's own client. In a dry run there is no rep, so the service client
+  // stands in for reads only — nothing is written either way.
+  const u = dryRun
+    ? admin
+    : createClient(SUPABASE_URL, ANON, { global: { headers: { Authorization: auth } } });
+  const ud = dryRun ? { user: null } : (await u.auth.getUser()).data;
+  if (!dryRun && !ud?.user) return json({ ok: false, error: "Sign in first" }, 401);
+
+  // ── what she did with a draft ──────────────────────────────────────────
+  const draftId = String(body?.draft_id ?? "");
+  if (draftId) {
+    const action = String(body?.action ?? "");
+    if (action === "send" && !dryRun) {
+      const r = await sendApproved(admin, u, ud!.user!.id, draftId, body?.body);
+      // Always 200 with ok:false and the reason: the app shows the reason, and
+      // a non-2xx reaches it as an exception with the words stripped off.
+      return json({ ...r.body, status: r.status });
+    }
+    // 'opened' means the WhatsApp chat opened with this text in it. It does
+    // NOT mean sent — settle_followups() decides that from the observer,
+    // because an app that marks its own homework learns nothing.
+    if (action !== "opened" && action !== "skipped") {
+      return json({ ok: false, error: "action must be opened, skipped or send" }, 400);
+    }
+    const patch = action === "opened"
+      ? { status: "opened", opened_at: new Date().toISOString() }
+      : { status: "skipped", settled_at: new Date().toISOString() };
+    // Through the USER's client on purpose: the RLS policy is what stops one
+    // rep closing another rep's draft, and it also refuses to let anyone write
+    // 'sent' by hand.
+    const { error } = await u.from("followup_drafts").update(patch).eq("id", draftId);
+    if (error) return json({ ok: false, error: error.message }, 400);
+    return json({ ok: true });
+  }
+
+  // ── a draft for one lead ───────────────────────────────────────────────
+  const contactId = String(body?.contact_id ?? "");
+  if (!contactId) return json({ ok: false, error: "contact_id required" }, 400);
+
+  const { data: lead } = await u.from("contacts").select(CONTACT_COLS).eq("id", contactId).maybeSingle();
+  const c = lead as Lead | null;
+  if (!c) return json({ ok: false, error: "not your lead" }, 403);
+
+  // A live draft she has not dealt with yet — including the one the end of
+  // her last call wrote. Handing her a second one is how two near-identical
+  // messages end up going to the same buyer. A dry run skips this: the whole
+  // point of a dry run is to see what the drafter says TODAY.
+  if (!dryRun) {
+    const { data: live } = await u.from("followup_drafts")
+      .select("id, angle, body, reason, created_at, source")
+      .eq("contact_id", contactId).in("status", ["suggested", "opened"])
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (live && Date.now() - new Date(live.created_at).getTime() < FRESH_HOURS * 3600_000) {
+      return json({
+        ok: true, verdict: "draft", reused: true, draft_id: live.id, angle: live.angle, body: live.body,
+        reason: live.reason, source: live.source,
+      });
+    }
+  }
+
+  const repId = c.salesperson_id ?? ud?.user?.id ?? "";
+  const r = await compose(u, c, repId, null);
+  if (r.kind === "call_instead") {
+    return json({ ok: true, verdict: "call_instead", sent_14d: r.sent14d, reason: r.reason });
+  }
+  if (r.kind !== "draft") return json({ ok: false, error: r.error }, 200);
+
   if (dryRun) {
     return json({
-      ok: true, verdict: "draft", dry_run: true, angle, body: text,
-      reason: out.data.reason ?? null, model: out.model,
-      read: {
-        memory: !!mem?.where_we_left_it, promises: (promises ?? []).length,
-        thread: ordered.length, style_samples: style.length, facts: facts.length,
-        allowed, banned: plan?.banned ?? [],
-      },
+      ok: true, verdict: "draft", dry_run: true, angle: r.angle, body: r.body,
+      reason: r.reason, model: r.model, read: r.read,
     });
   }
 
@@ -323,20 +584,12 @@ Deno.serve(async (req) => {
     company_id: c.company_id,
     contact_id: contactId,
     salesperson_id: c.salesperson_id ?? ud!.user!.id,
-    angle,
-    body: text,
-    reason: String(out.data.reason ?? "").trim().slice(0, 160) || null,
-    based_on: {
-      used_memory: !!mem?.where_we_left_it,
-      promise_ids: (promises ?? []).map((p) => p.id),
-      thread_messages: ordered.length,
-      style_samples: style.length,
-      facts: facts.length,
-      banned: plan?.banned ?? [],
-      model: out.model,
-    },
+    angle: r.angle,
+    body: r.body,
+    reason: r.reason,
+    based_on: r.based_on,
   }).select("id").single();
   if (error) return json({ ok: false, error: error.message }, 200);
 
-  return json({ ok: true, verdict: "draft", draft_id: row.id, angle, body: text, reason: out.data.reason ?? null });
+  return json({ ok: true, verdict: "draft", draft_id: row.id, angle: r.angle, body: r.body, reason: r.reason, source: "button" });
 });

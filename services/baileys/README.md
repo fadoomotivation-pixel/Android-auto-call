@@ -20,7 +20,7 @@ decided by **which path started it**, so it cannot be misconfigured.
 | Path | Whose session | May send? |
 | --- | --- | --- |
 | `/status` `/qr` `/reconnect` `/send` | the founder's | yes |
-| `/s/<salesperson_id>/status` `/qr` `/reconnect` | one telecaller | **no — `/s/…/send` returns 403** |
+| `/s/<salesperson_id>/status` `/qr` `/reconnect` | one telecaller | **only what the rep approved** — `/s/…/send`, called by `follow-up-draft` alone, throttled |
 | `/sessions` | every login at a glance | — |
 
 Each session has its own auth directory: the founder keeps `$AUTH_DIR` itself —
@@ -39,11 +39,24 @@ ignore the provider setting so this cannot happen by accident.
 
 ### observe (any `/s/<salesperson_id>` session)
 
-A telecaller's own WhatsApp, watched as a linked device. It **never sends** —
-`/s/…/send` returns 403 — and the rep goes on messaging buyers by hand
-from their own phone exactly as before. All this does is write down what
-happened, so the admin's Daily Pulse stops pretending WhatsApp work does not
-exist and "how many leads got the plot details" has an answer.
+A telecaller's own WhatsApp, watched as a linked device. The rep goes on
+messaging buyers by hand from their own phone exactly as before, and this
+writes down what happened, so the admin's Daily Pulse stops pretending WhatsApp
+work does not exist and "how many leads got the plot details" has an answer.
+
+**Since `2026.10.24-31` it also sends — but only what the rep approved.** After
+a real call the CRM writes a WhatsApp message for that buyer; the rep checks it
+in the app, edits it if she wants and taps **Approve & send**. `follow-up-draft`
+checks it is her own draft, to her own lead, then calls `/s/<id>/send`. The
+worker allows at most one message every 4 seconds and 30 an hour per number
+(`REP_SEND_GAP_MS`, `REP_SENDS_PER_HOUR`). Nothing else in the CRM calls it.
+
+**Which chat is which lead.** WhatsApp hides most numbers behind a LID now.
+`/s/<id>/resolve` takes `{ phones: [...] }` (the leads she has called, at most
+300, looked up 25 at a time with a pause) and asks WhatsApp for each one's LID.
+Every LID found is remembered (on disk, in `$AUTH_DIR/lid-maps/`, so a restart
+or a re-scan does not forget it) and reported to the CRM, which re-files those
+chats under the lead. `wa-lid-resolve` runs this hourly.
 
 **The risk, stated plainly.** Baileys is an unofficial client and WhatsApp bans
 accounts for it. In observe mode that risk now sits on numbers your buyers reply
@@ -279,7 +292,8 @@ Everything except `/health` needs `Authorization: Bearer $BAILEYS_SECRET`.
 | `/s/<id>/status` | GET | One telecaller's session, same shape as `/status`. |
 | `/s/<id>/qr` | GET | A scannable **HTML page** by default, so a rep can just open the link; `?format=json` for the dashboard. Starts the session if it isn't running. |
 | `/s/<id>/reconnect` | POST | Start or restart that telecaller's session. |
-| `/s/<id>/send` | any | Always **403**. A telecaller's number sends by hand, from their own phone. |
+| `/s/<id>/send` | POST | A message the rep approved in the app. Only `follow-up-draft` calls it. **503** when not connected, **429** when sent too fast. |
+| `/s/<id>/resolve` | POST | `{ phones }` → asks WhatsApp for each number's LID and reports new ones to the CRM. |
 
 The bearer normally goes in `Authorization`. For the HTML QR page only, it may
 arrive as `?k=<secret>` — a rep opening a link on a phone cannot set a header.

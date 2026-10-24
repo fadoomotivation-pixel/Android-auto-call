@@ -227,6 +227,38 @@ export function TelecallerWhatsApp({
   const [pairCode, setPairCode] = useState<string | null>(null);
   const [pairPhone, setPairPhone] = useState("");
   const [pairBusy, setPairBusy] = useState(false);
+  // "Match chats to leads": which rep is being looked up, and what came back.
+  const [matching, setMatching] = useState<string | null>(null);
+  const [matchNote, setMatchNote] = useState<Record<string, { ok: boolean; text: string }>>({});
+
+  /**
+   * Most of a rep's chats now arrive with WhatsApp's private id instead of a
+   * number, so they cannot be matched to a lead. This asks WhatsApp, through
+   * the rep's own session, which id each lead she has called uses. It also runs
+   * by itself every hour; the button is for "now".
+   */
+  async function matchChats(repId: string) {
+    setMatching(repId);
+    const { data, error } = await supabase.functions.invoke<{
+      ok: boolean; error?: string; asked?: number; lids_found?: number; note?: string;
+      matched_rows?: number; lid_rows_before?: number; lid_rows_after?: number;
+    }>("wa-lid-resolve", { body: { mode: "rep", salesperson_id: repId } });
+    setMatching(null);
+    setMatchNote((m) => ({
+      ...m,
+      [repId]: error || !data?.ok
+        ? { ok: false, text: data?.error || error?.message || "Couldn't ask WhatsApp." }
+        : data.asked === 0
+          ? { ok: true, text: data.note ?? "No called leads to look up yet." }
+          : {
+            ok: true,
+            text: `Asked WhatsApp about ${data.asked} leads this rep called. Found ${data.lids_found ?? 0}. ` +
+              `${(data.lid_rows_before ?? 0) - (data.lid_rows_after ?? 0)} hidden-number messages are now filed under a lead ` +
+              `(${data.matched_rows ?? 0} matched in total).`,
+          },
+    }));
+    void load();
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -551,13 +583,32 @@ export function TelecallerWhatsApp({
                         who those conversations were with. */}
                     {(() => {
                       const sn = seenBy.get(s.salesperson_id);
-                      if (!trusted || !sn || sn.unmatched === 0) return null;
+                      const note = matchNote[s.salesperson_id];
+                      if (!trusted || !sn || sn.unmatched === 0) {
+                        return note ? <div style={{ fontSize: "var(--text-caption1)", marginTop: 4, color: note.ok ? "var(--good)" : "var(--bad)" }}>{note.text}</div> : null;
+                      }
                       return (
-                        <div style={{ fontSize: "var(--text-caption1)", marginTop: 4, color: sn.matched === 0 ? "var(--warn)" : undefined }}>
-                          {sn.matched === 0
-                            ? `${sn.unmatched} messages seen today — none with a lead of this company`
-                            : `+${sn.unmatched} more with numbers not in the CRM`}
-                        </div>
+                        <>
+                          <div style={{ fontSize: "var(--text-caption1)", marginTop: 4, color: sn.matched === 0 ? "var(--warn)" : undefined }}>
+                            {sn.matched === 0
+                              ? `${sn.unmatched} messages seen today — none with a lead of this company`
+                              : `+${sn.unmatched} more with numbers not in the CRM`}
+                          </div>
+                          {/* Most of those are WhatsApp hiding the number, not
+                              strangers. Says so, and offers the fix. */}
+                          <div style={{ fontSize: "var(--text-caption1)", marginTop: 2, color: "var(--muted)" }}>
+                            WhatsApp hides many numbers now.{" "}
+                            <button className="link" disabled={matching === s.salesperson_id}
+                              onClick={() => void matchChats(s.salesperson_id)}>
+                              {matching === s.salesperson_id ? "Matching…" : "Match chats to leads"}
+                            </button>
+                          </div>
+                          {note && (
+                            <div style={{ fontSize: "var(--text-caption1)", marginTop: 2, color: note.ok ? "var(--good)" : "var(--bad)" }}>
+                              {note.text}
+                            </div>
+                          )}
+                        </>
                       );
                     })()}
                   </td>

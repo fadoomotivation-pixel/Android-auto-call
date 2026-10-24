@@ -6,6 +6,59 @@ entry before you start, and add an entry after every change.**
 
 ---
 
+## 2026-10-24 — Claude Code (After-call WhatsApp the rep approves; Nidhi's hidden-number chats; take back a lead list)
+- **Founder asks:**
+  1. Sagar: "remove all my numbers, new leads keep mixing with old".
+  2. Nidhi's WhatsApp is scanned, but everything shows 0 and "Number not shown by WhatsApp".
+  3. "After the call, analyse the recording and send the right WhatsApp from her number, with an approve button in
+     the app; if she edits it, it goes as edited." Plus a persona per telecaller built from their recordings.
+- **Findings:**
+  - Sagar: 305 leads in 2 scanned lists (21 Oct: 171, 3 ever called; 24 Oct: 134). All 189 of his calls this week
+    were off-CRM, and his phone has not synced since 22 Oct.
+  - Nidhi: 825 messages, 52 of 54 chats are LIDs, 0 matched. The worker knew 171 LID mappings, but none were for
+    those chats.
+  - followup_drafts had 1 row ever: the drafter waited for a button nobody pressed.
+- **Migration 0235** (apply by hand; the MCP apply times out waiting for approval):
+  - `rep_lead_lists(rep)` (invoker) and `take_back_leads(rep, sources[], keep_booked)` (definer, admin or super):
+    leads go to Unassigned, pending follow-ups are cancelled, a lead_activities 'system' line is written, and
+    nothing is deleted.
+  - followup_drafts gets `source` (button|after_call), `call_id` (unique), `sent_via`, `wa_message_id` and `edited`.
+  - Trigger `call_logs_after_call_draft`: when summary_status becomes 'ready' on a call of 45s or more with a
+    contact and rep, and the disposition is not not_interested/lost/dnc, it calls pg_net → follow-up-draft
+    `{mode:'after_call'}`.
+  - `rep_personas` (RLS: self, company admin, super). `wa_rep_sessions.lid_resolved_at/lid_resolved`.
+  - Crons `rep-persona-nightly` (*/10 16-17 UTC) and `wa-lid-resolve-hourly` (:41).
+- **follow-up-draft:**
+  - The brain is refactored into `compose()`, with a call block and a persona block.
+  - `mode:'after_call'` (service): one draft per call. It skips if a newer draft is waiting, marks an older waiting
+    one stale, and pushes via notify-rep (channel followups, opens the lead).
+  - `action:'send'` (rep JWT, always 200 with ok/false): her draft, her lead, her connected session →
+    `BaileysProvider.repSend` → status 'sent', `sent_via` 'linked_whatsapp'. Otherwise it returns `fallback: true`
+    and the app opens WhatsApp.
+- **New functions:**
+  - `rep-persona`: nightly, for reps with new recorded calls; admin get/rebuild. Phrases are kept only if they
+    appear in her own messages.
+  - `wa-lid-resolve`: an hourly sweep, plus admin `{mode:'rep'}`. It sends the numbers of leads she called (max
+    300) to the worker.
+- **Worker 2026.10.24-31:**
+  - `/s/<id>/send` is no longer 403: rep-approved only, 4s gap and 30 per hour per number.
+  - `/s/<id>/resolve` uses `onWhatsApp` to get the LID, then noteLid and an immediate flush.
+  - The LID map is persisted to `$AUTH_DIR/lid-maps/<id>.json` per session.
+  - `getMessage` now answers for every session.
+- **Admin:**
+  - Leads → Assigned → pick a telecaller → "Take back a lead list from X…".
+  - WhatsApp page rep row → "Match chats to leads".
+  - AI Coach weekly card row → "How X sounds and sells".
+- **Android:**
+  - The draft card text is editable. **Approve & send** is the main button; "Open in WhatsApp", Copy and
+    "Not this one" stay.
+  - A waiting after-call draft loads when the lead opens (table read, no AI).
+  - Today's Plan has a "WhatsApp ready · tap to check and send" bucket. `Repository.pendingDraft/readyDrafts/sendDraft`.
+- **Tests:**
+  - Worker booted locally: saved LID map reloads, send and resolve answer 503 when not connected.
+  - deno check is clean on follow-up-draft, rep-persona and wa-lid-resolve. Admin tsc and eslint pass.
+  - Android has not compiled here (no SDK); it relies on the CI build.
+
 ## 2026-10-23 — Claude Code (Weekly report card: telecallers hear about their own recorded calls every Monday)
 - Founder asked for a weekly analysis sent to each telecaller: what they did, what went right and wrong, from the
   recordings. The weekly review already existed (Monday 10 AM, `rep_weekly_on`, numbers only, OFF). Its own comment

@@ -674,6 +674,9 @@ fun LeadDetailScreen(vm: MainViewModel) {
                         onCallInstead = { doCall() },
                         onClearDraft = { vm.skipDraft() },
                         error = app.coachError,
+                        draftSource = app.messageDraftSource,
+                        sending = app.messageSending,
+                        onApprove = { msg -> vm.approveDraft(contact.phone, msg) },
                     )
                 }
 
@@ -1400,6 +1403,12 @@ private fun AiCoachCard(
     onCallInstead: () -> Unit,
     onClearDraft: () -> Unit,
     error: String? = null,
+    /** "after_call" when the end of her last call wrote the draft by itself. */
+    draftSource: String? = null,
+    /** Approve & send is going out right now. */
+    sending: Boolean = false,
+    /** Send these exact words from her own WhatsApp. */
+    onApprove: (String) -> Unit = {},
 ) {
     val clipboard = LocalClipboardManager.current
     var text by remember { mutableStateOf("") }
@@ -1646,7 +1655,11 @@ private fun AiCoachCard(
                 )
             }
 
-            draft?.let {
+            draft?.let { original ->
+                // HER words go, not the AI's. Seeded from the draft, and only
+                // re-seeded when a different draft arrives — a recomposition
+                // must never throw away what she typed.
+                var edited by remember(original) { mutableStateOf(original.trim()) }
                 Spacer(Modifier.height(12.dp))
                 Column(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
@@ -1654,7 +1667,7 @@ private fun AiCoachCard(
                         .padding(14.dp),
                 ) {
                     Text(
-                        "Ready to send",
+                        if (draftSource == "after_call") "Written after your call" else "Ready to send",
                         style = AppType.metaStrong,
                         color = AppColors.TextSecondary,
                     )
@@ -1666,37 +1679,56 @@ private fun AiCoachCard(
                         Spacer(Modifier.height(4.dp))
                         Text(draftReason, style = MaterialTheme.typography.labelMedium, color = SubInk)
                     }
-                    Spacer(Modifier.height(6.dp))
-                    Text(it.trim(), style = MaterialTheme.typography.bodyMedium, color = Ink, lineHeight = 21.sp)
+                    Spacer(Modifier.height(8.dp))
+                    // What she changes it to is the best training signal in
+                    // the system — she is the one who actually knows this buyer.
+                    OutlinedTextField(
+                        value = edited,
+                        onValueChange = { edited = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink, lineHeight = 21.sp),
+                        minLines = 3,
+                        maxLines = 10,
+                        enabled = !sending,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text("Change anything you like before you send.",
+                        style = MaterialTheme.typography.labelMedium, color = SubInk)
                     Spacer(Modifier.height(12.dp))
-                    // Opens WhatsApp pre-filled, from HER number, so she reads
-                    // it one last time and can edit it before it goes. What she
-                    // changes it to is the best training signal in the system —
-                    // she is the one who actually knows this buyer.
+                    // APPROVE & SEND: straight from her own WhatsApp, through the
+                    // session she linked. When that cannot send, WhatsApp opens
+                    // with her text instead — the message never just vanishes.
                     Box(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(WhatsGreen)
-                            .clickable { onSend(it.trim()) }.padding(vertical = 11.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .background(if (sending || edited.isBlank()) SubInk.copy(alpha = 0.25f) else WhatsGreen)
+                            .clickable(enabled = !sending && edited.isNotBlank()) { onApprove(edited.trim()) }
+                            .padding(vertical = 11.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Chat, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "Send on WhatsApp",
+                                if (sending) "Sending…" else "Approve & send",
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
                             )
                         }
                     }
+                    Spacer(Modifier.height(4.dp))
+                    Text("Goes from your own WhatsApp number.",
+                        style = MaterialTheme.typography.labelMedium, color = SubInk)
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CoachTextAction(Icons.Default.ContentCopy, "Copy") { clipboard.setText(AnnotatedString(it.trim())) }
+                        CoachTextAction(Icons.Default.Chat, "Open in WhatsApp") { onSend(edited.trim()) }
+                        Spacer(Modifier.width(18.dp))
+                        CoachTextAction(Icons.Default.ContentCopy, "Copy") { clipboard.setText(AnnotatedString(edited.trim())) }
                         Spacer(Modifier.width(18.dp))
                         // "Not this one" is recorded, not discarded. A draft
                         // she reads and refuses says as much about the brain
                         // as a buyer's reply does.
                         Text("Not this one", style = MaterialTheme.typography.labelMedium, color = SubInk,
-                            fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onClearDraft() })
+                            fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable(enabled = !sending) { onClearDraft() })
                     }
                 }
             }

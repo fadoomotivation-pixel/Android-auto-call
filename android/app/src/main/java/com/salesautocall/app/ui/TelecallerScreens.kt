@@ -1122,7 +1122,7 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
         // happened (and now needs closing). Names first, statuses never.
         if (dueContacts.isNotEmpty() || visitsPlanned.isNotEmpty() || visitsDoneShown.isNotEmpty() ||
             (showLocalUnconfirmed && visitsUnconfirmed.isNotEmpty()) ||
-            showServerVisits || visitBoard.error != null
+            showServerVisits || visitBoard.error != null || app.readyDrafts.isNotEmpty()
         ) {
             item {
                 Column(
@@ -1162,6 +1162,20 @@ fun HomeScreen(vm: MainViewModel, onOpenFollowUps: () -> Unit, onOpenLeads: () -
                                 )
                             },
                             more = dueContacts.size - 3, onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
+                        )
+                        // The message the end of each call already wrote. Tap
+                        // the name: the lead opens with the message on screen,
+                        // ready to check, change and Approve.
+                        PlanBucket(
+                            icon = Icons.Default.Chat, title = "WhatsApp ready · tap to check and send", color = Teal,
+                            rows = app.readyDrafts.take(3).map { d ->
+                                PlanRow(
+                                    prettyName(d.name) ?: d.phone, "",
+                                    d.body.replace(Regex("\\s+"), " "), d.phone,
+                                    contactId = d.contactId,
+                                )
+                            },
+                            more = app.readyDrafts.size - 3, onCall = { vm.dialManual(it) }, onOpen = { vm.openLeadDetail(it) },
                         )
                         PlanBucket(
                             icon = Icons.Outlined.LocationOn, title = "Site visit fixed", color = Purple,

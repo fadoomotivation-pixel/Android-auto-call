@@ -312,6 +312,12 @@ data class AppState(
      *  fortnight went unanswered and the honest next step is a phone call. */
     val messageVerdict: String? = null,
     val messageSentCount: Int = 0,
+    /** "after_call" when the end of her last call wrote the draft by itself. */
+    val messageDraftSource: String? = null,
+    /** Approve & send is going out from her WhatsApp right now. */
+    val messageSending: Boolean = false,
+    /** Messages the end of a call wrote in the last day, waiting for her Approve. */
+    val readyDrafts: List<Repository.ReadyDraft> = emptyList(),
     /** One-line failure notice for the AI Coach card (never mixed into results,
      *  so an error can never be copied or WhatsApp'd to a customer). */
     val coachError: String? = null,
@@ -1769,6 +1775,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Loads everything the Home tab needs in one go. */
     fun loadHome(force: Boolean = false) {
+        loadReadyDrafts()
         loadCoachFeed(force)
         decideMorningGreeting()
         loadCapture(force)
@@ -4625,6 +4632,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     else -> it.copy(
                         messageDraft = d.body, messageDraftReason = d.reason,
                         messageDraftId = d.draftId, messageVerdict = "draft",
+                        messageDraftSource = d.source,
                         messageDraftLoading = false, coachError = null,
                     )
                 }
@@ -4730,6 +4738,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 messageDraftId = null,
                 messageVerdict = null,
                 messageSentCount = 0,
+                messageDraftSource = null,
                 coachError = null,
                 waNote = warning,
             )
@@ -4767,12 +4776,59 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun skipDraft() {
         val id = _state.value.messageDraftId
         if (id != null) viewModelScope.launch { Repository.markDraft(id, "skipped") }
+        if (id != null) set { st -> st.copy(readyDrafts = st.readyDrafts.filterNot { it.draftId == id }) }
         clearMessageDraft()
+    }
+
+    /**
+     * She read it, maybe changed a word, and tapped Approve & send.
+     *
+     * It goes from HER WhatsApp, through the session she linked — no WhatsApp
+     * app, no copy-paste. When her WhatsApp is not linked (or is busy), the
+     * server says so and WhatsApp opens with her text instead, exactly as
+     * before: the message never just disappears.
+     */
+    fun approveDraft(phone: String, text: String) {
+        val id = _state.value.messageDraftId ?: return
+        if (_state.value.messageSending) return
+        val body = text.trim()
+        if (body.isEmpty()) return
+        set { it.copy(messageSending = true, coachError = null) }
+        viewModelScope.launch {
+            val r = runCatching { Repository.sendDraft(id, body) }
+                .getOrElse { Repository.DraftSend.Failed("Couldn't send it. Please try again.") }
+            set { st ->
+                if (st.messageDraftId != id) return@set st.copy(messageSending = false)
+                when (r) {
+                    Repository.DraftSend.Sent -> st.copy(
+                        messageSending = false, messageDraft = null, messageDraftReason = null,
+                        messageDraftId = null, messageVerdict = null, messageDraftSource = null,
+                        waNote = "Sent from your WhatsApp.",
+                        readyDrafts = st.readyDrafts.filterNot { it.draftId == id },
+                    )
+                    is Repository.DraftSend.OpenWhatsApp -> st.copy(
+                        messageSending = false,
+                        waNote = r.why,
+                        waHandoff = WaHandoff(phone, body, System.currentTimeMillis()),
+                    )
+                    is Repository.DraftSend.Failed -> st.copy(messageSending = false, coachError = r.why)
+                }
+            }
+        }
+    }
+
+    /** The after-call messages waiting for her Approve, for Today's Plan. */
+    fun loadReadyDrafts() {
+        viewModelScope.launch {
+            val list = runCatching { Repository.readyDrafts() }.getOrDefault(emptyList())
+            set { it.copy(readyDrafts = list) }
+        }
     }
 
     fun clearMessageDraft() = set {
         it.copy(messageDraft = null, messageDraftReason = null, messageDraftId = null,
-                messageVerdict = null, messageSentCount = 0, coachError = null)
+                messageVerdict = null, messageSentCount = 0, coachError = null,
+                messageDraftSource = null, messageSending = false)
     }
 
     /**
@@ -4809,7 +4865,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Opens the full-screen lead detail overlay and loads that lead's call history. */
     fun openLeadDetail(contactId: String) {
         set { it.copy(leadDetailId = contactId, showSettings = false, leadDetailCalls = emptyList(), leadDetailActivities = emptyList(), voiceNotes = emptyList(), leadDetailLoading = true, leadDetailCallsFailed = false, leadCoach = null, leadCoachLoading = true, leadBrief = null, leadBriefLoading = false, rebuttal = null, rebuttalLoading = false, messageDraft = null, messageDraftLoading = false, messageDraftReason = null,
-            messageDraftId = null, messageVerdict = null, messageSentCount = 0, coachError = null) }
+            messageDraftId = null, messageVerdict = null, messageSentCount = 0, coachError = null,
+            messageDraftSource = null, messageSending = false) }
+        // The message the end of her last call already wrote, if it is waiting.
+        // Shown without a tap — that is the whole point of writing it after the
+        // call. Read from the table, so opening a lead spends no AI.
+        viewModelScope.launch {
+            val pending = runCatching { Repository.pendingDraft(contactId) }.getOrNull() ?: return@launch
+            set {
+                if (it.leadDetailId == contactId && it.messageDraft == null && !it.messageDraftLoading)
+                    it.copy(
+                        messageDraft = pending.body, messageDraftReason = pending.reason,
+                        messageDraftId = pending.draftId, messageVerdict = "draft",
+                        messageDraftSource = pending.source,
+                    )
+                else it
+            }
+        }
         viewModelScope.launch {
             val callsRead = runCatching { Repository.fetchCallsForContact(contactId) }
             val calls = callsRead.getOrDefault(emptyList())
