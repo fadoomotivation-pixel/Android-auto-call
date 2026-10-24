@@ -18,7 +18,7 @@ import {
 import {
   type Chip, type FuGroup, CHIPS, callQueue, callbackPicks, dueSignal, fuGroup, inChip, lateBy, visitPicks,
 } from "@/lib/tele/work";
-import { demoFollowUps, demoLeads, demoProfile, demoStages, demoToday } from "@/lib/tele/demo";
+import { demoFollowUps, demoLeads, demoPlan, demoProfile, demoStages, demoToday } from "@/lib/tele/demo";
 import { ScanTab } from "./ScanTab";
 
 type View = "loading" | "entry" | "login" | "join" | "app";
@@ -95,7 +95,7 @@ export function TeleApp({ start, code }: { start?: "join"; code?: string }) {
     const q = new URLSearchParams(window.location.search);
     if (q.get("demo") === "1") {
       setDemo(true); setProfile(demoProfile); setLeads(demoLeads); setStages(demoStages);
-      setFollows(demoFollowUps); setToday(demoToday); setPush("off");
+      setFollows(demoFollowUps); setToday(demoToday); setPlan(demoPlan); setPush("off");
       const sc = q.get("screen") ?? (start === "join" ? "join" : "home");
       if (sc === "entry" || sc === "login" || sc === "join") { setView(sc); return; }
       setView("app");
