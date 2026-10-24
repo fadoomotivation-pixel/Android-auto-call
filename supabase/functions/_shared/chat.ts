@@ -131,9 +131,46 @@ function openAiCompatible(url: string, model: string) {
   };
 }
 
-const askGroq = openAiCompatible("https://api.groq.com/openai/v1/chat/completions", GROQ_MODEL);
+/**
+ * One provider, several of its models, the first that answers.
+ *
+ * A provider refusing ONE model is not the provider being down. On 24 Oct
+ * Mistral answered every call with 403 "This model is not available in your
+ * subscription tier" for mistral-large — so the whole chain had silently been
+ * running on Groq alone — and Groq's gpt-oss-120b had spent its 100k tokens for
+ * the day while its sibling models each still had their own. Whichever model
+ * answers is remembered, so the refusals cost one round-trip per cold start,
+ * not one per call.
+ */
+function withModels(url: string, models: string[], nextModel: (status: number, raw: string) => boolean) {
+  const list = [...new Set(models.filter(Boolean))];
+  let live: string | null = null;
+  return async (key: string, system: string, user: string, temperature: number): Promise<Attempt> => {
+    const order = live ? [live, ...list.filter((m) => m !== live)] : list;
+    let last: Attempt = { ok: false, status: 0, text: "", raw: "no model" };
+    for (const model of order) {
+      last = await openAiCompatible(url, model)(key, system, user, temperature);
+      if (last.ok) { live = model; return last; }
+      if (!nextModel(last.status, last.raw)) return last;
+    }
+    return last;
+  };
+}
+
+const askGroq = withModels(
+  "https://api.groq.com/openai/v1/chat/completions",
+  [GROQ_MODEL, "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"],
+  // Gone, or this model's DAILY allowance spent. A per-minute 429 is Groq being
+  // busy, and the same request under another name would only add to it.
+  (status, raw) => status === 404 || /decommissioned|does not exist/i.test(raw) ||
+    (status === 429 && /per day|\b(TPD|RPD)\b/i.test(raw)),
+);
 const askCerebras = openAiCompatible("https://api.cerebras.ai/v1/chat/completions", CEREBRAS_MODEL);
-const askMistral = openAiCompatible("https://api.mistral.ai/v1/chat/completions", MISTRAL_MODEL);
+const askMistral = withModels(
+  "https://api.mistral.ai/v1/chat/completions",
+  [MISTRAL_MODEL, "mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
+  (status, raw) => status === 404 || (status === 403 && /tier|not available/i.test(raw)),
+);
 
 async function askGemini(key: string, system: string, user: string, temperature: number): Promise<Attempt> {
   const url =
@@ -240,4 +277,29 @@ export async function chatJson(
     errors.push(...r.errors);
   }
   throw new Error(errors.join(" | ") || "no provider answered");
+}
+
+/**
+ * chatJson, parsed, and never throwing — the same { data, error, model } shape
+ * groqJson returns, so a caller moves off the single Groq quota by changing one
+ * word. Mistral first by default: the weekly report card, the nightly persona
+ * and the after-call WhatsApp each send several thousand tokens, and on Groq
+ * alone they were spending the 100k/day that call summaries need (24 Oct: the
+ * first after-call draft died on "429 … tokens per day").
+ */
+export async function askJson<T = Record<string, unknown>>(
+  system: string,
+  user: string,
+  temperature = 0.2,
+): Promise<{ data: T | null; error: string | null; model: string | null }> {
+  try {
+    const { text, provider } = await chatJson(system, user, { temperature });
+    try {
+      return { data: JSON.parse(text) as T, error: null, model: provider };
+    } catch {
+      return { data: null, error: `unparseable JSON from ${provider}: ${text.slice(0, 120)}`, model: provider };
+    }
+  } catch (e) {
+    return { data: null, error: String((e as Error)?.message ?? e).slice(0, 400), model: null };
+  }
 }

@@ -15,7 +15,7 @@
 //   admin (JWT)         { mode: "get" | "rebuild", salesperson_id }
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { groqJson } from "../_shared/groq.ts";
+import { askJson } from "../_shared/chat.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -83,7 +83,7 @@ async function build(admin: SupabaseClient, rep: Rep): Promise<{ ok: boolean; er
     ].filter(Boolean).join(" · ");
   });
 
-  const out = await groqJson<Record<string, unknown>>(SYSTEM,
+  const out = await askJson<Record<string, unknown>>(SYSTEM,
     `Telecaller: ${rep.full_name ?? "telecaller"}\n\nHER RECORDED CALLS:\n${callLines.join("\n")}\n\n` +
     (mine.length ? `HER OWN WHATSAPP MESSAGES:\n${mine.map((m) => `- ${m}`).join("\n")}` : "HER OWN WHATSAPP MESSAGES: none captured."),
     0.3);
